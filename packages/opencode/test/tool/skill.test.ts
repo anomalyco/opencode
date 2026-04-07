@@ -164,4 +164,52 @@ Use this skill.
       process.env.OPENCODE_TEST_HOME = home
     }
   })
+
+  test("execute repairs malformed skill names when the cleaned name exists", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".opencode", "skill", "rpa-vision")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: rpa-vision
+description: Skill for tool tests.
+---
+
+# RPA Vision
+`,
+        )
+      },
+    })
+
+    const home = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = tmp.path
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const tool = await SkillTool.init()
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          const ctx: Tool.Context = {
+            ...baseCtx,
+            ask: async (req) => {
+              requests.push(req)
+            },
+          }
+
+          const result = await tool.execute({ name: "}rpa-vision " }, ctx)
+
+          expect(requests.length).toBe(1)
+          expect(requests[0].patterns).toEqual(["rpa-vision"])
+          expect(requests[0].always).toEqual(["rpa-vision"])
+          expect(result.metadata.name).toBe("rpa-vision")
+          expect(result.output).toContain(`<skill_content name="rpa-vision">`)
+        },
+      })
+    } finally {
+      process.env.OPENCODE_TEST_HOME = home
+    }
+  })
 })

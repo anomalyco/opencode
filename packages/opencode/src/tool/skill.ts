@@ -41,7 +41,12 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
-      const skill = await Skill.get(params.name)
+      const name = params.name.trim()
+      const clean = name.replace(/^[^a-z0-9_-]+|[^a-z0-9_-]+$/gi, "")
+      const skill =
+        (await Skill.get(params.name)) ??
+        (name !== params.name ? await Skill.get(name) : undefined) ??
+        (clean !== name ? await Skill.get(clean) : undefined)
 
       if (!skill) {
         const available = await Skill.all().then((x) => x.map((skill) => skill.name).join(", "))
@@ -50,8 +55,8 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
       await ctx.ask({
         permission: "skill",
-        patterns: [params.name],
-        always: [params.name],
+        patterns: [skill.name],
+        always: [skill.name],
         metadata: {},
       })
 
