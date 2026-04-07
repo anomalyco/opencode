@@ -774,6 +774,585 @@ describe("session.message-v2.toModelMessage", () => {
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
+  test("excludes external tool parts from model messages", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-llm",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-external",
+            tool: "read",
+            external: true,
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/file" },
+              output: "file content",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // The LLM tool call should be present; the external one should be excluded
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-llm",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-llm",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("excludes messages with only external tool parts", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-ext",
+            tool: "status",
+            external: true,
+            state: {
+              status: "completed",
+              input: { message: "status update" },
+              output: "status update",
+              title: "",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // The assistant message has only external parts, so it should produce
+    // an empty assistant content. The toModelMessages function drops messages
+    // with no meaningful content.
+    expect(result.length).toBe(1)
+    expect(result[0]).toStrictEqual({
+      role: "user",
+      content: [{ type: "text", text: "hello" }],
+    })
+  })
+
+  test("excludes external tool parts in error/pending/running states", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "reply",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-ext-err",
+            tool: "bash",
+            external: true,
+            state: {
+              status: "error",
+              input: { cmd: "fail" },
+              error: "boom",
+              time: { start: 0, end: 1 },
+            },
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "tool",
+            callID: "call-ext-pending",
+            tool: "read",
+            external: true,
+            state: {
+              status: "pending",
+              input: { path: "/tmp" },
+              raw: "",
+            },
+          },
+          {
+            ...basePart(assistantID, "a4"),
+            type: "tool",
+            callID: "call-ext-running",
+            tool: "grep",
+            external: true,
+            state: {
+              status: "running",
+              input: { pattern: "test" },
+              time: { start: 0 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // All external tool parts should be excluded regardless of status
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "reply" }],
+      },
+    ])
+  })
+
+  test("includes tool parts with explicit external: false as normal", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-normal",
+            tool: "bash",
+            external: false,
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // explicit false should be treated as normal LLM tool call
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-normal",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-normal",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("preserves ordering when external parts are interleaved with LLM parts", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "do tasks",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-llm-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/a" },
+              output: "content a",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-ext-1",
+            tool: "status",
+            external: true,
+            state: {
+              status: "completed",
+              input: { message: "status" },
+              output: "status",
+              title: "",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "tool",
+            callID: "call-llm-2",
+            tool: "edit",
+            state: {
+              status: "completed",
+              input: { filePath: "/b" },
+              output: "edited",
+              title: "Edit",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // Both LLM tool calls should be present; the external one in between should be skipped
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "do tasks" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-llm-1",
+            toolName: "read",
+            input: { filePath: "/a" },
+            providerExecuted: undefined,
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call-llm-2",
+            toolName: "edit",
+            input: { filePath: "/b" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-llm-1",
+            toolName: "read",
+            output: { type: "text", value: "content a" },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-llm-2",
+            toolName: "edit",
+            output: { type: "text", value: "edited" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("treats tool parts with external: undefined as normal LLM tool calls", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-default",
+            tool: "bash",
+            // external is omitted (undefined) — should be treated as non-external
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // undefined external should be treated the same as false (normal LLM tool call)
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-default",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-default",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("does not register external tool names for model output conversion", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    // When external tools are the ONLY tool parts, no tool names should be
+    // registered internally, preventing stale tool-name leaks into the
+    // convertToModelMessages call.
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "I ran a tool externally",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-ext",
+            tool: "some_plugin_tool",
+            external: true,
+            state: {
+              status: "completed",
+              input: { arg: "val" },
+              output: "result",
+              title: "Plugin",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // Only the text content should remain; no tool-call/tool-result from the external tool
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "I ran a tool externally" }],
+      },
+    ])
+  })
+
+  test("drops assistant message with only step-start and external tool parts", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-ext",
+            tool: "status",
+            external: true,
+            state: {
+              status: "completed",
+              input: { message: "working" },
+              output: "working",
+              title: "",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // step-start + external-only = no meaningful content → message dropped
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ])
+  })
+
   test("converts pending/running tool calls to error results to prevent dangling tool_use", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
@@ -862,6 +1441,49 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+  })
+})
+
+describe("session.message-v2.ToolPart.external", () => {
+  const pid = PartID.ascending()
+  const mid = MessageID.ascending()
+
+  function toolPart(ext?: boolean) {
+    return {
+      id: pid,
+      sessionID,
+      messageID: mid,
+      type: "tool" as const,
+      callID: "call-1",
+      tool: "bash",
+      ...(ext !== undefined && { external: ext }),
+      state: {
+        status: "completed" as const,
+        input: { cmd: "ls" },
+        output: "ok",
+        title: "Bash",
+        metadata: {},
+        time: { start: 0, end: 1 },
+      },
+    }
+  }
+
+  test("schema accepts external: true", () => {
+    const result = MessageV2.ToolPart.safeParse(toolPart(true))
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.external).toBe(true)
+  })
+
+  test("schema accepts external: false", () => {
+    const result = MessageV2.ToolPart.safeParse(toolPart(false))
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.external).toBe(false)
+  })
+
+  test("schema accepts missing external field (undefined)", () => {
+    const result = MessageV2.ToolPart.safeParse(toolPart())
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.external).toBeUndefined()
   })
 })
 
