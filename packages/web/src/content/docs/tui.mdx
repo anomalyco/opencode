@@ -153,7 +153,7 @@ Show the help dialog.
 
 ### init
 
-Create or update `AGENTS.md` file. [Learn more](/docs/rules).
+Guided setup for creating or updating `AGENTS.md`. [Learn more](/docs/rules).
 
 ```bash frame="none"
 /init
@@ -368,7 +368,8 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true
 }
 ```
 
@@ -381,6 +382,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
+- `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
 
