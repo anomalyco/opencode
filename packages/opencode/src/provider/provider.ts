@@ -1362,7 +1362,7 @@ export namespace Provider {
             providerID: model.providerID,
           })
           const provider = s.providers[model.providerID]
-          const options = { ...provider.options }
+          const options = mergeDeep(provider.options, model.options)
 
           if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
             delete options.fetch
