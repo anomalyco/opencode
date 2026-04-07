@@ -71,19 +71,17 @@ export namespace Auth {
 
       const get = Effect.fn("Auth.get")(function* (providerID: string) {
         const allData = yield* all()
+        const bare = providerID.replace(/\/+$/, "")
         // Direct lookup (original behavior for backward compat with bare keys)
-        if (providerID in allData) return allData[providerID]
-        const withSlash = providerID.endsWith("/") ? providerID.slice(0, -1) : providerID + "/"
+        if (bare in allData) return allData[bare]
+        const withSlash = bare.endsWith("/") ? bare.slice(0, -1) : bare + "/"
         if (withSlash in allData) return allData[withSlash]
         // Multi-profile support: if key has embedded profile (provider:profile), try direct
         if (providerID.includes(":")) {
           if (providerID in allData) return allData[providerID]
+          // Profile specified but not found - try base provider without profile
+          if (bare in allData) return allData[bare]
         }
-        // Multi-profile support: try normalized key with :default
-        const withProfile = normalizeKey(providerID)
-        if (withProfile in allData) return allData[withProfile]
-        const bare = providerID.replace(/\/+$/, "")
-        if (`${bare}:default` in allData) return allData[`${bare}:default`]
         return undefined
       })
 
