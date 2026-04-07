@@ -167,12 +167,6 @@ export function Session() {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
-  createEffect(() => {
-    if (session()?.workspaceID) {
-      sdk.setWorkspace(session()?.workspaceID)
-    }
-  })
-
   createEffect(async () => {
     await sync.session
       .sync(route.sessionID)

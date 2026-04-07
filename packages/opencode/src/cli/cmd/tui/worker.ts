@@ -45,20 +45,20 @@ GlobalBus.on("event", (event) => {
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
-const eventStream = {
-  abort: undefined as AbortController | undefined,
-}
+const eventStreams = new Map<string, AbortController>()
 
-const startEventStream = (input: { directory: string; workspaceID?: string }) => {
-  if (eventStream.abort) eventStream.abort.abort()
+function startEventStream(directory: string) {
+  const id = crypto.randomUUID()
+
   const abort = new AbortController()
-  eventStream.abort = abort
   const signal = abort.signal
 
-  ;(async () => {
+  eventStreams.set(id, abort)
+
+  async function run() {
     while (!signal.aborted) {
       const shouldReconnect = await Instance.provide({
-        directory: input.directory,
+        directory,
         init: InstanceBootstrap,
         fn: () =>
           new Promise<boolean>((resolve) => {
@@ -77,7 +77,10 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
             }
 
             const unsub = Bus.subscribeAll((event) => {
-              Rpc.emit("event", event as Event)
+              Rpc.emit("event", {
+                id,
+                event: event as Event,
+              })
               if (event.type === Bus.InstanceDisposed.type) {
                 settle(true)
               }
@@ -104,14 +107,24 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
         await sleep(250)
       }
     }
-  })().catch((error) => {
+  }
+
+  run().catch((error) => {
     Log.Default.error("event stream error", {
       error: error instanceof Error ? error.message : error,
     })
   })
+
+  return id
 }
 
-startEventStream({ directory: process.cwd() })
+function stopEventStream(id: string) {
+  const abortController = eventStreams.get(id)
+  if (!abortController) return
+
+  abortController.abort()
+  eventStreams.delete(id)
+}
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
@@ -154,12 +167,19 @@ export const rpc = {
   async reload() {
     await Config.invalidate(true)
   },
-  async setWorkspace(input: { workspaceID?: string }) {
-    startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })
+  async subscribe(input: { directory: string | undefined }) {
+    return startEventStream(input.directory || process.cwd())
+  },
+  async unsubscribe(input: { id: string }) {
+    stopEventStream(input.id)
   },
   async shutdown() {
     Log.Default.info("worker shutting down")
-    if (eventStream.abort) eventStream.abort.abort()
+
+    for (const id of [...eventStreams.keys()]) {
+      stopEventStream(id)
+    }
+
     await Instance.disposeAll()
     if (server) await server.stop(true)
   },
