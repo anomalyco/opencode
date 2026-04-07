@@ -484,7 +484,15 @@ export namespace SessionProcessor {
               yield* abort()
             }
             if (ctx.needsCompaction) return "compact"
-            if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
+            if (ctx.blocked || ctx.assistantMessage.error || aborted) {
+              log.info("process stop", {
+                sessionID: ctx.sessionID,
+                blocked: ctx.blocked,
+                error: ctx.assistantMessage.error,
+                aborted,
+              })
+              return "stop"
+            }
             return "continue"
           }).pipe(Effect.onInterrupt(() => abort().pipe(Effect.asVoid)))
         })

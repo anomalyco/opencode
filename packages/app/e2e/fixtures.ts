@@ -93,7 +93,8 @@ async function visit(page: Page, url: string) {
       return
     } catch (cause) {
       err = cause
-      if (!String(cause).includes("ERR_CONNECTION_REFUSED")) throw cause
+      const msg = String(cause)
+      if (!msg.includes("ERR_CONNECTION_REFUSED") && !msg.includes("ECONNRESET")) throw cause
       await new Promise((resolve) => setTimeout(resolve, 300))
     }
   }
