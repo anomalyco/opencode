@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { inflate } from "./session-diff"
+import { normalize, text } from "./session-diff"
 
 describe("session diff", () => {
-  test("inflates unified patch content", () => {
+  test("keeps unified patch content", () => {
     const diff = {
       file: "a.ts",
       patch:
@@ -11,15 +11,15 @@ describe("session diff", () => {
       deletions: 1,
       status: "modified" as const,
     }
+    const view = normalize(diff)
 
-    expect(inflate(diff)).toEqual({
-      ...diff,
-      before: "one\ntwo\n",
-      after: "one\nthree\n",
-    })
+    expect(view.patch).toBe(diff.patch)
+    expect(view.fileDiff.name).toBe("a.ts")
+    expect(text(view, "deletions")).toBe("one\ntwo\n")
+    expect(text(view, "additions")).toBe("one\nthree\n")
   })
 
-  test("preserves legacy before and after content", () => {
+  test("converts legacy content into a patch", () => {
     const diff = {
       file: "a.ts",
       before: "one\n",
@@ -28,11 +28,10 @@ describe("session diff", () => {
       deletions: 1,
       status: "modified" as const,
     }
+    const view = normalize(diff)
 
-    expect(inflate(diff)).toEqual({
-      ...diff,
-      before: "one\n",
-      after: "two\n",
-    })
+    expect(view.patch).toContain("@@ -1,1 +1,1 @@")
+    expect(text(view, "deletions")).toBe("one\n")
+    expect(text(view, "additions")).toBe("two\n")
   })
 })

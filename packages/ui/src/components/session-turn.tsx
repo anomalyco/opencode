@@ -24,7 +24,7 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
-import { inflate } from "./session-diff"
+import { normalize } from "./session-diff"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -453,7 +453,7 @@ export function SessionTurn(
                     >
                       <For each={visible()}>
                         {(diff) => {
-                          const view = inflate(diff)
+                          const view = normalize(diff)
                           const active = createMemo(() => expanded().includes(diff.file))
                           const [shown, setShown] = createSignal(false)
 
@@ -502,12 +502,7 @@ export function SessionTurn(
                               <Accordion.Content>
                                 <Show when={shown()}>
                                   <div data-slot="session-turn-diff-view" data-scrollable>
-                                    <Dynamic
-                                      component={fileComponent}
-                                      mode="diff"
-                                      before={{ name: diff.file, contents: view.before }}
-                                      after={{ name: diff.file, contents: view.after }}
-                                    />
+                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
                                   </div>
                                 </Show>
                               </Accordion.Content>
