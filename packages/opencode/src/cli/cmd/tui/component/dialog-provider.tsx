@@ -57,6 +57,10 @@ export function createDialogProviderOptions() {
           async onSelect() {
             if (consoleManaged) return
 
+            const profile = await promptProfile(dialog, toast)
+            if (!profile) return
+            const authKey = profile === "default" ? provider.id : `${provider.id}:${profile}`
+
             const methods = sync.data.provider_auth[provider.id] ?? [
               {
                 type: "api",
@@ -84,6 +88,14 @@ export function createDialogProviderOptions() {
             if (index == null) return
             const method = methods[index]
             if (method.type === "oauth") {
+              if (profile !== "default") {
+                toast.show({
+                  variant: "warning",
+                  message:
+                    "OAuth profile selection in TUI is not yet supported. Use default profile or `opencode auth login`.",
+                })
+                return
+              }
               let inputs: Record<string, string> | undefined
               if (method.prompts?.length) {
                 const value = await PromptsMethod({
@@ -135,9 +147,7 @@ export function createDialogProviderOptions() {
                 if (!value) return
                 metadata = value
               }
-              return dialog.replace(() => (
-                <ApiMethod providerID={provider.id} title={method.label} metadata={metadata} />
-              ))
+              return dialog.replace(() => <ApiMethod providerID={authKey} title={method.label} metadata={metadata} />)
             }
           },
         }
@@ -145,6 +155,24 @@ export function createDialogProviderOptions() {
     )
   })
   return options
+}
+
+async function promptProfile(dialog: ReturnType<typeof useDialog>, toast: ReturnType<typeof useToast>) {
+  while (true) {
+    const value = await DialogPrompt.show(dialog, "Profile name", { placeholder: "default" })
+    if (value === null) return null
+    const raw = value.trim().toLowerCase()
+    if (!raw) return "default"
+    if (raw.length > 20) {
+      toast.show({ variant: "warning", message: "Profile name must be 20 characters or less" })
+      continue
+    }
+    if (!/^[a-z0-9_-]+$/.test(raw)) {
+      toast.show({ variant: "warning", message: "Use only letters, numbers, hyphens, and underscores" })
+      continue
+    }
+    return raw
+  }
 }
 
 export function DialogProvider() {
