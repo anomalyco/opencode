@@ -371,10 +371,10 @@ export namespace MessageV2 {
     model: z.object({
       providerID: ProviderID.zod,
       modelID: ModelID.zod,
+      variant: z.string().optional(),
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    variant: z.string().optional(),
   }).meta({
     ref: "UserMessage",
   })

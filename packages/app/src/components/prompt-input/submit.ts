@@ -121,8 +121,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     role: "user",
     time: { created: Date.now() },
     agent: input.draft.agent,
-    model: input.draft.model,
-    variant: input.draft.variant,
+    model: { ...input.draft.model, variant: input.draft.variant },
   }
 
   const add = () =>
