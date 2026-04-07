@@ -90,7 +90,8 @@ export async function handler(
     const body = await input.request.json()
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
-    const ip = input.request.headers.get("x-real-ip") ?? ""
+    const rawIp = input.request.headers.get("x-real-ip") ?? ""
+    const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""

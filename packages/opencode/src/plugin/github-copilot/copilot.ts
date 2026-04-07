@@ -309,6 +309,14 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         },
       ],
     },
+    "chat.params": async (incoming, output) => {
+      if (!incoming.model.providerID.includes("github-copilot")) return
+
+      // Match github copilot cli, omit maxOutputTokens for gpt models
+      if (incoming.model.api.id.includes("gpt")) {
+        output.maxOutputTokens = undefined
+      }
+    },
     "chat.headers": async (incoming, output) => {
       if (!incoming.model.providerID.includes("github-copilot")) return
 

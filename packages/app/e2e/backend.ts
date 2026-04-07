@@ -62,7 +62,7 @@ function tail(input: string[]) {
   return input.slice(-40).join("")
 }
 
-export async function startBackend(label: string): Promise<Handle> {
+export async function startBackend(label: string, input?: { llmUrl?: string }): Promise<Handle> {
   const port = await freePort()
   const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `opencode-e2e-${label}-`))
   const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -80,6 +80,7 @@ export async function startBackend(label: string): Promise<Handle> {
     XDG_STATE_HOME: path.join(sandbox, "state"),
     OPENCODE_CLIENT: "app",
     OPENCODE_STRICT_CONFIG_DEPS: "true",
+    OPENCODE_E2E_LLM_URL: input?.llmUrl,
   } satisfies Record<string, string | undefined>
   const out: string[] = []
   const err: string[] = []
