@@ -1,5 +1,5 @@
 import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
 import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
@@ -13,6 +13,7 @@ import {
   Info,
   RefreshToken,
   AccountServiceError,
+  AccountTransportError,
   Login,
   Org,
   OrgID,
@@ -31,6 +32,7 @@ export {
   type AccountError,
   AccountRepoError,
   AccountServiceError,
+  AccountTransportError,
   AccessToken,
   RefreshToken,
   DeviceCode,
@@ -133,10 +135,19 @@ const isTokenFresh = (tokenExpiry: number | null, now: number) =>
 
 const mapAccountServiceError =
   (message = "Account service operation failed") =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, AccountServiceError, R> =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, AccountError, R> =>
     effect.pipe(
       Effect.mapError((cause) =>
-        cause instanceof AccountServiceError ? cause : new AccountServiceError({ message, cause }),
+        cause instanceof AccountServiceError || cause instanceof AccountTransportError
+          ? cause
+          : HttpClientError.isHttpClientError(cause) && cause.reason._tag === "TransportError"
+            ? new AccountTransportError({
+                method: cause.request.method,
+                url: cause.request.url,
+                description: cause.reason.description,
+                cause: cause.reason.cause,
+              })
+            : new AccountServiceError({ message, cause }),
       ),
     )
 

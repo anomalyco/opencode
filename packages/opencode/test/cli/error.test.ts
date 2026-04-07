@@ -1,16 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
-
-import { AccountServiceError } from "../../src/account/schema"
+import { AccountTransportError } from "../../src/account/schema"
 import { FormatError } from "../../src/cli/error"
 
 describe("cli.error", () => {
   test("formats account transport errors clearly", () => {
-    const error = new AccountServiceError({
-      message: "HTTP request failed",
-      cause: new HttpClientError.TransportError({
-        request: HttpClientRequest.post("https://console.opencode.ai/auth/device/code"),
-      }),
+    const error = new AccountTransportError({
+      method: "POST",
+      url: "https://console.opencode.ai/auth/device/code",
     })
 
     const formatted = FormatError(error)

@@ -60,7 +60,14 @@ export class AccountServiceError extends Schema.TaggedErrorClass<AccountServiceE
   cause: Schema.optional(Schema.Defect),
 }) {}
 
-export type AccountError = AccountRepoError | AccountServiceError
+export class AccountTransportError extends Schema.TaggedErrorClass<AccountTransportError>()("AccountTransportError", {
+  method: Schema.String,
+  url: Schema.String,
+  description: Schema.optional(Schema.String),
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
+export type AccountError = AccountRepoError | AccountServiceError | AccountTransportError
 
 export class Login extends Schema.Class<Login>("Login")({
   code: DeviceCode,

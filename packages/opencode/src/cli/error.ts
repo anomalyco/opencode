@@ -1,5 +1,4 @@
-import { HttpClientError } from "effect/unstable/http"
-import { AccountServiceError } from "@/account"
+import { AccountServiceError, AccountTransportError } from "@/account"
 import { ConfigMarkdown } from "@/config/markdown"
 import { errorFormat } from "@/util/error"
 import { Config } from "../config/config"
@@ -7,31 +6,17 @@ import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
 import { UI } from "./ui"
 
-const findTransportError = (input: unknown): HttpClientError.TransportError | undefined => {
-  let current = input
-  const seen = new Set<object>()
-
-  while (typeof current === "object" && current !== null && !seen.has(current)) {
-    if (current instanceof HttpClientError.TransportError) return current
-    seen.add(current)
-    current = Reflect.get(current, "cause")
-  }
-}
-
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
     return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
+  if (input instanceof AccountTransportError) {
+    return [
+      `Could not reach ${input.method} ${input.url}.`,
+      `This failed before the server returned an HTTP response.`,
+      `Check your network, proxy, or VPN configuration and try again.`,
+    ].join("\n")
+  }
   if (input instanceof AccountServiceError) {
-    const transportError = findTransportError(input)
-    if (transportError) {
-      return [
-        `Could not reach ${transportError.methodAndUrl}.`,
-        `This failed before the server returned an HTTP response.`,
-        `Check your network, proxy, or VPN configuration and try again.`,
-      ]
-        .join("\n")
-    }
-
     return input.message
   }
   if (Provider.ModelNotFoundError.isInstance(input)) {

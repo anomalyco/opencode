@@ -1,10 +1,20 @@
 import { expect } from "bun:test"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
 import { Account } from "../../src/account"
-import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
+import {
+  AccessToken,
+  AccountID,
+  AccountTransportError,
+  DeviceCode,
+  Login,
+  Org,
+  OrgID,
+  RefreshToken,
+  UserCode,
+} from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../lib/effect"
 
@@ -83,6 +93,28 @@ it.live("login normalizes trailing slashes in the provided server URL", () =>
     expect(seen).toEqual(["POST https://one.example.com/auth/device/code"])
     expect(result.server).toBe("https://one.example.com")
     expect(result.url).toBe("https://one.example.com/device?user_code=user-code")
+  }),
+)
+
+it.live("login maps transport failures to account transport errors", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((req) =>
+      Effect.fail(
+        new HttpClientError.HttpClientError({
+          reason: new HttpClientError.TransportError({ request: req }),
+        }),
+      ),
+    )
+
+    const error = yield* Effect.flip(
+      Account.Service.use((s) => s.login("https://one.example.com")).pipe(Effect.provide(live(client))),
+    )
+
+    expect(error).toBeInstanceOf(AccountTransportError)
+    if (error instanceof AccountTransportError) {
+      expect(error.method).toBe("POST")
+      expect(error.url).toBe("https://one.example.com/auth/device/code")
+    }
   }),
 )
 
