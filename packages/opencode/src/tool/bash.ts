@@ -289,10 +289,22 @@ async function ask(ctx: Tool.Context, scan: Scan) {
 
 async function shellEnv(ctx: Tool.Context, cwd: string) {
   const extra = await Plugin.trigger("shell.env", { cwd, sessionID: ctx.sessionID, callID: ctx.callID }, { env: {} })
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...extra.env,
   }
+
+  if (process.platform === "darwin") {
+    const standardPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+    const currentPath = env.PATH ?? ""
+    const existingPaths = currentPath.split(path.delimiter)
+    const missingPaths = standardPaths.filter((p) => !existingPaths.includes(p))
+    if (missingPaths.length > 0) {
+      env.PATH = [...missingPaths, ...currentPath].join(path.delimiter)
+    }
+  }
+
+  return env
 }
 
 function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
