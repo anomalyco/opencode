@@ -29,6 +29,7 @@ const icons = {
   "terminal-active": `<path d="M2 18H18V2H2V18Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M6.5 8L8.64286 10L6.5 12M10.9286 12H13.5M2 18H18V2H2V18Z" stroke="currentColor" stroke-linecap="square"/>`,
   review: `<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
+  read: `<path d="M6.25 2.91699H12.9167C14.2974 2.91699 15.4167 4.03628 15.4167 5.41699V14.5837C15.4167 15.9644 14.2974 17.0837 12.9167 17.0837H7.08333C5.70262 17.0837 4.58333 15.9644 4.58333 14.5837V4.58366C4.58333 3.66218 5.32886 2.91699 6.25 2.91699Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M11.667 2.91699V5.41699H14.167" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M7.5 7.91699H12.0833M7.5 10.417H12.0833M7.5 12.917H10.417" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>`,
   "review-active": `<path d="M18 18V2L2 2L2 18H18Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
   expand: `<path d="M4.58301 10.4163V15.4163H9.58301M10.4163 4.58301H15.4163V9.58301" stroke="currentColor" stroke-linecap="square"/>`,
