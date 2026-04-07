@@ -390,10 +390,10 @@ const parser = lazy(async () => {
 })
 
 export async function commandFamilies(cmd: string): Promise<string[]> {
-  const tree = await parser().then((p) => p.parse(cmd))
-  if (!tree) return [cmd]
+  const root = await parse(cmd, false).catch(() => undefined)
+  if (!root) return [cmd]
   const result = new Set<string>()
-  for (const node of tree.rootNode.descendantsOfType("command")) {
+  for (const node of root.descendantsOfType("command")) {
     if (!node) continue
     const tokens: string[] = []
     for (let i = 0; i < node.childCount; i++) {
