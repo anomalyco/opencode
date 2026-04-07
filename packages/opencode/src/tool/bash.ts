@@ -261,7 +261,7 @@ function preview(text: string) {
 async function parse(command: string, ps: boolean) {
   const tree = await parser().then((p) => (ps ? p.ps : p.bash).parse(command))
   if (!tree) throw new Error("Failed to parse command")
-  return tree.rootNode
+  return tree
 }
 
 async function ask(ctx: Tool.Context, scan: Scan) {
@@ -474,10 +474,14 @@ export const BashTool = Tool.define("bash", async () => {
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const ps = PS.has(name)
-      const root = await parse(params.command, ps)
-      const scan = await collect(root, cwd, ps, shell)
-      if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
-      await ask(ctx, scan)
+      const tree = await parse(params.command, ps)
+      try {
+        const scan = await collect(tree.rootNode, cwd, ps, shell)
+        if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
+        await ask(ctx, scan)
+      } finally {
+        tree.delete()
+      }
 
       return run(
         {
