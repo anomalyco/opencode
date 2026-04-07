@@ -30,6 +30,8 @@ export namespace Skill {
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    status: z.enum(["ok", "invalid"]).optional(),
+    error: z.string().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -53,6 +55,7 @@ export namespace Skill {
 
   type State = {
     skills: Record<string, Info>
+    invalid: Info[]
     dirs: Set<string>
   }
 
@@ -75,7 +78,16 @@ export namespace Skill {
             : `Failed to parse skill ${match}`
           const { Session } = yield* Effect.promise(() => import("@/session"))
           yield* bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-          log.error("failed to load skill", { skill: match, err })
+          log.error("failed to parse skill frontmatter", { skill: match, error: message, err })
+          state.dirs.add(path.dirname(match))
+          state.invalid.push({
+            name: path.basename(path.dirname(match)),
+            description: "invalid SKILL.md",
+            location: match,
+            content: "",
+            status: "invalid",
+            error: message,
+          })
           return undefined
         }),
       ),
@@ -84,7 +96,20 @@ export namespace Skill {
     if (!md) return
 
     const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
-    if (!parsed.success) return
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "Invalid skill frontmatter"
+      log.warn("invalid skill frontmatter", { skill: match, error: message })
+      state.dirs.add(path.dirname(match))
+      state.invalid.push({
+        name: path.basename(path.dirname(match)),
+        description: "invalid SKILL.md",
+        location: match,
+        content: "",
+        status: "invalid",
+        error: message,
+      })
+      return
+    }
 
     if (state.skills[parsed.data.name]) {
       log.warn("duplicate skill name", {
@@ -100,6 +125,7 @@ export namespace Skill {
       description: parsed.data.description,
       location: match,
       content: md.content,
+      status: "ok",
     }
   })
 
@@ -184,7 +210,7 @@ export namespace Skill {
       }
     }
 
-    log.info("init", { count: Object.keys(state.skills).length })
+    log.info("init", { count: Object.keys(state.skills).length, invalid: state.invalid.length })
   })
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
@@ -198,7 +224,7 @@ export namespace Skill {
       const fsys = yield* AppFileSystem.Service
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
-          const s: State = { skills: {}, dirs: new Set() }
+          const s: State = { skills: {}, invalid: [], dirs: new Set() }
           yield* loadSkills(s, config, discovery, bus, fsys, ctx.directory, ctx.worktree)
           return s
         }),
@@ -211,7 +237,7 @@ export namespace Skill {
 
       const all = Effect.fn("Skill.all")(function* () {
         const s = yield* InstanceState.get(state)
-        return Object.values(s.skills)
+        return [...Object.values(s.skills), ...s.invalid]
       })
 
       const dirs = Effect.fn("Skill.dirs")(function* () {
@@ -243,18 +269,30 @@ export namespace Skill {
     if (opts.verbose) {
       return [
         "<available_skills>",
-        ...list.flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
-          "  </skill>",
-        ]),
+        ...list.flatMap((skill) => {
+          const status = skill.status ?? "ok"
+          const error = skill.error ? `    <error>${skill.error}</error>` : null
+          return [
+            "  <skill>",
+            `    <name>${skill.name}</name>`,
+            `    <description>${skill.description}</description>`,
+            `    <location>${pathToFileURL(skill.location).href}</location>`,
+            `    <status>${status}</status>`,
+            error,
+            "  </skill>",
+          ].filter(Boolean)
+        }),
         "</available_skills>",
       ].join("\n")
     }
 
-    return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
+    return [
+      "## Available Skills",
+      ...list.map((skill) => {
+        const tag = skill.status === "invalid" ? " (invalid)" : ""
+        return `- **${skill.name}**${tag}: ${skill.description}`
+      }),
+    ].join("\n")
   }
 
   const { runPromise } = makeRuntime(Service, defaultLayer)

@@ -5221,6 +5221,8 @@ export type AppSkillsResponses = {
     description: string
     location: string
     content: string
+    status?: "ok" | "invalid"
+    error?: string
   }>
 }
 

@@ -24,8 +24,10 @@ export function DialogSkill(props: DialogSkillProps) {
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
       value: skill.name,
-      category: "Skills",
+      category: skill.status === "invalid" ? "Invalid skills" : "Skills",
+      footer: skill.status === "invalid" ? "Invalid" : undefined,
       onSelect: () => {
+        if (skill.status === "invalid") return
         props.onSelect(skill.name)
         dialog.clear()
       },

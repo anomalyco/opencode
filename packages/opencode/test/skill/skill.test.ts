@@ -154,7 +154,39 @@ Just some content without YAML frontmatter.
     directory: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
-      expect(skills).toEqual([])
+      expect(skills).toHaveLength(1)
+      expect(skills[0].name).toBe("no-frontmatter")
+      expect(skills[0].status).toBe("invalid")
+    },
+  })
+})
+
+test("captures and logs invalid skill frontmatter", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "bad-frontmatter")
+      await fs.mkdir(skillDir, { recursive: true })
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: bad-frontmatter
+description: This frontmatter is invalid
+This line breaks YAML
+---
+\n# Bad Skill\n`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].status).toBe("invalid")
+      expect(skills[0].name).toBe("bad-frontmatter")
+      expect(skills[0].description).toBe("invalid SKILL.md")
     },
   })
 })
