@@ -130,10 +130,17 @@ export function SpreadsheetViewer(props: Props) {
   })
 
   createEffect(() => {
+    const el = host()
+    if (!el || typeof window === "undefined") return
     const cur = runtime
     if (!cur) return
     const wsBase = import.meta.env.VITE_UNIVER_SDK_WS?.trim()
-    if (!wsBase) return
+    if (!wsBase) {
+      console.warn(
+        "[veritly] VITE_UNIVER_SDK_WS was empty at vite build/dev — the SDK relay WebSocket is disabled. Set VITE_UNIVER_SDK_WS=ws://127.0.0.1:18766/ws in .env, restart `vite`/dev, or rebuild the app so the client bundle includes it.",
+      )
+      return
+    }
 
     relaySocket?.close(1000, "reconnect")
     const join = wsBase.includes("?") ? "&" : "?"

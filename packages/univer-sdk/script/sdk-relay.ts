@@ -63,7 +63,9 @@ Bun.serve({
     open(ws: RelayWebSocket) {
       if (ws.data.role === "browser") {
         if (browser) {
-          closeWithReason(ws, "browser already connected")
+          const prev = browser
+          browser = ws
+          prev.close(1000, "replaced by newer browser connection")
           return
         }
         browser = ws
@@ -106,6 +108,7 @@ Bun.serve({
     },
     close(ws: RelayWebSocket, _code: number, _reason: string) {
       if (ws.data.role === "browser") {
+        if (browser !== ws) return
         browser = null
         for (const [id, agent] of pending.entries()) {
           sendJson(agent, { id, ok: false, error: "browser disconnected" })
