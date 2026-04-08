@@ -9,7 +9,7 @@ const sidecarConfig = getCurrentSidecar(RUST_TARGET)
 const binaryPath = windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`)
 
 await (sidecarConfig.ocBinary.includes("-baseline")
-  ? $`cd ../opencode && bun run build --single --baseline`
-  : $`cd ../opencode && bun run build --single`)
+  ? $`cd ../opencode && bun run build --single --baseline --skip-install`
+  : $`cd ../opencode && bun run build --single --skip-install`)
 
 await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)
