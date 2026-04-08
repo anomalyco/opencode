@@ -173,6 +173,11 @@ export namespace Config {
         }),
       )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+      log.info("OPENCODE_CONFIG_CONTENT merged", {
+        skillsPaths: result.skills?.paths ?? [],
+        skillUrls: result.skills?.urls ?? [],
+        instructionCount: result.instructions?.length ?? 0,
+      })
     }
 
     const active = Account.active()

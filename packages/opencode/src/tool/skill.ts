@@ -5,9 +5,17 @@ import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tool.skill" })
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent)
+  log.info("skill tool listing", {
+    count: list.length,
+    names: list.map((s) => s.name),
+    agent: ctx?.agent?.name,
+  })
 
   const description =
     list.length === 0
@@ -41,6 +49,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      log.info("skill tool execute", { name: params.name })
       const skill = await Skill.get(params.name)
 
       if (!skill) {

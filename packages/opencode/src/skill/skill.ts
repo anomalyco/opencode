@@ -56,7 +56,13 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
     const dirs = new Set<string>()
 
-    const addSkill = async (match: string) => {
+    log.info("skill discovery starting", {
+      instanceDirectory: Instance.directory,
+      worktree: Instance.worktree,
+      opencodeSkillGlob: OPENCODE_SKILL_PATTERN,
+    })
+
+    const addSkill = async (match: string, source: string) => {
       const md = await ConfigMarkdown.parse(match).catch((err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
@@ -69,7 +75,10 @@ export namespace Skill {
       if (!md) return
 
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
-      if (!parsed.success) return
+      if (!parsed.success) {
+        log.warn("skill frontmatter missing name/description", { source, path: match, issues: parsed.error.issues })
+        return
+      }
 
       // Warn on duplicate skill names
       if (skills[parsed.data.name]) {
@@ -88,6 +97,7 @@ export namespace Skill {
         location: match,
         content: md.content,
       }
+      log.info("skill loaded", { source, name: parsed.data.name, path: match })
     }
 
     const scanExternal = async (root: string, scope: "global" | "project") => {
@@ -98,7 +108,14 @@ export namespace Skill {
         dot: true,
         symlink: true,
       })
-        .then((matches) => Promise.all(matches.map(addSkill)))
+        .then((matches) =>
+          Promise.all(
+            matches.map((m) => {
+              log.info("external skill glob match", { scope, root, path: m })
+              return addSkill(m, `external:${scope}`)
+            }),
+          ),
+        )
         .catch((error) => {
           log.error(`failed to scan ${scope} skills`, { dir: root, error })
         })
@@ -122,41 +139,51 @@ export namespace Skill {
       }
     }
 
-    // Scan .opencode/skill/ directories
-    for (const dir of await Config.directories()) {
+    // Scan .opencode/skill/ and .opencode/skills/ under each config directory (walk-up from cwd)
+    const opencodeDirs = await Config.directories()
+    log.info("scanning opencode config dirs for skills", { dirs: opencodeDirs })
+    for (const dir of opencodeDirs) {
       const matches = await Glob.scan(OPENCODE_SKILL_PATTERN, {
         cwd: dir,
         absolute: true,
         include: "file",
         symlink: true,
       })
+      log.info("opencode dir skill glob", { cwd: dir, matchCount: matches.length, paths: matches })
       for (const match of matches) {
-        await addSkill(match)
+        await addSkill(match, "opencode.config_dir")
       }
     }
 
-    // Scan additional skill paths from config
+    // Scan additional skill paths from config (e.g. OPENCODE_CONFIG_CONTENT skills.paths)
     const config = await Config.get()
+    log.info("config skills section", {
+      paths: config.skills?.paths ?? [],
+      urlCount: config.skills?.urls?.length ?? 0,
+    })
     for (const skillPath of config.skills?.paths ?? []) {
       const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
       const resolved = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
       if (!(await Filesystem.isDir(resolved))) {
-        log.warn("skill path not found", { path: resolved })
+        log.warn("skill path not found", { requested: skillPath, resolved })
         continue
       }
+      log.info("scanning configured skill path", { resolved })
       const matches = await Glob.scan(SKILL_PATTERN, {
         cwd: resolved,
         absolute: true,
         include: "file",
         symlink: true,
       })
+      log.info("configured skill path glob", { resolved, matchCount: matches.length, paths: matches })
       for (const match of matches) {
-        await addSkill(match)
+        await addSkill(match, "config.skills.paths")
       }
     }
 
     // Download and load skills from URLs
     for (const url of config.skills?.urls ?? []) {
+      log.info("pulling skills from url", { url })
       const list = await Discovery.pull(url)
       for (const dir of list) {
         dirs.add(dir)
@@ -166,11 +193,18 @@ export namespace Skill {
           include: "file",
           symlink: true,
         })
+        log.info("url skill bundle glob", { url, dir, matchCount: matches.length })
         for (const match of matches) {
-          await addSkill(match)
+          await addSkill(match, "config.skills.urls")
         }
       }
     }
+
+    log.info("skill discovery complete", {
+      total: Object.keys(skills).length,
+      names: Object.keys(skills),
+      skillDirs: Array.from(dirs),
+    })
 
     return {
       skills,

@@ -24,7 +24,16 @@ mkdir -p /data/opencode-managed
     cat "$XDG_CONFIG_HOME/opencode/AGENTS.md"
   fi
 } > /data/opencode-managed/veritly-instructions.md
-OPENCODE_CONFIG_CONTENT='{"instructions":["/data/opencode-managed/veritly-instructions.md"]}'
+# Vendored skills live in the image at /app/.opencode/skill (see opencode-veritly repo .opencode/skill/).
+OPENCODE_CONFIG_CONTENT="$(
+  python3 -c '
+import json
+print(json.dumps({
+  "instructions": ["/data/opencode-managed/veritly-instructions.md"],
+  "skills": {"paths": ["/app/.opencode/skill"]},
+}))
+'
+)"
 if [ -f /data/opencode-managed/veritly-instructions.md ]; then
   log "generated=/data/opencode-managed/veritly-instructions.md"
   log "bytes=$(wc -c < /data/opencode-managed/veritly-instructions.md)"
@@ -38,6 +47,7 @@ else
   log "user-instructions=missing"
 fi
 log "opencode_config_content=$OPENCODE_CONFIG_CONTENT"
+log "skills_paths_includes=/app/.opencode/skill"
 
 if [ ! -e /workspace ]; then
   ln -s /data/workspace /workspace
