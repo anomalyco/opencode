@@ -937,8 +937,8 @@ export namespace Provider {
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
-      headers: model.headers ?? {},
-      options: model.options ?? {},
+      headers: {},
+      options: {},
       cost: {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,
