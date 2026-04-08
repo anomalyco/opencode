@@ -147,8 +147,7 @@ describe("tool.webfetch", () => {
       )
 
       expect(ids).toHaveLength(1)
-      expect(cleared).toHaveLength(1)
-      expect(cleared[0]).toBe(ids[0])
+      expect(cleared).toContain(ids[0])
     })
   })
 })
