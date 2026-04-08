@@ -74,7 +74,13 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const circle = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
+      <ProgressCircle
+        size={20}
+        strokeWidth={2}
+        percentage={context()?.usage ?? 0}
+        label={context()?.usage ?? 0}
+        rounded
+      />
     </div>
   )
 
