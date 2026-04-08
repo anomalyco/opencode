@@ -46,7 +46,8 @@
   /* Links */
   a {
     color: var(--text-interactive-base);
-    text-decoration: none;
+    text-decoration: underline;
+    text-underline-offset: 2px;
     font-weight: inherit;
   }
 
@@ -214,7 +215,7 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--syntax-string);
+    color: var(--markdown-code, var(--syntax-primitive));
     font-weight: var(--font-weight-medium);
     /* font-size: 13px; */
 
