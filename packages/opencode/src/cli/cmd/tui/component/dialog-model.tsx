@@ -267,6 +267,7 @@ export function DialogModel(props: { providerID?: string }) {
               </box>
             )
           }
+          const s = status(val.model)
           return (
             <box flexDirection="column" gap={1}>
               <text fg={theme.text}>
@@ -276,7 +277,7 @@ export function DialogModel(props: { providerID?: string }) {
               <text fg={theme.textMuted}>Supports: {input(val.model)}</text>
               <text fg={theme.textMuted}>Reasoning: {val.model.capabilities?.reasoning ? "Yes" : "No"}</text>
               <text fg={theme.textMuted}>Context: {val.model.limit.context.toLocaleString()}</text>
-              <text fg={status(val.model).color}>{status(val.model).text}</text>
+              <text fg={s.color}>{s.text}</text>
             </box>
           )
         },
