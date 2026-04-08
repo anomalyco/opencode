@@ -29,3 +29,4 @@ opencode-dev
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+packages/univer-sdk/python/veritly_univer_sdk.egg-info/**
