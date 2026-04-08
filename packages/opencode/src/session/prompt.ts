@@ -483,14 +483,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             Effect.runPromise(
               Effect.gen(function* () {
                 const ctx = context(args, opts)
+                const hookOutput: { args: unknown; _meta?: Record<string, unknown> } = { args }
                 yield* plugin.trigger(
                   "tool.execute.before",
                   { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-                  { args },
+                  hookOutput,
                 )
                 yield* Effect.promise(() => ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] }))
                 const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
-                  execute(args, opts),
+                  execute(hookOutput.args, { ...opts, _meta: hookOutput._meta } as typeof opts),
                 )
                 yield* plugin.trigger(
                   "tool.execute.after",
