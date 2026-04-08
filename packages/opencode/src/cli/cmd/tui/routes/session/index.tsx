@@ -19,7 +19,7 @@ import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, detectLinks, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type {
   AssistantMessage,
@@ -1460,6 +1460,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
               filetype="markdown"
+              onChunks={detectLinks}
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
