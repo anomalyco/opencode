@@ -347,10 +347,9 @@ export type EventCommandExecuted = {
   }
 }
 
-export type FileDiff = {
+export type SnapshotFileDiff = {
   file: string
-  before: string
-  after: string
+  patch: string
   additions: number
   deletions: number
   status?: "added" | "deleted" | "modified"
@@ -360,7 +359,7 @@ export type EventSessionDiff = {
   type: "session.diff"
   properties: {
     sessionID: string
-    diff: Array<FileDiff>
+    diff: Array<SnapshotFileDiff>
   }
 }
 
@@ -542,7 +541,7 @@ export type UserMessage = {
   summary?: {
     title?: string
     body?: string
-    diffs: Array<FileDiff>
+    diffs: Array<SnapshotFileDiff>
   }
   agent: string
   model: {
@@ -917,7 +916,7 @@ export type Session = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<FileDiff>
+    diffs?: Array<SnapshotFileDiff>
   }
   share?: {
     url: string
@@ -1078,7 +1077,7 @@ export type SyncEventSessionUpdated = {
         additions: number
         deletions: number
         files: number
-        diffs?: Array<FileDiff>
+        diffs?: Array<SnapshotFileDiff>
       } | null
       share?: {
         url: string | null
@@ -1803,7 +1802,7 @@ export type GlobalSession = {
     additions: number
     deletions: number
     files: number
-    diffs?: Array<FileDiff>
+    diffs?: Array<SnapshotFileDiff>
   }
   share?: {
     url: string
@@ -2007,6 +2006,14 @@ export type Path = {
 export type VcsInfo = {
   branch?: string
   default_branch?: string
+}
+
+export type VcsFileDiff = {
+  file: string
+  patch: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
 }
 
 export type Command = {
@@ -3503,7 +3510,7 @@ export type SessionDiffResponses = {
   /**
    * Successfully retrieved diff
    */
-  200: Array<FileDiff>
+  200: Array<SnapshotFileDiff>
 }
 
 export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
@@ -5159,7 +5166,7 @@ export type VcsDiffResponses = {
   /**
    * VCS diff
    */
-  200: Array<FileDiff>
+  200: Array<VcsFileDiff>
 }
 
 export type VcsDiffResponse = VcsDiffResponses[keyof VcsDiffResponses]

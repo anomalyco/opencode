@@ -1,4 +1,9 @@
-import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import {
+  AssistantMessage,
+  type SnapshotFileDiff,
+  Message as MessageType,
+  Part as PartType,
+} from "@opencode-ai/sdk/v2/client"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
@@ -19,6 +24,7 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
+import { normalize } from "./session-diff"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -163,7 +169,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyDiffs: FileDiff[] = []
+  const emptyDiffs: SnapshotFileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
@@ -232,7 +238,7 @@ export function SessionTurn(
 
     const seen = new Set<string>()
     return files
-      .reduceRight<FileDiff[]>((result, diff) => {
+      .reduceRight<SnapshotFileDiff[]>((result, diff) => {
         if (seen.has(diff.file)) return result
         seen.add(diff.file)
         result.push(diff)
@@ -447,6 +453,7 @@ export function SessionTurn(
                     >
                       <For each={visible()}>
                         {(diff) => {
+                          const view = normalize(diff)
                           const active = createMemo(() => expanded().includes(diff.file))
                           const [shown, setShown] = createSignal(false)
 
@@ -495,12 +502,7 @@ export function SessionTurn(
                               <Accordion.Content>
                                 <Show when={shown()}>
                                   <div data-slot="session-turn-diff-view" data-scrollable>
-                                    <Dynamic
-                                      component={fileComponent}
-                                      mode="diff"
-                                      before={{ name: diff.file, contents: diff.before }}
-                                      after={{ name: diff.file, contents: diff.after }}
-                                    />
+                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
                                   </div>
                                 </Show>
                               </Accordion.Content>

@@ -1,7 +1,6 @@
 import { Binary } from "@opencode-ai/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
@@ -9,6 +8,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
@@ -161,7 +161,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.diff": {
-      const props = event.properties as { sessionID: string; diff: FileDiff[] }
+      const props = event.properties as { sessionID: string; diff: SnapshotFileDiff[] }
       input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
       break
     }
