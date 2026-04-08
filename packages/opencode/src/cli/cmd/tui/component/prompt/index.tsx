@@ -102,11 +102,7 @@ export function Prompt(props: PromptProps) {
     const provider = local.model.parsed().provider
     const profile = local.model.parsed().profile
     if (!current) return provider
-    const base = consoleManagedProviderLabel(
-      sync.data.console_state.consoleManagedProviders,
-      current.providerID,
-      provider,
-    )
+    const base = provider
     if (profile && profile !== "default") {
       return `${base}:${profile}`
     }

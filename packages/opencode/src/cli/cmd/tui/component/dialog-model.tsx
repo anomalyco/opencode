@@ -8,7 +8,6 @@ import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
-import { consoleManagedProviderLabel } from "@tui/util/provider-origin"
 import { Auth } from "@/auth"
 
 export function useConnected() {
@@ -77,11 +76,7 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id, authProfile: item.authProfile },
             title: model.name ?? item.modelID,
-            description: `${consoleManagedProviderLabel(
-              sync.data.console_state.consoleManagedProviders,
-              provider.id,
-              provider.name,
-            )}${item.authProfile ? `:${item.authProfile}` : ":default"}`,
+            description: `${provider.name}${item.authProfile ? `:${item.authProfile}` : ":default"}`,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -119,9 +114,7 @@ export function DialogModel(props: { providerID?: string }) {
                 value,
                 title: info.name ?? model,
                 description: favorites.some((item) => keyOf(item) === keyOf(value)) ? "(Favorite)" : undefined,
-                category: connected()
-                  ? `${consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, provider.id, provider.name)}${authProfile ? `:${authProfile}` : ""}`
-                  : undefined,
+                category: connected() ? `${provider.name}${authProfile ? `:${authProfile}` : ""}` : undefined,
                 disabled: provider.id === "opencode" && model.includes("-nano"),
                 footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
                 onSelect() {
