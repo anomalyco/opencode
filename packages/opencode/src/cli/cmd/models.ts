@@ -28,7 +28,7 @@ export const ModelsCommand = cmd({
   },
   handler: async (args) => {
     if (args.refresh) {
-      await ModelsDev.refresh()
+      await ModelsDev.refresh(true)
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
 
@@ -51,7 +51,7 @@ export const ModelsCommand = cmd({
         }
 
         if (args.provider) {
-          const provider = providers[args.provider]
+          const provider = providers[ProviderID.make(args.provider)]
           if (!provider) {
             UI.error(`Provider not found: ${args.provider}`)
             return

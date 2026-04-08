@@ -1,17 +1,83 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Session } from "../../src/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionCompaction } from "../../src/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageID, PartID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
 
-const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+function user(sessionID: string, agent = "default") {
+  return Session.updateMessage({
+    id: MessageID.ascending(),
+    role: "user" as const,
+    sessionID: sessionID as any,
+    agent,
+    model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") },
+    time: { created: Date.now() },
+  })
+}
+
+function assistant(sessionID: string, parentID: string, dir: string) {
+  return Session.updateMessage({
+    id: MessageID.ascending(),
+    role: "assistant" as const,
+    sessionID: sessionID as any,
+    mode: "default",
+    agent: "default",
+    path: { cwd: dir, root: dir },
+    cost: 0,
+    tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ModelID.make("gpt-4"),
+    providerID: ProviderID.make("openai"),
+    parentID: parentID as any,
+    time: { created: Date.now() },
+    finish: "end_turn",
+  })
+}
+
+function text(sessionID: string, messageID: string, content: string) {
+  return Session.updatePart({
+    id: PartID.ascending(),
+    messageID: messageID as any,
+    sessionID: sessionID as any,
+    type: "text" as const,
+    text: content,
+  })
+}
+
+function tool(sessionID: string, messageID: string) {
+  return Session.updatePart({
+    id: PartID.ascending(),
+    messageID: messageID as any,
+    sessionID: sessionID as any,
+    type: "tool" as const,
+    tool: "bash",
+    callID: "call-1",
+    state: {
+      status: "completed" as const,
+      input: {},
+      output: "done",
+      title: "",
+      metadata: {},
+      time: { start: 0, end: 1 },
+    },
+  })
+}
+
+const tokens = {
+  input: 0,
+  output: 0,
+  reasoning: 0,
+  cache: { read: 0, write: 0 },
+}
 
 describe("revert + compact workflow", () => {
   test("should properly handle compact command after revert", async () => {
@@ -280,6 +346,275 @@ describe("revert + compact workflow", () => {
 
         // Clean up
         await Session.remove(sessionID)
+      },
+    })
+  })
+
+  test("cleanup with partID removes parts from the revert point onward", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        const p1 = await text(sid, u1.id, "first part")
+        const p2 = await tool(sid, u1.id)
+        const p3 = await text(sid, u1.id, "third part")
+
+        // Set revert state pointing at a specific part
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u1.id, partID: p2.id },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const info = await Session.get(sid)
+        await SessionRevert.cleanup(info)
+
+        const msgs = await Session.messages({ sessionID: sid })
+        expect(msgs.length).toBe(1)
+        // Only the first part should remain (before the revert partID)
+        expect(msgs[0].parts.length).toBe(1)
+        expect(msgs[0].parts[0].id).toBe(p1.id)
+
+        const cleared = await Session.get(sid)
+        expect(cleared.revert).toBeUndefined()
+      },
+    })
+  })
+
+  test("cleanup removes messages after revert point but keeps earlier ones", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        const a1 = await assistant(sid, u1.id, tmp.path)
+        await text(sid, a1.id, "hi back")
+
+        const u2 = await user(sid)
+        await text(sid, u2.id, "second question")
+        const a2 = await assistant(sid, u2.id, tmp.path)
+        await text(sid, a2.id, "second answer")
+
+        // Revert from u2 onward
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u2.id },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const info = await Session.get(sid)
+        await SessionRevert.cleanup(info)
+
+        const msgs = await Session.messages({ sessionID: sid })
+        const ids = msgs.map((m) => m.info.id)
+        expect(ids).toContain(u1.id)
+        expect(ids).toContain(a1.id)
+        expect(ids).not.toContain(u2.id)
+        expect(ids).not.toContain(a2.id)
+      },
+    })
+  })
+
+  test("cleanup is a no-op when session has no revert state", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+
+        const info = await Session.get(sid)
+        expect(info.revert).toBeUndefined()
+        await SessionRevert.cleanup(info)
+
+        const msgs = await Session.messages({ sessionID: sid })
+        expect(msgs.length).toBe(1)
+      },
+    })
+  })
+
+  test("restore messages in sequential order", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await fs.writeFile(path.join(tmp.path, "a.txt"), "a0")
+        await fs.writeFile(path.join(tmp.path, "b.txt"), "b0")
+        await fs.writeFile(path.join(tmp.path, "c.txt"), "c0")
+
+        const session = await Session.create({})
+        const sid = session.id
+
+        const turn = async (file: string, next: string) => {
+          const u = await user(sid)
+          await text(sid, u.id, `${file}:${next}`)
+          const a = await assistant(sid, u.id, tmp.path)
+          const before = await Snapshot.track()
+          if (!before) throw new Error("expected snapshot")
+          await fs.writeFile(path.join(tmp.path, file), next)
+          const after = await Snapshot.track()
+          if (!after) throw new Error("expected snapshot")
+          const patch = await Snapshot.patch(before)
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "step-start",
+            snapshot: before,
+          })
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: after,
+            cost: 0,
+            tokens,
+          })
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+          return u.id
+        }
+
+        const first = await turn("a.txt", "a1")
+        const second = await turn("b.txt", "b2")
+        const third = await turn("c.txt", "c3")
+
+        await SessionRevert.revert({
+          sessionID: sid,
+          messageID: first,
+        })
+        expect((await Session.get(sid)).revert?.messageID).toBe(first)
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a0")
+        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b0")
+        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
+
+        await SessionRevert.revert({
+          sessionID: sid,
+          messageID: second,
+        })
+        expect((await Session.get(sid)).revert?.messageID).toBe(second)
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
+        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b0")
+        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
+
+        await SessionRevert.revert({
+          sessionID: sid,
+          messageID: third,
+        })
+        expect((await Session.get(sid)).revert?.messageID).toBe(third)
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
+        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b2")
+        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
+
+        await SessionRevert.unrevert({
+          sessionID: sid,
+        })
+        expect((await Session.get(sid)).revert).toBeUndefined()
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
+        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b2")
+        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c3")
+      },
+    })
+  })
+
+  test("restore same file in sequential order", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await fs.writeFile(path.join(tmp.path, "a.txt"), "a0")
+
+        const session = await Session.create({})
+        const sid = session.id
+
+        const turn = async (next: string) => {
+          const u = await user(sid)
+          await text(sid, u.id, `a.txt:${next}`)
+          const a = await assistant(sid, u.id, tmp.path)
+          const before = await Snapshot.track()
+          if (!before) throw new Error("expected snapshot")
+          await fs.writeFile(path.join(tmp.path, "a.txt"), next)
+          const after = await Snapshot.track()
+          if (!after) throw new Error("expected snapshot")
+          const patch = await Snapshot.patch(before)
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "step-start",
+            snapshot: before,
+          })
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "step-finish",
+            reason: "stop",
+            snapshot: after,
+            cost: 0,
+            tokens,
+          })
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+          return u.id
+        }
+
+        const first = await turn("a1")
+        const second = await turn("a2")
+        const third = await turn("a3")
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a3")
+
+        await SessionRevert.revert({
+          sessionID: sid,
+          messageID: first,
+        })
+        expect((await Session.get(sid)).revert?.messageID).toBe(first)
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a0")
+
+        await SessionRevert.revert({
+          sessionID: sid,
+          messageID: second,
+        })
+        expect((await Session.get(sid)).revert?.messageID).toBe(second)
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
+
+        await SessionRevert.revert({
+          sessionID: sid,
+          messageID: third,
+        })
+        expect((await Session.get(sid)).revert?.messageID).toBe(third)
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a2")
+
+        await SessionRevert.unrevert({
+          sessionID: sid,
+        })
+        expect((await Session.get(sid)).revert).toBeUndefined()
+        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a3")
       },
     })
   })

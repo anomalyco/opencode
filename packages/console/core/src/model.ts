@@ -26,7 +26,8 @@ export namespace ZenData {
     allowAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
-    trialProvider: z.string().optional(),
+    trialProviders: z.array(z.string()).optional(),
+    trialEnded: z.boolean().optional(),
     fallbackProvider: z.string().optional(),
     rateLimit: z.number().optional(),
     providers: z.array(
@@ -37,6 +38,7 @@ export namespace ZenData {
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
         payloadModifier: z.record(z.string(), z.any()).optional(),
+        safetyIdentifier: z.boolean().optional(),
       }),
     ),
   })
@@ -48,11 +50,15 @@ export namespace ZenData {
     headerMappings: z.record(z.string(), z.string()).optional(),
     payloadModifier: z.record(z.string(), z.any()).optional(),
     payloadMappings: z.record(z.string(), z.string()).optional(),
+    adjustCacheUsage: z.boolean().optional(),
   })
 
   const ModelsSchema = z.object({
     models: z.record(z.string(), z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))])),
-    liteModels: z.record(z.string(), ModelSchema),
+    liteModels: z.record(
+      z.string(),
+      z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))]),
+    ),
     providers: z.record(z.string(), ProviderSchema),
   })
 

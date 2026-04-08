@@ -5,7 +5,12 @@ import { createResource, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
 type InitType = Promise<string> | string | null
-type PersistedWithReady<T> = [Store<T>, SetStoreFunction<T>, InitType, Accessor<boolean>]
+type PersistedWithReady<T> = [
+  Store<T>,
+  SetStoreFunction<T>,
+  InitType,
+  Accessor<boolean> & { promise: undefined | Promise<any> },
+]
 
 type PersistTarget = {
   storage?: string
@@ -460,5 +465,12 @@ export function persisted<T>(
     { initialValue: !isAsync },
   )
 
-  return [state, setState, init, () => ready() === true]
+  return [
+    state,
+    setState,
+    init,
+    Object.assign(() => ready() === true, {
+      promise: init instanceof Promise ? init : undefined,
+    }),
+  ]
 }

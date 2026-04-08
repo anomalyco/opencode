@@ -13,7 +13,7 @@ export namespace ProviderError {
     /input token count.*exceeds the maximum/i, // Google (Gemini)
     /maximum prompt length is \d+/i, // xAI (Grok)
     /reduce the length of the messages/i, // Groq
-    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek
+    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek, vLLM
     /exceeds the limit of \d+/i, // GitHub Copilot
     /exceeds the available context size/i, // llama.cpp server
     /greater than the context length/i, // LM Studio
@@ -21,6 +21,11 @@ export namespace ProviderError {
     /exceeded model token limit/i, // Kimi For Coding, Moonshot
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
     /request entity too large/i, // HTTP 413
+    /context length is only \d+ tokens/i, // vLLM
+    /input length.*exceeds.*context length/i, // vLLM
+    /prompt too long; exceeded (?:max )?context length/i, // Ollama explicit overflow error
+    /too large for model with \d+ maximum context length/i, // Mistral
+    /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {

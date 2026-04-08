@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import type * as HttpClientError from "effect/unstable/http/HttpClientError"
 
 import { withStatics } from "@/util/schema"
 
@@ -38,7 +39,7 @@ export const UserCode = Schema.String.pipe(
 )
 export type UserCode = Schema.Schema.Type<typeof UserCode>
 
-export class Account extends Schema.Class<Account>("Account")({
+export class Info extends Schema.Class<Info>("Account")({
   id: AccountID,
   email: Schema.String,
   url: Schema.String,
@@ -60,7 +61,34 @@ export class AccountServiceError extends Schema.TaggedErrorClass<AccountServiceE
   cause: Schema.optional(Schema.Defect),
 }) {}
 
-export type AccountError = AccountRepoError | AccountServiceError
+export class AccountTransportError extends Schema.TaggedErrorClass<AccountTransportError>()("AccountTransportError", {
+  method: Schema.String,
+  url: Schema.String,
+  description: Schema.optional(Schema.String),
+  cause: Schema.optional(Schema.Defect),
+}) {
+  static fromHttpClientError(error: HttpClientError.TransportError): AccountTransportError {
+    return new AccountTransportError({
+      method: error.request.method,
+      url: error.request.url,
+      description: error.description,
+      cause: error.cause,
+    })
+  }
+
+  override get message(): string {
+    return [
+      `Could not reach ${this.method} ${this.url}.`,
+      `This failed before the server returned an HTTP response.`,
+      this.description,
+      `Check your network, proxy, or VPN configuration and try again.`,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }
+}
+
+export type AccountError = AccountRepoError | AccountServiceError | AccountTransportError
 
 export class Login extends Schema.Class<Login>("Login")({
   code: DeviceCode,

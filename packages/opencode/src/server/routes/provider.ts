@@ -9,6 +9,9 @@ import { ProviderID } from "../../provider/schema"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Log } from "../../util/log"
+
+const log = Log.create({ service: "server" })
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -109,14 +112,16 @@ export const ProviderRoutes = lazy(() =>
         "json",
         z.object({
           method: z.number().meta({ description: "Auth method index" }),
+          inputs: z.record(z.string(), z.string()).optional().meta({ description: "Prompt inputs" }),
         }),
       ),
       async (c) => {
         const providerID = c.req.valid("param").providerID
-        const { method } = c.req.valid("json")
+        const { method, inputs } = c.req.valid("json")
         const result = await ProviderAuth.authorize({
           providerID,
           method,
+          inputs,
         })
         return c.json(result)
       },

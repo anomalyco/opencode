@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { Effect } from "effect"
-import { DiscoveryService } from "../../src/skill/discovery"
+import { Discovery } from "../../src/skill/discovery"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
 import { rm } from "fs/promises"
@@ -48,7 +48,7 @@ afterAll(async () => {
 
 describe("Discovery.pull", () => {
   const pull = (url: string) =>
-    Effect.runPromise(DiscoveryService.use((s) => s.pull(url)).pipe(Effect.provide(DiscoveryService.defaultLayer)))
+    Effect.runPromise(Discovery.Service.use((s) => s.pull(url)).pipe(Effect.provide(Discovery.defaultLayer)))
 
   test("downloads skills from cloudflare url", async () => {
     const dirs = await pull(CLOUDFLARE_SKILLS_URL)
