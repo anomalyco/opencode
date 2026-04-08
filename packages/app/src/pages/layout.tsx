@@ -80,6 +80,7 @@ import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { dict as enDict } from "@/i18n/en"
 import {
+  canonicalWorkspaceDir,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -159,7 +160,7 @@ export default function Layout(props: ParentProps) {
     if (!dir) return ""
     // Prefer the synced child directory because the raw route value may be a
     // non-canonical path that later resolves to a normalized worktree path.
-    return globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir
+    return canonicalWorkspaceDir(dir, globalSync.peek(dir, { bootstrap: false })[0].path.directory)
   })
   // Use this only for equality checks, never as a directory source.
   const routeKey = createMemo(() => workspaceKey(routeDir()))
@@ -2315,8 +2316,17 @@ export default function Layout(props: ParentProps) {
   const side = createMemo(() => Math.max(state.previewSidebarWidth ?? layout.sidebar.width(), 244))
   const dragSide = createMemo(() => Math.max(state.previewSidebarWidth ?? layout.sidebar.width(), 244))
   const panel = createMemo(() => Math.max(side() - 64, 0))
+  const drag = {
+    click: false,
+    frame: 0,
+  }
 
   let started = false
+
+  onCleanup(() => {
+    if (!drag.frame) return
+    cancelAnimationFrame(drag.frame)
+  })
 
   createEffect(
     on(
@@ -2364,20 +2374,33 @@ export default function Layout(props: ParentProps) {
     setStore("activeProject", id)
   }
 
-  function handleDragOver(event: DragEvent) {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const projects = layout.projects.list()
-      const fromIndex = projects.findIndex((p) => p.worktree === draggable.id.toString())
-      const toIndex = projects.findIndex((p) => p.worktree === droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== -1) {
-        layout.projects.move(draggable.id.toString(), toIndex)
-      }
+  function handleDragEnd(event: DragEvent) {
+    if (store.activeProject) {
+      drag.click = true
+      if (drag.frame) cancelAnimationFrame(drag.frame)
+      drag.frame = requestAnimationFrame(() => {
+        drag.click = false
+        drag.frame = 0
+      })
     }
+    const { draggable, droppable } = event
+    setStore("activeProject", undefined)
+    if (!draggable || !droppable) return
+
+    const projects = layout.projects.list()
+    const from = projects.findIndex((p) => p.worktree === draggable.id.toString())
+    const to = projects.findIndex((p) => p.worktree === droppable.id.toString())
+    if (from === -1 || to === -1 || from === to) return
+
+    layout.projects.move(draggable.id.toString(), to)
   }
 
-  function handleDragEnd() {
-    setStore("activeProject", undefined)
+  function consumeProjectClick() {
+    if (!drag.click) return false
+    drag.click = false
+    if (drag.frame) cancelAnimationFrame(drag.frame)
+    drag.frame = 0
+    return true
   }
 
   function workspaceIds(project: LocalProject | undefined) {
@@ -3414,6 +3437,7 @@ export default function Layout(props: ParentProps) {
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir: routeDir,
     sidebarReduced,
+    consumeProjectClick,
     navigateToProject,
     closeProject,
     showEditProjectDialog,
@@ -3892,7 +3916,6 @@ export default function Layout(props: ParentProps) {
       renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile={mobile} />}
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
-      handleDragOver={handleDragOver}
       openProjectLabel={language.t("command.project.open")}
       openProjectKeybind={() => command.keybind("project.open")}
       onOpenProject={chooseProject}

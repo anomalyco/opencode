@@ -8,6 +8,7 @@ import {
 } from "./deep-links"
 import { type PermissionRequest, type Session } from "@opencode-ai/sdk/v2/client"
 import {
+  canonicalWorkspaceDir,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -129,6 +130,11 @@ describe("layout workspace helpers", () => {
     expect(String(pathKey("C:\\"))).toBe("C:/")
     expect(String(pathKey("C://"))).toBe("C:/")
     expect(String(pathKey("C:///"))).toBe("C:/")
+  })
+
+  test("uses canonical workspace dir only for the same workspace", () => {
+    expect(canonicalWorkspaceDir("/tmp/demo///", "/tmp/demo")).toBe("/tmp/demo")
+    expect(canonicalWorkspaceDir("/tmp/p", "/tmp/s")).toBe("/tmp/p")
   })
 
   test("keeps local first while preserving known order", () => {

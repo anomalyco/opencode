@@ -1,5 +1,7 @@
 import type { Message, Part, ProviderListResponse, Session } from "@opencode-ai/sdk/v2/client"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { useParams } from "@solidjs/router"
@@ -633,9 +635,12 @@ export function QuickAssistant() {
                 >
                   <Icon name="new-session" class="size-4.5" />
                 </button>
-                <button
+                <IconButton
                   type="button"
-                  class="flex size-10 items-center justify-center rounded-full bg-text-strong text-background-base shadow-xs-border disabled:cursor-not-allowed disabled:opacity-50"
+                  icon={busy() ? "stop" : "arrow-up-bold"}
+                  variant="primary"
+                  iconSize={busy() ? "normal" : "medium"}
+                  class="size-10 rounded-full shadow-xs-border disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!busy() && (state.loading || !root() || !state.text.trim())}
                   onClick={() => {
                     if (busy()) {
@@ -646,9 +651,7 @@ export function QuickAssistant() {
                   }}
                   aria-label={busy() ? "Stop" : "Send"}
                   title={busy() ? "Stop" : "Send"}
-                >
-                  <Icon name={busy() ? "stop" : "arrow-up-bold"} class={busy() ? "size-3.5" : "size-4.5"} />
-                </button>
+                />
               </div>
             </div>
 
@@ -660,15 +663,28 @@ export function QuickAssistant() {
                       const text = createMemo(() => render(data()?.part[item.id]))
                       return (
                         <div
+                          data-component="quick-assistant-message"
+                          data-role={item.role}
                           classList={{
-                            "rounded-2xl px-3 py-2": true,
-                            "ml-10 bg-surface-panel": item.role === "user",
-                            "mr-10 border border-border-weaker-base bg-background-stronger": item.role === "assistant",
+                            "px-3.5 py-3": true,
+                            "ml-10 rounded-[18px] border border-border-weak-base bg-surface-panel":
+                              item.role === "user",
+                            "mr-10 rounded-[20px] border border-border-weaker-base bg-background-stronger":
+                              item.role === "assistant",
                           }}
                         >
-                          <div class="whitespace-pre-wrap break-words text-13-regular text-text-base">
-                            {text() || (item.role === "assistant" && busy() ? "Thinking..." : "")}
-                          </div>
+                          <Show
+                            when={item.role === "assistant"}
+                            fallback={
+                              <div class="whitespace-pre-wrap break-words text-[15px] leading-7 text-text-strong">
+                                {text()}
+                              </div>
+                            }
+                          >
+                            <div class="quick-assistant-markdown text-[15px] leading-7 text-text-base">
+                              <Markdown text={text() || (busy() ? "Thinking..." : "")} math="defer" />
+                            </div>
+                          </Show>
                         </div>
                       )
                     }}

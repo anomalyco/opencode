@@ -6,6 +6,20 @@ type SessionStore = {
   path: { directory: string }
 }
 
+export const workspaceKey = (directory: string) => {
+  const value = directory.replaceAll("\\", "/")
+  const drive = value.match(/^([A-Za-z]:)\/+$/)
+  if (drive) return `${drive[1]}/`
+  if (/^\/+$/i.test(value)) return "/"
+  return value.replace(/\/+$/, "")
+}
+
+export const canonicalWorkspaceDir = (route: string, canonical?: string) => {
+  if (!canonical) return route
+  if (workspaceKey(route) !== workspaceKey(canonical)) return route
+  return canonical
+}
+
 function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {

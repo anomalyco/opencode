@@ -46,4 +46,8 @@ describe("markdown fileLink", () => {
   test("ignores plain slash-separated prose", () => {
     expect(fileLink("mode/Zhu")).toBeUndefined()
   })
+
+  test("ignores inline code commands containing file paths", () => {
+    expect(fileLink("pytest tests/test_backend.py tests/test_operator_spaces.py -q")).toBeUndefined()
+  })
 })

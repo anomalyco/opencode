@@ -18,8 +18,7 @@ export const SidebarContent = (props: {
   projects: Accessor<LocalProject[]>
   renderProject: (project: LocalProject) => JSX.Element
   handleDragStart: (event: unknown) => void
-  handleDragEnd: () => void
-  handleDragOver: (event: DragEvent) => void
+  handleDragEnd: (event: DragEvent) => void
   openProjectLabel: JSX.Element
   openProjectKeybind: Accessor<string | undefined>
   onOpenProject: () => void
@@ -60,7 +59,6 @@ export const SidebarContent = (props: {
           <DragDropProvider
             onDragStart={props.handleDragStart}
             onDragEnd={props.handleDragEnd}
-            onDragOver={props.handleDragOver}
             collisionDetector={closestCenter}
           >
             <DragDropSensors />
