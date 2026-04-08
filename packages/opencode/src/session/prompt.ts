@@ -784,9 +784,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       let output = ""
       let aborted = false
+      let done = false
 
       const finish = Effect.uninterruptible(
         Effect.gen(function* () {
+          if (done) return
+          done = true
           if (aborted) {
             output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
           }
