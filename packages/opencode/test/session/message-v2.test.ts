@@ -790,6 +790,330 @@ describe("session.message-v2.toModelMessage", () => {
   })
 })
 
+describe("session.message-v2.toModelMessage remind option", () => {
+  test("wraps user text parts after remind threshold", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("a1", "u0"),
+        parts: [
+          {
+            ...basePart("a1", "p0"),
+            type: "text",
+            text: "done",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "queued msg",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "a1" })
+    expect(result).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: [
+              "<system-reminder>",
+              "The user sent the following message:",
+              "queued msg",
+              "",
+              "Please address this message and continue with your tasks.",
+              "</system-reminder>",
+            ].join("\n"),
+          },
+        ],
+      },
+    ])
+  })
+
+  test("does not wrap user messages at or before remind threshold", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("a0"),
+        parts: [
+          {
+            ...basePart("a0", "p1"),
+            type: "text",
+            text: "old msg",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo("a1", "a0"),
+        parts: [
+          {
+            ...basePart("a1", "pa"),
+            type: "text",
+            text: "reply",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "a1" })
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "old msg" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "reply" }],
+      },
+    ])
+  })
+
+  test("does not wrap when remind is undefined", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ])
+  })
+
+  test("skips synthetic parts when wrapping", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "queued",
+          },
+          {
+            ...basePart("u1", "p2"),
+            type: "text",
+            text: "synthetic note",
+            synthetic: true,
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "a0" })
+    const parts = result[0].content as Array<{ type: string; text: string }>
+    const texts = parts.filter((p) => p.type === "text")
+    expect(texts[0].text).toContain("<system-reminder>")
+    expect(texts[0].text).toContain("queued")
+    expect(texts[1].text).toBe("synthetic note")
+  })
+
+  test("skips ignored parts when wrapping", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "ignored text",
+            ignored: true,
+          },
+          {
+            ...basePart("u1", "p2"),
+            type: "text",
+            text: "visible",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "a0" })
+    expect(result[0].content).toStrictEqual([
+      {
+        type: "text",
+        text: [
+          "<system-reminder>",
+          "The user sent the following message:",
+          "visible",
+          "",
+          "Please address this message and continue with your tasks.",
+          "</system-reminder>",
+        ].join("\n"),
+      },
+    ])
+  })
+
+  test("skips empty text parts when wrapping", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "   ",
+          },
+          {
+            ...basePart("u1", "p2"),
+            type: "text",
+            text: "real content",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "a0" })
+    const parts = result[0].content as Array<{ type: string; text: string }>
+    const texts = parts.filter((p) => p.type === "text")
+    expect(texts[0].text).toBe("   ")
+    expect(texts[1].text).toContain("<system-reminder>")
+  })
+
+  test("produces identical output across multiple calls (cache consistency)", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "first msg",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [
+          {
+            ...basePart("a1", "pa"),
+            type: "text",
+            text: "reply",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: userInfo("u2"),
+        parts: [
+          {
+            ...basePart("u2", "p2"),
+            type: "text",
+            text: "queued while busy",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const call1 = await MessageV2.toModelMessages(input, model, { remind: "a1" })
+    const call2 = await MessageV2.toModelMessages(input, model, { remind: "a1" })
+    expect(call1).toStrictEqual(call2)
+  })
+
+  test("does not mutate original message parts", async () => {
+    const part = {
+      ...basePart("u1", "p1"),
+      type: "text" as const,
+      text: "original",
+    }
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [part] as MessageV2.Part[],
+      },
+    ]
+
+    await MessageV2.toModelMessages(input, model, { remind: "a0" })
+    expect(part.text).toBe("original")
+  })
+
+  test("wraps multiple consecutive user messages after remind", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("a1", "u0"),
+        parts: [
+          {
+            ...basePart("a1", "pa"),
+            type: "text",
+            text: "done",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            ...basePart("u1", "p1"),
+            type: "text",
+            text: "first queued",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: userInfo("u2"),
+        parts: [
+          {
+            ...basePart("u2", "p2"),
+            type: "text",
+            text: "second queued",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "a1" })
+    expect(result).toHaveLength(3)
+    const first = result[1].content as Array<{ type: string; text: string }>
+    const second = result[2].content as Array<{ type: string; text: string }>
+    expect(first[0].text).toContain("<system-reminder>")
+    expect(first[0].text).toContain("first queued")
+    expect(second[0].text).toContain("<system-reminder>")
+    expect(second[0].text).toContain("second queued")
+  })
+
+  test("does not wrap when remind equals message id exactly", async () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("msg_aaa"),
+        parts: [
+          {
+            ...basePart("msg_aaa", "p1"),
+            type: "text",
+            text: "boundary msg",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model, { remind: "msg_aaa" })
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "boundary msg" }],
+      },
+    ])
+  })
+})
+
 describe("session.message-v2.fromError", () => {
   test("serializes context_length_exceeded as ContextOverflowError", () => {
     const input = {
