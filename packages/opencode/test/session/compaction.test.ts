@@ -482,6 +482,13 @@ describe("session.compaction.prune", () => {
         expect(part?.state.status).toBe("completed")
         if (part?.type === "tool" && part.state.status === "completed") {
           expect(part.state.time.compacted).toBeNumber()
+          expect(part.state.metadata.evidence).toMatchObject({
+            tool: "bash",
+            title: "done",
+            lines: 1,
+          })
+          expect(part.state.metadata.evidence).toHaveProperty("hash")
+          expect(part.state.metadata.evidence).toHaveProperty("excerpt")
         }
       },
     })

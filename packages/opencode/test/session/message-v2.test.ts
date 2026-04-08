@@ -434,7 +434,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("replaces compacted tool output with placeholder", async () => {
+  test("replaces compacted tool output with an evidence digest", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -470,35 +470,53 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
-      {
-        role: "user",
-        content: [{ type: "text", text: "run tool" }],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call-1",
-            toolName: "bash",
-            input: { cmd: "ls" },
-            providerExecuted: undefined,
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(3)
+    expect(result[0]).toStrictEqual({
+      role: "user",
+      content: [{ type: "text", text: "run tool" }],
+    })
+    expect(result[1]).toStrictEqual({
+      role: "assistant",
+      content: [
+        {
+          type: "tool-call",
+          toolCallId: "call-1",
+          toolName: "bash",
+          input: { cmd: "ls" },
+          providerExecuted: undefined,
+        },
+      ],
+    })
+    const tool = result[2] as {
+      role: string
+      content: Array<{
+        type: string
+        toolCallId: string
+        toolName: string
+        output: { type: string; value: string }
+      }>
+    }
+    expect(tool).toMatchObject({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call-1",
+          toolName: "bash",
+          output: {
+            type: "text",
           },
-        ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: "call-1",
-            toolName: "bash",
-            output: { type: "text", value: "[Old tool result content cleared]" },
-          },
-        ],
-      },
-    ])
+        },
+      ],
+    })
+
+    const text = tool.content[0]!.output.value
+    expect(text).toContain("tool: bash")
+    expect(text).toContain('input: {"cmd":"ls"}')
+    expect(text).toContain("excerpt:\nthis should be cleared")
+    expect(text).not.toContain("[Old tool result content cleared]")
   })
 
   test("converts assistant tool error into error-text tool result", async () => {
