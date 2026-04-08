@@ -65,6 +65,28 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
+  function threaded(model: Provider.Model) {
+    return model.providerID === "openai"
+  }
+
+  function chain(input: { model: Provider.Model; user: MessageV2.User; assistant?: MessageV2.WithParts }) {
+    const msg = input.assistant
+    if (!threaded(input.model) || !msg || msg.info.role !== "assistant") return
+    if ((input.model.options as { store?: boolean } | undefined)?.store !== true) return
+    if (`${input.model.providerID}/${input.model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`) return
+    if (input.user.id > msg.info.id) return
+    if (
+      !msg.parts.some(
+        (part) => part.type === "tool" && part.state.status !== "pending" && part.state.status !== "running",
+      )
+    )
+      return
+    const part = msg.parts.findLast((part): part is MessageV2.StepFinishPart => part.type === "step-finish")
+    const id = part?.metadata?.openai?.responseId
+    if (typeof id !== "string" || !id) return
+    return { id, msgs: [msg] }
+  }
+
   export interface Interface {
     readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -1342,6 +1364,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
+          const skills = new Map<string, string | undefined>()
+          const env = new Map<string, string[]>()
+          const systemPrompt = Effect.fnUntraced(function* (agent: Agent.Info, model: Provider.Model) {
+            const key = `${model.providerID}/${model.id}`
+            const skill = skills.has(agent.name)
+              ? skills.get(agent.name)
+              : yield* Effect.promise(() => SystemPrompt.skills(agent)).pipe(
+                  Effect.tap((value) => Effect.sync(() => skills.set(agent.name, value))),
+                )
+            const vars = env.has(key)
+              ? env.get(key)!
+              : yield* Effect.promise(() => SystemPrompt.environment(model)).pipe(
+                  Effect.tap((value) => Effect.sync(() => env.set(key, value))),
+                )
+            const instructions = yield* instruction.system().pipe(Effect.orDie)
+            return [...vars, ...(skill ? [skill] : []), ...instructions]
+          })
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
@@ -1500,15 +1539,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                  Effect.promise(() => SystemPrompt.skills(agent)),
-                  Effect.promise(() => SystemPrompt.environment(model)),
-                  instruction.system().pipe(Effect.orDie),
-                  Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+                const reuse = chain({ model, user: lastUser, assistant: lastAssistantMsg })
+                const src = reuse ? reuse.msgs : msgs
+
+                const [system, modelMsgs] = yield* Effect.all([
+                  systemPrompt(agent, model),
+                  Effect.promise(() => MessageV2.toModelMessages(src, model)),
                 ])
-                const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+                const send = reuse ? modelMsgs.filter((msg) => msg.role === "tool") : modelMsgs
                 const result = yield* handle.process({
                   user: lastUser,
                   agent,
@@ -1516,10 +1556,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   sessionID,
                   parentSessionID: session.parentID,
                   system,
-                  messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+                  messages: [...send, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                   tools,
                   model,
                   toolChoice: format.type === "json_schema" ? "required" : undefined,
+                  opts: reuse ? { previousResponseId: reuse.id, store: true } : undefined,
                 })
 
                 if (structured !== undefined) {

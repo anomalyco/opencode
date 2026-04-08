@@ -24,7 +24,7 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { sanitizeProject } from "./global-sync/utils"
+import { cloneProject, sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
@@ -97,8 +97,9 @@ function createGlobalSync() {
       cacheProjects()
       return
     }
-    setGlobalStore("project", next)
-    cacheProjects()
+    const list = next.map(cloneProject)
+    setGlobalStore("project", list)
+    setProjectCache("value", list.map(sanitizeProject))
   }
 
   const setBootStore = ((...input: unknown[]) => {

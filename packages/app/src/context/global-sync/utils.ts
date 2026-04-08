@@ -26,14 +26,29 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
   }
 }
 
-export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
+export function cloneProject(project: Project) {
   return {
     ...project,
-    icon: {
-      ...project.icon,
-      url: undefined,
-      override: undefined,
-    },
+    time: { ...project.time },
+    sandboxes: [...project.sandboxes],
+    ...(project.commands ? { commands: { ...project.commands } } : {}),
+    ...(project.icon ? { icon: { ...project.icon } } : {}),
+  }
+}
+
+export function sanitizeProject(project: Project) {
+  const next = cloneProject(project)
+  if (!next.icon) return next
+  return {
+    ...next,
+    ...(project.icon
+      ? {
+          icon: {
+            ...next.icon,
+            url: undefined,
+            override: undefined,
+          },
+        }
+      : {}),
   }
 }

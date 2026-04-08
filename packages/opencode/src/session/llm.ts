@@ -35,6 +35,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    opts?: Record<string, any>
   }
 
   export type StreamRequest = StreamInput & {
@@ -142,6 +143,7 @@ export namespace LLM {
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
+      mergeDeep(input.opts ?? {}),
     )
     if (isOpenaiOauth) {
       options.instructions = system.join("\n")
@@ -255,7 +257,7 @@ export namespace LLM {
       }
     }
 
-    return streamText({
+    const result = streamText({
       onError(error) {
         l.error("stream error", {
           error,
@@ -332,6 +334,8 @@ export namespace LLM {
         },
       },
     })
+
+    return result
   }
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {

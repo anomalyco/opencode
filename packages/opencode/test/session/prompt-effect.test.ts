@@ -27,6 +27,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { TaskTool } from "../../src/tool/task"
@@ -228,6 +229,43 @@ function providerCfg(url: string) {
         ...cfg.provider.test,
         options: {
           ...cfg.provider.test.options,
+          baseURL: url,
+        },
+      },
+    },
+  }
+}
+
+function openaiCfg(url: string, store = true) {
+  return {
+    enabled_providers: ["openai"],
+    agent: {
+      build: {
+        model: "openai/gpt-5.2",
+      },
+    },
+    provider: {
+      openai: {
+        name: "OpenAI",
+        env: ["OPENAI_API_KEY"],
+        npm: "@ai-sdk/openai",
+        api: "https://api.openai.com/v1",
+        models: {
+          "gpt-5.2": {
+            id: "gpt-5.2",
+            name: "GPT 5.2",
+            attachment: false,
+            reasoning: true,
+            temperature: false,
+            tool_call: true,
+            release_date: "2026-01-01",
+            limit: { context: 200000, output: 32000 },
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            options: store ? { store: true } : {},
+          },
+        },
+        options: {
+          apiKey: "test-key",
           baseURL: url,
         },
       },
@@ -460,6 +498,77 @@ it.live("loop continues when finish is tool-calls", () =>
   ),
 )
 
+it.live("openai tool continuation threads the previous response", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.tool("bash", { command: "pwd" })
+      yield* llm.text("done")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(result.info.role).toBe("assistant")
+      expect(yield* llm.calls).toBe(2)
+
+      const input = yield* llm.inputs
+      expect(input).toHaveLength(2)
+      expect(input[0]?.previous_response_id).toBeUndefined()
+      expect(input[0]?.store).toBe(true)
+      expect(input[1]?.previous_response_id).toBe("resp_test")
+      expect(input[1]?.store).toBe(true)
+      expect(Array.isArray(input[1]?.input)).toBe(true)
+      if (!Array.isArray(input[1]?.input)) return
+      expect(input[1].input.some((item) => item?.type === "function_call_output")).toBe(true)
+      expect(input[1].input.some((item) => item?.type === "function_call")).toBe(false)
+      expect(input[1].input.some((item) => item?.role === "user")).toBe(false)
+    }),
+    { git: true, config: (url) => openaiCfg(url, true) },
+  ),
+)
+
+it.live("openai tool continuation skips threading when response storage is disabled", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.tool("bash", { command: "pwd" })
+      yield* llm.text("done")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(result.info.role).toBe("assistant")
+      expect(yield* llm.calls).toBe(2)
+
+      const input = yield* llm.inputs
+      expect(input).toHaveLength(2)
+      expect(input[0]?.store).toBe(false)
+      expect(input[1]?.previous_response_id).toBeUndefined()
+    }),
+    { git: true, config: (url) => openaiCfg(url, false) },
+  ),
+)
+
 it.live("loop continues when finish is stop but assistant has tool parts", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {
@@ -485,6 +594,81 @@ it.live("loop continues when finish is stop but assistant has tool parts", () =>
         expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
         expect(result.info.finish).toBe("stop")
       }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop reloads system instructions on the next iteration", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ dir, llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const root = path.join(dir, "AGENTS.md")
+      yield* Effect.promise(() => Bun.write(root, "# First Instructions"))
+
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.tool("bash", { command: "sleep 0.2; pwd" })
+      yield* llm.text("done")
+
+      const run = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* Effect.promise(() => Bun.write(root, "# Second Instructions"))
+
+      const exit = yield* Fiber.await(run)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isFailure(exit)) return
+
+      const inputs = yield* llm.inputs
+      expect(inputs).toHaveLength(2)
+      expect(JSON.stringify(inputs[0]?.messages)).toContain("First Instructions")
+      expect(JSON.stringify(inputs[1]?.messages)).toContain("Second Instructions")
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop memoizes skills and environment across iterations", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const skills = spyOn(SystemPrompt, "skills")
+      const env = spyOn(SystemPrompt, "environment")
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          skills.mockRestore()
+          env.mockRestore()
+        }),
+      )
+
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.tool("bash", { command: "pwd" })
+      yield* llm.text("done")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(result.info.role).toBe("assistant")
+      expect(yield* llm.calls).toBe(2)
+      expect(skills).toHaveBeenCalledTimes(1)
+      expect(env).toHaveBeenCalledTimes(1)
     }),
     { git: true, config: providerCfg },
   ),

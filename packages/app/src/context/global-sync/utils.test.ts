@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { Agent } from "@opencode-ai/sdk/v2/client"
-import { normalizeAgentList } from "./utils"
+import type { Agent, Project } from "@opencode-ai/sdk/v2/client"
+import { createStore } from "solid-js/store"
+import { cloneProject, normalizeAgentList, sanitizeProject } from "./utils"
 
 const agent = (name = "build") =>
   ({
@@ -31,5 +32,91 @@ describe("normalizeAgentList", () => {
   test("drops invalid payloads", () => {
     expect(normalizeAgentList({ name: "AbortError" })).toEqual([])
     expect(normalizeAgentList([{ name: "build" }, agent("docs")])).toEqual([agent("docs")])
+  })
+})
+
+describe("sanitizeProject", () => {
+  test("cloneProject detaches nested project data without stripping icon fields", () => {
+    const [store] = createStore({
+      value: {
+        id: "proj_clone",
+        worktree: "/tmp/project-clone",
+        icon: {
+          url: "https://example.com/icon.png",
+          override: "data:image/png;base64,abc",
+          color: "blue",
+        },
+        commands: {
+          start: "bun dev",
+        },
+        time: {
+          created: 1,
+          updated: 2,
+        },
+        sandboxes: ["/tmp/project-a"],
+      } satisfies Project,
+    })
+
+    const next = cloneProject(store.value)
+
+    expect(next).not.toBe(store.value)
+    expect(next.time).not.toBe(store.value.time)
+    expect(next.sandboxes).not.toBe(store.value.sandboxes)
+    expect(next.commands).not.toBe(store.value.commands)
+    expect(next.icon).not.toBe(store.value.icon)
+    expect(next.icon?.url).toBe("https://example.com/icon.png")
+    expect(next.icon?.override).toBe("data:image/png;base64,abc")
+  })
+
+  test("clones nested project data and strips cached icon urls", () => {
+    const [store] = createStore({
+      value: {
+        id: "proj_1",
+        worktree: "/tmp/project",
+        name: "Project",
+        icon: {
+          url: "https://example.com/icon.png",
+          override: "data:image/png;base64,abc",
+          color: "pink",
+        },
+        commands: {
+          start: "bun dev",
+        },
+        time: {
+          created: 1,
+          updated: 2,
+        },
+        sandboxes: ["/tmp/project-a"],
+      } satisfies Project,
+    })
+
+    const next = sanitizeProject(store.value)
+
+    expect(next).not.toBe(store.value)
+    expect(next.time).not.toBe(store.value.time)
+    expect(next.sandboxes).not.toBe(store.value.sandboxes)
+    expect(next.commands).not.toBe(store.value.commands)
+    expect(next.icon).not.toBe(store.value.icon)
+    expect(next.icon?.url).toBeUndefined()
+    expect(next.icon?.override).toBeUndefined()
+    expect(next.icon?.color).toBe("pink")
+
+    next.sandboxes.push("/tmp/project-b")
+    expect(store.value.sandboxes).toEqual(["/tmp/project-a"])
+  })
+
+  test("returns a detached copy even without icon overrides", () => {
+    const project = {
+      id: "proj_2",
+      worktree: "/tmp/project-2",
+      time: { created: 1, updated: 1 },
+      sandboxes: [],
+    } satisfies Project
+
+    const next = sanitizeProject(project)
+
+    expect(next).not.toBe(project)
+    expect(next.time).not.toBe(project.time)
+    expect(next.sandboxes).not.toBe(project.sandboxes)
   })
 })
