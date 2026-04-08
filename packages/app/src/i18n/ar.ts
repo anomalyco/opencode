@@ -105,6 +105,8 @@ export const dict = {
   "dialog.model.manage": "إدارة النماذج",
   "dialog.model.manage.description": "تخصيص النماذج التي تظهر في محدد النماذج.",
   "dialog.model.manage.provider.toggle": "تبديل جميع نماذج {{provider}}",
+  "dialog.model.group.favorites": "المفضلة",
+
   "dialog.model.unpaid.freeModels.title": "نماذج مجانية مقدمة من OpenCode",
   "dialog.model.unpaid.addMore.title": "إضافة المزيد من النماذج من موفرين مشهورين",
   "dialog.provider.viewAll": "عرض المزيد من الموفرين",

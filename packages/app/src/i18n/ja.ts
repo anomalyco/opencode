@@ -105,6 +105,8 @@ export const dict = {
   "dialog.model.manage": "モデルを管理",
   "dialog.model.manage.description": "モデルセレクターに表示するモデルをカスタマイズします。",
   "dialog.model.manage.provider.toggle": "すべての{{provider}}モデルを切り替え",
+  "dialog.model.group.favorites": "お気に入り",
+
   "dialog.model.unpaid.freeModels.title": "OpenCodeが提供する無料モデル",
   "dialog.model.unpaid.addMore.title": "人気のプロバイダーからモデルを追加",
   "dialog.provider.viewAll": "さらにプロバイダーを表示",
