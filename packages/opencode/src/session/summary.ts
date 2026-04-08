@@ -1,5 +1,5 @@
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cache, Duration, Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
@@ -7,6 +7,7 @@ import { Storage } from "@/storage/storage"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
+import { InstanceState } from "@/effect/instance-state"
 
 export namespace SessionSummary {
   function unquoteGitPath(input: string) {
@@ -80,6 +81,20 @@ export namespace SessionSummary {
       const snapshot = yield* Snapshot.Service
       const storage = yield* Storage.Service
       const bus = yield* Bus.Service
+      const state = yield* InstanceState.make(
+        Effect.fn("SessionSummary.state")(function* () {
+          return {
+            pending: yield* Cache.make<string, void>({
+              capacity: 1024,
+              timeToLive: Duration.infinity,
+              lookup: (key) => {
+                const [sessionID, messageID] = JSON.parse(key) as [SessionID, MessageID]
+                return run({ sessionID, messageID })
+              },
+            }),
+          }
+        }),
+      )
 
       const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: {
         messages: MessageV2.WithParts[]
@@ -103,10 +118,7 @@ export namespace SessionSummary {
         return []
       })
 
-      const summarize = Effect.fn("SessionSummary.summarize")(function* (input: {
-        sessionID: SessionID
-        messageID: MessageID
-      }) {
+      const run = Effect.fn("SessionSummary.run")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
         const all = yield* sessions.messages({ sessionID: input.sessionID })
         if (!all.length) return
 
@@ -130,6 +142,15 @@ export namespace SessionSummary {
         const msgDiffs = yield* computeDiff({ messages })
         target.info.summary = { ...target.info.summary, diffs: msgDiffs }
         yield* sessions.updateMessage(target.info)
+      })
+
+      const summarize = Effect.fn("SessionSummary.summarize")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+      }) {
+        const s = yield* InstanceState.get(state)
+        const key = JSON.stringify([input.sessionID, input.messageID])
+        yield* Cache.get(s.pending, key).pipe(Effect.ensuring(Cache.invalidate(s.pending, key)))
       })
 
       const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
