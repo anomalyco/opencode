@@ -106,6 +106,8 @@ const imageGenerationCallItem = z.object({
   result: z.string(),
 })
 
+const phaseSchema = z.enum(["commentary", "final_answer"]).nullish()
+
 /**
  * `top_logprobs` request body argument can be set to an integer between
  * 0 and 20 specifying the number of most likely tokens to return at each
@@ -423,6 +425,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 type: z.literal("message"),
                 role: z.literal("assistant"),
                 id: z.string(),
+                phase: phaseSchema,
                 content: z.array(
                   z.object({
                     type: z.literal("output_text"),
@@ -584,6 +587,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               providerMetadata: {
                 openai: {
                   itemId: part.id,
+                  ...(part.phase != null && { phase: part.phase }),
                 },
               },
             })
@@ -850,6 +854,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     // Copilot may change item_id across text deltas; normalize to one id.
     let currentTextId: string | null = null
 
+    let activeMessagePhase: "commentary" | "final_answer" | undefined
+
     let serviceTier: string | undefined
 
     return {
@@ -949,12 +955,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               } else if (value.item.type === "message") {
                 // Start a stable text part for this assistant message
                 currentTextId = value.item.id
+                activeMessagePhase = value.item.phase ?? undefined
                 controller.enqueue({
                   type: "text-start",
                   id: value.item.id,
                   providerMetadata: {
                     openai: {
                       itemId: value.item.id,
+                      ...(value.item.phase != null && { phase: value.item.phase }),
                     },
                   },
                 })
@@ -1106,10 +1114,18 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                   },
                 })
               } else if (value.item.type === "message") {
+                const phase = value.item.phase ?? activeMessagePhase
+                activeMessagePhase = undefined
                 if (currentTextId) {
                   controller.enqueue({
                     type: "text-end",
                     id: currentTextId,
+                    providerMetadata: {
+                      openai: {
+                        itemId: currentTextId,
+                        ...(phase != null && { phase }),
+                      },
+                    },
                   })
                   currentTextId = null
                 }
@@ -1300,8 +1316,18 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
           flush(controller) {
             // Close any dangling text part
             if (currentTextId) {
-              controller.enqueue({ type: "text-end", id: currentTextId })
+              controller.enqueue({
+                type: "text-end",
+                id: currentTextId,
+                providerMetadata: {
+                  openai: {
+                    itemId: currentTextId,
+                    ...(activeMessagePhase != null && { phase: activeMessagePhase }),
+                  },
+                },
+              })
               currentTextId = null
+              activeMessagePhase = undefined
             }
 
             const providerMetadata: SharedV3ProviderMetadata = {
@@ -1401,6 +1427,7 @@ const responseOutputItemAddedSchema = z.object({
     z.object({
       type: z.literal("message"),
       id: z.string(),
+      phase: phaseSchema,
     }),
     z.object({
       type: z.literal("reasoning"),
@@ -1463,6 +1490,7 @@ const responseOutputItemDoneSchema = z.object({
     z.object({
       type: z.literal("message"),
       id: z.string(),
+      phase: phaseSchema,
     }),
     z.object({
       type: z.literal("reasoning"),
