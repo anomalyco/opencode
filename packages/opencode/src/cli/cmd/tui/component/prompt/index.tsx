@@ -36,6 +36,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { VoiceInput, VoiceMetadataStore } from "@/voice"
 
 export type PromptProps = {
   sessionID?: string
@@ -165,6 +166,9 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    recording: boolean
+    interimText: string
+    voiceMeta: string
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -174,6 +178,9 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    recording: false,
+    interimText: "",
+    voiceMeta: "",
   })
 
   createEffect(
@@ -261,6 +268,11 @@ export function Prompt(props: PromptProps) {
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
+          if (store.recording) {
+            voice?.stop()
+            dialog.clear()
+            return
+          }
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
@@ -368,6 +380,16 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(content)
+        },
+      },
+      {
+        title: "Voice dictate",
+        value: "voice.dictate",
+        keybind: "voice_dictate",
+        category: "Prompt",
+        onSelect: async (dialog) => {
+          dialog.clear()
+          await toggleVoice()
         },
       },
       {
@@ -587,6 +609,7 @@ export function Prompt(props: PromptProps) {
   ])
 
   async function submit() {
+    if (store.recording) await voice?.stop()
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
@@ -623,6 +646,12 @@ export function Prompt(props: PromptProps) {
 
     const messageID = MessageID.ascending()
     let inputText = store.prompt.input
+
+    // Append voice metadata context if voice was used during this prompt
+    const voiceContext = voiceMetaStore.toMarkdown()
+    if (voiceContext) {
+      inputText = inputText + "\n\n<!-- voice-context -->\n" + voiceContext + "\n<!-- /voice-context -->"
+    }
 
     // Expand pasted text inline before submitting
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
@@ -731,6 +760,86 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+
+  // ── Voice dictation ──────────────────────────────────────────────
+  let voice: VoiceInput | undefined
+  const voiceMetaStore = new VoiceMetadataStore()
+
+  function getVoice(): VoiceInput {
+    if (!voice) {
+      voice = new VoiceInput()
+      voice.onTranscript = (seg) => {
+        // Ingest metadata regardless of final/partial
+        voiceMetaStore.ingest(seg)
+        setStore("voiceMeta", voiceMetaStore.shortSummary)
+
+        if (seg.is_final && seg.text.trim()) {
+          if (!input || input.isDestroyed) return
+          input.insertText(seg.text.trim() + " ")
+          setStore("prompt", "input", input.plainText)
+          setStore("interimText", "")
+          setTimeout(() => {
+            if (!input || input.isDestroyed) return
+            input.getLayoutNode().markDirty()
+            renderer.requestRender()
+          }, 0)
+        } else if (!seg.is_final) {
+          setStore("interimText", seg.text)
+        }
+      }
+      voice.onError = (err) => {
+        toast.show({
+          message: `Voice: ${err.message}`,
+          variant: "error",
+          duration: 3000,
+        })
+        setStore("recording", false)
+        setStore("interimText", "")
+        setStore("voiceMeta", "")
+      }
+      voice.onStateChange = (active) => {
+        setStore("recording", active)
+        if (active) {
+          voiceMetaStore.startSession()
+        } else {
+          voiceMetaStore.endSession()
+          setStore("interimText", "")
+        }
+      }
+    }
+    return voice
+  }
+
+  async function toggleVoice() {
+    if (props.disabled) return
+    if (store.mode === "shell") return
+    try {
+      await getVoice().toggle()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Voice input failed"
+      toast.show({
+        message: msg.includes("not found") || msg.includes("ENOENT") ? "Voice requires sox: brew install sox" : `Voice: ${msg}`,
+        variant: "warning",
+        duration: 5000,
+      })
+      setStore("recording", false)
+    }
+  }
+
+  onCleanup(() => {
+    voice?.stop()
+  })
+
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => {
+        voice?.stop()
+      },
+      { defer: true },
+    ),
+  )
+  // ── End voice ────────────────────────────────────────────────────
 
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
@@ -945,6 +1054,11 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
+                if (keybind.match("voice_dictate", e)) {
+                  e.preventDefault()
+                  toggleVoice()
+                  return
+                }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
                     await exit()
@@ -1106,6 +1220,17 @@ export function Prompt(props: PromptProps) {
                         <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                       </text>
                     </Show>
+                    <Show when={store.recording}>
+                      <text fg={theme.textMuted}>·</text>
+                      <text fg={theme.error} bold>
+                        ●
+                      </text>
+                      <text fg={theme.textMuted} wrapMode="none">
+                        {store.interimText
+                          ? `"${store.interimText.slice(0, 40)}${store.interimText.length > 40 ? "…" : ""}"`
+                          : store.voiceMeta || "listening…"}
+                      </text>
+                    </Show>
                   </box>
                 </Show>
               </box>
@@ -1245,6 +1370,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <Show when={store.recording}>
+                    <text fg={theme.error}>
+                      {keybind.print("voice_dictate")} <span style={{ fg: theme.textMuted }}>stop</span>
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>

@@ -762,6 +762,7 @@ export namespace Config {
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
       plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
+      voice_dictate: z.string().optional().default("alt+v").describe("Toggle voice dictation"),
     })
     .strict()
     .meta({
