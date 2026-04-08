@@ -1,3 +1,5 @@
+@import "./mermaid.css";
+
 [data-component="markdown"] {
   /* Reset & Base Typography */
   min-width: 0;

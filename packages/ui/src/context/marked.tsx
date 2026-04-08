@@ -444,6 +444,13 @@ async function highlightCodeBlocks(html: string): Promise<string> {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
 
+    // Mermaid code blocks bypass Shiki and output a placeholder container
+    if (lang === "mermaid") {
+      const mermaidHtml = `<div data-component="mermaid-diagram"><pre><code class="language-mermaid">${escapedCode}</code></pre></div>`
+      result = result.replace(fullMatch, () => mermaidHtml)
+      continue
+    }
+
     let language = lang || "text"
     if (!(language in bundledLanguages)) {
       language = "text"
@@ -483,6 +490,12 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
       markedShiki({
         async highlight(code, lang) {
+          // Mermaid code blocks are rendered as interactive SVG diagrams
+          // via post-processing, not syntax-highlighted by Shiki.
+          if (lang === "mermaid") {
+            const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            return `<div data-component="mermaid-diagram"><pre><code class="language-mermaid">${escaped}</code></pre></div>`
+          }
           const highlighter = await getSharedHighlighter({
             themes: ["OpenCode"],
             langs: [],

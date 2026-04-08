@@ -1,0 +1,276 @@
+/* ============================================================
+   Container
+   ============================================================ */
+
+[data-component="mermaid-diagram"] {
+  position: relative;
+  border-radius: 6px;
+  border: 0.5px solid var(--border-weak-base);
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  background: var(--color-background-stronger, var(--surface-base));
+}
+
+/* ============================================================
+   Viewport & transform layer
+   ============================================================ */
+
+.mermaid-viewport {
+  position: relative;
+  overflow: hidden;
+  min-height: 100px;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.mermaid-transform {
+  transform-origin: center center;
+  will-change: transform;
+  transition: transform 150ms ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-transform svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ============================================================
+   Control bar
+   ============================================================ */
+
+.mermaid-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--surface-base) 80%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 0.5px solid var(--border-weak-base);
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-component="mermaid-diagram"]:hover .mermaid-controls {
+  opacity: 1;
+}
+
+.mermaid-control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--icon-base, var(--text-weak));
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.mermaid-control-btn:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.06));
+  color: var(--text-strong);
+}
+
+.mermaid-control-btn:active {
+  background: var(--surface-active, rgba(0, 0, 0, 0.1));
+}
+
+.mermaid-control-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mermaid-control-btn:disabled:hover {
+  background: transparent;
+  color: var(--icon-base, var(--text-weak));
+}
+
+.mermaid-control-btn[data-copied="true"] {
+  color: var(--text-interactive-base, #3b82f6);
+}
+
+.mermaid-control-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mermaid-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border-weak-base);
+}
+
+/* ============================================================
+   Download menu
+   ============================================================ */
+
+.mermaid-download-menu {
+  position: absolute;
+  top: 44px;
+  right: 8px;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface-float-base, var(--surface-base));
+  border: 0.5px solid var(--border-weak-base);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+  z-index: 20;
+}
+
+.mermaid-download-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  margin: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-base);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small, 13px);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.mermaid-download-item:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.06));
+}
+
+/* ============================================================
+   Fullscreen overlay
+   ============================================================ */
+
+.mermaid-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  /* Use solid background to ensure SVG visibility across themes */
+  background: var(--surface-base, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-fullscreen-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-fullscreen-viewport .mermaid-transform svg {
+  max-width: none;
+  max-height: 90vh;
+  width: auto;
+  height: auto;
+}
+
+.mermaid-fullscreen-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+  border: 0.5px solid var(--border-weak-base);
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--surface-base) 80%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-base);
+  cursor: pointer;
+  z-index: 10;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.mermaid-fullscreen-close:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.1));
+  color: var(--text-strong);
+}
+
+.mermaid-fullscreen-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mermaid-fullscreen-controls {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--surface-base) 80%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 0.5px solid var(--border-weak-base);
+  z-index: 10;
+}
+
+.mermaid-fullscreen-download-menu {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  top: auto;
+  right: auto;
+}
+
+/* ============================================================
+   Error state
+   ============================================================ */
+
+[data-component="mermaid-diagram"][data-mermaid-error] {
+  border-color: var(--syntax-critical, #ef4444);
+}
+
+.mermaid-error-bar {
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--syntax-critical, #ef4444) 10%, transparent);
+  color: var(--syntax-critical, #ef4444);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small, 13px);
+  border-bottom: 0.5px solid color-mix(in srgb, var(--syntax-critical, #ef4444) 30%, transparent);
+}
+
+[data-component="mermaid-diagram"][data-mermaid-error] pre {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+}

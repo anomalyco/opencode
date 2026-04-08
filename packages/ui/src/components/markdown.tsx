@@ -6,6 +6,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
 import { stream } from "./markdown-stream"
+import { renderMermaidDiagrams } from "./mermaid"
 
 type Entry = {
   hash: string
@@ -176,6 +177,8 @@ function markCodeLinks(root: HTMLDivElement) {
 function decorate(root: HTMLDivElement, labels: CopyLabels) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
+    // Mermaid code blocks are rendered as interactive SVG diagrams separately
+    if (block.closest('[data-component="mermaid-diagram"]')) continue
     ensureCodeWrapper(block, labels)
   }
   markCodeLinks(root)
@@ -309,6 +312,14 @@ export function Markdown(
     morphdom(container, temp, {
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
+        // Preserve rendered mermaid diagrams across morphdom updates
+        if (
+          fromEl instanceof HTMLElement &&
+          fromEl.getAttribute("data-component") === "mermaid-diagram" &&
+          fromEl.getAttribute("data-mermaid-rendered")
+        ) {
+          return false
+        }
         if (
           fromEl instanceof HTMLButtonElement &&
           toEl instanceof HTMLButtonElement &&
@@ -322,6 +333,9 @@ export function Markdown(
         return true
       },
     })
+
+    // Render mermaid diagrams asynchronously (lazy-loads mermaid library)
+    renderMermaidDiagrams(container)
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
