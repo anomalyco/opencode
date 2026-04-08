@@ -11,31 +11,80 @@ For examples, check out the [plugins](/docs/ecosystem#plugins) created by the co
 
 ## Use a plugin
 
-There are two ways to load plugins.
+OpenCode supports two plugin types:
+
+- **Server plugins** extend server/runtime behavior such as hooks, tools, auth, providers, and events. Configure them in `opencode.json` or `opencode.jsonc`, or place local files in a plugin directory.
+- **TUI plugins** extend the terminal UI with commands, routes, slots, themes, and other UI behavior. Configure them in `tui.json` or `tui.jsonc`.
+
+You can use `opencode.jsonc` and `tui.jsonc` instead of `opencode.json` and `tui.json`. They support `//` single-line comments. If both `.json` and `.jsonc` exist in the same directory, OpenCode loads and merges both files. Because `.jsonc` is loaded second, it takes precedence only for conflicting keys.
+
+TUI plugins are separate from server plugins and are not auto-loaded from the plugin directory.
 
 ---
 
 ### From local files
 
-Place JavaScript or TypeScript files in the plugin directory.
+For **server plugins**, place JavaScript or TypeScript files in a plugin directory.
 
-- `.opencode/plugins/` - Project-level plugins
-- `~/.config/opencode/plugins/` - Global plugins
+- `.opencode/plugin/` or `.opencode/plugins/` - Project-level plugins
+- `~/.config/opencode/plugin/` or `~/.config/opencode/plugins/` - Global plugins
 
-Files in these directories are automatically loaded at startup.
+OpenCode auto-discovers top-level `.js` and `.ts` files in these directories at startup.
+
+For a **local TUI plugin**, reference a file or directory path in `tui.json` or `tui.jsonc` instead of relying on directory auto-discovery.
+
+You can also point either config at a local plugin with a `file://` URL. This is useful when the plugin lives outside your config directory.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///absolute/path/to/my-plugin.ts", "file:///absolute/path/to/my-plugin-package"],
+}
+```
+
+:::note
+`file://` plugin URLs must use an absolute path.
+
+If the URL points to a directory, that directory must contain either a `package.json` or one of `index.ts`, `index.tsx`, `index.js`, `index.mjs`, or `index.cjs`.
+
+When a directory contains `package.json`, OpenCode uses the package entrypoints when available: server plugins prefer `exports["./server"]`, then `main`, and TUI plugins use `exports["./tui"]`.
+
+Unlike npm plugins, `file://` plugins are loaded directly from the referenced path and are not copied into `~/.cache/opencode/packages/`. Changes are picked up the next time you restart OpenCode.
+:::
+
+```jsonc title="tui.jsonc"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "plugin": ["./.opencode/plugins/my-tui-plugin.ts"],
+}
+```
 
 ---
 
 ### From npm
 
-Specify npm packages in your config file.
+Specify npm packages in the config file for the plugin type you want to load.
 
-```json title="opencode.json"
+```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"],
 }
 ```
+
+```jsonc title="tui.jsonc"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "plugin": ["@my-org/custom-tui-plugin"],
+}
+```
+
+Package targets are discovered from `package.json`:
+
+- `exports["./server"]` or `main` installs as a **server plugin** and belongs in `opencode.json[c]`
+- `exports["./tui"]` installs as a **TUI plugin** and belongs in `tui.json[c]`
+- A package can expose both and be installed in both configs
+- A package with only `oc-themes` is treated as a **TUI plugin** package and belongs in `tui.json[c]`
 
 Both regular and scoped npm packages are supported.
 
@@ -45,29 +94,82 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ### How plugins are installed
 
-**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
+**npm plugins** are installed into OpenCode's package cache in `~/.cache/opencode/packages/` and reused on restart. OpenCode decides whether a package is a server plugin, a TUI plugin, or both from the package metadata described above.
 
-**Local plugins** are loaded directly from the plugin directory. To use external packages, you must create a `package.json` within your config directory (see [Dependencies](#dependencies)), or publish the plugin to npm and [add it to your config](/docs/config#plugins).
+**Local server plugins** are loaded directly from the plugin directory.
+
+**Local TUI plugins** are loaded directly from the file or directory path you reference in `tui.json[c]`.
+
+**`file://` plugins** are also loaded directly from the referenced file or directory. They are not cached in `~/.cache/opencode/packages/`.
+
+To use external packages from local plugins, create a `package.json` in your config directory (see [Dependencies](#dependencies)), or publish the plugin to npm and [add it to your config](/docs/config#plugins).
+
+---
+
+### Upgrading plugins
+
+**npm plugins** are upgraded by updating the package spec in `opencode.json[c]` or `tui.json[c]` and restarting OpenCode.
+
+If the plugin entry in your config stays the same, OpenCode will keep using the cached install until you clear `~/.cache/opencode/packages/` and restart. This commonly affects bare package names, `@latest`, and unchanged version ranges.
+
+**Local plugins** are upgraded by updating the referenced files and restarting OpenCode.
+
+This includes `file://` plugins. OpenCode reloads them from the original path on each restart.
+
+If your local plugin uses external dependencies through a `package.json` in your config directory, OpenCode will reinstall them when needed at startup. If you still see stale code, remove that config directory's `node_modules` and restart. For cached npm plugin packages, clear `~/.cache/opencode/packages/` and restart.
 
 ---
 
 ### Load order
 
-Plugins are loaded from all sources and all hooks run in sequence. The load order is:
+**Server plugins** are loaded from config first, then from the local plugin directories. Within the same directory, `opencode.json` loads before `opencode.jsonc`, so OpenCode merges both files and `opencode.jsonc` only overrides conflicting keys when both are present.
 
-1. Global config (`~/.config/opencode/opencode.json`)
-2. Project config (`opencode.json`)
-3. Global plugin directory (`~/.config/opencode/plugins/`)
-4. Project plugin directory (`.opencode/plugins/`)
+1. Global config (`~/.config/opencode/opencode.json`, then `~/.config/opencode/opencode.jsonc`)
+2. Project config (`opencode.json`, then `opencode.jsonc`)
+3. Global plugin directory (`~/.config/opencode/plugin/` or `~/.config/opencode/plugins/`)
+4. Project plugin directory (`.opencode/plugin/` or `.opencode/plugins/`)
 
-Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
+**TUI plugins** are loaded from `tui.json[c]` using the same `.json` then `.jsonc` merge behavior and precedence for conflicting keys. There is no TUI plugin directory auto-discovery.
+
+This is a simplified overview. OpenCode also supports other config locations, including additional `.opencode` directories and `OPENCODE_CONFIG_DIR`.
+
+Duplicate npm packages are deduplicated by package name so later config sources win. However, a local path plugin and an npm plugin with similar names are loaded separately.
 
 ---
 
 ## Create a plugin
 
-A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
-functions. Each function receives a context object and returns a hooks object.
+A plugin is a **JavaScript/TypeScript module**.
+
+- A **server plugin** exports hooks that extend server/runtime behavior.
+- A **TUI plugin** exports a `tui()` entrypoint that extends the terminal UI.
+- A single module can expose **either** `server()` **or** `tui()`, not both.
+
+The examples below focus on server plugins.
+
+Server plugins also support the legacy function-export style shown below.
+
+### Module shapes
+
+```ts title="server plugin"
+export default {
+  id: "my-server-plugin",
+  server: async (input, options) => {
+    return {
+      // hooks
+    }
+  },
+}
+```
+
+```ts title="tui plugin"
+export default {
+  id: "my-tui-plugin",
+  tui: async (api, options, meta) => {
+    // register commands, routes, slots, themes, etc.
+  },
+}
+```
 
 ---
 
@@ -83,7 +185,7 @@ Local plugins and custom tools can use external npm packages. Add a `package.jso
 }
 ```
 
-OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
+OpenCode installs these dependencies at startup. Your plugins and tools can then import them.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -141,7 +243,9 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ### Events
 
-Plugins can subscribe to events as seen below in the Examples section. Here is a list of the different events available.
+Plugins can subscribe to events as seen below in the Examples section. Some common events you will use are listed below.
+
+This list is not exhaustive. OpenCode also emits additional events for questions, workspaces, PTYs, MCP, worktrees, and other runtime features.
 
 #### Command Events
 
@@ -217,7 +321,7 @@ Here are some examples of plugins you can use to extend opencode.
 
 ### Send notifications
 
-Send notifications when certain events occur:
+Send notifications for session events such as completion:
 
 ```js title=".opencode/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -260,7 +364,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Inject environment variables
 
-Inject environment variables into all shell execution (AI tools and user terminals):
+Inject environment variables into shell execution inside OpenCode, including AI tool runs and OpenCode terminals:
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
@@ -300,7 +404,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-The `tool` helper creates a custom tool that opencode can call. It takes a Zod schema function and returns a tool definition with:
+The `tool` helper creates a custom tool that opencode can call. It takes a Zod object shape for `args` and returns a tool definition with:
 
 - `description`: What the tool does
 - `args`: Zod schema for the tool's arguments
@@ -309,7 +413,7 @@ The `tool` helper creates a custom tool that opencode can call. It takes a Zod s
 Your custom tools will be available to opencode alongside built-in tools.
 
 :::note
-If a plugin tool uses the same name as a built-in tool, the plugin tool takes precedence.
+If a plugin tool uses the same name as a built-in tool, OpenCode resolves the built-in tool first. Use unique tool names to avoid collisions.
 :::
 
 ---
