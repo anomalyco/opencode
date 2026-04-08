@@ -46,6 +46,7 @@
     height: 100%;
     display: flex;
     align-items: center;
+    cursor: pointer;
     gap: 12px;
     color: var(--text-base);
 
@@ -70,6 +71,7 @@
       justify-content: center;
       padding: 14px 24px 14px 12px;
       outline: none;
+      cursor: pointer;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -84,6 +86,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
     }
 
     [data-component="icon-button"] {
@@ -162,10 +165,12 @@
       height: var(--tabs-compact-pill-height);
       margin-block: 0;
       max-width: 320px;
-      padding-inline: 0;
+      padding-left: 8px;
+      padding-right: 6px;
       box-sizing: border-box;
       border: none;
-      border-radius: 0;
+      border-radius: var(--tabs-compact-pill-radius);
+      cursor: pointer;
       background-color: transparent;
       gap: 8px;
       color: var(--text-weak);
@@ -201,7 +206,7 @@
       }
 
       &:has([data-slot="tabs-trigger-close-button"]) {
-        padding-right: 5px;
+        padding-right: 8px;
         [data-slot="tabs-trigger"] {
           padding-right: 0 !important;
         }

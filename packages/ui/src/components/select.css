@@ -2,6 +2,7 @@
   [data-slot="select-select-trigger"] {
     padding: 0 4px 0 8px;
     box-shadow: none;
+    cursor: pointer;
 
     [data-slot="select-select-trigger-value"] {
       overflow: hidden;
@@ -135,7 +136,7 @@
     padding: 2px 8px;
     gap: 12px;
     border-radius: 4px;
-    cursor: default;
+    cursor: pointer;
 
     /* text-12-medium */
     font-family: var(--font-family-sans);

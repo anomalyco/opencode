@@ -80,7 +80,7 @@
 
   [data-slot="radio-group-item-label"] {
     color: var(--text-weak);
-    cursor: default;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -7,7 +7,7 @@
   border-radius: var(--radius-md);
   text-decoration: none;
   user-select: none;
-  cursor: default;
+  cursor: pointer;
   outline: none;
   white-space: nowrap;
 

@@ -40,7 +40,7 @@
     gap: 8px;
     padding: 4px 8px;
     border-radius: var(--radius-sm);
-    cursor: default;
+    cursor: pointer;
     outline: none;
 
     font-family: var(--font-family-sans);

@@ -79,7 +79,7 @@ a {
   color: inherit;
   -webkit-text-decoration: inherit;
   text-decoration: inherit;
-  cursor: default;
+  cursor: pointer;
 }
 
 *[data-tauri-drag-region] {
