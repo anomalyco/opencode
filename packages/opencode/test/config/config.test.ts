@@ -1765,6 +1765,42 @@ test("local .opencode config can override MCP from project config", async () => 
   })
 })
 
+test("child .opencode config overrides parent .opencode config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Parent .opencode directory with one username
+      const parentOpencode = path.join(dir, ".opencode")
+      await fs.mkdir(parentOpencode, { recursive: true })
+      await Filesystem.write(
+        path.join(parentOpencode, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          username: "parent-wins",
+        }),
+      )
+      // Child directory with its own .opencode
+      const childDir = path.join(dir, "child")
+      const childOpencode = path.join(childDir, ".opencode")
+      await fs.mkdir(childOpencode, { recursive: true })
+      await Filesystem.write(
+        path.join(childOpencode, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          username: "child-should-win",
+        }),
+      )
+    },
+  })
+  const childDir = path.join(tmp.path, "child")
+  await Instance.provide({
+    directory: childDir,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.username).toBe("child-should-win")
+    },
+  })
+})
+
 test("project config overrides remote well-known config", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined

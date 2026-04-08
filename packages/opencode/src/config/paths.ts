@@ -16,13 +16,13 @@ export namespace ConfigPaths {
     return [
       Global.Path.config,
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-        ? await Array.fromAsync(
+        ? (await Array.fromAsync(
             Filesystem.up({
               targets: [".opencode"],
               start: directory,
               stop: worktree,
             }),
-          )
+          )).reverse()
         : []),
       ...(await Array.fromAsync(
         Filesystem.up({
