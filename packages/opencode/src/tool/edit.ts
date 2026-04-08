@@ -175,21 +175,38 @@ const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3
  * Levenshtein distance algorithm implementation
  */
 function levenshtein(a: string, b: string): number {
-  // Handle empty strings
   if (a === "" || b === "") {
     return Math.max(a.length, b.length)
   }
-  const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  )
 
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
-    }
+  if (a.length > b.length) {
+    const tmp = a
+    a = b
+    b = tmp
   }
-  return matrix[a.length][b.length]
+
+  let prevRow = new Int32Array(a.length + 1)
+  let currRow = new Int32Array(a.length + 1)
+
+  for (let i = 0; i <= a.length; i++) {
+    prevRow[i] = i
+  }
+
+  for (let j = 1; j <= b.length; j++) {
+    currRow[0] = j
+    for (let i = 1; i <= a.length; i++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      currRow[i] = Math.min(
+        currRow[i - 1] + 1,
+        prevRow[i] + 1,
+        prevRow[i - 1] + cost
+      )
+    }
+    const tempRow = prevRow
+    prevRow = currRow
+    currRow = tempRow
+  }
+  return prevRow[a.length]
 }
 
 export const SimpleReplacer: Replacer = function* (_content, find) {
