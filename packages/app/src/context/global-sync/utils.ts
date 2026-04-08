@@ -26,16 +26,25 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
   }
 }
 
-export function sanitizeProject(project: Project) {
+export function cloneProject(project: Project) {
   return {
     ...project,
     time: { ...project.time },
     sandboxes: [...project.sandboxes],
     ...(project.commands ? { commands: { ...project.commands } } : {}),
+    ...(project.icon ? { icon: { ...project.icon } } : {}),
+  }
+}
+
+export function sanitizeProject(project: Project) {
+  const next = cloneProject(project)
+  if (!next.icon) return next
+  return {
+    ...next,
     ...(project.icon
       ? {
           icon: {
-            ...project.icon,
+            ...next.icon,
             url: undefined,
             override: undefined,
           },
