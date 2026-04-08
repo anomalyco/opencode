@@ -162,14 +162,7 @@ export function DialogModel(props: { providerID?: string }) {
     const msg = sync.data.message[route.data.sessionID] ?? []
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return undefined
-    return (
-      last.tokens.total ??
-      last.tokens.input +
-        last.tokens.output +
-        last.tokens.reasoning +
-        last.tokens.cache.read +
-        last.tokens.cache.write
-    )
+    return last.tokens
   })
 
   function detail(value?: { providerID: string; modelID: string }) {
@@ -193,17 +186,25 @@ export function DialogModel(props: { providerID?: string }) {
         text: "Status: Unknown (open a session to evaluate)",
       }
     }
-    const reserved = sync.data.config.compaction?.reserved ?? Math.min(20_000, Math.min(model.limit.output, 32_000) || 32_000)
-    const usable = model.limit.input ? model.limit.input - reserved : model.limit.context - (Math.min(model.limit.output, 32_000) || 32_000)
+    if (model.limit.context === 0) {
+      return {
+        color: theme.textMuted,
+        text: "⊙ Context unknown (model limit unavailable)",
+      }
+    }
+    const output = Math.min(model.limit.output, 32_000) || 32_000
+    const reserved = sync.data.config.compaction?.reserved ?? Math.min(20_000, output)
+    const usable = model.limit.input ? model.limit.input - reserved : model.limit.context - output
     const threshold = Math.max(0, usable)
     const auto = sync.data.config.compaction?.auto !== false
-    if (tokens > model.limit.context) {
+    const count = tokens.total ?? tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+    if (count > model.limit.context) {
       return {
         color: theme.error,
         text: "⊙ Context insufficient",
       }
     }
-    if (auto && tokens >= threshold) {
+    if (auto && count >= threshold) {
       return {
         color: theme.warning,
         text: "⊙ Context warning (will compact next turn)",
