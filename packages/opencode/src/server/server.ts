@@ -3,10 +3,10 @@ import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler 
 import { Hono } from "hono"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
-import { basicAuth } from "hono/basic-auth"
 import z from "zod"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
+import { HubAuth } from "./hub-auth"
 import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "./router"
 import { websocket } from "hono/bun"
@@ -42,21 +42,8 @@ export namespace Server {
     const app = new Hono()
     return app
       .onError(errorHandler(log))
-      .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
-        if (c.req.method === "OPTIONS") return next()
-        const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return next()
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        const token = c.req.query("token")
-        if (token) {
-          const raw = Buffer.from(token, "base64").toString()
-          const i = raw.indexOf(":")
-          if (i !== -1 && raw.slice(0, i) === username && raw.slice(i + 1) === password) return next()
-        }
-        return basicAuth({ username, password })(c, next)
-      })
+      .use(HubAuth.auth())
+      .get("/oauth_callback", (c) => HubAuth.callback(c))
       .use(async (c, next) => {
         const skip = c.req.path === "/log"
         if (!skip) {
