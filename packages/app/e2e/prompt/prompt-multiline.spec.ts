@@ -7,12 +7,18 @@ test("shift+enter inserts a newline without submitting", async ({ page, gotoSess
   await expect(page).toHaveURL(/\/session\/?$/)
 
   const prompt = page.locator(promptSelector)
-  await prompt.click()
-  await page.keyboard.type("line one")
-  await page.keyboard.press("Shift+Enter")
-  await page.keyboard.type("line two")
+  await prompt.focus()
+  await expect(prompt).toBeFocused()
+
+  await prompt.pressSequentially("line one")
+  await expect(prompt).toBeFocused()
+
+  await prompt.press("Shift+Enter")
+  await expect(page).toHaveURL(/\/session\/?$/)
+  await expect(prompt).toBeFocused()
+
+  await prompt.pressSequentially("line two")
 
   await expect(page).toHaveURL(/\/session\/?$/)
-  await expect(prompt).toContainText("line one")
-  await expect(prompt).toContainText("line two")
+  await expect.poll(() => prompt.evaluate((el) => el.innerText)).toBe("line one\nline two")
 })

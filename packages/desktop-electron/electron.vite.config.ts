@@ -27,7 +27,7 @@ export default defineConfig({
   },
   renderer: {
     plugins: [appPlugin],
-    publicDir: "../app/public",
+    publicDir: "../../../app/public",
     root: "src/renderer",
     build: {
       rollupOptions: {
