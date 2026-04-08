@@ -8,6 +8,8 @@ import { showToast } from "@opencode-ai/ui/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
 
@@ -172,17 +174,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     }
 
     update()
-    window.addEventListener("resize", update)
+
+    makeEventListener(window, "resize", update)
 
     const dock = root?.closest('[data-component="session-prompt-dock"]')
     const scroller = document.querySelector(".scroll-view__viewport")
-    const observer = new ResizeObserver(update)
-    if (dock instanceof HTMLElement) observer.observe(dock)
-    if (scroller instanceof HTMLElement) observer.observe(scroller)
+    createResizeObserver([dock, scroller], update)
 
     onCleanup(() => {
-      window.removeEventListener("resize", update)
-      observer.disconnect()
       if (raf !== undefined) cancelAnimationFrame(raf)
     })
 
