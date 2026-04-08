@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
-import { type IPty } from "bun-pty"
+import type { Proc } from "#pty"
 import z from "zod"
 import { Log } from "../util/log"
 import { lazy } from "@opencode-ai/util/lazy"
@@ -26,9 +26,11 @@ export namespace Pty {
     close: (code?: number, reason?: string) => void
   }
 
+  const sock = (ws: Socket) => (ws.data && typeof ws.data === "object" ? ws.data : ws)
+
   type Active = {
     info: Info
-    process: IPty
+    process: Proc
     buffer: string
     bufferCursor: number
     cursor: number
@@ -50,10 +52,7 @@ export namespace Pty {
     return out
   }
 
-  const pty = lazy(async () => {
-    const { spawn } = await import("bun-pty")
-    return spawn
-  })
+  const pty = lazy(() => import("#pty"))
 
   export const Info = z
     .object({
@@ -124,9 +123,9 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const [key, ws] of session.subscribers.entries()) {
+        for (const [sub, ws] of session.subscribers.entries()) {
           try {
-            if (ws.data === key) ws.close()
+            if (sock(ws) === sub) ws.close()
           } catch {}
         }
         session.subscribers.clear()
@@ -198,7 +197,7 @@ export namespace Pty {
         }
         log.info("creating session", { id, cmd: command, args, cwd })
 
-        const spawn = yield* Effect.promise(() => pty())
+        const { spawn } = yield* Effect.promise(() => pty())
         const proc = yield* Effect.sync(() =>
           spawn(command, args, {
             name: "xterm-256color",
@@ -234,7 +233,7 @@ export namespace Pty {
                 session.subscribers.delete(key)
                 continue
               }
-              if (ws.data !== key) {
+              if (sock(ws) !== key) {
                 session.subscribers.delete(key)
                 continue
               }
@@ -304,15 +303,12 @@ export namespace Pty {
         }
         log.info("client connected to session", { id })
 
-        // Use ws.data as the unique key for this connection lifecycle.
-        // If ws.data is undefined, fallback to ws object.
-        const key = ws.data && typeof ws.data === "object" ? ws.data : ws
-        // Optionally cleanup if the key somehow exists
-        session.subscribers.delete(key)
-        session.subscribers.set(key, ws)
+        const sub = sock(ws)
+        session.subscribers.delete(sub)
+        session.subscribers.set(sub, ws)
 
         const cleanup = () => {
-          session.subscribers.delete(key)
+          session.subscribers.delete(sub)
         }
 
         const start = session.bufferCursor

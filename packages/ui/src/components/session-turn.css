@@ -94,9 +94,15 @@
 
   [data-slot="session-turn-diffs-header"] {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
+    padding-top: 4px;
     padding-bottom: 12px;
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    background-color: var(--background-stronger);
+    height: 44px;
   }
 
   [data-slot="session-turn-diffs-label"] {

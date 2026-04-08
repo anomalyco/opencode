@@ -17,9 +17,8 @@ export function createRateLimiter(
   const dict = i18n(localeFromRequest(request))
 
   const limits = Subscription.getFreeLimits()
-  const headerExists = request.headers.has(limits.checkHeader)
-  const dailyLimit = !headerExists ? limits.fallbackValue : (rateLimit ?? limits.dailyRequests)
-  const isDefaultModel = headerExists && !rateLimit
+  const dailyLimit = rateLimit ?? limits.dailyRequests
+  const isDefaultModel = !rateLimit
 
   const ip = !rawIp.length ? "unknown" : rawIp
   const now = Date.now()
