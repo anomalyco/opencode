@@ -79,6 +79,39 @@ type Scan = {
 
 export const log = Log.create({ service: "bash-tool" })
 
+const active = new Map<
+  string,
+  {
+    pid: number
+    timeout: number
+    started: number
+    kill: () => void
+    done: () => void
+  }
+>()
+
+export function stale() {
+  const list: string[] = []
+  const now = Date.now()
+  for (const [id, item] of active) {
+    if (now - item.started > item.timeout + 5000) list.push(id)
+  }
+  return list
+}
+
+export function reap(id: string) {
+  const item = active.get(id)
+  if (!item) return
+  log.info("reaping stuck process", {
+    callID: id,
+    pid: item.pid,
+    age: Date.now() - item.started,
+  })
+  item.kill()
+  item.done()
+  active.delete(id)
+}
+
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
   if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
@@ -345,6 +378,9 @@ async function run(
   let output = ""
   let expired = false
   let aborted = false
+  const cap = 10 * 1024 * 1024
+  const out: string[] = []
+  let size = 0
 
   ctx.metadata({
     metadata: {
@@ -353,13 +389,37 @@ async function run(
     },
   })
 
-  const exit = await CrossSpawnSpawner.runPromiseExit((spawner) =>
-    Effect.gen(function* () {
+  const exit: Exit.Exit<number | null, never> = await CrossSpawnSpawner.runPromiseExit((spawner) => {
+    const run = Effect.gen(function* () {
       const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
+      const callID = ctx.callID
+      let done = () => {}
+      const reaped = new Promise<void>((resolve) => {
+        done = resolve
+      })
+      if (callID) {
+        active.set(callID, {
+          pid: Number(handle.pid),
+          timeout: input.timeout,
+          started: Date.now(),
+          kill: () => {
+            void Effect.runPromise(handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie))
+          },
+          done,
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(() => active.delete(callID)))
+      }
 
       yield* Effect.forkScoped(
         Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
           Effect.sync(() => {
+            out.push(chunk)
+            size += chunk.length
+            while (size > cap && out.length > 1) {
+              const item = out.shift()
+              if (!item) break
+              size -= item.length
+            }
             output += chunk
             ctx.metadata({
               metadata: {
@@ -384,6 +444,7 @@ async function run(
         handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
         abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
         timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
+        Effect.promise(() => reaped).pipe(Effect.map(() => ({ kind: "reap" as const, code: null }))),
       ])
 
       if (exit.kind === "abort") {
@@ -394,15 +455,18 @@ async function run(
         expired = true
         yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
       }
+      if (exit.kind === "reap") {
+        yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+      }
 
       return exit.kind === "exit" ? exit.code : null
-    }).pipe(Effect.scoped, Effect.orDie),
-  )
+    }).pipe(Effect.scoped, Effect.orDie)
+    return run as Effect.Effect<number | null, never, never>
+  })
 
   let code: number | null = null
-  if (Exit.isSuccess(exit)) {
-    code = exit.value
-  } else if (!Cause.hasInterruptsOnly(exit.cause)) {
+  if (Exit.isSuccess(exit)) code = exit.value
+  if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
     throw Cause.squash(exit.cause)
   }
 
@@ -411,6 +475,10 @@ async function run(
   if (aborted) meta.push("User aborted the command")
   if (meta.length > 0) {
     output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
+  }
+  if (size > cap) {
+    output = out.join("")
+    if (meta.length > 0) output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
   }
 
   return {

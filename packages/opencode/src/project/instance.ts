@@ -12,9 +12,14 @@ export interface InstanceContext {
   worktree: string
   project: Project.Info
 }
-
 const context = Context.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
+const activity = new Map<string, number>()
+const refs = new Map<string, number>()
+const disposing = new Set<string>()
+const IDLE_MS = 5 * 60 * 1000
+const SWEEP_MS = 60 * 1000
+let sweep: ReturnType<typeof setInterval> | undefined
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -30,6 +35,63 @@ function emit(directory: string) {
       },
     },
   })
+}
+
+function touch(dir: string) {
+  activity.set(dir, Date.now())
+}
+
+function acquire(dir: string) {
+  refs.set(dir, (refs.get(dir) ?? 0) + 1)
+}
+
+function release(dir: string) {
+  const n = (refs.get(dir) ?? 1) - 1
+  if (n <= 0) refs.delete(dir)
+  else refs.set(dir, n)
+}
+
+async function wait(dir: string) {
+  while (disposing.has(dir)) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+async function reap() {
+  const now = Date.now()
+  for (const [dir, last] of activity) {
+    if (now - last < IDLE_MS) continue
+    if (refs.has(dir)) continue
+    if (disposing.has(dir)) continue
+    if (!cache.has(dir)) {
+      activity.delete(dir)
+      continue
+    }
+    const val = cache.get(dir)
+    if (!val) continue
+    disposing.add(dir)
+    cache.delete(dir)
+    try {
+      Log.Default.info("disposing idle instance", { directory: dir, idle_ms: now - last })
+      const ctx = await val.catch(() => undefined)
+      if (!ctx) continue
+      await context.provide(ctx, async () => {
+        await Promise.all([State.dispose(dir), disposeInstance(dir)])
+      })
+      emit(dir)
+    } catch (error) {
+      Log.Default.warn("idle instance dispose failed", { directory: dir, error })
+    } finally {
+      disposing.delete(dir)
+      activity.delete(dir)
+    }
+  }
+}
+
+function ensureSweep() {
+  if (sweep) return
+  sweep = setInterval(reap, SWEEP_MS)
+  sweep.unref?.()
 }
 
 function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
@@ -65,21 +127,33 @@ function track(directory: string, next: Promise<InstanceContext>) {
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
-    let existing = cache.get(directory)
-    if (!existing) {
-      Log.Default.info("creating instance", { directory })
-      existing = track(
-        directory,
-        boot({
+    while (true) {
+      await wait(directory)
+      let existing = cache.get(directory)
+      if (!existing) {
+        Log.Default.info("creating instance", { directory })
+        existing = track(
           directory,
-          init: input.init,
-        }),
-      )
+          boot({
+            directory,
+            init: input.init,
+          }),
+        )
+      }
+      touch(directory)
+      ensureSweep()
+      const ctx = await existing
+      if (disposing.has(directory)) continue
+      acquire(directory)
+      try {
+        return await context.provide(ctx, async () => {
+          return input.fn()
+        })
+      } finally {
+        release(directory)
+        touch(directory)
+      }
     }
-    const ctx = await existing
-    return context.provide(ctx, async () => {
-      return input.fn()
-    })
   },
   get current() {
     return context.use()

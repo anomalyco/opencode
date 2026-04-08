@@ -145,6 +145,35 @@ describe("session messages endpoint", () => {
   })
 })
 
+describe("session create duplicate id", () => {
+  test("returns 409 when creating the same explicit session id twice", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await withoutWatcher(() =>
+      Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const app = Server.Default()
+
+          const first = await app.request(`/session`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ id: "ses_duplicate_smoke", title: "duplicate one" }),
+          })
+          expect(first.status).toBe(200)
+
+          const second = await app.request(`/session`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ id: "ses_duplicate_smoke", title: "duplicate two" }),
+          })
+
+          expect(second.status).toBe(409)
+        },
+      }),
+    )
+  })
+})
+
 describe("session.prompt_async error handling", () => {
   test("prompt_async route has error handler for detached prompt call", async () => {
     const src = await Bun.file(new URL("../../src/server/routes/session.ts", import.meta.url)).text()
@@ -155,5 +184,7 @@ describe("session.prompt_async error handling", () => {
     const route = src.slice(start, end)
     expect(route).toContain(".catch(")
     expect(route).toContain("Bus.publish(Session.Event.Error")
+    expect(route).toContain("Instance.bind(")
+    expect(route).not.toContain("return stream(c")
   })
 })

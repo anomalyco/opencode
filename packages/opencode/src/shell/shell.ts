@@ -9,10 +9,18 @@ import { setTimeout as sleep } from "node:timers/promises"
 const SIGKILL_TIMEOUT_MS = 200
 
 export namespace Shell {
+  function alive(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const BLACKLIST = new Set(["fish", "nu"])
   const LOGIN = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"])
   const POSIX = new Set(["bash", "dash", "ksh", "sh", "zsh"])
-
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
     if (!pid || opts?.exited?.()) return
@@ -31,17 +39,24 @@ export namespace Shell {
 
     try {
       process.kill(-pid, "SIGTERM")
-      await sleep(SIGKILL_TIMEOUT_MS)
-      if (!opts?.exited?.()) {
-        process.kill(-pid, "SIGKILL")
-      }
-    } catch (_e) {
-      proc.kill("SIGTERM")
-      await sleep(SIGKILL_TIMEOUT_MS)
-      if (!opts?.exited?.()) {
-        proc.kill("SIGKILL")
-      }
+    } catch {
+      try {
+        proc.kill("SIGTERM")
+      } catch {}
     }
+
+    await sleep(SIGKILL_TIMEOUT_MS)
+
+    if (opts?.exited?.() || !alive(pid)) return
+    try {
+      process.kill(-pid, "SIGKILL")
+    } catch {
+      try {
+        proc.kill("SIGKILL")
+      } catch {}
+    }
+
+    await sleep(SIGKILL_TIMEOUT_MS)
   }
 
   function full(file: string) {

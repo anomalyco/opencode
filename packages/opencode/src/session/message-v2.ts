@@ -696,6 +696,10 @@ export namespace MessageV2 {
         ) {
           continue
         }
+        // Skip incomplete assistant messages (no finish, no error, and no meaningful parts)
+        if (!msg.info.finish && !msg.info.error && !msg.parts.some((part) => part.type !== "step-start")) {
+          continue
+        }
         const assistantMessage: UIMessage = {
           id: msg.info.id,
           role: "assistant",
@@ -972,7 +976,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case APICallError.isInstance(e):
+      case APICallError.isInstance(e): {
         const parsed = ProviderError.parseAPICallError({
           providerID: ctx.providerID,
           error: e,
@@ -995,6 +999,33 @@ export namespace MessageV2 {
             responseHeaders: parsed.responseHeaders,
             responseBody: parsed.responseBody,
             metadata: parsed.metadata,
+          },
+          { cause: e },
+        ).toObject()
+      }
+      case e instanceof DOMException && e.name === "TimeoutError":
+        return new MessageV2.APIError(
+          {
+            message: "Request timed out",
+            isRetryable: true,
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error &&
+        "code" in e &&
+        typeof (e as SystemError).code === "string" &&
+        ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EPIPE", "ECONNABORTED", "EHOSTUNREACH"].includes(
+          (e as SystemError).code ?? "",
+        ):
+        return new MessageV2.APIError(
+          {
+            message: `Network error: ${(e as SystemError).message}`,
+            isRetryable: true,
+            metadata: {
+              code: (e as SystemError).code ?? "",
+              syscall: (e as SystemError).syscall ?? "",
+              message: (e as SystemError).message ?? "",
+            },
           },
           { cause: e },
         ).toObject()

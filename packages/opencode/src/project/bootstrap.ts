@@ -12,6 +12,20 @@ import { Instance } from "./instance"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
 
+const cmd = Instance.state(
+  () => {
+    const pid = Instance.project.id
+    return Bus.subscribe(Command.Event.Executed, async (payload) => {
+      if (payload.properties.name === Command.Default.INIT) {
+        Project.setInitialized(pid)
+      }
+    })
+  },
+  async (fn) => {
+    fn()
+  },
+)
+
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
@@ -22,10 +36,5 @@ export async function InstanceBootstrap() {
   FileWatcher.init()
   Vcs.init()
   Snapshot.init()
-
-  Bus.subscribe(Command.Event.Executed, async (payload) => {
-    if (payload.properties.name === Command.Default.INIT) {
-      Project.setInitialized(Instance.project.id)
-    }
-  })
+  cmd()
 }

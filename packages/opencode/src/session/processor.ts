@@ -414,7 +414,14 @@ export namespace SessionProcessor {
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-          log.error("process", { error: e, stack: e instanceof Error ? e.stack : undefined })
+          log.error("process", {
+            error: e,
+            stack: e instanceof Error ? e.stack : undefined,
+            providerID: ctx.assistantMessage.providerID,
+            modelID: ctx.assistantMessage.modelID,
+            sessionID: ctx.sessionID,
+            agent: ctx.assistantMessage.agent,
+          })
           const error = parse(e)
           if (MessageV2.ContextOverflowError.isInstance(error)) {
             ctx.needsCompaction = true

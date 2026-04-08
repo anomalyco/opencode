@@ -13,6 +13,7 @@ import { useSync } from "@tui/context/sync"
 import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Log } from "@/util/log"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
@@ -277,7 +278,7 @@ export function Prompt(props: PromptProps) {
           if (store.interrupt >= 2) {
             sdk.client.session.abort({
               sessionID: props.sessionID,
-            })
+            }).catch(() => {})
             setStore("interrupt", 0)
           }
           dialog.clear()
@@ -608,10 +609,10 @@ export function Prompt(props: PromptProps) {
       })
 
       if (res.error) {
-        console.log("Creating a session failed:", res.error)
+        Log.Default.error("session creation failed", { error: res.error })
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: "Creating a session failed",
           variant: "error",
         })
 
@@ -687,7 +688,7 @@ export function Prompt(props: PromptProps) {
             id: PartID.ascending(),
             ...x,
           })),
-      })
+      }).catch(() => {})
     } else {
       sdk.client.session
         .prompt({

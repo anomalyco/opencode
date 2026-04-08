@@ -102,6 +102,7 @@ export namespace Question {
     readonly reply: (input: { requestID: QuestionID; answers: Answer[] }) => Effect.Effect<void>
     readonly reject: (requestID: QuestionID) => Effect.Effect<void>
     readonly list: () => Effect.Effect<Request[]>
+    readonly clearSession: (sessionID: SessionID) => Effect.Effect<void>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Question") {}
@@ -194,7 +195,20 @@ export namespace Question {
         return Array.from(pending.values(), (x) => x.info)
       })
 
-      return Service.of({ ask, reply, reject, list })
+      const clearSession = Effect.fn("Question.clearSession")(function* (sessionID: SessionID) {
+        const pending = (yield* InstanceState.get(state)).pending
+        for (const [id, entry] of pending) {
+          if (entry.info.sessionID !== sessionID) continue
+          pending.delete(id)
+          Bus.publish(Event.Rejected, {
+            sessionID: entry.info.sessionID,
+            requestID: entry.info.id,
+          })
+          yield* Deferred.fail(entry.deferred, new RejectedError())
+        }
+      })
+
+      return Service.of({ ask, reply, reject, list, clearSession })
     }),
   )
 
@@ -218,6 +232,10 @@ export namespace Question {
     return runPromise((s) => s.reject(requestID))
   }
 
+
+  export async function clearSession(sessionID: SessionID) {
+    return runPromise((s) => s.clearSession(sessionID))
+  }
   export async function list() {
     return runPromise((s) => s.list())
   }

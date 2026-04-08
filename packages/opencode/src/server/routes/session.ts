@@ -21,6 +21,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
+import { Instance } from "@/project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -194,7 +195,7 @@ export const SessionRoutes = lazy(() =>
         description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
         operationId: "session.create",
         responses: {
-          ...errors(400),
+          ...errors(400, 409),
           200: {
             description: "Successfully created session",
             content: {
@@ -381,7 +382,7 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        await SessionPrompt.cancel(c.req.valid("param").sessionID)
+        await SessionPrompt.cancel(c.req.valid("param").sessionID).catch(() => {})
         return c.json(true)
       },
     )
@@ -843,19 +844,25 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
-        c.status(204)
-        c.header("Content-Type", "application/json")
-        return stream(c, async () => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const run = Instance.bind(() => {
           SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
-            log.error("prompt_async failed", { sessionID, error: err })
+            log.error("prompt_async failed", {
+              sessionID,
+              error: err,
+              stack: err instanceof Error ? err.stack : undefined,
+            })
+            const error = MessageV2.fromError(err, { providerID: "unknown" as any })
             Bus.publish(Session.Event.Error, {
               sessionID,
-              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+              error,
             })
           })
         })
+        run()
+        c.status(204)
+        return c.body(null)
       },
     )
     .post(

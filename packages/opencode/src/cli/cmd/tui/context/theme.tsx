@@ -376,7 +376,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
-      renderer.clearPaletteCache()
       resolveSystemTheme(mode)
     }
 
@@ -409,6 +408,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       renderer.off(CliRenderEvents.THEME_MODE, handle)
       process.off("SIGUSR2", refresh)
     })
+
+    const sigusr2Handler = async () => {
+      renderer.clearPaletteCache()
+      init()
+    }
+    process.on("SIGUSR2", sigusr2Handler)
+    onCleanup(() => process.off("SIGUSR2", sigusr2Handler))
 
     const values = createMemo(() => {
       const active = store.themes[store.active]

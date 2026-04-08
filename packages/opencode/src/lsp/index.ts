@@ -217,6 +217,9 @@ export namespace LSP {
           yield* Effect.addFinalizer(() =>
             Effect.promise(async () => {
               await Promise.all(s.clients.map((client) => client.shutdown()))
+              s.clients.length = 0
+              s.broken.clear()
+              s.spawning.clear()
             }),
           )
 
@@ -510,7 +513,7 @@ export namespace LSP {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export const init = async () => runPromise((svc) => svc.init())
+  export const init: () => Promise<any> = async () => runPromise((svc) => svc.init())
 
   export const status = async () => runPromise((svc) => svc.status())
 

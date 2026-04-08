@@ -179,11 +179,6 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await Instance.provide({
-        directory: cwd,
-        fn: () => TuiConfig.get(),
-      })
-
       const network = await resolveNetworkOptions(args)
       const external =
         process.argv.includes("--port") ||
@@ -193,46 +188,57 @@ export const TuiThreadCommand = cmd({
         network.port !== 0 ||
         network.hostname !== "127.0.0.1"
 
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            events: undefined,
-          }
-        : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
-          }
+      await Instance.provide({
+        directory: cwd,
+        fn: async () => {
+          const config = await TuiConfig.get()
 
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
+          const transport = external
+            ? {
+                url: (await client.call("server", network)).url,
+                fetch: undefined,
+                events: undefined,
+              }
+            : {
+                url: "http://opencode.internal",
+                fetch: createWorkerFetch(client),
+                events: createEventSource(client),
+              }
 
-      try {
-        await tui({
-          url: transport.url,
-          async onSnapshot() {
-            const tui = writeHeapSnapshot("tui.heapsnapshot")
-            const server = await client.call("snapshot", undefined)
-            return [tui, server]
-          },
-          config,
-          directory: cwd,
-          fetch: transport.fetch,
-          events: transport.events,
-          args: {
-            continue: args.continue,
-            sessionID: args.session,
-            agent: args.agent,
-            model: args.model,
-            prompt,
-            fork: args.fork,
-          },
-        })
-      } finally {
-        await stop()
-      }
+          setTimeout(() => {
+            client.call("checkUpgrade", { directory: cwd }).catch((err) => {
+              Log.Default.warn("tui.thread checkUpgrade failed", {
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
+          }, 1000).unref?.()
+
+          try {
+            await tui({
+              url: transport.url,
+              async onSnapshot() {
+                const tui = writeHeapSnapshot("tui.heapsnapshot")
+                const server = await client.call("snapshot", undefined)
+                return [tui, server]
+              },
+              config,
+              directory: cwd,
+              fetch: transport.fetch,
+              events: transport.events,
+              args: {
+                continue: args.continue,
+                sessionID: args.session,
+                agent: args.agent,
+                model: args.model,
+                prompt,
+                fork: args.fork,
+              },
+            })
+          } finally {
+            await stop()
+          }
+        },
+      })
     } finally {
       unguard?.()
     }

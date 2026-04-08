@@ -60,6 +60,7 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { Log } from "@/util/log"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -140,7 +141,7 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
         Clipboard.copy(text).catch((error) => {
-          console.error(`Failed to copy console selection to clipboard: ${error}`)
+          Log.Default.error("clipboard copy from console failed", { error })
         })
       },
     },

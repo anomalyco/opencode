@@ -14,6 +14,12 @@ function foreign(err: unknown) {
   return "message" in err && typeof err.message === "string" && err.message.includes("FOREIGN KEY constraint failed")
 }
 
+function duplicate(err: unknown, table: string) {
+  if (typeof err !== "object" || err === null) return false
+  if (!("message" in err) || typeof err.message !== "string") return false
+  return err.message.includes(`UNIQUE constraint failed: ${table}.id`)
+}
+
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
 
 function grab<T extends object, K1 extends keyof T, X>(
@@ -63,7 +69,12 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
 
 export default [
   SyncEvent.project(Session.Event.Created, (db, data) => {
-    db.insert(SessionTable).values(Session.toRow(data.info)).run()
+    try {
+      db.insert(SessionTable).values(Session.toRow(data.info)).run()
+    } catch (err) {
+      if (duplicate(err, "session")) throw new Session.DuplicateIDError({ id: data.info.id })
+      throw err
+    }
   }),
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {

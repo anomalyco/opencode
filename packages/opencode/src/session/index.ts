@@ -1,4 +1,5 @@
 import { Slug } from "@opencode-ai/util/slug"
+import { NamedError } from "@opencode-ai/util/error"
 import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
@@ -38,6 +39,13 @@ import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+
+  export const DuplicateIDError = NamedError.create(
+    "DuplicateIDError",
+    z.object({
+      id: z.string(),
+    }),
+  )
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
@@ -493,6 +501,7 @@ export namespace Session {
         }).pipe(Effect.withSpan("Session.updatePart"))
 
       const create = Effect.fn("Session.create")(function* (input?: {
+        id?: SessionID
         parentID?: SessionID
         title?: string
         permission?: Permission.Ruleset
@@ -500,6 +509,7 @@ export namespace Session {
       }) {
         const directory = yield* InstanceState.directory
         return yield* createNext({
+          id: input?.id,
           parentID: input?.parentID,
           directory,
           title: input?.title,
@@ -688,6 +698,7 @@ export namespace Session {
   export const create = fn(
     z
       .object({
+        id: SessionID.zod.optional(),
         parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,

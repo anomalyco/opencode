@@ -1833,6 +1833,13 @@ export type McpResource = {
   client: string
 }
 
+export type DuplicateIdError = {
+  name: "DuplicateIDError"
+  data: {
+    id: string
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -3094,6 +3101,7 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 
 export type SessionCreateData = {
   body?: {
+    id?: string
     parentID?: string
     title?: string
     permission?: PermissionRuleset
@@ -3112,6 +3120,10 @@ export type SessionCreateErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: DuplicateIdError
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]

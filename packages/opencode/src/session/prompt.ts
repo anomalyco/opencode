@@ -946,7 +946,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-        const agentName = input.agent || (yield* agents.defaultAgent())
+        const agentName = input.agent ?? (yield* lastPrimaryAgent(input.sessionID))
         const ag = yield* agents.get(agentName)
         if (!ag) {
           const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -1308,6 +1308,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         function* (input: PromptInput) {
           const session = yield* sessions.get(input.sessionID)
           yield* Effect.promise(() => SessionRevert.cleanup(session))
+
+          const text = input.parts.find((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic)
+          const slash = text?.text.trim()
+          if (slash?.startsWith("/") && !slash.startsWith("//")) {
+            const body = slash.slice(1)
+            const at = body.search(/\s/)
+            const cmd = at === -1 ? body : body.slice(0, at)
+            const args = at === -1 ? "" : body.slice(at + 1).trim()
+            return yield* command({
+              sessionID: input.sessionID,
+              messageID: input.messageID,
+              agent: input.agent,
+              model: input.model ? `${input.model.providerID}/${input.model.modelID}` : undefined,
+              variant: input.variant,
+              command: cmd,
+              arguments: args,
+              parts: input.parts.filter((part) => part.type === "file"),
+            })
+          }
+
           const message = yield* createUserMessage(input)
           yield* sessions.touch(input.sessionID)
 
@@ -1372,12 +1392,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             // Keep the loop running so tool results can be sent back to the model.
             const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
 
-            if (
-              lastAssistant?.finish &&
-              !["tool-calls"].includes(lastAssistant.finish) &&
-              !hasToolCalls &&
-              lastUser.id < lastAssistant.id
-            ) {
+            if (shouldExitLoop(lastUser, lastAssistant, lastFinished, hasToolCalls)) {
               log.info("exiting loop", { sessionID })
               break
             }
@@ -1871,6 +1886,49 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function command(input: CommandInput) {
     return runPromise((svc) => svc.command(CommandInput.parse(input)))
+  }
+
+  const lastPrimaryAgent = Effect.fnUntraced(function* (sessionID: SessionID) {
+    const msgs = yield* Effect.promise(async () => {
+      const result: MessageV2.WithParts[] = []
+      for await (const item of MessageV2.stream(sessionID)) result.push(item)
+      return result
+    })
+    let name: string | undefined
+    for (const item of msgs) {
+      if (item.info.role !== "user") continue
+      if (!item.info.agent) continue
+      const agent = yield* Effect.promise(() => Agent.get(item.info.agent).catch(() => undefined))
+      if (!agent || agent.hidden || agent.mode === "subagent") continue
+      name = agent.name
+    }
+    if (name) return name
+    return yield* Effect.promise(() => Agent.defaultAgent())
+  })
+
+  export function shouldExitLoop(
+    lastUser: MessageV2.User | undefined,
+    lastAssistant: MessageV2.Assistant | undefined,
+    lastFinished?: MessageV2.Assistant,
+    hasToolCalls = false,
+  ): boolean {
+    if (!lastUser || hasToolCalls) return false
+    const done = lastFinished ?? lastAssistant
+    if (!done?.finish) return false
+    if (["tool-calls", "unknown"].includes(done.finish)) return false
+    if (!done.parentID) return true
+    return done.parentID === lastUser.id
+  }
+
+  export function shouldWrapSystemReminder(
+    msg: MessageV2.User | MessageV2.Assistant,
+    idx: number,
+    lastFinished: MessageV2.Assistant | undefined,
+    finishedIdx: number,
+  ): boolean {
+    if (msg.role !== "user") return false
+    if (!lastFinished) return false
+    return idx > finishedIdx
   }
 
   /** @internal Exported for testing */
