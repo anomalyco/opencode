@@ -559,7 +559,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
-        const taskTool = yield* registry.fromID(TaskTool.id)
+        const { task: taskTool } = yield* registry.named()
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
           id: MessageID.ascending(),
@@ -1080,6 +1080,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const filepath = fileURLToPath(part.url)
                 if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
+                const { read } = yield* registry.named()
+                const execRead = (args: Record<string, unknown>, extra?: Record<string, unknown>) =>
+                  Effect.promise((signal: AbortSignal) =>
+                    read.execute(args, {
+                      sessionID: input.sessionID,
+                      abort: signal,
+                      agent: input.agent!,
+                      messageID: info.id,
+                      extra: { bypassCwdCheck: true, ...extra },
+                      messages: [],
+                      metadata: async () => {},
+                      ask: async () => {},
+                    }),
+                  )
+
                 if (part.mime === "text/plain") {
                   let offset: number | undefined
                   let limit: number | undefined
@@ -1116,29 +1131,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                     },
                   ]
-                  const read = yield* registry.fromID("read").pipe(
-                    Effect.flatMap((t) =>
-                      provider.getModel(info.model.providerID, info.model.modelID).pipe(
-                        Effect.flatMap((mdl) =>
-                          Effect.promise(() =>
-                            t.execute(args, {
-                              sessionID: input.sessionID,
-                              abort: new AbortController().signal,
-                              agent: input.agent!,
-                              messageID: info.id,
-                              extra: { bypassCwdCheck: true, model: mdl },
-                              messages: [],
-                              metadata: async () => {},
-                              ask: async () => {},
-                            }),
-                          ),
-                        ),
-                      ),
-                    ),
+                  const exit = yield* provider.getModel(info.model.providerID, info.model.modelID).pipe(
+                    Effect.flatMap((mdl) => execRead(args, { model: mdl })),
                     Effect.exit,
                   )
-                  if (Exit.isSuccess(read)) {
-                    const result = read.value
+                  if (Exit.isSuccess(exit)) {
+                    const result = exit.value
                     pieces.push({
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -1160,7 +1158,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
                     }
                   } else {
-                    const error = Cause.squash(read.cause)
+                    const error = Cause.squash(exit.cause)
                     log.error("failed to read file", { error })
                     const message = error instanceof Error ? error.message : String(error)
                     yield* bus.publish(Session.Event.Error, {
@@ -1180,22 +1178,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 if (part.mime === "application/x-directory") {
                   const args = { filePath: filepath }
-                  const result = yield* registry.fromID("read").pipe(
-                    Effect.flatMap((t) =>
-                      Effect.promise(() =>
-                        t.execute(args, {
-                          sessionID: input.sessionID,
-                          abort: new AbortController().signal,
-                          agent: input.agent!,
-                          messageID: info.id,
-                          extra: { bypassCwdCheck: true },
-                          messages: [],
-                          metadata: async () => {},
-                          ask: async () => {},
-                        }),
-                      ),
-                    ),
-                  )
+                  const exit = yield* execRead(args).pipe(Effect.exit)
+                  if (Exit.isFailure(exit)) {
+                    const error = Cause.squash(exit.cause)
+                    log.error("failed to read directory", { error })
+                    const message = error instanceof Error ? error.message : String(error)
+                    yield* bus.publish(Session.Event.Error, {
+                      sessionID: input.sessionID,
+                      error: new NamedError.Unknown({ message }).toObject(),
+                    })
+                    return [
+                      {
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                      },
+                    ]
+                  }
                   return [
                     {
                       messageID: info.id,
@@ -1209,7 +1210,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       sessionID: input.sessionID,
                       type: "text",
                       synthetic: true,
-                      text: result.output,
+                      text: exit.value.output,
                     },
                     { ...part, messageID: info.id, sessionID: input.sessionID },
                   ]
