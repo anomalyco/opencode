@@ -277,6 +277,7 @@ export namespace SessionProcessor {
                 id: PartID.ascending(),
                 reason: value.finishReason,
                 snapshot: yield* snapshot.track(),
+                metadata: value.providerMetadata,
                 messageID: ctx.assistantMessage.id,
                 sessionID: ctx.assistantMessage.sessionID,
                 type: "step-finish",
