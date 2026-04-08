@@ -64,7 +64,7 @@ export function ProgressCircle(props: ProgressCircleProps) {
         data-slot="progress-circle-label"
         text-anchor="middle"
         dominant-baseline="central"
-        font-size={font()}
+        font-size={font().toString()}
       >
         {split.label}
       </text>
