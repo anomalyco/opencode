@@ -42,6 +42,15 @@ export namespace Flag {
   export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
+
+  // JupyterHub integration
+  export const JUPYTERHUB_API_URL = process.env["JUPYTERHUB_API_URL"]
+  export const JUPYTERHUB_API_TOKEN = process.env["JUPYTERHUB_API_TOKEN"]
+  export const JUPYTERHUB_USER = process.env["JUPYTERHUB_USER"]
+  export const JUPYTERHUB_CLIENT_ID = process.env["JUPYTERHUB_CLIENT_ID"]
+  export const JUPYTERHUB_OAUTH_CALLBACK_URL = process.env["JUPYTERHUB_OAUTH_CALLBACK_URL"]
+  export const JUPYTERHUB_BASE_URL = process.env["JUPYTERHUB_BASE_URL"]
+  export const JUPYTERHUB_SERVICE_PREFIX = process.env["JUPYTERHUB_SERVICE_PREFIX"]
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental
