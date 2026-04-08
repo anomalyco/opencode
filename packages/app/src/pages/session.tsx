@@ -928,7 +928,11 @@ export default function Page() {
         ? (evt.details.properties as Record<string, unknown>)
         : undefined
     const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
+    if (!file) return
+    const path = file.replaceAll("\\", "/")
+    // Worktree watcher events can arrive as absolute .git/worktrees/... paths.
+    const git = path.startsWith(".git/") || path.includes("/.git/")
+    if (git) return
     refreshVcs()
   })
   onCleanup(stopVcs)

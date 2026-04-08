@@ -59,6 +59,13 @@ export namespace FileWatcher {
     })
   }
 
+  function rel(dir: string, file: string) {
+    const next = path.relative(dir, file).replaceAll("\\", "/")
+    if (path.isAbsolute(next)) return
+    if (next === ".." || next.startsWith("../")) return
+    return next
+  }
+
   export const hasNativeBinding = () => !!watcher()
 
   export interface Interface {
@@ -95,16 +102,24 @@ export namespace FileWatcher {
               Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))),
             )
 
-            const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
-              if (err) return
-              for (const evt of evts) {
-                if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-                if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-                if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
-              }
-            })
+            const subscribe = (dir: string, ignore: string[], git = false) => {
+              const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
+                if (err) return
+                for (const evt of evts) {
+                  const file = rel(dir, evt.path)
+                  if (file === undefined) continue
+                  if (git) {
+                    if (file !== "HEAD") continue
+                  } else if (FileIgnore.match(file, { extra: cfgIgnores })) {
+                    continue
+                  }
 
-            const subscribe = (dir: string, ignore: string[]) => {
+                  if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
+                  if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+                  if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+                }
+              })
+
               const pending = w.subscribe(dir, cb, { ignore, backend })
               return Effect.gen(function* () {
                 const sub = yield* Effect.promise(() => pending)
@@ -142,7 +157,7 @@ export namespace FileWatcher {
                 const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                   (entry) => entry !== "HEAD",
                 )
-                yield* subscribe(vcsDir, ignore)
+                yield* subscribe(vcsDir, ignore, true)
               }
             }
           },
