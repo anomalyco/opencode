@@ -27,9 +27,7 @@ type AskInput = {
       filePath: string
       relativePath: string
       type: "add" | "update" | "delete" | "move"
-      diff: string
-      before: string
-      after: string
+      patch: string
       additions: number
       deletions: number
       movePath?: string
@@ -112,12 +110,12 @@ describe("tool.apply_patch freeform", () => {
         const addFile = permissionCall.metadata.files.find((f) => f.type === "add")
         expect(addFile).toBeDefined()
         expect(addFile!.relativePath).toBe("nested/new.txt")
-        expect(addFile!.after).toBe("created\n")
+        expect(addFile!.patch).toContain("+created")
 
         const updateFile = permissionCall.metadata.files.find((f) => f.type === "update")
         expect(updateFile).toBeDefined()
-        expect(updateFile!.before).toContain("line2")
-        expect(updateFile!.after).toContain("changed")
+        expect(updateFile!.patch).toContain("-line2")
+        expect(updateFile!.patch).toContain("+changed")
 
         const added = await fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")
         expect(added).toBe("created\n")
@@ -151,8 +149,8 @@ describe("tool.apply_patch freeform", () => {
         expect(moveFile.type).toBe("move")
         expect(moveFile.relativePath).toBe("renamed/dir/name.txt")
         expect(moveFile.movePath).toBe(path.join(fixture.path, "renamed/dir/name.txt"))
-        expect(moveFile.before).toBe("old content\n")
-        expect(moveFile.after).toBe("new content\n")
+        expect(moveFile.patch).toContain("-old content")
+        expect(moveFile.patch).toContain("+new content")
       },
     })
   })

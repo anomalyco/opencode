@@ -58,6 +58,19 @@ export namespace SessionRetry {
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
+    // Check for rate limit patterns in plain text error messages
+    const msg = error.data?.message
+    if (typeof msg === "string") {
+      const lower = msg.toLowerCase()
+      if (
+        lower.includes("rate increased too quickly") ||
+        lower.includes("rate limit") ||
+        lower.includes("too many requests")
+      ) {
+        return msg
+      }
+    }
+
     const json = iife(() => {
       try {
         if (typeof error.data?.message === "string") {

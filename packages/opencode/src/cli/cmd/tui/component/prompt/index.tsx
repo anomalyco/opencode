@@ -23,7 +23,7 @@ import { useRenderer, type JSX } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { AssistantMessage, FilePart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -36,7 +36,6 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
-import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export type PromptProps = {
   sessionID?: string
@@ -96,15 +95,8 @@ export function Prompt(props: PromptProps) {
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
-  const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
-  const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
-  const currentProviderLabel = createMemo(() => {
-    const current = local.model.current()
-    const provider = local.model.parsed().provider
-    if (!current) return provider
-    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
-  })
-  const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
+  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
+  const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
     toast.show({
@@ -145,7 +137,7 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return undefined
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
-    return messages.findLast((m) => m.role === "user")
+    return messages.findLast((m): m is UserMessage => m.role === "user")
   })
 
   const usage = createMemo(() => {
@@ -209,8 +201,10 @@ export function Prompt(props: PromptProps) {
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
-        if (msg.variant) local.model.variant.set(msg.variant)
+        if (msg.model) {
+          local.model.set(msg.model)
+          local.model.variant.set(msg.model.variant)
+        }
       }
     }
   })
@@ -1118,17 +1112,6 @@ export function Prompt(props: PromptProps) {
               <Show when={hasRightContent()}>
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}
-                  <Show when={activeOrgName()}>
-                    <text
-                      fg={theme.textMuted}
-                      onMouseUp={() => {
-                        if (!canSwitchOrgs()) return
-                        command.trigger("console.org.switch")
-                      }}
-                    >
-                      {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
-                    </text>
-                  </Show>
                 </box>
               </Show>
             </box>
@@ -1160,7 +1143,7 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box flexDirection="row" justifyContent="space-between">
+        <box width="100%" flexDirection="row" justifyContent="space-between">
           <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
             <box
               flexDirection="row"
