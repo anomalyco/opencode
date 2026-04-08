@@ -267,7 +267,7 @@ export function DialogWorkspaceList() {
 
   onMount(() => {
     dialog.setSize("large")
-    void sync.workspace.sync()
+    void Promise.all([sync.session.list(), sync.workspace.sync()])
   })
 
   return (

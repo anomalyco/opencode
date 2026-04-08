@@ -480,6 +480,8 @@ export function Autocomplete(props: {
 
   function show(mode: "@" | "/") {
     command.keybinds(false)
+    if (mode === "/") void sync.command.sync()
+    if (mode === "@") void sync.resource.sync()
     setStore({
       visible: mode,
       index: props.input().cursorOffset,

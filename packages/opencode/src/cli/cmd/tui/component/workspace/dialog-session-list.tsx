@@ -86,6 +86,7 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
 
   onMount(() => {
     dialog.setSize("large")
+    if (!props.workspaceID) void sync.session.list()
   })
 
   return (

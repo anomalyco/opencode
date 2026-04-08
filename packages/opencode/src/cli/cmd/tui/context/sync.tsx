@@ -25,6 +25,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
+import { eager } from "./sync-eager"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
@@ -106,6 +107,72 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    const args = useArgs()
+    const load = eager(args)
+    let listed = false
+    let commanded = false
+    let resourced = false
+    let listedRun: Promise<Session[]> | undefined
+    let commandRun: Promise<Command[]> | undefined
+    let resourceRun: Promise<Record<string, McpResource>> | undefined
+
+    function sort(list: Session[]) {
+      return list.toSorted((a, b) => a.id.localeCompare(b.id))
+    }
+
+    function syncSessions() {
+      if (listed) return Promise.resolve(store.session)
+      if (listedRun) return listedRun
+      const next = sdk.client.session
+        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000 })
+        .then((x) => sort(x.data ?? []))
+        .then((x) => {
+          setStore("session", reconcile(x))
+          listed = true
+          return x
+        })
+        .finally(() => {
+          if (listedRun === next) listedRun = undefined
+        })
+      listedRun = next
+      return next
+    }
+
+    function syncCommands() {
+      if (commanded) return Promise.resolve(store.command)
+      if (commandRun) return commandRun
+      const next = sdk.client.command
+        .list()
+        .then((x) => x.data ?? [])
+        .then((x) => {
+          setStore("command", reconcile(x))
+          commanded = true
+          return x
+        })
+        .finally(() => {
+          if (commandRun === next) commandRun = undefined
+        })
+      commandRun = next
+      return next
+    }
+
+    function syncResources() {
+      if (resourced) return Promise.resolve(store.mcp_resource)
+      if (resourceRun) return resourceRun
+      const next = sdk.client.experimental.resource
+        .list()
+        .then((x) => x.data ?? {})
+        .then((x) => {
+          setStore("mcp_resource", reconcile(x))
+          resourced = true
+          return x
+        })
+        .finally(() => {
+          if (resourceRun === next) resourceRun = undefined
+        })
+      resourceRun = next
+      return next
+    }
 
     async function syncWorkspaces() {
       const result = await sdk.client.experimental.workspace.list().catch(() => undefined)
@@ -353,14 +420,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const exit = useExit()
-    const args = useArgs()
 
     async function bootstrap() {
       console.log("bootstrapping")
-      const start = Date.now() - 30 * 24 * 60 * 60 * 1000
-      const sessionListPromise = sdk.client.session
-        .list({ start: start })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+      listed = false
+      commanded = false
+      resourced = false
+      const sessionListPromise = load.session ? syncSessions() : undefined
 
       // blocking - include session.list when continuing a session
       const providersPromise = sdk.client.config.providers({}, { throwOnError: true })
@@ -372,7 +438,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         providerListPromise,
         agentsPromise,
         configPromise,
-        ...(args.continue ? [sessionListPromise] : []),
+        ...(args.continue && sessionListPromise ? [sessionListPromise] : []),
       ]
 
       await Promise.all(blockingRequests)
@@ -402,7 +468,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               setStore("provider_next", reconcile(providerList))
               setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
-              if (sessions !== undefined) setStore("session", reconcile(sessions))
+              if (sessions !== undefined) {
+                setStore("session", reconcile(sessions))
+                listed = true
+              }
             })
           })
         })
@@ -410,11 +479,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
+            ...(args.continue || !sessionListPromise ? [] : [sessionListPromise]),
+            ...(load.command ? [syncCommands()] : []),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
-            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
+            ...(load.resource ? [syncResources()] : []),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {
               setStore("session_status", reconcile(x.data!))
@@ -422,7 +491,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
-            syncWorkspaces(),
+            ...(load.workspace ? [syncWorkspaces()] : []),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -452,6 +521,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status !== "loading"
       },
       session: {
+        list: syncSessions,
         get(sessionID: string) {
           const match = Binary.search(store.session, sessionID, (s) => s.id)
           if (match.found) return store.session[match.index]
@@ -490,6 +560,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
           fullSyncedSessions.add(sessionID)
         },
+      },
+      command: {
+        sync: syncCommands,
+      },
+      resource: {
+        sync: syncResources,
       },
       workspace: {
         get(workspaceID: string) {

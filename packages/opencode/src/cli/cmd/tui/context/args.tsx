@@ -7,6 +7,8 @@ export interface Args {
   continue?: boolean
   sessionID?: string
   fork?: boolean
+  transport?: "local" | "attach"
+  url?: string
 }
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
