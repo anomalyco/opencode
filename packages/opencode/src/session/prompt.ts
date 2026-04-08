@@ -1311,13 +1311,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const message = yield* createUserMessage(input)
           yield* sessions.touch(input.sessionID)
 
+          const sessionPerms = session.permission ?? []
           const permissions: Permission.Ruleset = []
           for (const [t, enabled] of Object.entries(input.tools ?? {})) {
             permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
           }
-          if (permissions.length > 0) {
-            session.permission = permissions
-            yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+          const merged = Permission.merge(sessionPerms, permissions)
+          if (merged.length > 0) {
+            session.permission = merged
+            yield* sessions.setPermission({ sessionID: session.id, permission: merged })
           }
 
           if (input.noReply === true) return message
