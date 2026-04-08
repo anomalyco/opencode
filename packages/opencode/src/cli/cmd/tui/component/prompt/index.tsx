@@ -1222,7 +1222,7 @@ export function Prompt(props: PromptProps) {
                     </Show>
                     <Show when={store.recording}>
                       <text fg={theme.textMuted}>·</text>
-                      <text fg={theme.error} bold>
+                      <text fg={theme.error}>
                         ●
                       </text>
                       <text fg={theme.textMuted} wrapMode="none">
