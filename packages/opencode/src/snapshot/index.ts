@@ -1,6 +1,6 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Schedule, Semaphore, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
@@ -22,14 +22,13 @@ export namespace Snapshot {
   export const FileDiff = z
     .object({
       file: z.string(),
-      before: z.string(),
-      after: z.string(),
+      patch: z.string(),
       additions: z.number(),
       deletions: z.number(),
       status: z.enum(["added", "deleted", "modified"]).optional(),
     })
     .meta({
-      ref: "FileDiff",
+      ref: "SnapshotFileDiff",
     })
   export type FileDiff = z.infer<typeof FileDiff>
 
@@ -521,8 +520,6 @@ export namespace Snapshot {
                     const map = new Map<string, { before: string; after: string }>()
                     const dec = new TextDecoder()
                     let i = 0
-                    // Parse the default `git cat-file --batch` stream: one header line,
-                    // then exactly `size` bytes of blob content, then a trailing newline.
                     for (const ref of refs) {
                       let end = i
                       while (end < out.length && out[end] !== 10) end += 1
@@ -620,8 +617,9 @@ export namespace Snapshot {
                     ]
                   })
                 const step = 100
+                const patch = (file: string, before: string, after: string) =>
+                  formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
 
-                // Keep batches bounded so a large diff does not buffer every blob at once.
                 for (let i = 0; i < rows.length; i += step) {
                   const run = rows.slice(i, i + step)
                   const text = yield* load(run)
@@ -631,8 +629,7 @@ export namespace Snapshot {
                     const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
                     result.push({
                       file: row.file,
-                      before,
-                      after,
+                      patch: row.binary ? "" : patch(row.file, before, after),
                       additions: row.additions,
                       deletions: row.deletions,
                       status: row.status,

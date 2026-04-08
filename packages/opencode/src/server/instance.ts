@@ -154,7 +154,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
             description: "VCS diff",
             content: {
               "application/json": {
-                schema: resolver(Snapshot.FileDiff.array()),
+                schema: resolver(Vcs.FileDiff.array()),
               },
             },
           },
