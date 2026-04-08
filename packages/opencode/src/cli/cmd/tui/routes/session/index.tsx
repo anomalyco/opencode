@@ -167,12 +167,6 @@ export function Session() {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
-  createEffect(() => {
-    if (session()?.workspaceID) {
-      sdk.setWorkspace(session()?.workspaceID)
-    }
-  })
-
   createEffect(async () => {
     await sync.session
       .sync(route.sessionID)
@@ -2130,7 +2124,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
                   </text>
                 }
               >
-                <Diff diff={file.diff} filePath={file.filePath} />
+                <Diff diff={file.patch} filePath={file.filePath} />
                 <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
               </Show>
             </BlockTool>
