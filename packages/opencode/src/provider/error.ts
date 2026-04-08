@@ -28,11 +28,14 @@ export namespace ProviderError {
     /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
   ]
 
+  // Status codes that are always transient and safe to retry regardless of provider
+  const RETRYABLE_CODES = new Set([429, 500, 502, 503, 504, 529])
+
   function isOpenAiErrorRetryable(e: APICallError) {
     const status = e.statusCode
     if (!status) return e.isRetryable
     // openai sometimes returns 404 for models that are actually available
-    return status === 404 || e.isRetryable
+    return status === 404 || RETRYABLE_CODES.has(status) || e.isRetryable
   }
 
   // Providers not reliably handled in this function:
@@ -188,7 +191,7 @@ export namespace ProviderError {
       statusCode: input.error.statusCode,
       isRetryable: input.providerID.startsWith("openai")
         ? isOpenAiErrorRetryable(input.error)
-        : input.error.isRetryable,
+        : (input.error.statusCode !== undefined && RETRYABLE_CODES.has(input.error.statusCode)) || input.error.isRetryable,
       responseHeaders: input.error.responseHeaders,
       responseBody: input.error.responseBody,
       metadata,
