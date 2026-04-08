@@ -61,6 +61,17 @@ export namespace MessageV2 {
     z.object({ message: z.string(), responseBody: z.string().optional() }),
   )
 
+  export const LoopError = NamedError.create(
+    "LoopError",
+    z.object({
+      message: z.string(),
+      period: z.number(),
+      attempts: z.number(),
+      action: z.literal("abort"),
+      source: z.enum(["reasoning", "text"]),
+    }),
+  )
+
   export const OutputFormatText = z
     .object({
       type: z.literal("text"),
@@ -414,6 +425,7 @@ export namespace MessageV2 {
         AbortedError.Schema,
         StructuredOutputError.Schema,
         ContextOverflowError.Schema,
+        LoopError.Schema,
         APIError.Schema,
       ])
       .optional(),

@@ -9,6 +9,7 @@ import z from "zod"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
+import { isLoopOutcome } from "./loop"
 import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
@@ -270,6 +271,19 @@ When constructing the summary, try to stick to this template:
             model,
           })
           .pipe(Effect.onInterrupt(() => processor.abort()))
+
+        if (isLoopOutcome(result)) {
+          processor.message.error = new MessageV2.LoopError({
+            message: `Repetitive ${result.source} output detected during compaction (period ~${result.period} chars)`,
+            period: result.period,
+            attempts: 1,
+            action: "abort",
+            source: result.source,
+          }).toObject()
+          processor.message.finish = "error"
+          yield* session.updateMessage(processor.message)
+          return "stop"
+        }
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
