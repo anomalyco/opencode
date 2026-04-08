@@ -1,14 +1,15 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { Renderable, RGBA } from "@opentui/core"
+import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
-import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
+import { Flag } from "@/flag/flag"
+import { Selection } from "@tui/util/selection"
 
 export function Dialog(
   props: ParentProps<{
-    size?: "medium" | "large"
+    size?: "medium" | "large" | "xlarge"
     onClose: () => void
   }>,
 ) {
@@ -16,27 +17,41 @@ export function Dialog(
   const { theme } = useTheme()
   const renderer = useRenderer()
 
+  let dismiss = false
+  const width = () => {
+    if (props.size === "xlarge") return 116
+    if (props.size === "large") return 88
+    return 60
+  }
+
   return (
     <box
-      onMouseUp={async () => {
-        if (renderer.getSelection()) return
+      onMouseDown={() => {
+        dismiss = !!renderer.getSelection()
+      }}
+      onMouseUp={() => {
+        if (dismiss) {
+          dismiss = false
+          return
+        }
         props.onClose?.()
       }}
       width={dimensions().width}
       height={dimensions().height}
       alignItems="center"
       position="absolute"
+      zIndex={3000}
       paddingTop={dimensions().height / 4}
       left={0}
       top={0}
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
     >
       <box
-        onMouseUp={async (e) => {
-          if (renderer.getSelection()) return
+        onMouseUp={(e) => {
+          dismiss = false
           e.stopPropagation()
         }}
-        width={props.size === "large" ? 80 : 60}
+        width={width()}
         maxWidth={dimensions().width - 2}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
@@ -53,11 +68,19 @@ function init() {
       element: JSX.Element
       onClose?: () => void
     }[],
-    size: "medium" as "medium" | "large",
+    size: "medium" as "medium" | "large" | "xlarge",
   })
 
+  const renderer = useRenderer()
+
   useKeyboard((evt) => {
-    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && store.stack.length > 0) {
+    if (store.stack.length === 0) return
+    if (evt.defaultPrevented) return
+    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()?.getSelectedText()) return
+    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
+      if (renderer.getSelection()) {
+        renderer.clearSelection()
+      }
       const current = store.stack.at(-1)!
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
@@ -67,7 +90,6 @@ function init() {
     }
   })
 
-  const renderer = useRenderer()
   let focus: Renderable | null
   function refocus() {
     setTimeout(() => {
@@ -119,7 +141,7 @@ function init() {
     get size() {
       return store.size
     },
-    setSize(size: "medium" | "large") {
+    setSize(size: "medium" | "large" | "xlarge") {
       setStore("size", size)
     },
   }
@@ -138,15 +160,18 @@ export function DialogProvider(props: ParentProps) {
       {props.children}
       <box
         position="absolute"
-        onMouseUp={async () => {
-          const text = renderer.getSelection()?.getSelectedText()
-          if (text && text.length > 0) {
-            await Clipboard.copy(text)
-              .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-              .catch(toast.error)
-            renderer.clearSelection()
-          }
+        zIndex={3000}
+        onMouseDown={(evt) => {
+          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          if (evt.button !== MouseButton.RIGHT) return
+
+          if (!Selection.copy(renderer, toast)) return
+          evt.preventDefault()
+          evt.stopPropagation()
         }}
+        onMouseUp={
+          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast) : undefined
+        }
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

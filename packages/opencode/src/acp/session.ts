@@ -21,7 +21,6 @@ export class ACPSessionManager {
     const session = await this.sdk.session
       .create(
         {
-          title: `ACP Session ${crypto.randomUUID()}`,
           directory: cwd,
         },
         { throwOnError: true },

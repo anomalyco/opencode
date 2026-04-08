@@ -2,7 +2,8 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
 import { bootstrap } from "../bootstrap"
-import { Storage } from "../../storage/storage"
+import { Database } from "../../storage/db"
+import { SessionTable } from "../../session/session.sql"
 import { Project } from "../../project/project"
 import { Instance } from "../../project/instance"
 
@@ -87,25 +88,8 @@ async function getCurrentProject(): Promise<Project.Info> {
 }
 
 async function getAllSessions(): Promise<Session.Info[]> {
-  const sessions: Session.Info[] = []
-
-  const projectKeys = await Storage.list(["project"])
-  const projects = await Promise.all(projectKeys.map((key) => Storage.read<Project.Info>(key)))
-
-  for (const project of projects) {
-    if (!project) continue
-
-    const sessionKeys = await Storage.list(["session", project.id])
-    const projectSessions = await Promise.all(sessionKeys.map((key) => Storage.read<Session.Info>(key)))
-
-    for (const session of projectSessions) {
-      if (session) {
-        sessions.push(session)
-      }
-    }
-  }
-
-  return sessions
+  const rows = Database.use((db) => db.select().from(SessionTable).all())
+  return rows.map((row) => Session.fromRow(row))
 }
 
 export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {

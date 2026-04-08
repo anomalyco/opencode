@@ -8,6 +8,7 @@ import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 
 interface DialogSelectDirectoryProps {
@@ -19,6 +20,7 @@ interface DialogSelectDirectoryProps {
 type Row = {
   absolute: string
   search: string
+  group: "recent" | "folders"
 }
 
 function cleanInput(value: string) {
@@ -101,7 +103,7 @@ function displayPath(path: string, input: string, home: string) {
   return tildeOf(full, home) || full
 }
 
-function toRow(absolute: string, home: string): Row {
+function toRow(absolute: string, home: string, group: Row["group"]): Row {
   const full = trimTrailing(absolute)
   const tilde = tildeOf(full, home)
   const withSlash = (value: string) => {
@@ -113,7 +115,16 @@ function toRow(absolute: string, home: string): Row {
   const search = Array.from(
     new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
   ).join("\n")
-  return { absolute: full, search }
+  return { absolute: full, search, group }
+}
+
+function uniqueRows(rows: Row[]) {
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    if (seen.has(row.absolute)) return false
+    seen.add(row.absolute)
+    return true
+  })
 }
 
 function useDirectorySearch(args: {
@@ -237,6 +248,7 @@ function useDirectorySearch(args: {
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
+  const layout = useLayout()
   const dialog = useDialog()
   const language = useLanguage()
 
@@ -266,9 +278,42 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     start,
   })
 
+  const recentProjects = createMemo(() => {
+    const projects = layout.projects.list()
+    const byProject = new Map<string, number>()
+
+    for (const project of projects) {
+      let at = 0
+      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+      for (const directory of dirs) {
+        const sessions = sync.child(directory, { bootstrap: false })[0].session
+        for (const session of sessions) {
+          if (session.time.archived) continue
+          const updated = session.time.updated ?? session.time.created
+          if (updated > at) at = updated
+        }
+      }
+      byProject.set(project.worktree, at)
+    }
+
+    return projects
+      .map((project, index) => ({ project, at: byProject.get(project.worktree) ?? 0, index }))
+      .sort((a, b) => b.at - a.at || a.index - b.index)
+      .slice(0, 5)
+      .map(({ project }) => {
+        const row = toRow(project.worktree, home(), "recent")
+        const name = project.name || getFilename(project.worktree)
+        return {
+          ...row,
+          search: `${row.search}\n${name}`,
+        }
+      })
+  })
+
   const items = async (value: string) => {
     const results = await directories(value)
-    return results.map((absolute) => toRow(absolute, home()))
+    const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
+    return uniqueRows([...recentProjects(), ...directoryRows])
   }
 
   function resolve(absolute: string) {
@@ -285,6 +330,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         items={items}
         key={(x) => x.absolute}
         filterKeys={["search"]}
+        groupBy={(item) => item.group}
+        sortGroupsBy={(a, b) => {
+          if (a.category === b.category) return 0
+          return a.category === "recent" ? -1 : 1
+        }}
+        groupHeader={(group) =>
+          group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
+        }
         ref={(r) => (list = r)}
         onFilter={(value) => setFilter(cleanInput(value))}
         onKeyEvent={(e, item) => {

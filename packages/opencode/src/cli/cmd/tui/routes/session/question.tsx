@@ -412,6 +412,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                       <textarea
                         ref={(val: TextareaRenderable) => {
                           textarea = val
+                          val.traits = { status: "ANSWER" }
                           queueMicrotask(() => {
                             val.focus()
                             val.gotoLineEnd()
@@ -419,6 +420,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         }}
                         initialValue={input()}
                         placeholder="Type your own answer"
+                        placeholderColor={theme.textMuted}
                         minHeight={1}
                         maxHeight={6}
                         textColor={theme.text}

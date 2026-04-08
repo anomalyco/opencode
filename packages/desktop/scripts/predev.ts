@@ -8,6 +8,8 @@ const sidecarConfig = getCurrentSidecar(RUST_TARGET)
 
 const binaryPath = windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`)
 
-await $`cd ../opencode && bun run build --single`
+await (sidecarConfig.ocBinary.includes("-baseline")
+  ? $`cd ../opencode && bun run build --single --baseline`
+  : $`cd ../opencode && bun run build --single`)
 
 await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)

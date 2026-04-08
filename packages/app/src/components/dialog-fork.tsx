@@ -66,6 +66,7 @@ export const DialogFork: Component = () => {
       directory: sdk.directory,
       attachmentName: language.t("common.attachment"),
     })
+    const dir = base64Encode(sdk.directory)
 
     sdk.client.session
       .fork({ sessionID, messageID: item.id })
@@ -75,10 +76,8 @@ export const DialogFork: Component = () => {
           return
         }
         dialog.close()
-        navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
-        requestAnimationFrame(() => {
-          prompt.set(restored)
-        })
+        prompt.set(restored, undefined, { dir, id: forked.data.id })
+        navigate(`/${dir}/session/${forked.data.id}`)
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)

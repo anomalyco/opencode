@@ -3,10 +3,11 @@ import path from "path"
 import { GrepTool } from "../../src/tool/grep"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),

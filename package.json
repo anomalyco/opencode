@@ -4,12 +4,15 @@
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.9",
+  "packageManager": "bun@1.3.11",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
+    "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
+    "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
+    "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
@@ -23,7 +26,9 @@
       "packages/slack"
     ],
     "catalog": {
-      "@types/bun": "1.3.9",
+      "@effect/platform-node": "4.0.0-beta.43",
+      "@types/bun": "1.3.11",
+      "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
@@ -35,18 +40,23 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/diffs": "1.1.0-beta.13",
+      "@pierre/diffs": "1.1.0-beta.18",
       "@solid-primitives/storage": "4.3.3",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "dompurify": "3.3.1",
-      "ai": "5.0.124",
+      "drizzle-kit": "1.0.0-beta.19-d95b7a4",
+      "drizzle-orm": "1.0.0-beta.19-d95b7a4",
+      "effect": "4.0.0-beta.43",
+      "ai": "6.0.149",
+      "cross-spawn": "7.0.6",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
       "marked": "17.0.1",
       "marked-shiki": "1.2.1",
+      "remend": "1.3.0",
       "@playwright/test": "1.51.0",
       "typescript": "5.8.2",
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
@@ -67,17 +77,21 @@
   "devDependencies": {
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
+    "@types/mime-types": "3.0.1",
+    "@typescript/native-preview": "catalog:",
+    "glob": "13.0.5",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
-    "sst": "3.17.23",
-    "turbo": "2.5.6"
+    "sst": "3.18.10",
+    "turbo": "2.8.13"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "heap-snapshot-toolkit": "1.1.3",
     "typescript": "catalog:"
   },
   "repository": {
@@ -91,16 +105,20 @@
   },
   "trustedDependencies": [
     "esbuild",
+    "node-pty",
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
-    "web-tree-sitter"
+    "tree-sitter-powershell",
+    "web-tree-sitter",
+    "electron"
   ],
   "overrides": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
   },
   "patchedDependencies": {
-    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch"
+    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
+    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
   }
 }

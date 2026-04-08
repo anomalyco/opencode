@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
+import { iife } from "@/util/iife"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -62,15 +63,18 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
-    const initial = await fetch(params.url, { signal, headers })
+    const response = await iife(async () => {
+      try {
+        const initial = await fetch(params.url, { signal, headers })
 
-    // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-    const response =
-      initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
-        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
-        : initial
-
-    clearTimeout()
+        // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+        return initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
+          ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
+          : initial
+      } finally {
+        clearTimeout()
+      }
+    })
 
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
@@ -87,10 +91,30 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("Response too large (exceeds 5MB limit)")
     }
 
-    const content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
-
+    const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
     const title = `${params.url} (${contentType})`
+
+    // Check if response is an image
+    const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
+
+    if (isImage) {
+      const base64Content = Buffer.from(arrayBuffer).toString("base64")
+      return {
+        title,
+        output: "Image fetched successfully",
+        metadata: {},
+        attachments: [
+          {
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${base64Content}`,
+          },
+        ],
+      }
+    }
+
+    const content = new TextDecoder().decode(arrayBuffer)
 
     // Handle content based on requested format and actual content type
     switch (params.format) {

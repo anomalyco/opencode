@@ -65,6 +65,15 @@ jobs:
                 body: closeMessage,
               });
 
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: item.number,
+                  name: 'needs:compliance',
+                });
+              } catch (e) {}
+
               if (isPR) {
                 await github.rest.pulls.update({
                   owner: context.repo.owner,

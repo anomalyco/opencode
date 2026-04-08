@@ -1,17 +1,124 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
+import { ProviderID, ModelID } from "../../provider/schema"
 import { ToolRegistry } from "../../tool/registry"
 import { Worktree } from "../../worktree"
 import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
+import { Session } from "../../session"
+import { Config } from "../../config/config"
+import { ConsoleState } from "../../config/console-state"
+import { Account, AccountID, OrgID } from "../../account"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { WorkspaceRoutes } from "./workspace"
+import { Agent } from "@/agent/agent"
+
+const ConsoleOrgOption = z.object({
+  accountID: z.string(),
+  accountEmail: z.string(),
+  accountUrl: z.string(),
+  orgID: z.string(),
+  orgName: z.string(),
+  active: z.boolean(),
+})
+
+const ConsoleOrgList = z.object({
+  orgs: z.array(ConsoleOrgOption),
+})
+
+const ConsoleSwitchBody = z.object({
+  accountID: z.string(),
+  orgID: z.string(),
+})
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/console",
+      describeRoute({
+        summary: "Get active Console provider metadata",
+        description: "Get the active Console org name and the set of provider IDs managed by that Console org.",
+        operationId: "experimental.console.get",
+        responses: {
+          200: {
+            description: "Active Console provider metadata",
+            content: {
+              "application/json": {
+                schema: resolver(ConsoleState),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const [consoleState, groups] = await Promise.all([Config.getConsoleState(), Account.orgsByAccount()])
+        return c.json({
+          ...consoleState,
+          switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
+        })
+      },
+    )
+    .get(
+      "/console/orgs",
+      describeRoute({
+        summary: "List switchable Console orgs",
+        description: "Get the available Console orgs across logged-in accounts, including the current active org.",
+        operationId: "experimental.console.listOrgs",
+        responses: {
+          200: {
+            description: "Switchable Console orgs",
+            content: {
+              "application/json": {
+                schema: resolver(ConsoleOrgList),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const [groups, active] = await Promise.all([Account.orgsByAccount(), Account.active()])
+
+        const orgs = groups.flatMap((group) =>
+          group.orgs.map((org) => ({
+            accountID: group.account.id,
+            accountEmail: group.account.email,
+            accountUrl: group.account.url,
+            orgID: org.id,
+            orgName: org.name,
+            active: !!active && active.id === group.account.id && active.active_org_id === org.id,
+          })),
+        )
+        return c.json({ orgs })
+      },
+    )
+    .post(
+      "/console/switch",
+      describeRoute({
+        summary: "Switch active Console org",
+        description: "Persist a new active Console account/org selection for the current local OpenCode state.",
+        operationId: "experimental.console.switchOrg",
+        responses: {
+          200: {
+            description: "Switch success",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", ConsoleSwitchBody),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Account.switchOrg(AccountID.make(body.accountID), OrgID.make(body.orgID))
+        return c.json(true)
+      },
+    )
     .get(
       "/tool/ids",
       describeRoute({
@@ -75,7 +182,11 @@ export const ExperimentalRoutes = lazy(() =>
       ),
       async (c) => {
         const { provider, model } = c.req.valid("query")
-        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model })
+        const tools = await ToolRegistry.tools({
+          providerID: ProviderID.make(provider),
+          modelID: ModelID.make(model),
+          agent: await Agent.get(await Agent.defaultAgent()),
+        })
         return c.json(
           tools.map((t) => ({
             id: t.id,
@@ -86,6 +197,7 @@ export const ExperimentalRoutes = lazy(() =>
         )
       },
     )
+    .route("/workspace", WorkspaceRoutes())
     .post(
       "/worktree",
       describeRoute({
@@ -104,7 +216,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.create.schema),
+      validator("json", Worktree.CreateInput.optional()),
       async (c) => {
         const body = c.req.valid("json")
         const worktree = await Worktree.create(body)
@@ -151,7 +263,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.remove.schema),
+      validator("json", Worktree.RemoveInput),
       async (c) => {
         const body = c.req.valid("json")
         await Worktree.remove(body)
@@ -177,11 +289,70 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.reset.schema),
+      validator("json", Worktree.ResetInput),
       async (c) => {
         const body = c.req.valid("json")
         await Worktree.reset(body)
         return c.json(true)
+      },
+    )
+    .get(
+      "/session",
+      describeRoute({
+        summary: "List sessions",
+        description:
+          "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+        operationId: "experimental.session.list",
+        responses: {
+          200: {
+            description: "List of sessions",
+            content: {
+              "application/json": {
+                schema: resolver(Session.GlobalInfo.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+          roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+          start: z.coerce
+            .number()
+            .optional()
+            .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
+          cursor: z.coerce
+            .number()
+            .optional()
+            .meta({ description: "Return sessions updated before this timestamp (milliseconds since epoch)" }),
+          search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
+          limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+          archived: z.coerce.boolean().optional().meta({ description: "Include archived sessions (default false)" }),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        const limit = query.limit ?? 100
+        const sessions: Session.GlobalInfo[] = []
+        for await (const session of Session.listGlobal({
+          directory: query.directory,
+          roots: query.roots,
+          start: query.start,
+          cursor: query.cursor,
+          search: query.search,
+          limit: limit + 1,
+          archived: query.archived,
+        })) {
+          sessions.push(session)
+        }
+        const hasMore = sessions.length > limit
+        const list = hasMore ? sessions.slice(0, limit) : sessions
+        if (hasMore && list.length > 0) {
+          c.header("x-next-cursor", String(list[list.length - 1].time.updated))
+        }
+        return c.json(list)
       },
     )
     .get(

@@ -4,10 +4,11 @@ import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const baseCtx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -26,9 +27,7 @@ type AskInput = {
       filePath: string
       relativePath: string
       type: "add" | "update" | "delete" | "move"
-      diff: string
-      before: string
-      after: string
+      patch: string
       additions: number
       deletions: number
       movePath?: string
@@ -93,6 +92,13 @@ describe("tool.apply_patch freeform", () => {
 
         expect(result.title).toContain("Success. Updated the following files")
         expect(result.output).toContain("Success. Updated the following files")
+        // Strict formatting assertions for slashes
+        expect(result.output).toMatch(/A nested\/new\.txt/)
+        expect(result.output).toMatch(/D delete\.txt/)
+        expect(result.output).toMatch(/M modify\.txt/)
+        if (process.platform === "win32") {
+          expect(result.output).not.toContain("\\")
+        }
         expect(result.metadata.diff).toContain("Index:")
         expect(calls.length).toBe(1)
 
@@ -104,12 +110,12 @@ describe("tool.apply_patch freeform", () => {
         const addFile = permissionCall.metadata.files.find((f) => f.type === "add")
         expect(addFile).toBeDefined()
         expect(addFile!.relativePath).toBe("nested/new.txt")
-        expect(addFile!.after).toBe("created\n")
+        expect(addFile!.patch).toContain("+created")
 
         const updateFile = permissionCall.metadata.files.find((f) => f.type === "update")
         expect(updateFile).toBeDefined()
-        expect(updateFile!.before).toContain("line2")
-        expect(updateFile!.after).toContain("changed")
+        expect(updateFile!.patch).toContain("-line2")
+        expect(updateFile!.patch).toContain("+changed")
 
         const added = await fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")
         expect(added).toBe("created\n")
@@ -143,8 +149,8 @@ describe("tool.apply_patch freeform", () => {
         expect(moveFile.type).toBe("move")
         expect(moveFile.relativePath).toBe("renamed/dir/name.txt")
         expect(moveFile.movePath).toBe(path.join(fixture.path, "renamed/dir/name.txt"))
-        expect(moveFile.before).toBe("old content\n")
-        expect(moveFile.after).toBe("new content\n")
+        expect(moveFile.patch).toContain("-old content")
+        expect(moveFile.patch).toContain("+new content")
       },
     })
   })

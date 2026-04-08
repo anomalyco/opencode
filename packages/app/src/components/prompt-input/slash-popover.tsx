@@ -40,9 +40,9 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
         ref={(el) => {
           if (props.popover === "slash") props.setSlashPopoverRef(el)
         }}
-        class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
-                 overflow-auto no-scrollbar flex flex-col p-2 rounded-md
-                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+        class="absolute inset-x-0 -top-2 -translate-y-full origin-bottom-left max-h-80 min-h-10
+                 overflow-auto no-scrollbar flex flex-col p-2 rounded-[12px]
+                 bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-lg-border-base)]"
         onMouseDown={(e) => e.preventDefault()}
       >
         <Switch>
@@ -53,18 +53,15 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
             >
               <For each={props.atFlat.slice(0, 10)}>
                 {(item) => {
-                  const active = props.atActive === props.atKey(item)
-                  const shared = {
-                    "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
-                    "bg-surface-raised-base-hover": active,
-                  }
+                  const key = props.atKey(item)
 
                   if (item.type === "agent") {
                     return (
                       <button
-                        classList={shared}
+                        class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                        classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
                         onClick={() => props.onAtSelect(item)}
-                        onMouseEnter={() => props.setAtActive(props.atKey(item))}
+                        onMouseEnter={() => props.setAtActive(key)}
                       >
                         <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
                         <span class="text-14-regular text-text-strong whitespace-nowrap">@{item.name}</span>
@@ -78,9 +75,10 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
 
                   return (
                     <button
-                      classList={shared}
+                      class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                      classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
                       onClick={() => props.onAtSelect(item)}
-                      onMouseEnter={() => props.setAtActive(props.atKey(item))}
+                      onMouseEnter={() => props.setAtActive(key)}
                     >
                       <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
                       <div class="flex items-center text-14-regular min-w-0">

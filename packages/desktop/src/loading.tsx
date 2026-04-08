@@ -5,13 +5,20 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { Progress } from "@opencode-ai/ui/progress"
 import "./styles.css"
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { commands, events, InitStep } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
+import { initI18n, t } from "./i18n"
 
 const root = document.getElementById("root")!
-const lines = ["Just a moment...", "Migrating your database", "This may take a couple of minutes"]
+const lines = [
+  t("desktop.loading.status.initial"),
+  t("desktop.loading.status.migrating"),
+  t("desktop.loading.status.waiting"),
+]
 const delays = [3000, 9000]
+
+void initI18n()
 
 render(() => {
   const [step, setStep] = createSignal<InitStep | null>(null)
@@ -29,36 +36,20 @@ render(() => {
   channel.onmessage = (next) => setStep(next)
   commands.awaitInitialization(channel as any).catch(() => undefined)
 
-  createEffect(() => {
-    if (phase() !== "sqlite_waiting") return
-
+  onMount(() => {
     setLine(0)
     setPercent(0)
 
     const timers = delays.map((ms, i) => setTimeout(() => setLine(i + 1), ms))
 
-    let stop: (() => void) | undefined
-    let active = true
-
-    void events.sqliteMigrationProgress
-      .listen((e) => {
-        if (e.payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, e.payload.value)))
-        if (e.payload.type === "Done") setPercent(100)
-      })
-      .then((unlisten) => {
-        if (active) {
-          stop = unlisten
-          return
-        }
-
-        unlisten()
-      })
-      .catch(() => undefined)
+    const listener = events.sqliteMigrationProgress.listen((e) => {
+      if (e.payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, e.payload.value)))
+      if (e.payload.type === "Done") setPercent(100)
+    })
 
     onCleanup(() => {
-      active = false
+      listener.then((cb) => cb())
       timers.forEach(clearTimeout)
-      stop?.()
     })
   })
 
@@ -70,9 +61,9 @@ render(() => {
   })
 
   const status = createMemo(() => {
-    if (phase() === "done") return "All done"
+    if (phase() === "done") return t("desktop.loading.status.done")
     if (phase() === "sqlite_waiting") return lines[line()]
-    return "Just a moment..."
+    return t("desktop.loading.status.initial")
   })
 
   return (
@@ -88,7 +79,7 @@ render(() => {
             <Progress
               value={value()}
               class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
-              aria-label="Database migration progress"
+              aria-label={t("desktop.loading.progressAria")}
               getValueLabel={({ value }) => `${Math.round(value)}%`}
             />
           </div>

@@ -1,10 +1,10 @@
 import { Database, eq, and, sql, inArray, isNull, count } from "../src/drizzle/index.js"
-import { BillingTable, SubscriptionPlan } from "../src/schema/billing.sql.js"
+import { BillingTable, BlackPlans } from "../src/schema/billing.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 
-const plan = process.argv[2] as (typeof SubscriptionPlan)[number]
-if (!SubscriptionPlan.includes(plan)) {
+const plan = process.argv[2] as (typeof BlackPlans)[number]
+if (!BlackPlans.includes(plan)) {
   console.error("Usage: bun foo.ts <count>")
   process.exit(1)
 }
