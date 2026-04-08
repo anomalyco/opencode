@@ -1,4 +1,5 @@
 import { useNavigate } from "@solidjs/router"
+import { createMemo } from "solid-js"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
@@ -14,6 +15,7 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/shared/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { sortMessages } from "@opencode-ai/shared/util/message"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -68,18 +70,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const closableTab = tabState.closableTab
 
   const idle = { type: "idle" as const }
-  const status = () => sync.data.session_status[params.id ?? ""] ?? idle
-  const messages = () => {
-    const id = params.id
-    if (!id) return []
-    return sync.data.message[id] ?? []
-  }
-  const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
-  const visibleUserMessages = () => {
+  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
+  const messages = createMemo(() => sortMessages(params.id ? (sync.data.message[params.id] ?? []) : []))
+  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[])
+  const visibleUserMessages = createMemo(() => {
     const revert = info()?.revert?.messageID
     if (!revert) return userMessages()
     return userMessages().filter((m) => m.id < revert)
-  }
+  })
 
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
