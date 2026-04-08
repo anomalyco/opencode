@@ -54,6 +54,7 @@ Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
 Mevcut model listesi şunları içerir:
 
 - **GLM-5**
+- **GLM-5.1**
 - **Kimi K2.5**
 - **MiMo-V2-Pro**
 - **MiMo-V2-Omni**
@@ -72,19 +73,19 @@ OpenCode Go aşağıdaki limitleri içerir:
 - **Haftalık limit** — 30$ kullanım
 - **Aylık limit** — 60$ kullanım
 
-Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. MiniMax M2.5 gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5 gibi yüksek maliyetli modeller daha azına izin verir.
+Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. MiniMax M2.5 gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5.1 gibi yüksek maliyetli modeller daha azına izin verir.
 
 Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek sayısı sunmaktadır:
 
-|                    | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
-| ------------------ | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
-| 5 saatte bir istek | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
-| haftalık istek     | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
-| aylık istek        | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
+|                    | GLM-5.1 | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
+| ------------------ | ------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
+| 5 saatte bir istek | 880     | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
+| haftalık istek     | 2.150   | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
+| aylık istek        | 4.300   | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
 
 Tahminler, gözlemlenen ortalama istek modellerine dayanmaktadır:
 
-- GLM-5 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
+- GLM-5/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - Kimi K2.5 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
 - MiniMax M2.7/M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
 - MiMo-V2-Pro — İstek başına 350 girdi, 41.000 önbelleğe alınmış, 250 çıktı token'ı
@@ -112,6 +113,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 
 | Model        | Model ID     | Uç Nokta                                         | AI SDK Paketi               |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
