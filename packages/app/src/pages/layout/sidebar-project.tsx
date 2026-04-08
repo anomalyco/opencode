@@ -100,10 +100,11 @@ const ProjectTile = (props: {
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden transition-colors cursor-default": true,
-          "bg-surface-raised-base text-text-strong": props.selected(),
-          "bg-surface-base text-text-base": !props.selected() && props.active(),
-          "bg-transparent hover:bg-surface-base-hover": !props.selected() && !props.active(),
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+            !props.selected() && !props.active(),
+          "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
         }}
         onPointerDown={(event) => {
           if (event.button === 0 && !event.ctrlKey) {
