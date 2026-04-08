@@ -42,17 +42,20 @@ import { Agent } from "../agent/agent"
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
+  type TaskDef = Tool.InferDef<typeof TaskTool>
+  type ReadDef = Tool.InferDef<typeof ReadTool>
+
   type State = {
     custom: Tool.Def[]
     builtin: Tool.Def[]
-    task: Tool.Def
-    read: Tool.Def
+    task: TaskDef
+    read: ReadDef
   }
 
   export interface Interface {
     readonly ids: () => Effect.Effect<string[]>
     readonly all: () => Effect.Effect<Tool.Def[]>
-    readonly named: () => Effect.Effect<{ task: Tool.Def; read: Tool.Def }>
+    readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
     readonly tools: (model: {
       providerID: ProviderID
       modelID: ModelID

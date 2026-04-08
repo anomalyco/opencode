@@ -1081,7 +1081,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
                 const { read } = yield* registry.named()
-                const execRead = (args: Record<string, unknown>, extra?: Record<string, unknown>) =>
+                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) =>
                   Effect.promise((signal: AbortSignal) =>
                     read.execute(args, {
                       sessionID: input.sessionID,
