@@ -410,7 +410,7 @@ export async function waitSession(
     allowAnySession?: boolean
   },
 ) {
-  const target = await resolveDirectory(input.directory, input.serverUrl)
+  const target = await resolveDirectory(input.directory, input.serverUrl).catch(() => input.directory)
   await expect
     .poll(
       async () => {
