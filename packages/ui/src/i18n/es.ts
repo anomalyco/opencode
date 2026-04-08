@@ -67,6 +67,7 @@ export const dict = {
   "ui.messagePart.context.search.other": "{{count}} búsquedas",
   "ui.messagePart.context.list.one": "{{count}} lista",
   "ui.messagePart.context.list.other": "{{count}} listas",
+  "ui.messagePart.thinking": "Pensando",
   "ui.messagePart.diagnostic.error": "Error",
   "ui.messagePart.title.edit": "Editar",
   "ui.messagePart.title.write": "Escribir",

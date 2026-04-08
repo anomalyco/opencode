@@ -71,6 +71,7 @@ export const dict = {
   "ui.messagePart.context.search.other": "{{count}} pretrage",
   "ui.messagePart.context.list.one": "{{count}} lista",
   "ui.messagePart.context.list.other": "{{count}} liste",
+  "ui.messagePart.thinking": "Razmišljanje",
   "ui.messagePart.diagnostic.error": "Greška",
   "ui.messagePart.title.edit": "Uredi",
   "ui.messagePart.title.write": "Napiši",

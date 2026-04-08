@@ -73,6 +73,10 @@ export const dict = {
   "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Aceptar permisos automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar permisos automáticamente",
+  "command.settings.thinking.enable": "Mostrar razonamiento",
+  "command.settings.thinking.disable": "Ocultar razonamiento",
+  "command.settings.thinking.description":
+    "Alternar la visualización de resúmenes de razonamiento del modelo en la línea de tiempo",
   "command.workspace.toggle": "Alternar espacios de trabajo",
   "command.workspace.toggle.description": "Habilitar o deshabilitar múltiples espacios de trabajo en la barra lateral",
   "command.session.undo": "Deshacer",

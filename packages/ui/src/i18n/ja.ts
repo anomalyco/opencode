@@ -66,6 +66,7 @@ export const dict = {
   "ui.messagePart.context.search.other": "{{count}} 件の検索",
   "ui.messagePart.context.list.one": "{{count}} 件のリスト",
   "ui.messagePart.context.list.other": "{{count}} 件のリスト",
+  "ui.messagePart.thinking": "思考中",
   "ui.messagePart.diagnostic.error": "エラー",
   "ui.messagePart.title.edit": "編集",
   "ui.messagePart.title.write": "作成",

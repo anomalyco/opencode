@@ -68,6 +68,7 @@ export const dict = {
   "ui.messagePart.context.search.other": "ค้นหา {{count}} รายการ",
   "ui.messagePart.context.list.one": "รายการ {{count}} รายการ",
   "ui.messagePart.context.list.other": "รายการ {{count}} รายการ",
+  "ui.messagePart.thinking": "กำลังคิด",
   "ui.messagePart.diagnostic.error": "ข้อผิดพลาด",
   "ui.messagePart.title.edit": "แก้ไข",
   "ui.messagePart.title.write": "เขียน",

@@ -73,6 +73,7 @@ export const dict = {
   "ui.messagePart.context.search.other": "{{count}} arama",
   "ui.messagePart.context.list.one": "{{count}} liste",
   "ui.messagePart.context.list.other": "{{count}} liste",
+  "ui.messagePart.thinking": "Düşünüyor",
   "ui.messagePart.diagnostic.error": "Hata",
   "ui.messagePart.title.edit": "Düzenle",
   "ui.messagePart.title.write": "Yaz",

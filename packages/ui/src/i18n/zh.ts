@@ -71,6 +71,7 @@ export const dict = {
   "ui.messagePart.context.search.other": "{{count}} 次搜索",
   "ui.messagePart.context.list.one": "{{count}} 个列表",
   "ui.messagePart.context.list.other": "{{count}} 个列表",
+  "ui.messagePart.thinking": "思考中",
   "ui.messagePart.diagnostic.error": "错误",
   "ui.messagePart.title.edit": "编辑",
   "ui.messagePart.title.write": "写入",

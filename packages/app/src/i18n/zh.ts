@@ -99,6 +99,10 @@ export const dict = {
   "command.permissions.autoaccept.enable": "自动接受权限",
   "command.permissions.autoaccept.disable": "停止自动接受权限",
 
+  "command.settings.thinking.enable": "显示思考",
+  "command.settings.thinking.disable": "隐藏思考",
+  "command.settings.thinking.description": "在时间线中切换显示模型思考摘要",
+
   "command.workspace.toggle": "切换工作区",
   "command.workspace.toggle.description": "在侧边栏启用或禁用多个工作区",
 
