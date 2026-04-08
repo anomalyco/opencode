@@ -273,13 +273,18 @@ export const GiteaRunCommand = cmd({
   command: "run",
   describe: "run the Gitea agent",
   builder: (yargs) =>
-    yargs.option("event", {
-      type: "string",
-      describe: "Gitea mock event to run the agent for",
-    }),
+    yargs
+      .option("event", {
+        type: "string",
+        describe: "Gitea mock event to run the agent for",
+      })
+      .option("token", {
+        type: "string",
+        describe: "Gitea personal access token (for local testing)",
+      }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      const isMock = Boolean(args.event)
+      const isMock = Boolean(args.event || args.token)
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
       if (!SUPPORTED_EVENTS.includes(context.eventName as (typeof SUPPORTED_EVENTS)[number])) {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
@@ -365,7 +370,12 @@ export const GiteaRunCommand = cmd({
           const summary = await summarize(session, model, variant, response, payload)
           await pushToNewBranch(summary, branch, dirty.uncommittedChanges, isScheduleEvent, actor, gitHost)
           const typeLabel = isWorkflowDispatchEvent ? "workflow_dispatch" : "scheduled workflow"
-          const pr = await createPR(repoData.defaultBranch, branch, summary, `${response}\n\nTriggered by ${typeLabel}${footer()}`)
+          const pr = await createPR(
+            repoData.defaultBranch,
+            branch,
+            summary,
+            `${response}\n\nTriggered by ${typeLabel}${footer()}`,
+          )
           if (pr) {
             console.log(`Created PR #${pr}`)
             return
@@ -392,7 +402,7 @@ export const GiteaRunCommand = cmd({
             }
             if (dirty.dirty && !dirty.switched) {
               const summary = await summarize(session, model, variant, response, payload)
-               await pushToLocalBranch(summary, dirty.uncommittedChanges, actor, gitHost)
+              await pushToLocalBranch(summary, dirty.uncommittedChanges, actor, gitHost)
             }
             await createComment(`${response}${footer(!shared)}`)
             await removeReaction()
@@ -433,7 +443,12 @@ export const GiteaRunCommand = cmd({
         }
         const summary = await summarize(session, model, variant, response, payload)
         await pushToNewBranch(summary, branch, dirty.uncommittedChanges, false, actor, gitHost)
-        const pr = await createPR(repoData.defaultBranch, branch, summary, `${response}\n\nCloses #${issueId}${footer(true)}`)
+        const pr = await createPR(
+          repoData.defaultBranch,
+          branch,
+          summary,
+          `${response}\n\nCloses #${issueId}${footer(true)}`,
+        )
         if (pr) {
           await createComment(`Created PR #${pr}${footer(true)}`)
           await removeReaction()
@@ -482,6 +497,7 @@ export const GiteaRunCommand = cmd({
       }
 
       function normalizeToken() {
+        if (args.token) return args.token
         const value = process.env["GITEA_TOKEN"]
         if (!value) throw new Error(`Environment variable "GITEA_TOKEN" is not set`)
         return value
@@ -558,8 +574,8 @@ export const GiteaRunCommand = cmd({
       }
 
       async function downloadAttachment(url: string) {
-          if (new URL(url).host !== gitHost) return
-          const item = parseAttachment(url)
+        if (new URL(url).host !== gitHost) return
+        const item = parseAttachment(url)
         if (!item) return
         const res = await fetch(`https://${host}/api/v1/attachments/${item.uuid}`, {
           headers: {
@@ -658,7 +674,14 @@ export const GiteaRunCommand = cmd({
         return local
       }
 
-      async function pushToNewBranch(summary: string, branch: string, commit: boolean, scheduled: boolean, actor: string | undefined, host: string) {
+      async function pushToNewBranch(
+        summary: string,
+        branch: string,
+        commit: boolean,
+        scheduled: boolean,
+        actor: string | undefined,
+        host: string,
+      ) {
         console.log("Pushing to new branch...")
         if (commit) {
           await gitRun(["add", "."])
@@ -676,7 +699,13 @@ export const GiteaRunCommand = cmd({
         await gitRun(["push"])
       }
 
-      async function pushToForkBranch(summary: string, branch: string, commit: boolean, actor: string | undefined, host: string) {
+      async function pushToForkBranch(
+        summary: string,
+        branch: string,
+        commit: boolean,
+        actor: string | undefined,
+        host: string,
+      ) {
         console.log("Pushing to fork branch...")
         if (commit) {
           await gitRun(["add", "."])
@@ -887,7 +916,11 @@ async function hasNewCommits(base: string, head: string) {
 }
 
 function generateBranchName(type: "issue" | "pr" | "schedule" | "dispatch", issueId?: number) {
-  const time = new Date().toISOString().replace(/[:-]/g, "").replace(/\.\d{3}Z/, "").replace("T", "")
+  const time = new Date()
+    .toISOString()
+    .replace(/[:-]/g, "")
+    .replace(/\.\d{3}Z/, "")
+    .replace("T", "")
   if (type === "schedule" || type === "dispatch") {
     return `opencode/${type}-${crypto.randomUUID().slice(0, 6)}-${time}`
   }
