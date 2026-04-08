@@ -61,6 +61,7 @@ impl MainWindow {
     }
 
     pub fn reveal(window: &WebviewWindow, path: Option<&str>) {
+        let _ = window.show();
         ensure_window_visible(window);
         let _ = window.set_focus();
         let _ = window.unminimize();

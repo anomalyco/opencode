@@ -1436,10 +1436,34 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app, event| {
-            if let RunEvent::Exit = event {
-                tracing::info!("Received Exit");
-
-                kill_sidecar(app.clone());
+            match event {
+                #[cfg(target_os = "macos")]
+                RunEvent::WindowEvent { label, event, .. } => {
+                    if label == MainWindow::LABEL
+                        && let tauri::WindowEvent::CloseRequested { api, .. } = event
+                    {
+                        api.prevent_close();
+                        if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                #[cfg(target_os = "macos")]
+                RunEvent::Reopen {
+                    has_visible_windows,
+                    ..
+                } => {
+                    if !has_visible_windows
+                        && let Some(window) = app.get_webview_window(MainWindow::LABEL)
+                    {
+                        MainWindow::reveal(&window, None);
+                    }
+                }
+                RunEvent::Exit => {
+                    tracing::info!("Received Exit");
+                    kill_sidecar(app.clone());
+                }
+                _ => {}
             }
         });
 }
