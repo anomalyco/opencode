@@ -3071,7 +3071,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/FileDiff"
+                    "$ref": "#/components/schemas/SnapshotFileDiff"
                   }
                 }
               }
@@ -7032,7 +7032,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/FileDiff"
+                    "$ref": "#/components/schemas/VcsFileDiff"
                   }
                 }
               }
@@ -8146,16 +8146,13 @@
         },
         "required": ["type", "properties"]
       },
-      "FileDiff": {
+      "SnapshotFileDiff": {
         "type": "object",
         "properties": {
           "file": {
             "type": "string"
           },
-          "before": {
-            "type": "string"
-          },
-          "after": {
+          "patch": {
             "type": "string"
           },
           "additions": {
@@ -8169,7 +8166,7 @@
             "enum": ["added", "deleted", "modified"]
           }
         },
-        "required": ["file", "before", "after", "additions", "deletions"]
+        "required": ["file", "patch", "additions", "deletions"]
       },
       "Event.session.diff": {
         "type": "object",
@@ -8188,7 +8185,7 @@
               "diff": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/FileDiff"
+                  "$ref": "#/components/schemas/SnapshotFileDiff"
                 }
               }
             },
@@ -8700,7 +8697,7 @@
               "diffs": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/FileDiff"
+                  "$ref": "#/components/schemas/SnapshotFileDiff"
                 }
               }
             },
@@ -9842,7 +9839,7 @@
               "diffs": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/FileDiff"
+                  "$ref": "#/components/schemas/SnapshotFileDiff"
                 }
               }
             },
@@ -10372,7 +10369,7 @@
                           "diffs": {
                             "type": "array",
                             "items": {
-                              "$ref": "#/components/schemas/FileDiff"
+                              "$ref": "#/components/schemas/SnapshotFileDiff"
                             }
                           }
                         },
@@ -12122,7 +12119,7 @@
               "diffs": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/FileDiff"
+                  "$ref": "#/components/schemas/SnapshotFileDiff"
                 }
               }
             },
@@ -12759,6 +12756,28 @@
             "type": "string"
           }
         }
+      },
+      "VcsFileDiff": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "additions": {
+            "type": "number"
+          },
+          "deletions": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
+          }
+        },
+        "required": ["file", "patch", "additions", "deletions"]
       },
       "Command": {
         "type": "object",

@@ -1,9 +1,16 @@
 import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http"
 
 import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { AccountRepo, type AccountRow } from "./repo"
+import { normalizeServerUrl } from "./url"
 import {
   type AccountError,
   AccessToken,
@@ -12,6 +19,7 @@ import {
   Info,
   RefreshToken,
   AccountServiceError,
+  AccountTransportError,
   Login,
   Org,
   OrgID,
@@ -30,6 +38,7 @@ export {
   type AccountError,
   AccountRepoError,
   AccountServiceError,
+  AccountTransportError,
   AccessToken,
   RefreshToken,
   DeviceCode,
@@ -132,12 +141,27 @@ const isTokenFresh = (tokenExpiry: number | null, now: number) =>
 
 const mapAccountServiceError =
   (message = "Account service operation failed") =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, AccountServiceError, R> =>
-    effect.pipe(
-      Effect.mapError((cause) =>
-        cause instanceof AccountServiceError ? cause : new AccountServiceError({ message, cause }),
-      ),
-    )
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, AccountError, R> =>
+    effect.pipe(Effect.mapError((cause) => accountErrorFromCause(cause, message)))
+
+const accountErrorFromCause = (cause: unknown, message: string): AccountError => {
+  if (cause instanceof AccountServiceError || cause instanceof AccountTransportError) {
+    return cause
+  }
+
+  if (HttpClientError.isHttpClientError(cause)) {
+    switch (cause.reason._tag) {
+      case "TransportError": {
+        return AccountTransportError.fromHttpClientError(cause.reason)
+      }
+      default: {
+        return new AccountServiceError({ message, cause })
+      }
+    }
+  }
+
+  return new AccountServiceError({ message, cause })
+}
 
 export namespace Account {
   export interface Interface {
@@ -346,8 +370,9 @@ export namespace Account {
       })
 
       const login = Effect.fn("Account.login")(function* (server: string) {
+        const normalizedServer = normalizeServerUrl(server)
         const response = yield* executeEffectOk(
-          HttpClientRequest.post(`${server}/auth/device/code`).pipe(
+          HttpClientRequest.post(`${normalizedServer}/auth/device/code`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.schemaBodyJson(ClientId)(new ClientId({ client_id: clientId })),
           ),
@@ -359,8 +384,8 @@ export namespace Account {
         return new Login({
           code: parsed.device_code,
           user: parsed.user_code,
-          url: `${server}${parsed.verification_uri_complete}`,
-          server,
+          url: `${normalizedServer}${parsed.verification_uri_complete}`,
+          server: normalizedServer,
           expiry: parsed.expires_in,
           interval: parsed.interval,
         })

@@ -1,7 +1,8 @@
+import { Effect } from "effect"
 import { afterEach, describe, expect, test } from "bun:test"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
-import { TaskTool } from "../../src/tool/task"
+import { TaskDescription } from "../../src/tool/task"
 import { tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
@@ -28,16 +29,16 @@ describe("tool.task", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const build = await Agent.get("build")
-        const first = await TaskTool.init({ agent: build })
-        const second = await TaskTool.init({ agent: build })
+        const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+        const first = await Effect.runPromise(TaskDescription(agent))
+        const second = await Effect.runPromise(TaskDescription(agent))
 
-        expect(first.description).toBe(second.description)
+        expect(first).toBe(second)
 
-        const alpha = first.description.indexOf("- alpha: Alpha agent")
-        const explore = first.description.indexOf("- explore:")
-        const general = first.description.indexOf("- general:")
-        const zebra = first.description.indexOf("- zebra: Zebra agent")
+        const alpha = first.indexOf("- alpha: Alpha agent")
+        const explore = first.indexOf("- explore:")
+        const general = first.indexOf("- general:")
+        const zebra = first.indexOf("- zebra: Zebra agent")
 
         expect(alpha).toBeGreaterThan(-1)
         expect(explore).toBeGreaterThan(alpha)
