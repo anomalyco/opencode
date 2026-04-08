@@ -1,8 +1,15 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "veritly-univer-sdk"
 version = "0.1.0"
 description = "Python SDK for the Veritly Univer websocket bridge"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = [
   "websockets>=12.0",
 ]
+
+[tool.setuptools]
+py-modules = ["veritly_univer_sdk"]
