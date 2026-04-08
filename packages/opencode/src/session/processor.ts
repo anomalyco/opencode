@@ -23,6 +23,12 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  function finishMetadata(input: Record<string, any> | undefined) {
+    const id = typeof input?.openai?.responseId === "string" ? input.openai.responseId : undefined
+    if (!id) return
+    return { openai: { responseId: id } }
+  }
+
   export type Result = "compact" | "stop" | "continue"
 
   export type Event = LLM.Event
@@ -277,7 +283,7 @@ export namespace SessionProcessor {
                 id: PartID.ascending(),
                 reason: value.finishReason,
                 snapshot: yield* snapshot.track(),
-                metadata: value.providerMetadata,
+                metadata: finishMetadata(value.providerMetadata),
                 messageID: ctx.assistantMessage.id,
                 sessionID: ctx.assistantMessage.sessionID,
                 type: "step-finish",
