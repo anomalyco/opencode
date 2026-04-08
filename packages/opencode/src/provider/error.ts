@@ -31,13 +31,6 @@ export namespace ProviderError {
   // Status codes that are always transient and safe to retry regardless of provider
   const RETRYABLE_CODES = new Set([429, 500, 502, 503, 504, 529])
 
-  function isOpenAiErrorRetryable(e: APICallError) {
-    const status = e.statusCode
-    if (!status) return e.isRetryable
-    // openai sometimes returns 404 for models that are actually available
-    return status === 404 || RETRYABLE_CODES.has(status) || e.isRetryable
-  }
-
   // Providers not reliably handled in this function:
   // - z.ai: can accept overflow silently (needs token-count/context-window checks)
   function isOverflow(message: string) {
@@ -189,9 +182,10 @@ export namespace ProviderError {
       type: "api_error",
       message: m,
       statusCode: input.error.statusCode,
-      isRetryable: input.providerID.startsWith("openai")
-        ? isOpenAiErrorRetryable(input.error)
-        : (input.error.statusCode !== undefined && RETRYABLE_CODES.has(input.error.statusCode)) || input.error.isRetryable,
+      isRetryable:
+        (input.error.statusCode !== undefined && RETRYABLE_CODES.has(input.error.statusCode)) ||
+        (input.providerID.startsWith("openai") && input.error.statusCode === 404) ||
+        input.error.isRetryable,
       responseHeaders: input.error.responseHeaders,
       responseBody: input.error.responseBody,
       metadata,
