@@ -13,7 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
-import { CONSOLE_MANAGED_ICON, isConsoleManagedProvider } from "@tui/util/provider-origin"
+import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -49,11 +49,7 @@ export function createDialogProviderOptions() {
           }[provider.id],
           footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
           category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
-          gutter: consoleManaged ? (
-            <text fg={theme.textMuted}>{CONSOLE_MANAGED_ICON}</text>
-          ) : connected ? (
-            <text fg={theme.success}>✓</text>
-          ) : undefined,
+          gutter: connected ? <text fg={theme.success}>✓</text> : undefined,
           async onSelect() {
             if (consoleManaged) return
 

@@ -599,6 +599,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     {
       title: "Switch model variant",
       value: "variant.list",
+      keybind: "variant_list",
       category: "Agent",
       hidden: local.model.variant.list().length === 0,
       slash: {

@@ -36,7 +36,6 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
-import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export type PromptProps = {
   sessionID?: string
@@ -1129,17 +1128,6 @@ export function Prompt(props: PromptProps) {
               <Show when={hasRightContent()}>
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}
-                  <Show when={activeOrgName()}>
-                    <text
-                      fg={theme.textMuted}
-                      onMouseUp={() => {
-                        if (!canSwitchOrgs()) return
-                        command.trigger("console.org.switch")
-                      }}
-                    >
-                      {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
-                    </text>
-                  </Show>
                 </box>
               </Show>
             </box>
@@ -1171,7 +1159,7 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box flexDirection="row" justifyContent="space-between">
+        <box width="100%" flexDirection="row" justifyContent="space-between">
           <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
             <box
               flexDirection="row"

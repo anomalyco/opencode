@@ -4,47 +4,37 @@ import z from "zod"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
-import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Effect } from "effect"
 
-const parameters = z.object({
-  description: z.string().describe("A short (3-5 words) description of the task"),
-  prompt: z.string().describe("The task for the agent to perform"),
-  subagent_type: z.string().describe("The type of specialized agent to use for this task"),
-  task_id: z
-    .string()
-    .describe(
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-    )
-    .optional(),
-  command: z.string().describe("The command that triggered this task").optional(),
-})
-
-export const TaskTool = Tool.define("task", async (ctx) => {
+export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+  const list = agents.toSorted((a, b) => a.name.localeCompare(b.name))
+  const agentList = list
+    .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+    .join("\n")
+  const description = [`Available agent types and the tools they have access to:`, agentList].join("\n")
 
-  // Filter agents by permissions if agent provided
-  const caller = ctx?.agent
-  const accessibleAgents = caller
-    ? agents.filter((a) => Permission.evaluate("task", a.name, caller.permission).action !== "deny")
-    : agents
-  const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
-
-  const description = DESCRIPTION.replace(
-    "{agents}",
-    list
-      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-      .join("\n"),
-  )
   return {
     description,
-    parameters,
-    async execute(params: z.infer<typeof parameters>, ctx) {
+    parameters: z.object({
+      description: z.string().describe("A short (3-5 words) description of the task"),
+      prompt: z.string().describe("The task for the agent to perform"),
+      subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+      task_id: z
+        .string()
+        .describe(
+          "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+        )
+        .optional(),
+      command: z.string().describe("The command that triggered this task").optional(),
+    }),
+    async execute(params, ctx) {
       const config = await Config.get()
 
       // Skip permission check when user explicitly invoked via @ or command subtask
@@ -164,3 +154,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     },
   }
 })
+
+export const TaskDescription: Tool.DynamicDescription = (agent) =>
+  Effect.gen(function* () {
+    const agents = yield* Effect.promise(() => Agent.list().then((x) => x.filter((a) => a.mode !== "primary")))
+    const accessibleAgents = agents.filter(
+      (a) => Permission.evaluate("task", a.name, agent.permission).action !== "deny",
+    )
+    const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
+    const description = list
+      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+      .join("\n")
+    return [`Available agent types and the tools they have access to:`, description].join("\n")
+  })

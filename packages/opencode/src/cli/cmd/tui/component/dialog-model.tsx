@@ -172,7 +172,7 @@ export function DialogModel(props: { providerID?: string }) {
   const title = createMemo(() => {
     const value = provider()
     if (!value) return "Select model"
-    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, value.id, value.name)
+    return value.name
   })
 
   function onSelect(providerID: string, modelID: string, authProfile?: string) {
