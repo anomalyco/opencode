@@ -2040,22 +2040,26 @@ export default function Layout(props: ParentProps) {
 
     const restore = async (session: Session) => {
       try {
-        await globalSDK.client.session.update({
-          directory: session.directory,
-          sessionID: session.id,
-          time: { archived: null },
-        })
+        const restored = await globalSDK.client.session
+          .update({
+            directory: session.directory,
+            sessionID: session.id,
+            time: { archived: null },
+          })
+          .then((x) => x.data)
+        if (!restored) throw new Error(language.t("common.requestFailed"))
         const [, setChild] = globalSync.child(session.directory)
         setChild(
           produce((draft) => {
-            const match = Binary.search(draft.session, session.id, (s) => s.id)
+            const match = Binary.search(draft.session, restored.id, (s) => s.id)
             if (match.found) {
-              draft.session[match.index] = session
+              draft.session[match.index] = restored
               return
             }
-            draft.session.splice(match.index, 0, session)
+            draft.session.splice(match.index, 0, restored)
           }),
         )
+        await globalSync.project.loadSessions(session.directory, { silent: true, force: true })
         remove(session.id)
       } catch (err) {
         showToast({

@@ -188,7 +188,7 @@ function createGlobalSync() {
     return sdk
   }
 
-  async function loadSessions(directory: string, opts?: { silent?: boolean }) {
+  async function loadSessions(directory: string, opts?: { silent?: boolean; force?: boolean }) {
     if (isolated(directory)) {
       trace("loadSessions.skip", {
         directory,
@@ -220,7 +220,7 @@ function createGlobalSync() {
     setStore("sessions", "loading")
     setStore("session_error", undefined)
     const meta = sessionMeta.get(directory)
-    if (meta && meta.limit >= store.limit) {
+    if (!opts?.force && meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
         permission: store.permission,
