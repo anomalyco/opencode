@@ -68,11 +68,19 @@
   }
 
   [data-dock-surface="shell"][data-slot="prompt-shell"].prompt-shell-shadow:focus-within {
-    box-shadow: var(--shadow-xs-border);
+    box-shadow:
+      0 0 0 1px light-dark(rgba(142, 120, 98, 0.68), rgba(166, 141, 111, 0.62)),
+      0 0 0 4px light-dark(rgba(186, 172, 147, 0.22), rgba(186, 172, 147, 0.2)),
+      0 0 24px light-dark(rgba(168, 142, 109, 0.24), rgba(201, 170, 128, 0.2)),
+      var(--shadow-xs-border);
   }
 
   html[data-theme="aether"] [data-dock-surface="shell"][data-slot="prompt-shell"].prompt-shell-shadow:focus-within {
-    box-shadow: var(--shadow-lg-border-base);
+    box-shadow:
+      0 0 0 1px light-dark(rgba(142, 120, 98, 0.64), rgba(174, 149, 118, 0.58)),
+      0 0 0 5px light-dark(rgba(186, 172, 147, 0.2), rgba(186, 172, 147, 0.18)),
+      0 0 28px light-dark(rgba(168, 142, 109, 0.2), rgba(201, 170, 128, 0.18)),
+      var(--shadow-lg-border-base);
   }
 
   html[data-platform="desktop"] [data-component="user-message"] [data-slot="user-message-text"] {
@@ -85,6 +93,45 @@
     box-shadow:
       inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
       0 10px 24px -18px light-dark(rgba(193, 95, 60, 0.3), rgba(0, 0, 0, 0.34));
+  }
+
+  [data-component="quick-assistant-message"][data-role="user"] {
+    color: var(--text-strong);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+      0 10px 24px -20px color-mix(in srgb, var(--surface-panel) 55%, transparent);
+  }
+
+  [data-component="quick-assistant-message"][data-role="assistant"] {
+    color: var(--text-base);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 6%, transparent),
+      0 12px 28px -22px color-mix(in srgb, black 40%, transparent);
+  }
+
+  [data-component="quick-assistant-message"] .quick-assistant-markdown {
+    --font-size-base: 15px;
+    --line-height-x-large: 1.7;
+    --markdown-link: var(--text-interactive-base);
+    --markdown-heading: var(--text-strong);
+  }
+
+  [data-component="quick-assistant-message"] .quick-assistant-markdown p {
+    margin-bottom: 0.75rem;
+  }
+
+  [data-component="quick-assistant-message"] .quick-assistant-markdown ul,
+  [data-component="quick-assistant-message"] .quick-assistant-markdown ol {
+    margin-bottom: 0.75rem;
+  }
+
+  [data-component="quick-assistant-message"] .quick-assistant-markdown pre {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  [data-component="quick-assistant-message"] .quick-assistant-markdown :not(pre) > code {
+    color: var(--text-strong);
   }
 
   [data-component="button"].prompt-pick,

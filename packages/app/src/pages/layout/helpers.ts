@@ -14,6 +14,12 @@ export const workspaceKey = (directory: string) => {
   return value.replace(/\/+$/, "")
 }
 
+export const canonicalWorkspaceDir = (route: string, canonical?: string) => {
+  if (!canonical) return route
+  if (workspaceKey(route) !== workspaceKey(canonical)) return route
+  return canonical
+}
+
 function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {

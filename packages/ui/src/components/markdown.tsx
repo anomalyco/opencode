@@ -105,6 +105,7 @@ export function fileLink(text: string) {
   if (!raw) return
   if (raw.includes("://")) return
   if (!/[\\/]/.test(raw)) return
+  if (/\s/.test(raw)) return
 
   const hash = raw.match(/#L(\d+)(?:C(\d+))?$/i)
   const hashLine = hash?.[1] ? Number(hash[1]) : undefined

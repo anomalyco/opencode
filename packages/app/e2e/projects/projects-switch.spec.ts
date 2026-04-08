@@ -4,12 +4,13 @@ import {
   createTestProject,
   cleanupTestProject,
   openSidebar,
+  slugFromUrl,
   setWorkspacesEnabled,
   waitSession,
   waitSlug,
 } from "../actions"
 import { projectSwitchSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
-import { dirSlug, resolveDirectory } from "../utils"
+import { dirSlug, modKey, resolveDirectory } from "../utils"
 
 test("can switch between projects from sidebar", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
@@ -86,6 +87,57 @@ test("switching back to a project opens its session list", async ({ page, withPr
         await rootButton.click({ force: true })
 
         await expect(page).toHaveURL(new RegExp(`/${slug}/session(?:[/?#]|$)`))
+      },
+      { extra: [other] },
+    )
+  } finally {
+    await cleanupTestProject(other)
+  }
+})
+
+test("modifier drag reorders projects without navigating", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  const other = await createTestProject()
+  const otherSlug = dirSlug(other)
+
+  try {
+    await withProject(
+      async ({ slug }) => {
+        await defocus(page)
+        await openSidebar(page)
+
+        const list = async () => {
+          const items = await page
+            .locator('[data-component="sidebar-rail"] [data-action="project-switch"]')
+            .evaluateAll((els) =>
+              els.map((el) => el.getAttribute("data-project") ?? "").filter((value) => value.length > 0),
+            )
+          return items.filter((item) => item === slug || item === otherSlug)
+        }
+
+        const drag = async (from: string, to: string) => {
+          const src = page.locator(projectSwitchSelector(from)).first()
+          const dst = page.locator(projectSwitchSelector(to)).first()
+          const a = await src.boundingBox()
+          const b = await dst.boundingBox()
+          if (!a || !b) throw new Error("Failed to resolve project drag bounds")
+
+          await page.keyboard.down(modKey)
+          await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
+          await page.mouse.down()
+          await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 })
+          await page.mouse.up()
+          await page.keyboard.up(modKey)
+        }
+
+        await expect.poll(async () => await list()).toEqual([otherSlug, slug])
+
+        const before = slugFromUrl(page.url())
+        await drag(slug, otherSlug)
+
+        await expect.poll(async () => await list()).toEqual([slug, otherSlug])
+        await expect.poll(() => slugFromUrl(page.url())).toBe(before)
       },
       { extra: [other] },
     )

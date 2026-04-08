@@ -14,6 +14,7 @@ import { projectSelected } from "./sidebar-project-helpers"
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
   sidebarReduced: Accessor<boolean>
+  consumeProjectClick: () => boolean
   navigateToProject: (directory: string) => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
@@ -45,6 +46,8 @@ const ProjectTile = (props: {
   selected: Accessor<boolean>
   active: Accessor<boolean>
   dirs: Accessor<string[]>
+  startDrag: (event: PointerEvent) => void
+  consumeProjectClick: () => boolean
   navigateToProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
@@ -53,10 +56,6 @@ const ProjectTile = (props: {
   setMenu: (value: boolean) => void
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => {
-  const dbg = (...args: unknown[]) => {
-    if (!import.meta.env.DEV) return
-    console.debug("[sidebar-project]", ...args)
-  }
   const notification = useNotification()
   const layout = useLayout()
   const unseenCount = createMemo(() =>
@@ -100,17 +99,16 @@ const ProjectTile = (props: {
             "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
           }}
           onPointerDown={(event) => {
+            if (event.button === 0 && (event.metaKey || event.ctrlKey)) {
+              props.startDrag(event)
+              if (event.ctrlKey) event.preventDefault()
+              return
+            }
             if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
             event.preventDefault()
           }}
           onClick={() => {
-            dbg("click", {
-              worktree: props.project.worktree,
-              selected: props.selected(),
-              active: props.active(),
-              sandboxes: props.project.sandboxes,
-              dirs: props.dirs(),
-            })
+            if (props.consumeProjectClick()) return
             if (props.selected()) {
               layout.sidebar.toggle()
               return
@@ -166,6 +164,12 @@ export const SortableProject = (props: {
   ctx: ProjectSidebarContext
 }): JSX.Element => {
   const sortable = createSortable(props.project.worktree)
+  const startDrag = (event: PointerEvent) => sortable.dragActivators.onpointerdown?.(event)
+  const transform = createMemo(() => {
+    const value = sortable.transform
+    if (!value.x && !value.y) return undefined
+    return `translate3d(${value.x}px, ${value.y}px, 0)`
+  })
   const selected = createMemo(() =>
     projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes),
   )
@@ -180,6 +184,8 @@ export const SortableProject = (props: {
       selected={selected}
       active={() => state.menu}
       dirs={dirs}
+      startDrag={startDrag}
+      consumeProjectClick={props.ctx.consumeProjectClick}
       navigateToProject={props.ctx.navigateToProject}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
@@ -191,7 +197,15 @@ export const SortableProject = (props: {
   )
 
   return (
-    <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
+    <div
+      ref={sortable.ref}
+      style={{
+        transform: transform(),
+        transition: sortable.isActiveDraggable ? undefined : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "will-change": "transform",
+      }}
+      classList={{ "opacity-30": sortable.isActiveDraggable }}
+    >
       {tile()}
     </div>
   )
