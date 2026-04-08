@@ -62,7 +62,12 @@ export function activate(context: vscode.ExtensionContext) {
     })
 
     terminal.show()
-    terminal.sendText(`opencode --port ${port}`)
+    const disposable = vscode.window.onDidChangeTerminalShellIntegration(async (e) => {
+      if (e.terminal === terminal) {
+        disposable.dispose();
+        terminal.sendText(`opencode --port ${port}`);
+      }   
+    });
 
     const fileRef = getActiveFile()
     if (!fileRef) {
