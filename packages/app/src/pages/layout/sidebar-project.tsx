@@ -96,6 +96,7 @@ const ProjectTile = (props: {
       <ContextMenu.Trigger
         as="button"
         type="button"
+        tabIndex={props.selected() ? -1 : undefined}
         aria-label={displayName(props.project)}
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
