@@ -24,6 +24,7 @@ export interface Settings {
     releaseNotes: boolean
     followup: "queue" | "steer"
     showReasoningSummaries: boolean
+    reasoningToolDefaultOpen: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
   }
@@ -90,6 +91,7 @@ const defaultSettings: Settings = {
     releaseNotes: true,
     followup: "steer",
     showReasoningSummaries: false,
+    reasoningToolDefaultOpen: true,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
   },
@@ -168,6 +170,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        reasoningToolDefaultOpen: withFallback(
+          () => store.general?.reasoningToolDefaultOpen,
+          defaultSettings.general.reasoningToolDefaultOpen,
+        ),
+        setReasoningToolDefaultOpen(value: boolean) {
+          setStore("general", "reasoningToolDefaultOpen", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

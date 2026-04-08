@@ -9,6 +9,7 @@ import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -41,6 +42,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permission = usePermission()
   const prompt = usePrompt()
   const sdk = useSDK()
+  const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
@@ -118,6 +120,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const agentCommand = withCategory(language.t("command.category.agent"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
+  const settingsCommand = withCategory(language.t("command.category.settings"))
 
   const isAutoAcceptActive = () => {
     const sessionID = params.id
@@ -559,6 +562,18 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
+  const settingsCmds = () => [
+    settingsCommand({
+      id: "settings.thinking",
+      title: settings.general.reasoningToolDefaultOpen()
+        ? language.t("command.settings.thinking.disable")
+        : language.t("command.settings.thinking.enable"),
+      description: language.t("command.settings.thinking.description"),
+      slash: "thinking",
+      onSelect: () => settings.general.setReasoningToolDefaultOpen(!settings.general.reasoningToolDefaultOpen()),
+    }),
+  ]
+
   command.register("session", () => [
     ...sessionCmds(),
     ...shareCmds(),
@@ -571,5 +586,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...mcpCmds(),
     ...agentCmds(),
     ...permissionsCmds(),
+    ...settingsCmds(),
   ])
 }

@@ -150,6 +150,7 @@ export function SessionTurn(
     messages?: MessageType[]
     actions?: UserActions
     showReasoningSummaries?: boolean
+    reasoningToolDefaultOpen?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
     active?: boolean
@@ -322,7 +323,8 @@ export function SessionTurn(
     return data.store.session_status[props.sessionID] ?? idle
   })
   const working = createMemo(() => status().type !== "idle" && active())
-  const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
+  const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? false)
+  const reasoningDefaultOpen = createMemo(() => props.reasoningToolDefaultOpen ?? true)
 
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
@@ -361,13 +363,6 @@ export function SessionTurn(
     return { visible, reason }
   })
   const assistantVisible = createMemo(() => assistantDerived().visible)
-  const reasoningHeading = createMemo(() => assistantDerived().reason)
-  const showThinking = createMemo(() => {
-    if (!working() || !!error()) return false
-    if (status().type === "retry") return false
-    if (showReasoningSummaries()) return assistantVisible() === 0
-    return true
-  })
 
   const autoScroll = createAutoScroll({
     working,
@@ -407,22 +402,10 @@ export function SessionTurn(
                     turnDurationMs={turnDurationMs()}
                     working={working()}
                     showReasoningSummaries={showReasoningSummaries()}
+                    reasoningToolDefaultOpen={reasoningDefaultOpen()}
                     shellToolDefaultOpen={props.shellToolDefaultOpen}
                     editToolDefaultOpen={props.editToolDefaultOpen}
                   />
-                </div>
-              </Show>
-              <Show when={showThinking()}>
-                <div data-slot="session-turn-thinking">
-                  <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                  <Show when={!showReasoningSummaries()}>
-                    <TextReveal
-                      text={reasoningHeading()}
-                      class="session-turn-thinking-heading"
-                      travel={25}
-                      duration={700}
-                    />
-                  </Show>
                 </div>
               </Show>
               <SessionRetry status={status()} show={active()} />

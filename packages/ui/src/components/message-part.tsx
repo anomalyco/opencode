@@ -570,7 +570,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
 }
 
-function renderable(part: PartType, showReasoningSummaries = true) {
+function renderable(part: PartType, showReasoningSummaries = false) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
@@ -581,14 +581,16 @@ function renderable(part: PartType, showReasoningSummaries = true) {
   return !!PART_MAPPING[part.type]
 }
 
-function toolDefaultOpen(tool: string, shell = false, edit = false) {
+function toolDefaultOpen(tool: string, shell = false, edit = false, reasoning = false) {
   if (tool === "bash") return shell
   if (tool === "edit" || tool === "write" || tool === "apply_patch") return edit
+  if (tool === "reasoning") return reasoning
 }
 
-function partDefaultOpen(part: PartType, shell = false, edit = false) {
+function partDefaultOpen(part: PartType, shell = false, edit = false, reasoning = false) {
+  if (part.type === "reasoning") return reasoning
   if (part.type !== "tool") return
-  return toolDefaultOpen(part.tool, shell, edit)
+  return toolDefaultOpen(part.tool, shell, edit, reasoning)
 }
 
 export function AssistantParts(props: {
@@ -597,6 +599,7 @@ export function AssistantParts(props: {
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
+  reasoningToolDefaultOpen?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
 }) {
@@ -616,7 +619,7 @@ export function AssistantParts(props: {
       groupParts(
         props.messages.flatMap((message) =>
           list(data.store.part?.[message.id], emptyParts)
-            .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+            .filter((part) => renderable(part, props.showReasoningSummaries ?? false))
             .map((part) => ({
               messageID: message.id,
               part,
@@ -679,7 +682,12 @@ export function AssistantParts(props: {
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                        defaultOpen={partDefaultOpen(
+                          item()!,
+                          props.shellToolDefaultOpen,
+                          props.editToolDefaultOpen,
+                          props.reasoningToolDefaultOpen,
+                        )}
                       />
                     </Show>
                   </Show>
@@ -831,7 +839,7 @@ export function AssistantMessageDisplay(props: {
     () =>
       groupParts(
         props.parts
-          .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+          .filter((part) => renderable(part, props.showReasoningSummaries ?? false))
           .map((part) => ({
             messageID: props.message.id,
             part,
@@ -1510,6 +1518,8 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const data = useData()
+  const i18n = useI18n()
   const part = () => props.part as ReasoningPart
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
@@ -1518,11 +1528,29 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 
   return (
     <Show when={text()}>
-      <div data-component="reasoning-part">
-        <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-        </Show>
-      </div>
+      <Collapsible defaultOpen={props.defaultOpen} variant="ghost" class="tool-collapsible">
+        <Collapsible.Trigger>
+          <div data-component="reasoning-part-trigger" class="flex items-center gap-2 min-w-0">
+            <span
+              data-slot="reasoning-part-title"
+              class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+            >
+              <Icon name="brain" class="shrink-0" />
+              <span data-slot="reasoning-part-label" class="truncate">
+                {i18n.t("ui.messagePart.thinking")}
+              </span>
+            </span>
+            <Collapsible.Arrow />
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-component="reasoning-part" class="mt-2">
+            <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
+              <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+            </Show>
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
     </Show>
   )
 }

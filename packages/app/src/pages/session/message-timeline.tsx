@@ -1097,6 +1097,7 @@ export function MessageTimeline(props: {
                         active={active()}
                         status={active() ? sessionStatus() : undefined}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
+                        reasoningToolDefaultOpen={settings.general.reasoningToolDefaultOpen()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                         classes={{
