@@ -41,6 +41,10 @@ function mockSdk() {
           calls.push("facade.insert-chart")
           return true
         }
+        if (id === "sheet.mutation.set-drawing-apply") {
+          calls.push("facade.set-drawing-apply")
+          return true
+        }
         return false
       },
       getActiveWorkbook: () => wb,
@@ -62,6 +66,6 @@ describe("spreadsheet viewer sdk smoke", () => {
     await sdk.addChart({
       range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 },
     })
-    expect(calls).toEqual(["load", "facade.insert-chart"])
+    expect(calls).toEqual(["load", "facade.insert-chart", "facade.set-drawing-apply"])
   })
 })

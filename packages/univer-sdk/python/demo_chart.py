@@ -6,7 +6,7 @@ from veritly_univer_sdk import RangeRect, UniverSDK
 
 
 async def main() -> None:
-    sdk = UniverSDK("ws://127.0.0.1:18766/ws")
+    sdk = UniverSDK()
     await sdk.connect()
     try:
         doc = await sdk.get_active_document()

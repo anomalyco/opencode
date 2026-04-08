@@ -44,13 +44,21 @@ await writeFile(managedInstructionsPath, content, "utf8");
 
 process.env.OPENCODE_PROJECTS_ROOT = path.join(repoRoot, ".veritly", "projects");
 
+const vendoredSkillDir = path.join(repoRoot, "vendor", "opencode-veritly", ".opencode", "skill");
+
 process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
 	instructions: [managedInstructionsPath],
+	// Per-project cwd is often `.veritly/projects/...` with no `.opencode/` on the ancestor chain,
+	// and server processes may not see the developer's `~/.opencode/skill` symlink. Absolute paths work everywhere.
+	skills: {
+		paths: [vendoredSkillDir],
+	},
 });
 
 log(`root=${opencodeRoot}`);
 log(`generated=${managedInstructionsPath}`);
 log(`opencode_projects_root=${process.env.OPENCODE_PROJECTS_ROOT}`);
+log(`skills.paths[0]=${vendoredSkillDir}`);
 
 // Make the downstream CLI parse as `opencode serve --port 4096`.
 process.argv = [process.argv[0] ?? "bun", path.join(packageRoot, "src", "index.ts"), "serve", "--port", "4096"];

@@ -81,6 +81,45 @@ type InsertChartMutationParams = {
   anchor: { row: number; column: number }
 }
 
+type SetDrawingApplyMutationParams = {
+  op: [
+    string,
+    string,
+    ["data", string, { i: ChartDrawing }],
+    ["order", number, { i: string }],
+  ]
+  unitId: string
+  subUnitId: string
+  objects: Array<{ unitId: string; subUnitId: string; drawingId: string }>
+  type: 0
+  trigger: string
+}
+
+type ChartDrawing = {
+  unitId: string
+  subUnitId: string
+  drawingId: string
+  drawingType: number
+  componentKey: "Shape"
+  sheetTransform: {
+    from: { column: number; columnOffset: number; row: number; rowOffset: number }
+    to: { column: number; columnOffset: number; row: number; rowOffset: number }
+  }
+  transform: { left: number; top: number; width: number; height: number }
+  axisAlignSheetTransform: {
+    from: { column: number; columnOffset: number; row: number; rowOffset: number }
+    to: { column: number; columnOffset: number; row: number; rowOffset: number }
+  }
+  data: {
+    border: string
+    background: string
+    range: string
+    chartType: number
+    isRowDirection: boolean
+  }
+  allowTransform: true
+}
+
 type SheetRef = {
   getSheetId(): string
   getName(): string
@@ -208,15 +247,90 @@ function randomChartId() {
   return `sdk-${Math.random().toString(36).slice(2, 12)}`
 }
 
+function colName(v: number): string {
+  let n = v + 1
+  let out = ""
+  while (n > 0) {
+    const r = (n - 1) % 26
+    out = String.fromCharCode(65 + r) + out
+    n = Math.floor((n - 1) / 26)
+  }
+  return out
+}
+
+function a1Range(input: { sheet: string; range: RangeRect }) {
+  const s = `${colName(input.range.startColumn)}${input.range.startRow + 1}`
+  const e = `${colName(input.range.endColumn)}${input.range.endRow + 1}`
+  return `${input.sheet}!${s}:${e}`
+}
+
+function chartDrawing(input: { chart: InsertChartMutationParams; sheetName: string }): ChartDrawing {
+  const from = {
+    column: input.chart.anchor.column,
+    columnOffset: 60,
+    row: input.chart.anchor.row,
+    rowOffset: 8,
+  }
+  const to = {
+    column: input.chart.anchor.column + 6,
+    columnOffset: 30,
+    row: input.chart.anchor.row + 22,
+    rowOffset: 2,
+  }
+  return {
+    unitId: input.chart.unitId,
+    subUnitId: input.chart.subUnitId,
+    drawingId: input.chart.chartId,
+    drawingType: 2,
+    componentKey: "Shape",
+    sheetTransform: { from, to },
+    transform: { left: 200, top: 200, width: 468, height: 369 },
+    axisAlignSheetTransform: { from, to },
+    data: {
+      border: "#979DAC",
+      background: "rgba(0,0,0,0)",
+      range: a1Range({ sheet: input.sheetName, range: input.chart.sourceRange }),
+      chartType: input.chart.chartType,
+      isRowDirection: input.chart.isRowDirection,
+    },
+    allowTransform: true,
+  }
+}
+
 async function addChartViaFacade(input: {
   runtime: UniverSdkRuntime
   chartParams: InsertChartMutationParams
   sheet: SheetRef
   wb: WorkbookRef
+  sheetName: string
   rangeObj: { addChart?: (params: InsertChartMutationParams) => Promise<boolean> | boolean }
 }) {
   const ok = await input.runtime.univerAPI.executeCommand("sheet.mutation.insert-chart", input.chartParams)
-  if (ok) return true
+  if (ok) {
+    const drawing = chartDrawing({ chart: input.chartParams, sheetName: input.sheetName })
+    const apply: SetDrawingApplyMutationParams = {
+      op: [
+        input.chartParams.unitId,
+        input.chartParams.subUnitId,
+        ["data", input.chartParams.chartId, { i: drawing }],
+        ["order", 0, { i: input.chartParams.chartId }],
+      ],
+      unitId: input.chartParams.unitId,
+      subUnitId: input.chartParams.subUnitId,
+      objects: [
+        {
+          unitId: input.chartParams.unitId,
+          subUnitId: input.chartParams.subUnitId,
+          drawingId: input.chartParams.chartId,
+        },
+      ],
+      type: 0,
+      trigger: input.chartParams.trigger,
+    }
+    const drawOk = await input.runtime.univerAPI.executeCommand("sheet.mutation.set-drawing-apply", apply)
+    if (drawOk) return true
+    throw new SdkError("insert-chart succeeded but set-drawing-apply was rejected")
+  }
   if (input.rangeObj.addChart) return await input.rangeObj.addChart(input.chartParams)
   if (input.sheet.addChart) return await input.sheet.addChart(input.chartParams)
   if (input.wb.addChart) return await input.wb.addChart(input.chartParams)
@@ -316,7 +430,7 @@ export function createUniverSdk(input: UniverSdkRuntime) {
         anchor: input.anchor ?? { row: input.range.endRow + 1, column: input.range.endColumn + 1 },
       }
       const rangeObj = sh.getRange(input.range.startRow, input.range.startColumn, input.range.endRow, input.range.endColumn)
-      const ok = await addChartViaFacade({ runtime, chartParams, sheet: sh, wb, rangeObj })
+      const ok = await addChartViaFacade({ runtime, chartParams, sheet: sh, wb, sheetName: sh.getName(), rangeObj })
       if (ok) return true
       throw new SdkError("Facade chart call was rejected by Univer runtime")
     },

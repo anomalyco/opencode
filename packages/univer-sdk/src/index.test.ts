@@ -37,6 +37,10 @@ function setup() {
         calls.push({ id: "facade.insert-chart", data: _params ?? {} })
         return true
       }
+      if (id === "sheet.mutation.set-drawing-apply") {
+        calls.push({ id: "facade.set-drawing-apply", data: _params ?? {} })
+        return true
+      }
       return false
     },
     getActiveWorkbook: () => wb,
@@ -74,6 +78,6 @@ describe("univer-sdk", () => {
     await sdk.addChart({
       range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 },
     })
-    expect(calls[0]?.id).toBe("facade.insert-chart")
+    expect(calls.map((x) => x.id)).toEqual(["facade.insert-chart", "facade.set-drawing-apply"])
   })
 })

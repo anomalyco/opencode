@@ -19,6 +19,10 @@ COPY . .
 RUN bun install
 RUN bun run build:veritly-hosted
 
+RUN python3 -m venv /opt/veritly-univer-sdk \
+  && /opt/veritly-univer-sdk/bin/pip install --no-cache-dir /app/packages/univer-sdk/python
+ENV PATH="/opt/veritly-univer-sdk/bin:$PATH"
+
 COPY railway/start-opencode-serve.sh /usr/local/bin/start-opencode-serve
 COPY railway/serve-custom-app.mjs /usr/local/bin/serve-custom-app.mjs
 COPY railway/start-hosted-opencode.sh /usr/local/bin/start-hosted-opencode

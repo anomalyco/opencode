@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -35,9 +36,20 @@ class UniverSDKError(RuntimeError):
     pass
 
 
+def _resolve_ws_url(explicit: str | None) -> str:
+    """Default matches Bun `sdk-relay` (`UNIVER_SDK_PORT`, default 18766). Override with `UNIVER_SDK_WS`."""
+    if explicit is not None:
+        return explicit.strip()
+    env = os.environ.get("UNIVER_SDK_WS", "").strip()
+    if env:
+        return env
+    port = os.environ.get("UNIVER_SDK_PORT", "18766").strip()
+    return f"ws://127.0.0.1:{port}/ws"
+
+
 class UniverSDK:
-    def __init__(self, ws_url: str) -> None:
-        self._ws_url = ws_url
+    def __init__(self, ws_url: str | None = None) -> None:
+        self._ws_url = _resolve_ws_url(ws_url)
         self._conn: ClientConnection | None = None
         self._lock = asyncio.Lock()
 
