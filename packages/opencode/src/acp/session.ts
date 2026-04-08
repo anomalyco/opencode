@@ -1,5 +1,5 @@
 import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
-import type { ACPSessionState } from "./types"
+import type { ACPSessionState, ACPSelectionSource } from "./types"
 import * as Log from "@opencode-ai/core/util/log"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 
@@ -17,7 +17,7 @@ export class ACPSessionManager {
     return this.sessions.get(sessionId)
   }
 
-  async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
+  async create(cwd: string, mcpServers: McpServer[]): Promise<ACPSessionState> {
     const session = await this.sdk.session
       .create(
         {
@@ -28,14 +28,12 @@ export class ACPSessionManager {
       .then((x) => x.data!)
 
     const sessionId = session.id
-    const resolvedModel = model
 
     const state: ACPSessionState = {
       id: sessionId,
       cwd,
       mcpServers,
       createdAt: new Date(),
-      model: resolvedModel,
     }
     log.info("creating_session", { state })
 
@@ -43,12 +41,7 @@ export class ACPSessionManager {
     return state
   }
 
-  async load(
-    sessionId: string,
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-  ): Promise<ACPSessionState> {
+  async load(sessionId: string, cwd: string, mcpServers: McpServer[]): Promise<ACPSessionState> {
     const session = await this.sdk.session
       .get(
         {
@@ -59,14 +52,11 @@ export class ACPSessionManager {
       )
       .then((x) => x.data!)
 
-    const resolvedModel = model
-
     const state: ACPSessionState = {
       id: sessionId,
       cwd,
       mcpServers,
       createdAt: new Date(session.time.created),
-      model: resolvedModel,
     }
     log.info("loading_session", { state })
 
@@ -88,9 +78,10 @@ export class ACPSessionManager {
     return session.model
   }
 
-  setModel(sessionId: string, model: ACPSessionState["model"]) {
+  setModel(sessionId: string, model: ACPSessionState["model"], source?: ACPSelectionSource) {
     const session = this.get(sessionId)
     session.model = model
+    session.modelSource = source
     this.sessions.set(sessionId, session)
     return session
   }
@@ -100,9 +91,10 @@ export class ACPSessionManager {
     return session.variant
   }
 
-  setVariant(sessionId: string, variant?: string) {
+  setVariant(sessionId: string, variant?: string, source?: ACPSelectionSource) {
     const session = this.get(sessionId)
     session.variant = variant
+    session.variantSource = source
     this.sessions.set(sessionId, session)
     return session
   }

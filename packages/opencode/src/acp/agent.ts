@@ -55,8 +55,29 @@ import { applyPatch } from "diff"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ShellID } from "@/tool/shell/id"
 
-type ModeOption = { id: string; name: string; description?: string }
+type ModeOption = {
+  id: string
+  name: string
+  description?: string
+  model?: { providerID: ProviderID; modelID: ModelID }
+  variant?: string
+}
 type ModelOption = { modelId: string; name: string }
+type ProviderOption = {
+  id: string
+  name: string
+  models: Record<string, { id: string; name: string; variants?: Record<string, unknown> }>
+}
+type ResolvedState = {
+  currentModeId?: string
+  availableModes: ModeOption[]
+  model: { providerID: ProviderID; modelID: ModelID }
+  variant?: string
+  availableVariants: string[]
+  availableModels: ModelOption[]
+  legacyModels: ModelOption[]
+  configOptions: SessionConfigOption[]
+}
 const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
@@ -559,10 +580,7 @@ export class Agent implements ACPAgent {
   async newSession(params: NewSessionRequest) {
     const directory = params.cwd
     try {
-      const model = await defaultModel(this.config, directory)
-
-      // Store ACP session state
-      const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+      const state = await this.sessionManager.create(params.cwd, params.mcpServers)
       const sessionId = state.id
 
       log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
@@ -596,10 +614,7 @@ export class Agent implements ACPAgent {
     const sessionId = params.sessionId
 
     try {
-      const model = await defaultModel(this.config, directory)
-
-      // Store ACP session state
-      await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
+      await this.sessionManager.load(sessionId, params.cwd, params.mcpServers)
 
       const messages = await this.loadSessionMessages(directory, sessionId)
       this.restoreSessionStateFromMessages(sessionId, messages)
@@ -681,8 +696,6 @@ export class Agent implements ACPAgent {
     const mcpServers = params.mcpServers ?? []
 
     try {
-      const model = await defaultModel(this.config, directory)
-
       const forked = await this.sdk.session
         .fork(
           {
@@ -698,7 +711,7 @@ export class Agent implements ACPAgent {
       }
 
       const sessionId = forked.id
-      await this.sessionManager.load(sessionId, directory, mcpServers, model)
+      await this.sessionManager.load(sessionId, directory, mcpServers)
 
       const messages = await this.loadSessionMessages(directory, sessionId)
       this.restoreSessionStateFromMessages(sessionId, messages)
@@ -736,8 +749,7 @@ export class Agent implements ACPAgent {
     const mcpServers = params.mcpServers ?? []
 
     try {
-      const model = await defaultModel(this.config, directory)
-      await this.sessionManager.load(sessionId, directory, mcpServers, model)
+      await this.sessionManager.load(sessionId, directory, mcpServers)
 
       const messages = await this.loadSessionMessages(directory, sessionId, 20)
       this.restoreSessionStateFromMessages(sessionId, messages)
@@ -1063,6 +1075,12 @@ export class Agent implements ACPAgent {
       })
   }
 
+  private async loadProviders(directory: string): Promise<ProviderOption[]> {
+    return this.sdk.config
+      .providers({ directory }, { throwOnError: true })
+      .then((x) => x.data!.providers as ProviderOption[])
+  }
+
   private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
     const agents = await this.config.sdk.app
       .agents(
@@ -1079,49 +1097,129 @@ export class Agent implements ACPAgent {
         id: agent.name,
         name: agent.name,
         description: agent.description,
+        model: agent.model
+          ? {
+              providerID: ProviderID.make(agent.model.providerID),
+              modelID: ModelID.make(agent.model.modelID),
+            }
+          : undefined,
+        variant: agent.variant ?? undefined,
       }))
   }
 
   private async resolveModeState(
     directory: string,
     sessionId: string,
+    availableModes?: ModeOption[],
   ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
-    const availableModes = await this.loadAvailableModes(directory)
+    const modes = availableModes ?? (await this.loadAvailableModes(directory))
     const storedModeId = this.sessionManager.get(sessionId).modeId
-    if (storedModeId && availableModes.some((mode) => mode.id === storedModeId)) {
-      return { availableModes, currentModeId: storedModeId }
+    if (storedModeId && modes.some((mode) => mode.id === storedModeId)) {
+      return { availableModes: modes, currentModeId: storedModeId }
     }
 
     const currentModeId = await (async () => {
-      if (!availableModes.length) return undefined
+      if (!modes.length) return undefined
       const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
-      const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+      const resolvedModeId = modes.find((mode) => mode.name === defaultAgentName)?.id ?? modes[0].id
       this.sessionManager.setMode(sessionId, resolvedModeId)
       return resolvedModeId
     })()
 
-    return { availableModes, currentModeId }
+    return { availableModes: modes, currentModeId }
+  }
+
+  private async resolveSessionState(
+    directory: string,
+    sessionId: string,
+    providers?: ProviderOption[],
+  ): Promise<ResolvedState> {
+    const entries = sortProvidersByName(providers ?? (await this.loadProviders(directory)))
+    const modeState = await this.resolveModeState(directory, sessionId)
+    const currentMode = modeState.currentModeId
+      ? modeState.availableModes.find((mode) => mode.id === modeState.currentModeId)
+      : undefined
+    const session = this.sessionManager.get(sessionId)
+    const model =
+      session.modelSource && session.model
+        ? session.model
+        : (currentMode?.model ?? (await defaultModel(this.config, directory)))
+    const availableVariants = modelVariantsFromProviders(entries, model)
+
+    if (session.variantSource && session.variant && !availableVariants.includes(session.variant)) {
+      this.sessionManager.setVariant(sessionId, undefined)
+    }
+
+    const state = this.sessionManager.get(sessionId)
+    const variant =
+      state.variantSource !== undefined
+        ? state.variant
+        : currentMode?.model &&
+            currentMode.variant &&
+            sameModel(currentMode.model, model) &&
+            availableVariants.includes(currentMode.variant)
+          ? currentMode.variant
+          : undefined
+
+    const availableModels = buildAvailableModels(entries)
+    const legacyModels = buildAvailableModels(entries, { includeVariants: true })
+
+    return {
+      currentModeId: modeState.currentModeId,
+      availableModes: modeState.availableModes,
+      model,
+      variant,
+      availableVariants,
+      availableModels,
+      legacyModels,
+      configOptions: buildSessionConfigOptions({
+        currentModeId: modeState.currentModeId,
+        availableModes: modeState.availableModes,
+        model,
+        availableModels,
+        variant,
+        availableVariants,
+      }),
+    }
+  }
+
+  private async sendConfigUpdate(sessionId: string, configOptions: SessionConfigOption[]) {
+    await this.connection
+      .sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "config_option_update",
+          configOptions,
+        },
+      })
+      .catch((error) => {
+        log.error("failed to send config option update", { error, sessionId })
+      })
+  }
+
+  private async sendModeUpdate(sessionId: string, currentModeId: string) {
+    await this.connection
+      .sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "current_mode_update",
+          currentModeId,
+        },
+      })
+      .catch((error) => {
+        log.error("failed to send mode update", { error, sessionId })
+      })
   }
 
   private async loadSessionMode(params: LoadSessionRequest) {
     const directory = params.cwd
     const sessionId = params.sessionId
-    const model = this.sessionManager.get(sessionId).model ?? (await defaultModel(this.config, directory))
-
-    const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-    const entries = sortProvidersByName(providers)
-    const availableVariants = modelVariantsFromProviders(entries, model)
-    const currentVariant = this.sessionManager.getVariant(sessionId)
-    if (currentVariant && !availableVariants.includes(currentVariant)) {
-      this.sessionManager.setVariant(sessionId, undefined)
-    }
-    const availableModels = buildAvailableModels(entries)
-    const modeState = await this.resolveModeState(directory, sessionId)
-    const currentModeId = modeState.currentModeId
-    const modes = currentModeId
+    const providers = await this.loadProviders(directory)
+    const state = await this.resolveSessionState(directory, sessionId, providers)
+    const modes = state.currentModeId
       ? {
-          availableModes: modeState.availableModes,
-          currentModeId,
+          availableModes: state.availableModes,
+          currentModeId: state.currentModeId,
         }
       : undefined
 
@@ -1197,125 +1295,106 @@ export class Agent implements ACPAgent {
 
     return {
       sessionId,
+      configOptions: state.configOptions,
       models: {
-        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, false),
-        availableModels,
+        currentModelId: formatModelIdWithVariant(state.model, state.variant, state.availableVariants, true),
+        availableModels: state.legacyModels,
       },
       modes,
-      configOptions: buildConfigOptions({
-        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, false),
-        availableModels,
-        currentVariant,
-        availableVariants,
-        modes,
-      }),
       _meta: buildVariantMeta({
-        model,
-        variant: this.sessionManager.getVariant(sessionId),
-        availableVariants,
+        model: state.model,
+        variant: state.variant,
+        availableVariants: state.availableVariants,
       }),
     }
   }
 
   async unstable_setSessionModel(params: SetSessionModelRequest) {
     const session = this.sessionManager.get(params.sessionId)
-    const providers = await this.sdk.config
-      .providers({ directory: session.cwd }, { throwOnError: true })
-      .then((x) => x.data!.providers)
+    const providers = await this.loadProviders(session.cwd)
 
     const selection = parseModelSelection(params.modelId, providers)
-    this.sessionManager.setModel(session.id, selection.model)
-    this.sessionManager.setVariant(session.id, selection.variant)
+    this.sessionManager.setModel(session.id, selection.model, "user")
+    this.sessionManager.setVariant(session.id, selection.variant, "user")
+    const state = await this.resolveSessionState(session.cwd, session.id, providers)
 
-    const entries = sortProvidersByName(providers)
-    const availableVariants = modelVariantsFromProviders(entries, selection.model)
-    const modeState = await this.resolveModeState(session.cwd, session.id)
-    const modes = modeState.currentModeId
-      ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
-      : undefined
-
-    await this.connection.sessionUpdate({
-      sessionId: session.id,
-      update: {
-        sessionUpdate: "config_option_update",
-        configOptions: buildConfigOptions({
-          currentModelId: formatModelIdWithVariant(selection.model, selection.variant, availableVariants, false),
-          availableModels: buildAvailableModels(entries),
-          currentVariant: selection.variant,
-          availableVariants,
-          modes,
-        }),
-      },
-    })
+    await this.sendConfigUpdate(session.id, state.configOptions)
 
     return {
       _meta: buildVariantMeta({
-        model: selection.model,
-        variant: selection.variant,
-        availableVariants,
+        model: state.model,
+        variant: state.variant,
+        availableVariants: state.availableVariants,
       }),
     }
   }
 
-  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
+  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
     const session = this.sessionManager.get(params.sessionId)
     const availableModes = await this.loadAvailableModes(session.cwd)
     if (!availableModes.some((mode) => mode.id === params.modeId)) {
       throw new Error(`Agent not found: ${params.modeId}`)
     }
     this.sessionManager.setMode(params.sessionId, params.modeId)
+
+    const state = await this.resolveSessionState(session.cwd, session.id)
+    await this.sendModeUpdate(session.id, params.modeId)
+    await this.sendConfigUpdate(session.id, state.configOptions)
+    return {}
   }
 
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
     const session = this.sessionManager.get(params.sessionId)
-    const providers = await this.sdk.config
-      .providers({ directory: session.cwd }, { throwOnError: true })
-      .then((x) => x.data!.providers)
-    const entries = sortProvidersByName(providers)
+    const providers = await this.loadProviders(session.cwd)
+    const state = await this.resolveSessionState(session.cwd, session.id, providers)
 
-    if (params.configId === "model") {
-      if (typeof params.value !== "string") throw RequestError.invalidParams("model value must be a string")
-      const selection = parseModelSelection(params.value, providers)
-      this.sessionManager.setModel(session.id, selection.model)
-      this.sessionManager.setVariant(session.id, selection.variant)
-    } else if (params.configId === "effort") {
-      if (typeof params.value !== "string") throw RequestError.invalidParams("effort value must be a string")
-      const current = session.model ?? (await defaultModel(this.config, session.cwd))
-      const availableVariants = modelVariantsFromProviders(entries, current)
-      if (!availableVariants.includes(params.value)) {
-        throw RequestError.invalidParams(JSON.stringify({ error: `Effort not found: ${params.value}` }))
+    if (params.configId === "mode") {
+      if (typeof params.value !== "string") {
+        throw RequestError.invalidParams("mode option requires a string value")
       }
-      this.sessionManager.setVariant(session.id, params.value)
-    } else if (params.configId === "mode") {
-      if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
-      const availableModes = await this.loadAvailableModes(session.cwd)
-      if (!availableModes.some((mode) => mode.id === params.value)) {
-        throw RequestError.invalidParams(JSON.stringify({ error: `Mode not found: ${params.value}` }))
+      if (!state.availableModes.some((mode) => mode.id === params.value)) {
+        throw RequestError.invalidParams(`Unknown mode: ${params.value}`)
       }
       this.sessionManager.setMode(session.id, params.value)
-    } else {
-      throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
+      const next = await this.resolveSessionState(session.cwd, session.id, providers)
+      await this.sendModeUpdate(session.id, params.value)
+      return { configOptions: next.configOptions }
     }
 
-    const updatedSession = this.sessionManager.get(session.id)
-    const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
-    const availableVariants = modelVariantsFromProviders(entries, model)
-    const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, false)
-    const availableModels = buildAvailableModels(entries)
-    const modeState = await this.resolveModeState(session.cwd, session.id)
-    const modes = modeState.currentModeId
-      ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
-      : undefined
-
-    return {
-      configOptions: buildConfigOptions({
-        currentModelId,
-        availableModels,
-        currentVariant: updatedSession.variant,
-        availableVariants,
-        modes,
-      }),
+    if (params.configId === "model") {
+      if (typeof params.value !== "string") {
+        throw RequestError.invalidParams("model option requires a string value")
+      }
+      if (!state.availableModels.some((model) => model.modelId === params.value)) {
+        throw RequestError.invalidParams(`Unknown model: ${params.value}`)
+      }
+      const selection = parseModelSelection(params.value, providers)
+      this.sessionManager.setModel(session.id, selection.model, "user")
+      if (selection.variant !== undefined) {
+        this.sessionManager.setVariant(session.id, selection.variant, "user")
+      }
+      const next = await this.resolveSessionState(session.cwd, session.id, providers)
+      return { configOptions: next.configOptions }
     }
+
+    if (params.configId === "variant") {
+      if (typeof params.value !== "string") {
+        throw RequestError.invalidParams("variant option requires a string value")
+      }
+      if (params.value === DEFAULT_VARIANT_VALUE) {
+        this.sessionManager.setVariant(session.id, undefined, "user")
+        const next = await this.resolveSessionState(session.cwd, session.id, providers)
+        return { configOptions: next.configOptions }
+      }
+      if (!state.availableVariants.includes(params.value)) {
+        throw RequestError.invalidParams(`Unknown variant: ${params.value}`)
+      }
+      this.sessionManager.setVariant(session.id, params.value, "user")
+      const next = await this.resolveSessionState(session.cwd, session.id, providers)
+      return { configOptions: next.configOptions }
+    }
+
+    throw RequestError.invalidParams(`Unknown config option: ${params.configId}`)
   }
 
   async prompt(params: PromptRequest) {
@@ -1323,12 +1402,10 @@ export class Agent implements ACPAgent {
     const session = this.sessionManager.get(sessionID)
     const directory = session.cwd
 
-    const current = session.model
-    const model = current ?? (await defaultModel(this.config, directory))
-    if (!current) {
-      this.sessionManager.setModel(session.id, model)
-    }
-    const agent = session.modeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
+    const state = await this.resolveSessionState(directory, sessionID)
+    const model = state.model
+    const agent =
+      state.currentModeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
 
     const parts: Array<
       | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
@@ -1440,7 +1517,7 @@ export class Agent implements ACPAgent {
           providerID: model.providerID,
           modelID: model.modelID,
         },
-        variant: this.sessionManager.getVariant(sessionID),
+        variant: state.variant,
         parts,
         agent,
         directory,
@@ -1533,11 +1610,19 @@ export class Agent implements ACPAgent {
     const lastUser = messages?.findLast((message) => message.info.role === "user")?.info
     if (lastUser?.role !== "user") return
 
-    this.sessionManager.setModel(sessionId, {
-      providerID: ProviderID.make(lastUser.model.providerID),
-      modelID: ModelID.make(lastUser.model.modelID),
-    })
-    this.sessionManager.setVariant(sessionId, lastUser.model.variant)
+    this.sessionManager.setModel(
+      sessionId,
+      {
+        providerID: ProviderID.make(lastUser.model.providerID),
+        modelID: ModelID.make(lastUser.model.modelID),
+      },
+      "restored",
+    )
+    this.sessionManager.setVariant(
+      sessionId,
+      "variant" in lastUser && typeof lastUser.variant === "string" ? lastUser.variant : lastUser.model.variant,
+      "restored",
+    )
     if (lastUser.agent) {
       this.sessionManager.setMode(sessionId, lastUser.agent)
     }
@@ -1811,8 +1896,12 @@ function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
   })
 }
 
+function sameModel(a: { providerID: ProviderID; modelID: ModelID }, b: { providerID: ProviderID; modelID: ModelID }) {
+  return a.providerID === b.providerID && a.modelID === b.modelID
+}
+
 function modelVariantsFromProviders(
-  providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+  providers: ProviderOption[],
   model: { providerID: ProviderID; modelID: ModelID },
 ): string[] {
   const provider = providers.find((entry) => entry.id === model.providerID)
@@ -1822,14 +1911,10 @@ function modelVariantsFromProviders(
   return Object.keys(modelInfo.variants)
 }
 
-function buildAvailableModels(
-  providers: Array<{ id: string; name: string; models: Record<string, any> }>,
-  options: { includeVariants?: boolean } = {},
-): ModelOption[] {
+function buildAvailableModels(providers: ProviderOption[], options: { includeVariants?: boolean } = {}): ModelOption[] {
   const includeVariants = options.includeVariants ?? false
   return providers.flatMap((provider) => {
-    const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(provider.models)
-    const models = Provider.sort(unsorted)
+    const models = Provider.sort(Object.values(provider.models))
     return models.flatMap((model) => {
       const base: ModelOption = {
         modelId: `${provider.id}/${model.id}`,
@@ -1846,6 +1931,69 @@ function buildAvailableModels(
   })
 }
 
+function buildSessionConfigOptions(input: {
+  currentModeId?: string
+  availableModes: ModeOption[]
+  model: { providerID: ProviderID; modelID: ModelID }
+  availableModels: ModelOption[]
+  variant?: string
+  availableVariants: string[]
+}): SessionConfigOption[] {
+  const options: SessionConfigOption[] = []
+
+  if (input.currentModeId) {
+    options.push({
+      id: "mode",
+      name: "Session Mode",
+      category: "mode",
+      type: "select",
+      currentValue: input.currentModeId,
+      options: input.availableModes.map((mode) => ({
+        value: mode.id,
+        name: mode.name,
+        description: mode.description,
+      })),
+    })
+  }
+
+  options.push({
+    id: "model",
+    name: "Model",
+    category: "model",
+    type: "select",
+    currentValue: `${input.model.providerID}/${input.model.modelID}`,
+    options: input.availableModels.map((model) => ({
+      value: model.modelId,
+      name: model.name,
+    })),
+  })
+
+  if (!input.availableVariants.length) return options
+
+  options.push({
+    id: "variant",
+    name: "Thought Level",
+    category: "thought_level",
+    type: "select",
+    currentValue: input.variant ?? DEFAULT_VARIANT_VALUE,
+    options: [
+      {
+        value: DEFAULT_VARIANT_VALUE,
+        name: DEFAULT_VARIANT_VALUE,
+        description: "Use the model default.",
+      },
+      ...input.availableVariants
+        .filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
+        .map((variant) => ({
+          value: variant,
+          name: variant,
+        })),
+    ],
+  })
+
+  return options
+}
+
 function formatModelIdWithVariant(
   model: { providerID: ProviderID; modelID: ModelID },
   variant: string | undefined,
@@ -1853,14 +2001,8 @@ function formatModelIdWithVariant(
   includeVariant: boolean,
 ) {
   const base = `${model.providerID}/${model.modelID}`
-  if (!includeVariant || availableVariants.length === 0) return base
-  const selectedVariant =
-    variant && availableVariants.includes(variant)
-      ? variant
-      : availableVariants.includes(DEFAULT_VARIANT_VALUE)
-        ? DEFAULT_VARIANT_VALUE
-        : availableVariants[0]
-  return `${base}/${selectedVariant}`
+  if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
+  return `${base}/${variant}`
 }
 
 function buildVariantMeta(input: {
@@ -1879,7 +2021,7 @@ function buildVariantMeta(input: {
 
 function parseModelSelection(
   modelId: string,
-  providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+  providers: ProviderOption[],
 ): { model: { providerID: ProviderID; modelID: ModelID }; variant?: string } {
   const parsed = Provider.parseModel(modelId)
   const provider = providers.find((p) => p.id === parsed.providerID)
@@ -1887,12 +2029,10 @@ function parseModelSelection(
     return { model: parsed, variant: undefined }
   }
 
-  // Check if modelID exists directly
   if (provider.models[parsed.modelID]) {
     return { model: parsed, variant: undefined }
   }
 
-  // Try to extract variant from end of modelID (e.g., "claude-sonnet-4/high" -> model: "claude-sonnet-4", variant: "high")
   const segments = parsed.modelID.split("/")
   if (segments.length > 1) {
     const candidateVariant = segments[segments.length - 1]
@@ -1907,63 +2047,6 @@ function parseModelSelection(
   }
 
   return { model: parsed, variant: undefined }
-}
-
-function buildConfigOptions(input: {
-  currentModelId: string
-  availableModels: ModelOption[]
-  currentVariant?: string
-  availableVariants?: string[]
-  modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
-}): SessionConfigOption[] {
-  const options: SessionConfigOption[] = [
-    {
-      id: "model",
-      name: "Model",
-      category: "model",
-      type: "select",
-      currentValue: input.currentModelId,
-      options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
-    },
-  ]
-  if (input.availableVariants?.length) {
-    options.push({
-      id: "effort",
-      name: "Effort",
-      description: "Available effort levels for this model",
-      category: "thought_level",
-      type: "select",
-      currentValue:
-        input.currentVariant && input.availableVariants.includes(input.currentVariant)
-          ? input.currentVariant
-          : input.availableVariants.includes(DEFAULT_VARIANT_VALUE)
-            ? DEFAULT_VARIANT_VALUE
-            : input.availableVariants[0],
-      options: input.availableVariants.map((variant) => ({ value: variant, name: formatVariantName(variant) })),
-    })
-  }
-  if (input.modes) {
-    options.push({
-      id: "mode",
-      name: "Session Mode",
-      category: "mode",
-      type: "select",
-      currentValue: input.modes.currentModeId,
-      options: input.modes.availableModes.map((m) => ({
-        value: m.id,
-        name: m.name,
-        ...(m.description ? { description: m.description } : {}),
-      })),
-    })
-  }
-  return options
-}
-
-function formatVariantName(variant: string) {
-  return variant
-    .split(/[_-]/)
-    .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
-    .join(" ")
 }
 
 export * as ACP from "./agent"

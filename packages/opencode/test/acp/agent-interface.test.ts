@@ -33,6 +33,7 @@ describe("acp.agent interface compliance", () => {
     // Optional but checked by SDK router
     "loadSession",
     "setSessionMode",
+    "setSessionConfigOption",
     "authenticate",
     // Capability-gated methods checked by the SDK router
     "listSessions",
