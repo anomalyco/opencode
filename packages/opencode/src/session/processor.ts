@@ -396,9 +396,8 @@ export namespace SessionProcessor {
           }
           ctx.reasoningMap = {}
 
-          const parts = MessageV2.parts(ctx.assistantMessage.id)
-          for (const part of parts) {
-            if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") continue
+          for (const part of Object.values(ctx.toolcalls)) {
+            if (part.state.status === "completed" || part.state.status === "error") continue
             yield* session.updatePart({
               ...part,
               state: {
@@ -409,6 +408,7 @@ export namespace SessionProcessor {
               },
             })
           }
+          ctx.toolcalls = {}
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
         })
