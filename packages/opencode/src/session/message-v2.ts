@@ -15,6 +15,7 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect } from "effect"
+import { Evidence } from "./evidence"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -255,6 +256,7 @@ export namespace MessageV2 {
     reason: z.string(),
     snapshot: z.string().optional(),
     cost: z.number(),
+    metadata: z.record(z.string(), z.any()).optional(),
     tokens: z.object({
       total: z.number().optional(),
       input: z.number(),
@@ -715,8 +717,15 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+              const state = part.state
+              const outputText = state.time.compacted
+                ? Evidence.text(
+                    Evidence.isTool(state.metadata.evidence)
+                      ? state.metadata.evidence
+                      : Evidence.tool({ tool: part.tool, state }),
+                  )
+                : state.output
+              const attachments = state.time.compacted || options?.stripMedia ? [] : (state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
               // (images, PDFs) to be sent as a separate user message
@@ -739,7 +748,7 @@ export namespace MessageV2 {
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
-                input: part.state.input,
+                input: state.input,
                 output,
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })

@@ -19,6 +19,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
+import { Evidence } from "./evidence"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -130,7 +131,10 @@ export namespace SessionCompaction {
         if (pruned > PRUNE_MINIMUM) {
           for (const part of toPrune) {
             if (part.state.status === "completed") {
-              part.state.time.compacted = Date.now()
+              const state = part.state
+              const evidence = Evidence.tool({ tool: part.tool, state })
+              state.time.compacted = Date.now()
+              state.metadata = { ...state.metadata, evidence }
               yield* session.updatePart(part)
             }
           }
