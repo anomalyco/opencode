@@ -1,0 +1,44 @@
+name: "opencode Gitea Action"
+description: "Run opencode in Gitea Actions workflows"
+branding:
+  icon: "code"
+  color: "orange"
+
+inputs:
+  model:
+    description: "Model to use (format: provider/model)"
+    required: true
+
+  gitea_token:
+    description: "Gitea personal access token. Falls back to GITEA_TOKEN env var."
+    required: false
+
+  share:
+    description: "Share the opencode session (defaults to true for public repos)"
+    required: false
+
+  prompt:
+    description: "Custom prompt to override the default prompt"
+    required: false
+
+  mentions:
+    description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/opencode,/oc'"
+    required: false
+
+  variant:
+    description: "Model variant for provider-specific reasoning effort (e.g., high, max, minimal)"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run opencode
+      shell: bash
+      run: opencode gitea run
+      env:
+        MODEL: ${{ inputs.model }}
+        GITEA_TOKEN: ${{ inputs.gitea_token || env.GITEA_TOKEN }}
+        SHARE: ${{ inputs.share }}
+        PROMPT: ${{ inputs.prompt }}
+        MENTIONS: ${{ inputs.mentions }}
+        VARIANT: ${{ inputs.variant }}
