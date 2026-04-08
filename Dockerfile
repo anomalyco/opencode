@@ -20,8 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system core.excludesFile /etc/opencode/.gitignore
 
+ARG PLAYWRIGHT_MCP_VERSION=0.0.70
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN npm install -g @playwright/mcp@latest \
+RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
     && npx playwright install --with-deps chromium \
     && rm -rf /tmp/*
 
