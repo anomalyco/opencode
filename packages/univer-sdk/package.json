@@ -1,0 +1,18 @@
+{
+  "name": "@opencode-ai/univer-sdk",
+  "version": "1.2.24",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test ./src",
+    "sdk-relay": "bun ./script/sdk-relay.ts"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  }
+}

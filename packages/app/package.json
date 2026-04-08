@@ -43,6 +43,7 @@
     "@mertdeveci55/univer-import-export": "0.2.1",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/univer-sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",

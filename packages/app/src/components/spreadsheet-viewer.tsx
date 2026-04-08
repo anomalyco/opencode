@@ -19,16 +19,19 @@ import "@univerjs/presets/lib/styles/preset-sheets-advanced.css"
 import { UniverSheetsCollaborationPreset } from "@univerjs/presets/preset-sheets-collaboration"
 import sheetsCollaborationEnUs from "@univerjs/presets/preset-sheets-collaboration/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-collaboration.css"
+import {
+  createUniverSdk,
+  type AddChartInput,
+  type RangeRect,
+  type SetRangeValuesInput,
+} from "@opencode-ai/univer-sdk"
 import { registerOfficeUnit } from "@/lib/veritly-univer-files"
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
 
 type PendingImport = { base64: string; mimeType?: string }
-
-type UniverApiWithExchange = {
-  importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
-  loadServerUnit(unitId: string, unitType: number): void
-  toggleDarkMode(on: boolean): void
-}
+type RelayRequest = { id: string; op: string; params?: unknown }
+type RelayResponse = { id: string; ok: boolean; result?: unknown; error?: string }
+type GetRangeInput = { sheetId?: string; range: RangeRect }
 
 type Props = {
   unitId?: string
@@ -41,6 +44,8 @@ type Props = {
 
 const UNIVERSER_BASE = univerBackendOrigin()
 const UNIVER_LICENSE = import.meta.env.VITE_UNIVER_LICENSE?.trim() ?? ""
+
+type VeritlyWindow = Window & { __veritlyUniverSdk?: () => ReturnType<typeof createUniverSdk> }
 
 function base64ToFile(base64: string, name: string, mimeType?: string): File {
   const bin = atob(base64)
@@ -56,6 +61,7 @@ export function SpreadsheetViewer(props: Props) {
   const [loading, setLoading] = createSignal(false)
 
   let runtime: ReturnType<typeof createUniver> | null = null
+  let relaySocket: WebSocket | null = null
   let seq = 0
 
   createEffect(() => {
@@ -100,9 +106,19 @@ export function SpreadsheetViewer(props: Props) {
     })
 
     runtime = instance
+    if (import.meta.env.DEV) {
+      const w = window as VeritlyWindow
+      w.__veritlyUniverSdk = () => createUniverSdk({ univerAPI: instance.univerAPI, univer: instance.univer as never })
+    }
 
     onCleanup(() => {
+      relaySocket?.close(1000, "viewer disposed")
+      relaySocket = null
       runtime = null
+      if (import.meta.env.DEV) {
+        const w = window as VeritlyWindow
+        delete w.__veritlyUniverSdk
+      }
       instance.univer.dispose()
     })
   })
@@ -110,7 +126,102 @@ export function SpreadsheetViewer(props: Props) {
   createEffect(() => {
     const cur = runtime
     if (!cur) return
-    cur.univerAPI.toggleDarkMode(theme.mode() === "dark")
+    createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer as never }).toggleDarkMode(theme.mode() === "dark")
+  })
+
+  createEffect(() => {
+    const cur = runtime
+    if (!cur) return
+    const wsBase = import.meta.env.VITE_UNIVER_SDK_WS?.trim()
+    if (!wsBase) return
+
+    relaySocket?.close(1000, "reconnect")
+    const join = wsBase.includes("?") ? "&" : "?"
+    const ws = new WebSocket(`${wsBase}${join}role=browser`)
+    relaySocket = ws
+    const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer as never })
+
+    const respond = (payload: RelayResponse) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+    }
+
+    ws.onmessage = async (evt) => {
+      let req: RelayRequest
+      try {
+        req = JSON.parse(String(evt.data)) as RelayRequest
+      } catch {
+        respond({ id: "relay", ok: false, error: "invalid json payload" })
+        return
+      }
+      if (!req?.id || !req?.op) {
+        respond({ id: "relay", ok: false, error: "request must include id and op" })
+        return
+      }
+
+      try {
+        switch (req.op) {
+          case "get_active_document":
+            respond({ id: req.id, ok: true, result: sdk.getActiveDocument() })
+            return
+          case "list_sheets":
+            respond({ id: req.id, ok: true, result: sdk.listSheets() })
+            return
+          case "get_range":
+            respond({ id: req.id, ok: true, result: sdk.getSheetRange(req.params as GetRangeInput) })
+            return
+          case "set_range":
+            sdk.setRangeValues(req.params as SetRangeValuesInput)
+            respond({ id: req.id, ok: true, result: true })
+            return
+          case "add_chart":
+            respond({ id: req.id, ok: true, result: await sdk.addChart(req.params as AddChartInput) })
+            return
+          case "sdk_introspect":
+            respond({
+              id: req.id,
+              ok: true,
+              result: sdk.inspectFacadeCapabilities(
+                req.params as { sheetId?: string; range?: { startRow: number; endRow: number; startColumn: number; endColumn: number } } | undefined,
+              ),
+            })
+            return
+          case "execute_command": {
+            const p = (req.params ?? {}) as { id?: string; params?: unknown }
+            if (!p.id) {
+              respond({ id: req.id, ok: false, error: "execute_command requires params.id" })
+              return
+            }
+            if (!cur.univerAPI.executeCommand) {
+              respond({ id: req.id, ok: false, error: "univerAPI.executeCommand unavailable" })
+              return
+            }
+            const result = await cur.univerAPI.executeCommand(p.id, p.params)
+            respond({ id: req.id, ok: true, result })
+            return
+          }
+          default:
+            respond({ id: req.id, ok: false, error: `unsupported op: ${req.op}` })
+        }
+      } catch (err) {
+        if (req.op === "add_chart") {
+          const info = sdk.inspectFacadeCapabilities()
+          console.warn("univer-sdk add_chart failed; facade capabilities:", info)
+        }
+        respond({ id: req.id, ok: false, error: err instanceof Error ? err.message : "sdk operation failed" })
+      }
+    }
+
+    ws.onerror = () => {
+      if (import.meta.env.DEV) console.error("univer sdk relay websocket error")
+    }
+    ws.onclose = () => {
+      if (relaySocket === ws) relaySocket = null
+    }
+
+    onCleanup(() => {
+      if (relaySocket === ws) relaySocket = null
+      ws.close(1000, "effect cleanup")
+    })
   })
 
   createEffect(
@@ -135,7 +246,7 @@ export function SpreadsheetViewer(props: Props) {
         const id = ++seq
         const stale = () => id !== seq || runtime !== cur
 
-        const api = cur.univerAPI as unknown as UniverApiWithExchange
+        const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer as never })
 
         try {
           if (stale()) return
@@ -147,7 +258,7 @@ export function SpreadsheetViewer(props: Props) {
             }
             const name = officePath.split("/").pop() || "workbook.xlsx"
             const file = base64ToFile(pendingB64, name, pendingMime)
-            const realId = await api.importXLSXToUnitIdAsync(file)
+            const realId = await sdk.importXlsxToUnit(file)
             if (stale()) return
             if (!realId) {
               setError("Univer import returned no unit id")
@@ -159,7 +270,7 @@ export function SpreadsheetViewer(props: Props) {
             return
           }
 
-          api.loadServerUnit(unitId, unitType)
+          sdk.loadServerUnit(unitId, unitType)
         } catch (e) {
           if (stale()) return
           setError(e instanceof Error ? e.message : "Failed to load sheet")

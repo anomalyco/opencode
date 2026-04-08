@@ -1,0 +1,166 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import uuid
+from dataclasses import dataclass
+from typing import Any
+
+import websockets
+from websockets.asyncio.client import ClientConnection
+
+
+@dataclass(frozen=True)
+class RangeRect:
+    startRow: int
+    endRow: int
+    startColumn: int
+    endColumn: int
+
+
+@dataclass(frozen=True)
+class ActiveDocument:
+    unitId: str
+    sheetId: str
+    sheetName: str
+
+
+@dataclass(frozen=True)
+class SheetMeta:
+    id: str
+    name: str
+
+
+class UniverSDKError(RuntimeError):
+    pass
+
+
+class UniverSDK:
+    def __init__(self, ws_url: str) -> None:
+        self._ws_url = ws_url
+        self._conn: ClientConnection | None = None
+        self._lock = asyncio.Lock()
+
+    async def connect(self) -> None:
+        if self._conn is not None:
+            return
+        url = self._ws_url if "?" in self._ws_url else f"{self._ws_url}?role=agent"
+        if "role=" not in url:
+            url = f"{url}&role=agent"
+        self._conn = await websockets.connect(url)
+
+    async def close(self) -> None:
+        if self._conn is None:
+            return
+        await self._conn.close()
+        self._conn = None
+
+    async def get_active_document(self) -> ActiveDocument:
+        data = await self._call("get_active_document")
+        return ActiveDocument(
+            unitId=str(data["unitId"]),
+            sheetId=str(data["sheetId"]),
+            sheetName=str(data["sheetName"]),
+        )
+
+    async def list_sheets(self) -> list[SheetMeta]:
+        data = await self._call("list_sheets")
+        return [SheetMeta(id=str(x["id"]), name=str(x["name"])) for x in data]
+
+    async def get_range(self, range_rect: RangeRect, sheet_id: str | None = None) -> list[list[Any]]:
+        return await self._call(
+            "get_range",
+            {
+                "sheetId": sheet_id,
+                "range": {
+                    "startRow": range_rect.startRow,
+                    "endRow": range_rect.endRow,
+                    "startColumn": range_rect.startColumn,
+                    "endColumn": range_rect.endColumn,
+                },
+            },
+        )
+
+    async def set_range(self, range_rect: RangeRect, values: list[list[Any]], sheet_id: str | None = None) -> bool:
+        result = await self._call(
+            "set_range",
+            {
+                "sheetId": sheet_id,
+                "range": {
+                    "startRow": range_rect.startRow,
+                    "endRow": range_rect.endRow,
+                    "startColumn": range_rect.startColumn,
+                    "endColumn": range_rect.endColumn,
+                },
+                "values": values,
+            },
+        )
+        return bool(result)
+
+    async def add_chart(
+        self,
+        range_rect: RangeRect,
+        sheet_id: str | None = None,
+        chart_type: int | None = None,
+        anchor: dict[str, int] | None = None,
+    ) -> bool:
+        params: dict[str, Any] = {
+            "sheetId": sheet_id,
+            "range": {
+                "startRow": range_rect.startRow,
+                "endRow": range_rect.endRow,
+                "startColumn": range_rect.startColumn,
+                "endColumn": range_rect.endColumn,
+            },
+        }
+        if chart_type is not None:
+            params["type"] = chart_type
+        if anchor is not None:
+            params["anchor"] = anchor
+        result = await self._call("add_chart", params)
+        return bool(result)
+
+    async def inspect_facade(self, sheet_id: str | None = None, range_rect: RangeRect | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if sheet_id is not None:
+            params["sheetId"] = sheet_id
+        if range_rect is not None:
+            params["range"] = {
+                "startRow": range_rect.startRow,
+                "endRow": range_rect.endRow,
+                "startColumn": range_rect.startColumn,
+                "endColumn": range_rect.endColumn,
+            }
+        return await self._call("sdk_introspect", params or None)
+
+    async def execute_command(self, command_id: str, params: dict[str, Any] | None = None) -> Any:
+        return await self._call(
+            "execute_command",
+            {
+                "id": command_id,
+                "params": params or {},
+            },
+        )
+
+    async def _call(self, op: str, params: dict[str, Any] | None = None) -> Any:
+        if self._conn is None:
+            raise UniverSDKError("UniverSDK is not connected. Call connect() first.")
+
+        req_id = uuid.uuid4().hex
+        payload: dict[str, Any] = {"id": req_id, "op": op}
+        if params is not None:
+            payload["params"] = params
+
+        async with self._lock:
+            await self._conn.send(json.dumps(payload))
+            raw = await self._conn.recv()
+
+        if not isinstance(raw, str):
+            raise UniverSDKError("Received non-text response from relay.")
+
+        data = json.loads(raw)
+        if data.get("id") != req_id:
+            raise UniverSDKError(f"Unexpected response id. expected={req_id} actual={data.get('id')}")
+        if data.get("ok") is not True:
+            raise UniverSDKError(str(data.get("error") or "Unknown relay error"))
+        return data.get("result")

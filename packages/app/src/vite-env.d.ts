@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_UNIVER_LICENSE?: string
   /** Optional workspace/project namespace header for control-plane lookups. */
   readonly VITE_VERITLY_PROJECT_ID?: string
+  /** Optional local WebSocket relay used by the Univer SDK bridge. */
+  readonly VITE_UNIVER_SDK_WS?: string
 }
 
 interface ImportMeta {

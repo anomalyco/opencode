@@ -35,6 +35,7 @@
         "@mertdeveci55/univer-import-export": "0.2.1",
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/univer-sdk": "workspace:*",
         "@opencode-ai/util": "workspace:*",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/active-element": "2.1.3",
@@ -539,6 +540,14 @@
         "vite": "catalog:",
         "vite-plugin-icons-spritesheet": "3.0.1",
         "vite-plugin-solid": "catalog:",
+      },
+    },
+    "packages/univer-sdk": {
+      "name": "@opencode-ai/univer-sdk",
+      "version": "1.2.24",
+      "devDependencies": {
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/util": {
@@ -1469,6 +1478,8 @@
     "@opencode-ai/storybook": ["@opencode-ai/storybook@workspace:packages/storybook"],
 
     "@opencode-ai/ui": ["@opencode-ai/ui@workspace:packages/ui"],
+
+    "@opencode-ai/univer-sdk": ["@opencode-ai/univer-sdk@workspace:packages/univer-sdk"],
 
     "@opencode-ai/util": ["@opencode-ai/util@workspace:packages/util"],
 
