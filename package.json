@@ -103,8 +103,7 @@
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
-    "web-tree-sitter",
-    "electron"
+    "web-tree-sitter"
   ],
   "overrides": {
     "@types/bun": "catalog:",
