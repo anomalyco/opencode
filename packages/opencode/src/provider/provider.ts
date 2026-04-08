@@ -1333,6 +1333,22 @@ export namespace Provider {
             })
           }
 
+          const requesty = ProviderID.make("requesty")
+          if (discoveryLoaders[requesty] && providers[requesty] && isProviderAllowed(requesty)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[requesty]()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[requesty].models[modelID]) {
+                    providers[requesty].models[modelID] = model
+                  }
+                }
+              } catch (e) {
+                log.warn("state discovery error", { id: "requesty", error: e })
+              }
+            })
+          }
+
           for (const hook of plugins) {
             const p = hook.provider
             const models = p?.models
