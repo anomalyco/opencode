@@ -1365,6 +1365,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
+          const skills = new Map<string, string | undefined>()
+          const env = new Map<string, string[]>()
+          const systemPrompt = Effect.fnUntraced(function* (agent: Agent.Info, model: Provider.Model) {
+            const key = `${model.providerID}/${model.id}`
+            const skill = skills.has(agent.name)
+              ? skills.get(agent.name)
+              : yield* Effect.promise(() => SystemPrompt.skills(agent)).pipe(
+                  Effect.tap((value) => Effect.sync(() => skills.set(agent.name, value))),
+                )
+            const vars = env.has(key)
+              ? env.get(key)!
+              : yield* Effect.promise(() => SystemPrompt.environment(model)).pipe(
+                  Effect.tap((value) => Effect.sync(() => env.set(key, value))),
+                )
+            const instructions = yield* instruction.system().pipe(Effect.orDie)
+            return [...vars, ...(skill ? [skill] : []), ...instructions]
+          })
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
@@ -1526,13 +1543,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const reuse = chain({ model, user: lastUser, assistant: lastAssistantMsg })
                 const src = reuse ? reuse.msgs : msgs
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                  Effect.promise(() => SystemPrompt.skills(agent)),
-                  Effect.promise(() => SystemPrompt.environment(model)),
-                  instruction.system().pipe(Effect.orDie),
+                const [system, modelMsgs] = yield* Effect.all([
+                  systemPrompt(agent, model),
                   Effect.promise(() => MessageV2.toModelMessages(src, model)),
                 ])
-                const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const send = reuse ? modelMsgs.filter((msg) => msg.role === "tool") : modelMsgs
