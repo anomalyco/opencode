@@ -36,6 +36,16 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
           await input.onBeforeExit?.()
           // Reset window title before destroying renderer
           renderer.setTerminalTitle("")
+          // Disable mouse tracking synchronously before destroy.
+          // renderer.destroy() may defer native cleanup when called during a
+          // render frame, so we also register a process 'exit' handler as a
+          // last-resort safeguard that runs right before the process terminates.
+          const MOUSE_RESET =
+            "\x1b[?1003l" + // disable any-event mouse tracking
+            "\x1b[?1006l" + // disable SGR mouse mode
+            "\x1b[?1000l" + // disable normal mouse tracking
+            "\x1b[?25h" // show cursor
+          process.stdout.write(MOUSE_RESET)
           renderer.destroy()
           win32FlushInputBuffer()
           if (reason) {
@@ -55,6 +65,16 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       },
     )
     process.on("SIGHUP", () => exit())
+    // Last-resort: if process.exit() fires before renderer cleanup finishes,
+    // 'exit' event still runs synchronously and can write terminal reset sequences.
+    process.on("exit", () => {
+      process.stdout.write(
+        "\x1b[?1003l" + // disable any-event mouse tracking
+          "\x1b[?1006l" + // disable SGR mouse mode
+          "\x1b[?1000l" + // disable normal mouse tracking
+          "\x1b[?25h", // show cursor
+      )
+    })
     return exit
   },
 })

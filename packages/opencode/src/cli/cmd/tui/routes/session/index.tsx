@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -83,6 +84,8 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "../../plugin"
+
+const EXIT_CONFIRM_MS = 3000
 
 addDefaultParsers(parsers.parsers)
 
@@ -217,9 +220,32 @@ export function Session() {
   const keybind = useKeybind()
   const dialog = useDialog()
   const renderer = useRenderer()
+  const [exitConfirmArmed, setExitConfirmArmed] = createSignal(false)
+  const [exitPending, setExitPending] = createSignal(false)
+  let exitConfirmTimeout: ReturnType<typeof setTimeout> | undefined
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
+  const clearExitConfirm = () => {
+    setExitConfirmArmed(false)
+    if (exitConfirmTimeout) {
+      clearTimeout(exitConfirmTimeout)
+      exitConfirmTimeout = undefined
+    }
+  }
+
+  const armExitConfirm = () => {
+    setExitConfirmArmed(true)
+    if (exitConfirmTimeout) clearTimeout(exitConfirmTimeout)
+    exitConfirmTimeout = setTimeout(() => {
+      setExitConfirmArmed(false)
+      exitConfirmTimeout = undefined
+    }, EXIT_CONFIRM_MS)
+  }
+
+  onCleanup(() => {
+    clearExitConfirm()
+  })
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
@@ -242,8 +268,28 @@ export function Session() {
 
   useKeyboard((evt) => {
     if (!session()?.parentID) return
+    if (exitPending()) {
+      evt.preventDefault()
+      return
+    }
+    if (exitConfirmArmed() && !keybind.match("app_exit", evt)) {
+      clearExitConfirm()
+    }
     if (keybind.match("app_exit", evt)) {
-      exit()
+      evt.preventDefault()
+      if (exitConfirmArmed()) {
+        clearExitConfirm()
+        setExitPending(true)
+        exit()
+        return
+      }
+
+      armExitConfirm()
+      toast.show({
+        message: `Press ${keybind.print("app_exit")} again to exit`,
+        variant: "info",
+        duration: EXIT_CONFIRM_MS,
+      })
     }
   })
 

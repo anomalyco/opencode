@@ -37,6 +37,8 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 
+const EXIT_CONFIRM_MS = 3000
+
 export type PromptProps = {
   sessionID?: string
   workspaceID?: string
@@ -95,8 +97,28 @@ export function Prompt(props: PromptProps) {
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
+  const [exitConfirmArmed, setExitConfirmArmed] = createSignal(false)
+  const [exitPending, setExitPending] = createSignal(false)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+  let exitConfirmTimeout: ReturnType<typeof setTimeout> | undefined
+
+  const clearExitConfirm = () => {
+    setExitConfirmArmed(false)
+    if (exitConfirmTimeout) {
+      clearTimeout(exitConfirmTimeout)
+      exitConfirmTimeout = undefined
+    }
+  }
+
+  const armExitConfirm = () => {
+    setExitConfirmArmed(true)
+    if (exitConfirmTimeout) clearTimeout(exitConfirmTimeout)
+    exitConfirmTimeout = setTimeout(() => {
+      setExitConfirmArmed(false)
+      exitConfirmTimeout = undefined
+    }, EXIT_CONFIRM_MS)
+  }
 
   function promptModelWarning() {
     toast.show({
@@ -429,6 +451,7 @@ export function Prompt(props: PromptProps) {
   }
 
   onCleanup(() => {
+    clearExitConfirm()
     props.ref?.(undefined)
   })
 
@@ -919,6 +942,13 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (exitPending()) {
+                  e.preventDefault()
+                  return
+                }
+                if (exitConfirmArmed() && !keybind.match("app_exit", e)) {
+                  clearExitConfirm()
+                }
                 // Check clipboard for images before terminal-handled paste runs.
                 // This helps terminals that forward Ctrl+V to the app; Windows
                 // Terminal 1.25+ usually handles Ctrl+V before this path.
@@ -936,6 +966,7 @@ export function Prompt(props: PromptProps) {
                   // If no image, let the default paste behavior continue
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                  clearExitConfirm()
                   input.clear()
                   input.extmarks.clear()
                   setStore("prompt", {
@@ -947,9 +978,15 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
-                    await exit()
-                    // Don't preventDefault - let textarea potentially handle the event
                     e.preventDefault()
+                    if (exitConfirmArmed()) {
+                      clearExitConfirm()
+                      setExitPending(true)
+                      await exit()
+                      return
+                    }
+
+                    armExitConfirm()
                     return
                   }
                 }
@@ -1144,7 +1181,20 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
+          <Show
+            when={status().type !== "idle"}
+            fallback={
+              <Show
+                when={exitConfirmArmed()}
+                fallback={props.hint ?? <text />}
+                children={
+                  <text fg={theme.warning}>
+                    {keybind.print("app_exit")} <span style={{ fg: theme.textMuted }}>again to exit</span>
+                  </text>
+                }
+              />
+            }
+          >
             <box
               flexDirection="row"
               gap={1}
