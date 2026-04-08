@@ -72,3 +72,30 @@ Node.js 앱:
 ```bash
 PORT=3000 node app.js
 ```
+
+## 브라우저 디버깅
+
+사용자가 앱이 동작하지 않는다고 보고하면, Playwright MCP 도구로 직접 확인하세요.
+
+### 워크플로
+
+1. 서빙 주소를 확인합니다.
+```bash
+echo "http://localhost:3000"
+```
+2. `browser_navigate`로 페이지에 접속합니다.
+3. `browser_console_messages`로 콘솔 에러를 확인합니다.
+4. `browser_network_requests`로 실패한 네트워크 요청을 확인합니다.
+5. 필요하면 `browser_take_screenshot`으로 시각적 상태를 확인합니다.
+6. 원인을 파악하고 코드를 수정합니다.
+
+### 사용 가능한 도구
+
+- `browser_navigate` - URL로 이동
+- `browser_console_messages` - 콘솔 로그/에러 조회
+- `browser_network_requests` - 네트워크 요청/응답 조회
+- `browser_take_screenshot` - 페이지 스크린샷 캡처
+- `browser_evaluate` - JavaScript 실행
+- `browser_snapshot` - 페이지 구조(접근성 트리) 조회
+- `browser_click` - 페이지 요소 클릭
+- `browser_fill_form` - 폼 입력

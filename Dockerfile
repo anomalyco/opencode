@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system core.excludesFile /etc/opencode/.gitignore
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN npm install -g @playwright/mcp@latest \
+    && npx playwright install --with-deps chromium \
+    && rm -rf /tmp/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 RUN adduser -D -u 1000 -h /home/jovyan jovyan
