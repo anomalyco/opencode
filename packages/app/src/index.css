@@ -1,6 +1,84 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
 @layer components {
+  [data-component="app-titlebar"] {
+    background: var(--titlebar-base, var(--background-base));
+    border-bottom: var(--titlebar-divider-width, 0px) solid var(--titlebar-divider-base, transparent);
+  }
+
+  [data-component="sidebar-rail"] {
+    background: var(--sidebar-rail-base, var(--background-stronger));
+    border-right: var(--sidebar-rail-divider-width, 0px) solid var(--sidebar-rail-divider-base, transparent);
+  }
+
+  [data-component="app-shell"] {
+    background: var(--app-shell-base, var(--background-base));
+  }
+
+  [data-surface="sidebar-panel"] {
+    background: var(--sidebar-panel-base, var(--background-stronger));
+  }
+
+  [data-component="main-surface"] {
+    background: var(--main-surface-base, var(--background-base));
+  }
+
+  [data-component="review-panel"] {
+    background: var(--review-panel-base, var(--background-base));
+  }
+
+[data-component="review-panel-surface"] {
+  background: var(--review-panel-base, var(--background-base));
+}
+
+[data-component="file-manager"] {
+  background: var(--file-manager-base, var(--review-panel-base, var(--background-base)));
+}
+
+  [data-slot="dialog-content"].settings-dialog-shell {
+    background: var(--main-surface-base, var(--surface-raised-stronger-non-alpha));
+    box-shadow:
+      0 48px 120px -56px rgba(0, 0, 0, 0.52),
+      0 24px 48px -32px rgba(0, 0, 0, 0.28),
+      0 8px 18px -12px rgba(0, 0, 0, 0.18);
+    border: var(--settings-dialog-border-width, 0px) solid
+      var(--settings-dialog-border-base, transparent);
+  }
+
+  [data-component="settings-sticky"] {
+    background: var(--main-surface-base, var(--surface-raised-stronger-non-alpha));
+  }
+
+  [data-component="workspace-item"] > div > [data-action="workspace-toggle"] {
+    background: transparent;
+  }
+
+  [data-component="workspace-item"] > div > [data-action="workspace-toggle"]:hover,
+  [data-component="workspace-item"] > div > [data-action="workspace-toggle"]:focus-visible {
+    background: var(--surface-base-hover);
+  }
+
+  [data-dock-surface="tray"] {
+    background: transparent;
+    border: 0;
+  }
+
+  [data-dock-surface="shell"] {
+    background: var(--surface-raised-base);
+    border: 1px solid var(--border-weaker-base);
+    border-radius: 18px;
+    box-shadow: none;
+  }
+
+  [data-dock-surface="shell"]:focus-within {
+    border-color: var(--border-interactive-base);
+  }
+
+  [data-dock-surface="shell"][data-dock-attach="top"] {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+  }
+
   @keyframes session-progress-whip {
     0% {
       clip-path: inset(0 100% 0 0 round 999px);
@@ -44,6 +122,16 @@
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;
+  }
+
+  [data-component="session-scroll-resume"] {
+    background: var(--surface-raised-strong);
+    border: 1px solid var(--border-weak-base);
+  }
+
+  [data-component="timeline-comment"] {
+    background: var(--surface-raised-base);
+    border: 1px solid var(--border-weaker-base);
   }
 
   [data-component="getting-started-actions"] {

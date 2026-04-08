@@ -642,11 +642,8 @@ export function MessageTimeline(props: {
             onClick={props.onResumeScroll}
           >
             <div
-              class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-[var(--gray-dark-7)] bg-[color-mix(in_srgb,var(--gray-dark-3)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--gray-dark-8)] [--icon-base:var(--gray-dark-10)] group-hover:[--icon-base:var(--gray-dark-11)]"
-              style={{
-                "box-shadow":
-                  "0 51px 60px 0 rgba(0,0,0,0.13), 0 15.375px 18.088px 0 rgba(0,0,0,0.19), 0 6.386px 7.513px 0 rgba(0,0,0,0.25), 0 2.31px 2.717px 0 rgba(0,0,0,0.38)",
-              }}
+              data-component="session-scroll-resume"
+              class="flex items-center justify-center w-8 h-6 rounded-[8px] transition-colors [--icon-base:var(--icon-base)] group-hover:[--icon-base:var(--icon-strong-base)]"
             >
               <Icon name="arrow-down-to-line" size="small" />
             </div>
@@ -830,7 +827,7 @@ export function MessageTimeline(props: {
                               as={IconButton}
                               icon="dot-grid"
                               variant="ghost"
-                              class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                                class="size-6 rounded-lg data-[expanded]:bg-surface-base-active"
                               classList={{
                                 "bg-surface-base-active": share.open || title.pendingShare,
                               }}
@@ -963,7 +960,7 @@ export function MessageTimeline(props: {
                                           <Button
                                             size="large"
                                             variant="secondary"
-                                            class="w-full shadow-none border border-border-weak-base"
+                                            class="w-full shadow-none"
                                             onClick={unshareSession}
                                             disabled={unshareMutation.isPending}
                                           >
@@ -1059,7 +1056,10 @@ export function MessageTimeline(props: {
                                   return (
                                     <Show when={comment()}>
                                       {(c) => (
-                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                        <div
+                                          data-component="timeline-comment"
+                                          class="shrink-0 max-w-[260px] rounded-[10px] px-2.5 py-2"
+                                        >
                                           <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
                                             <FileIcon
                                               node={{ path: c().path, type: "file" }}

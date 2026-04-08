@@ -122,6 +122,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const mirror = { input: false }
   const inset = 56
   const space = `${inset}px`
+  const row = 32
+  const top = `${row}px`
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -1287,7 +1289,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
-          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1329,9 +1330,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
         >
           <div
-            class="relative max-h-[240px] overflow-y-auto no-scrollbar"
+            class="relative max-h-[240px] py-2 overflow-y-auto no-scrollbar"
             ref={(el) => (scrollRef = el)}
-            style={{ "scroll-padding-bottom": space }}
+            style={{ "scroll-padding-bottom": space, "scroll-padding-top": top }}
           >
             <div
               data-component="prompt-input"
@@ -1357,35 +1358,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
-                "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                "w-full px-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
               }}
-              style={{ "padding-bottom": space }}
+              style={{ "min-height": `${row}px` }}
             />
             <Show when={!prompt.dirty()}>
               <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                class="absolute top-0 inset-x-0 px-12 pt-2 pb-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                 classList={{ "font-mono!": store.mode === "shell" }}
-                style={{ "padding-bottom": space }}
+                style={{ "min-height": `${row + 8}px` }}
               >
                 {placeholder()}
               </div>
             </Show>
           </div>
 
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-x-0 bottom-0"
-            style={{
-              height: space,
-              background:
-                "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
-            }}
-          />
-
-          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
+          <div class="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between px-2 py-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -1399,27 +1390,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
             />
 
-            <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={store.mode !== "normal" || (!working() && blank())}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={stopping() ? "stop" : "arrow-up"}
-                  variant="primary"
-                  class="size-8"
-                  style={buttons()}
-                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                />
-              </Tooltip>
-            </div>
-          </div>
-
-          <div class="pointer-events-none absolute bottom-2 left-2">
             <div
               aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
+              class="pointer-events-auto flex items-center"
               style={{
                 "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
@@ -1443,6 +1416,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Icon name="plus" class="size-4.5" />
                 </Button>
               </TooltipKeybind>
+            </div>
+
+            <div class="pointer-events-auto flex items-center">
+              <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
+                <IconButton
+                  data-action="prompt-submit"
+                  type="submit"
+                  disabled={store.mode !== "normal" || (!working() && blank())}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  icon={stopping() ? "stop" : "arrow-up"}
+                  variant="primary"
+                  class="size-8 rounded-[18px]"
+                  style={buttons()}
+                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                />
+              </Tooltip>
             </div>
           </div>
         </div>

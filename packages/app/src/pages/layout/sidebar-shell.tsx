@@ -50,7 +50,7 @@ export const SidebarContent = (props: {
     <div class="flex h-full w-full min-w-0 overflow-hidden">
       <div
         data-component="sidebar-rail"
-        class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
+        class="w-16 shrink-0 flex flex-col items-center overflow-hidden"
         onMouseMove={props.aimMove}
       >
         <div class="flex-1 min-h-0 w-full">
@@ -62,7 +62,7 @@ export const SidebarContent = (props: {
           >
             <DragDropSensors />
             <ConstrainDragXAxis />
-            <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
+            <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-4 overflow-y-auto no-scrollbar">
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
@@ -89,7 +89,7 @@ export const SidebarContent = (props: {
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>
           </DragDropProvider>
         </div>
-        <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
+        <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2.5">
           <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"

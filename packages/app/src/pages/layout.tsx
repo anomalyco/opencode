@@ -2067,17 +2067,19 @@ export default function Layout(props: ParentProps) {
 
     return (
       <div
+        data-surface="sidebar-panel"
         classList={{
-          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
-          "border border-b-0 border-border-weak-base": !merged(),
-          "border-l border-t border-border-weaker-base": merged(),
-          "bg-background-base": merged() || hover(),
-          "bg-background-stronger": !merged() && !hover(),
+          "flex flex-col min-h-0 min-w-0 box-border px-3": true,
+          "border-l border-t": merged(),
           "flex-1 min-w-0": panelProps.mobile,
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
         style={{
           width: panelProps.mobile ? undefined : `${panel()}px`,
+          "border-left-width": merged() ? "var(--layout-divider-width, 1px)" : undefined,
+          "border-left-color": merged() ? "var(--layout-divider-base, var(--border-weaker-base))" : undefined,
+          "border-top-width": merged() ? "var(--layout-divider-width, 1px)" : undefined,
+          "border-top-color": merged() ? "var(--layout-divider-base, var(--border-weaker-base))" : undefined,
         }}
       >
         <Show
@@ -2354,7 +2356,10 @@ export default function Layout(props: ParentProps) {
   )
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div
+      data-component="app-shell"
+      class="relative flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+    >
       <Titlebar />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
@@ -2406,8 +2411,12 @@ export default function Layout(props: ParentProps) {
             </Show>
 
             <div
-              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-              style={{ left: "calc(4rem + 12px)" }}
+              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t"
+              style={{
+                left: "calc(4rem + 12px)",
+                "border-top-width": "var(--layout-divider-width, 1px)",
+                "border-top-color": "var(--layout-divider-base, var(--border-weaker-base))",
+              }}
             />
 
             <div class="xl:hidden">
@@ -2425,9 +2434,13 @@ export default function Layout(props: ParentProps) {
                 aria-label={language.t("sidebar.nav.projectsAndSessions")}
                 data-component="sidebar-nav-mobile"
                 classList={{
-                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
+                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r bg-background-base transition-transform duration-200 ease-out": true,
                   "translate-x-0": layout.mobileSidebar.opened(),
                   "-translate-x-full": !layout.mobileSidebar.opened(),
+                }}
+                style={{
+                  "border-right-width": "var(--layout-divider-width, 1px)",
+                  "border-right-color": "var(--layout-divider-base, var(--border-weaker-base))",
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -2448,8 +2461,15 @@ export default function Layout(props: ParentProps) {
               }}
             >
               <main
+                data-component="main-surface"
                 classList={{
-                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t xl:border-l": true,
+                }}
+                style={{
+                  "border-top-width": "var(--layout-divider-width, 1px)",
+                  "border-top-color": "var(--layout-divider-base, var(--border-weaker-base))",
+                  "border-left-width": "var(--layout-divider-width, 1px)",
+                  "border-left-color": "var(--layout-divider-base, var(--border-weaker-base))",
                 }}
               >
                 <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
@@ -2493,7 +2513,14 @@ export default function Layout(props: ParentProps) {
               }}
               style={{ left: `calc(4rem + ${panel()}px)` }}
             >
-              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
+              <div
+                class="h-full"
+                style={{
+                  width: "var(--layout-divider-width, 1px)",
+                  "box-shadow": "none",
+                  background: "var(--layout-divider-base, var(--border-weaker-base))",
+                }}
+              />
             </div>
           </div>
         </div>

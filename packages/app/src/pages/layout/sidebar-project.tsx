@@ -100,11 +100,10 @@ const ProjectTile = (props: {
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !props.selected() && !props.active(),
-          "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
+          "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden transition-colors cursor-default": true,
+          "bg-surface-raised-base text-text-strong": props.selected(),
+          "bg-surface-base text-text-base": !props.selected() && props.active(),
+          "bg-transparent hover:bg-surface-base-hover": !props.selected() && !props.active(),
         }}
         onPointerDown={(event) => {
           if (event.button === 0 && !event.ctrlKey) {
@@ -250,10 +249,10 @@ const ProjectPreviewPanel = (props: {
         </For>
       </Show>
     </div>
-    <div class="px-2 py-2 border-t border-border-weak-base">
+    <div class="px-2 py-2 border-t border-border-weaker-base">
       <Button
         variant="ghost"
-        class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+        class="flex w-full rounded-lg text-left justify-start text-text-base px-2 hover:bg-surface-base-hover active:bg-surface-base-active"
         onClick={() => {
           props.ctx.openSidebar()
           props.ctx.onHoverOpenChanged(props.project.worktree, false)

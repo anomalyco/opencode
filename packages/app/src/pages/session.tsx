@@ -1242,7 +1242,7 @@ export default function Page() {
   )
 
   const reviewPanel = () => (
-    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+    <div data-component="review-panel-surface" class="flex flex-col h-full overflow-hidden contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         {reviewContent({
           diffStyle: layout.review.diffStyle(),
@@ -1884,7 +1884,7 @@ export default function Page() {
   })
 
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+    <div class="relative size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
@@ -1915,7 +1915,7 @@ export default function Page() {
         {/* Session panel */}
         <div
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
