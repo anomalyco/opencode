@@ -817,6 +817,21 @@ export function Session() {
       },
     },
     {
+      title: "Copy session ID",
+      value: "session.copy_id",
+      keybind: "session_copy_id",
+      category: "Session",
+      slash: {
+        name: "id",
+      },
+      onSelect: (dialog) => {
+        Clipboard.copy(route.sessionID)
+          .then(() => toast.show({ message: "Session ID copied to clipboard!", variant: "success" }))
+          .catch(() => toast.show({ message: "Failed to copy session ID to clipboard", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    {
       title: "Copy session transcript",
       value: "session.copy",
       category: "Session",
