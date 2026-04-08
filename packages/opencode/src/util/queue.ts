@@ -1,5 +1,6 @@
 export class AsyncQueue<T> implements AsyncIterable<T> {
   private queue: T[] = []
+  private idx = 0
   private resolvers: ((value: T) => void)[] = []
 
   push(item: T) {
@@ -9,7 +10,17 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
   }
 
   async next(): Promise<T> {
-    if (this.queue.length > 0) return this.queue.shift()!
+    if (this.idx < this.queue.length) {
+      const item = this.queue[this.idx++]!
+      if (this.idx === this.queue.length) {
+        this.queue = []
+        this.idx = 0
+      } else if (this.idx > 1024 && this.idx * 2 >= this.queue.length) {
+        this.queue = this.queue.slice(this.idx)
+        this.idx = 0
+      }
+      return item
+    }
     return new Promise((resolve) => this.resolvers.push(resolve))
   }
 
