@@ -1,8 +1,4 @@
-# 2.0
-
-What we would change if we could
-
-## Keybindings vs. Keymappings
+# Keybindings vs. Keymappings
 
 Make it `keymappings`, closer to neovim. Can be layered like `<leader>abc`. Commands don't define their binding, but have an id that a key can be mapped to like
 

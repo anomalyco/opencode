@@ -1080,7 +1080,7 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
-  test("handles reasoning tokens", () => {
+  test("separates reasoning tokens from output tokens", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     const result = Session.getUsage({
       model,
@@ -1092,7 +1092,35 @@ describe("session.getUsage", () => {
       },
     })
 
+    expect(result.tokens.input).toBe(1000)
+    expect(result.tokens.output).toBe(400)
     expect(result.tokens.reasoning).toBe(100)
+    expect(result.tokens.total).toBe(1500)
+  })
+
+  test("does not double count reasoning tokens in cost", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: 0,
+        output: 15,
+        cache: { read: 0, write: 0 },
+      },
+    })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 1_000_000,
+        totalTokens: 1_000_000,
+        reasoningTokens: 250_000,
+      },
+    })
+
+    expect(result.tokens.output).toBe(750_000)
+    expect(result.tokens.reasoning).toBe(250_000)
+    expect(result.cost).toBe(15)
   })
 
   test("handles undefined optional values gracefully", () => {

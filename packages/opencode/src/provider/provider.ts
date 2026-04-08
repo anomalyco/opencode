@@ -672,13 +672,26 @@ export namespace Provider {
         }
       }),
       "cloudflare-workers-ai": Effect.fnUntraced(function* (input: Info) {
-        const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-        if (!accountId) return { autoload: false }
+        // When baseURL is already configured (e.g. corporate config routing through a proxy/gateway),
+        // skip the account ID check because the URL is already fully specified.
+        if (input.options?.baseURL) return { autoload: false }
+
+        const auth = yield* dep.auth(input.id)
+        const accountId =
+          Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+        if (!accountId)
+          return {
+            autoload: false,
+            async getModel() {
+              throw new Error(
+                "CLOUDFLARE_ACCOUNT_ID is missing. Set it with: export CLOUDFLARE_ACCOUNT_ID=<your-account-id>",
+              )
+            },
+          }
 
         const apiKey = yield* Effect.gen(function* () {
           const envToken = Env.get("CLOUDFLARE_API_KEY")
           if (envToken) return envToken
-          const auth = yield* dep.auth(input.id)
           if (auth?.type === "api") return auth.key
           return undefined
         })
@@ -702,16 +715,34 @@ export namespace Provider {
         }
       }),
       "cloudflare-ai-gateway": Effect.fnUntraced(function* (input: Info) {
-        const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-        const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
+        // When baseURL is already configured (e.g. corporate config), skip the ID checks.
+        if (input.options?.baseURL) return { autoload: false }
 
-        if (!accountId || !gateway) return { autoload: false }
+        const auth = yield* dep.auth(input.id)
+        const accountId =
+          Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+        const gateway =
+          Env.get("CLOUDFLARE_GATEWAY_ID") || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
+
+        if (!accountId || !gateway) {
+          const missing = [
+            !accountId ? "CLOUDFLARE_ACCOUNT_ID" : undefined,
+            !gateway ? "CLOUDFLARE_GATEWAY_ID" : undefined,
+          ].filter((x): x is string => Boolean(x))
+          return {
+            autoload: false,
+            async getModel() {
+              throw new Error(
+                `${missing.join(" and ")} missing. Set with: ${missing.map((x) => `export ${x}=<value>`).join(" && ")}`,
+              )
+            },
+          }
+        }
 
         // Get API token from env or auth - required for authenticated gateways
         const apiToken = yield* Effect.gen(function* () {
           const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
           if (envToken) return envToken
-          const auth = yield* dep.auth(input.id)
           if (auth?.type === "api") return auth.key
           return undefined
         })

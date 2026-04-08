@@ -36,6 +36,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
+import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -124,14 +125,17 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
+  const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
+
   return {
     externalOutputMode: "passthrough",
     targetFps: 60,
     gatherStats: false,
     exitOnCtrlC: false,
-    useKittyKeyboard: { events: process.platform === "win32" },
+    useKittyKeyboard: {},
     autoFocus: false,
     openConsoleOnError: false,
+    useMouse: mouseEnabled,
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
@@ -284,9 +288,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     theme: themeState,
     toast,
     renderer,
-  })
-  onCleanup(() => {
-    api.dispose()
   })
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init(api)
@@ -598,6 +599,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     {
       title: "Switch model variant",
       value: "variant.list",
+      keybind: "variant_list",
       category: "Agent",
       hidden: local.model.variant.list().length === 0,
       slash: {
@@ -629,6 +631,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       category: "Provider",
     },
+    ...(sync.data.console_state.switchableOrgCount > 1
+      ? [
+          {
+            title: "Switch org",
+            value: "console.org.switch",
+            suggested: Boolean(sync.data.console_state.activeOrgName),
+            slash: {
+              name: "org",
+              aliases: ["orgs", "switch-org"],
+            },
+            onSelect: () => {
+              dialog.replace(() => <DialogConsoleOrg />)
+            },
+            category: "Provider",
+          },
+        ]
+      : []),
     {
       title: "View status",
       keybind: "status_view",
@@ -654,7 +673,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle Theme Mode",
+      title: "Toggle theme mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
@@ -663,7 +682,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: locked() ? "Unlock Theme Mode" : "Lock Theme Mode",
+      title: locked() ? "Unlock theme mode" : "Lock theme mode",
       value: "theme.mode.lock",
       onSelect: (dialog) => {
         if (locked()) unlock()
@@ -740,6 +759,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       keybind: "terminal_suspend",
       category: "System",
       hidden: true,
+      enabled: tuiConfig.keybinds?.terminal_suspend !== "none",
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()
