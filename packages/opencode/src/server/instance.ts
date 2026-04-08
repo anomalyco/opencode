@@ -34,13 +34,13 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-const ENKI_URL = process.env["OPENCODE_ENKI_URL"] ?? "https://enki.dev.team-mono.com"
+const SERVE_URL = process.env["OPENCODE_SERVE_URL"] ?? "https://enki.dev.team-mono.com"
 
 const DEFAULT_CSP =
-  `frame-ancestors 'self' ${ENKI_URL}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
 const csp = (hash = "") =>
-  `frame-ancestors 'self' ${ENKI_URL}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
 export const InstanceRoutes = (app?: Hono) =>
   (app ?? new Hono())
