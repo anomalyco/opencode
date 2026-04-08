@@ -152,11 +152,10 @@ describe("tool.write", () => {
   })
 
   describe("file permissions", () => {
-    test("sets file permissions when writing sensitive data", async () => {
+    async function writeAndCheckMode(umask: number, expected: number) {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "sensitive.json")
-
-      const prevUmask = process.umask(0o022)
+      const prev = process.umask(umask)
       try {
         await Instance.provide({
           directory: tmp.path,
@@ -170,17 +169,20 @@ describe("tool.write", () => {
               ctx,
             )
 
-            // On Unix systems, check permissions
             if (process.platform !== "win32") {
               const stats = await fs.stat(filepath)
-              expect(stats.mode & 0o777).toBe(0o644)
+              expect(stats.mode & 0o777).toBe(expected)
             }
           },
         })
       } finally {
-        process.umask(prevUmask)
+        process.umask(prev)
       }
-    })
+    }
+
+    test("base mode is 0o644 before umask masking", () => writeAndCheckMode(0o000, 0o644))
+    test("respects umask 0o022 → 0o644", () => writeAndCheckMode(0o022, 0o644))
+    test("respects umask 0o077 → 0o600", () => writeAndCheckMode(0o077, 0o600))
   })
 
   describe("content types", () => {
