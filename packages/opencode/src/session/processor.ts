@@ -349,7 +349,7 @@ export namespace SessionProcessor {
                 },
                 { text: ctx.currentText.text },
               )).text
-              ctx.currentText.time = { start: Date.now(), end: Date.now() }
+              ctx.currentText.time = { start: ctx.currentText.time?.start ?? Date.now(), end: Date.now() }
               if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
               yield* session.updatePart(ctx.currentText)
               ctx.currentText = undefined
