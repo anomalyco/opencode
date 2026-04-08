@@ -718,13 +718,10 @@ export namespace MessageV2 {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const state = part.state
-              const outputText = state.time.compacted
-                ? Evidence.text(
-                    Evidence.isTool(state.metadata.evidence)
-                      ? state.metadata.evidence
-                      : Evidence.tool({ tool: part.tool, state }),
-                  )
-                : state.output
+              const proof = Evidence.isTool(state.metadata?.evidence)
+                ? state.metadata.evidence
+                : Evidence.tool({ tool: part.tool, state })
+              const outputText = state.time.compacted ? Evidence.text(proof) : state.output
               const attachments = state.time.compacted || options?.stripMedia ? [] : (state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files

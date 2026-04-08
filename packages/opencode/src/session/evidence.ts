@@ -32,8 +32,8 @@ export namespace Evidence {
     return [...list.slice(0, FILE_MAX), `+${list.length - FILE_MAX} more`]
   }
 
-  function path(input: MessageV2.ToolStateCompleted["metadata"]) {
-    return typeof input.outputPath === "string" ? input.outputPath : undefined
+  function path(input?: MessageV2.ToolStateCompleted["metadata"]) {
+    return typeof input?.outputPath === "string" ? input.outputPath : undefined
   }
 
   export function tool(input: {

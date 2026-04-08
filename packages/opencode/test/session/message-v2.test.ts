@@ -519,6 +519,53 @@ describe("session.message-v2.toModelMessage", () => {
     expect(text).not.toContain("[Old tool result content cleared]")
   })
 
+  test("replaces compacted tool output when legacy evidence metadata is missing", async () => {
+    const userID = "m-user-legacy"
+    const assistantID = "m-assistant-legacy"
+
+    const input = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-legacy",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "pwd" },
+              output: "legacy compacted output",
+              title: "Bash",
+              metadata: undefined,
+              time: { start: 0, end: 1, compacted: 1 },
+            },
+          },
+        ] as unknown as MessageV2.Part[],
+      },
+    ] satisfies MessageV2.WithParts[]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    const tool = result[2] as {
+      content: Array<{
+        output: { value: string }
+      }>
+    }
+
+    expect(tool.content[0]?.output.value).toContain("tool: bash")
+    expect(tool.content[0]?.output.value).toContain("excerpt:\nlegacy compacted output")
+  })
+
   test("converts assistant tool error into error-text tool result", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
