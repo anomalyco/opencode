@@ -706,7 +706,7 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              ...(differentModel ? {} : { providerOptions: part.metadata }),
             })
           if (part.type === "step-start")
             assistantMessage.parts.push({
@@ -769,7 +769,7 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              ...(differentModel ? {} : { providerOptions: part.metadata }),
             })
           }
         }
