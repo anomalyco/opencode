@@ -170,6 +170,48 @@ describe("ProviderTransform.options - google thinkingConfig gating", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 reasoningSummary azure guard", () => {
+  const sessionID = "test-session-123"
+
+  const createGpt5Model = (apiId: string, providerID = "openai", npm = "@ai-sdk/openai") =>
+    ({
+      id: `${providerID}/${apiId}`,
+      providerID,
+      api: {
+        id: apiId,
+        url: "https://api.openai.com",
+        npm,
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("openai gpt-5 should have reasoningSummary", () => {
+    const model = createGpt5Model("gpt-5")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningSummary).toBe("auto")
+  })
+
+  test("azure gpt-5 should NOT have reasoningSummary", () => {
+    const model = createGpt5Model("gpt-5", "azure", "@ai-sdk/azure")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningSummary).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   const sessionID = "test-session-123"
 
