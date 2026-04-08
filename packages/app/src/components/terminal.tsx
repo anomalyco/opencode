@@ -174,6 +174,7 @@ export const Terminal = (props: TerminalProps) => {
   const auth = server.current?.http
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""
+  const basic = password ? btoa(`${username}:${password}`) : ""
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
@@ -518,9 +519,8 @@ export const Terminal = (props: TerminalProps) => {
         const next = new URL(url + `/pty/${id}/connect`)
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
+        if (basic) next.searchParams.set("auth", basic)
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = username
-        next.password = password
 
         const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"

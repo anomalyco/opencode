@@ -42,6 +42,12 @@ export namespace Server {
     return false
   }
 
+  // scope a separate auth check to just `/pty/:id/connect`.
+  const pty = (path: string) => {
+    const part = path.split("/")
+    return part.length === 4 && part[1] === "pty" && part[2] && part[3] === "connect"
+  }
+
   export const Default = lazy(() => create({}).app)
 
   export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
@@ -54,6 +60,16 @@ export namespace Server {
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        const auth = c.req.query("auth")
+        if (
+          // allow websocket upgrades through when they provide the expected derived credential.
+          c.req.method === "GET" &&
+          c.req.header("upgrade")?.toLowerCase() === "websocket" &&
+          pty(c.req.path) &&
+          auth === Buffer.from(`${username}:${password}`).toString("base64")
+        ) {
+          return next()
+        }
         return basicAuth({ username, password })(c, next)
       })
       .use(async (c, next) => {
