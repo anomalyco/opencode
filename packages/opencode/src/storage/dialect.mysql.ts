@@ -41,8 +41,25 @@ function integer(nameOrConfig?: any, config?: any) {
   return myBigint({ mode: "number" })
 }
 
+// Some managed MySQL providers (e.g. ByteDance ByteHouse / China-East clusters)
+// reject reserved/system keywords as table names even when backtick-quoted.
+// We rename those at the physical DB level only — the TypeScript schema files
+// and every downstream query continue to reference the original logical name,
+// because Drizzle's table object is the identity (`sessionTable`), not the
+// string. Only the emitted `CREATE TABLE` / SELECT target changes.
+const RESERVED_TABLE_RENAME: Record<string, string> = {
+  session: "opencode_session",
+}
+
+function table(name: string, columns: any, extraConfig?: any) {
+  const physicalName = RESERVED_TABLE_RENAME[name] ?? name
+  return extraConfig !== undefined
+    ? mysqlTable(physicalName, columns, extraConfig)
+    : mysqlTable(physicalName, columns)
+}
+
 export {
-  mysqlTable as table,
+  table,
   text,
   integer,
   myIndex as index,

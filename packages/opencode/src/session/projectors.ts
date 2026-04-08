@@ -2,8 +2,8 @@ import { eq, and } from "../storage/db"
 import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
-import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { ProjectTable } from "../project/project.sql"
+import { SessionTable, MessageTable, PartTable, TodoTable } from "./session.sql"
+import { SessionShareTable } from "../share/share.sql"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "session.projector" })
@@ -81,6 +81,17 @@ export default [
   }),
 
   SyncEvent.project(Session.Event.Deleted, (db, data) => {
+    // Explicit cascade. Some managed MySQL services forbid FOREIGN KEY
+    // constraints (no online DDL support), so we cannot rely on the DB to
+    // remove children. Order matters: delete grandchildren (parts) first,
+    // then children (messages, todos, share), then the session row itself.
+    // This is a no-op on dialects where FK CASCADE would have done it
+    // already, since the children are gone by the time the parent delete
+    // runs in the same statement-by-statement order.
+    db.delete(PartTable).where(eq(PartTable.session_id, data.sessionID)).run()
+    db.delete(MessageTable).where(eq(MessageTable.session_id, data.sessionID)).run()
+    db.delete(TodoTable).where(eq(TodoTable.session_id, data.sessionID)).run()
+    db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, data.sessionID)).run()
     db.delete(SessionTable).where(eq(SessionTable.id, data.sessionID)).run()
   }),
 
@@ -105,6 +116,8 @@ export default [
   }),
 
   SyncEvent.project(MessageV2.Event.Removed, (db, data) => {
+    // Explicit cascade — see Session.Event.Deleted projector for rationale.
+    db.delete(PartTable).where(eq(PartTable.message_id, data.messageID)).run()
     db.delete(MessageTable)
       .where(and(eq(MessageTable.id, data.messageID), eq(MessageTable.session_id, data.sessionID)))
       .run()
