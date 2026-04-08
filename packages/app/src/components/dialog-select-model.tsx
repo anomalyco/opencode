@@ -45,8 +45,13 @@ const ModelList: Component<{
       current={model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={(x) => {
+        const isFavorite = model.favorites().has(`${x.provider.id}:${x.id}`)
+        return isFavorite ? "Favorites" : x.provider.name
+      }}
       sortGroupsBy={(a, b) => {
+        if (a.category === "Favorites") return -1
+        if (b.category === "Favorites") return 1
         const aProvider = a.items[0].provider.id
         const bProvider = b.items[0].provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
@@ -70,17 +75,52 @@ const ModelList: Component<{
         props.onSelect()
       }}
     >
-      {(i) => (
-        <div class="w-full flex items-center gap-x-2 text-13-regular">
-          <span class="truncate">{i.name}</span>
-          <Show when={isFree(i.provider.id, i.cost)}>
-            <Tag>{language.t("model.tag.free")}</Tag>
-          </Show>
-          <Show when={i.latest}>
-            <Tag>{language.t("model.tag.latest")}</Tag>
-          </Show>
-        </div>
-      )}
+      {(i) => {
+        const current = model.current()
+        const isSelected = current?.id === i.id && current?.provider.id === i.provider.id
+        const isFavorite = model.favorites().has(`${i.provider.id}:${i.id}`)
+
+        return (
+          <div
+            class={`w-full flex items-center gap-x-2 text-13-regular group ${isSelected ? "bg-primary-container text-primary-on-container" : ""}`}
+          >
+            <span class="truncate">{i.name}</span>
+            <div class="flex-1" />
+            <Show when={isFree(i.provider.id, i.cost)}>
+              <Tag>{language.t("model.tag.free")}</Tag>
+            </Show>
+            <Show when={i.latest}>
+              <Tag>{language.t("model.tag.latest")}</Tag>
+            </Show>
+            <Show when={!(isFavorite && isSelected)}>
+              <Show
+                when={isFavorite}
+                fallback={
+                  <IconButton
+                    icon="star-outline"
+                    variant="ghost"
+                    class="size-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      model.setFavorite({ providerID: i.provider.id, modelID: i.id }, true)
+                    }}
+                  />
+                }
+              >
+                <IconButton
+                  icon="star"
+                  variant="ghost"
+                  class="size-7"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    model.setFavorite({ providerID: i.provider.id, modelID: i.id }, false)
+                  }}
+                />
+              </Show>
+            </Show>
+          </div>
+        )
+      }}
     </List>
   )
 }

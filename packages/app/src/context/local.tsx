@@ -311,6 +311,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setVisibility(item: ModelKey, visible: boolean) {
         models.setVisibility(item, visible)
       },
+      setFavorite(item: ModelKey, favorite: boolean) {
+        models.setFavorite(item, favorite)
+      },
+      favorites: models.favorites,
       variant: {
         configured,
         selected,

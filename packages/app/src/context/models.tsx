@@ -92,6 +92,16 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       return map
     })
 
+    const favorites = createMemo(() => {
+      const map = new Map<string, boolean>()
+      for (const item of store.user) {
+        if (item.favorite) {
+          map.set(`${item.providerID}:${item.modelID}`, item.favorite)
+        }
+      }
+      return map
+    })
+
     const list = createMemo(() =>
       available().map((m) => ({
         ...m,
@@ -102,13 +112,21 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     const find = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
 
-    function update(model: ModelKey, state: Visibility) {
+    function update(model: ModelKey, state: Partial<Omit<User, keyof ModelKey>>) {
       const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
       if (index >= 0) {
-        setStore("user", index, (current) => ({ ...current, visibility: state }))
+        setStore("user", index, (current) => ({ ...current, ...state }))
         return
       }
-      setStore("user", store.user.length, { ...model, visibility: state })
+      setStore("user", store.user.length, { ...model, visibility: "show", ...state })
+    }
+
+    const setVisibility = (model: ModelKey, state: boolean) => {
+      update(model, { visibility: state ? "show" : "hide" })
+    }
+
+    const setFavorite = (model: ModelKey, state: boolean) => {
+      update(model, { favorite: state })
     }
 
     const visible = (model: ModelKey) => {
@@ -120,10 +138,6 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       const date = release().get(key)
       if (!date?.isValid) return true
       return false
-    }
-
-    const setVisibility = (model: ModelKey, state: boolean) => {
-      update(model, state ? "show" : "hide")
     }
 
     const push = (model: ModelKey) => {
@@ -150,6 +164,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       find,
       visible,
       setVisibility,
+      setFavorite,
+      favorites,
       recent: {
         list: createMemo(() => store.recent),
         push,
