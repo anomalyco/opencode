@@ -4,14 +4,14 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Button } from "@opencode-ai/ui/button"
 import type { Component } from "solid-js"
-import { useLocal } from "@/context/local"
+import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 export const DialogManageModels: Component = () => {
-  const local = useLocal()
+  const models = useModels()
   const language = useLanguage()
   const dialog = useDialog()
 
@@ -19,12 +19,12 @@ export const DialogManageModels: Component = () => {
     dialog.show(() => <DialogSelectProvider />)
   }
   const providerRank = (id: string) => popularProviders.indexOf(id)
-  const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
+  const providerList = (providerID: string) => models.list().filter((x) => x.provider.id === providerID)
   const providerVisible = (providerID: string) =>
-    providerList(providerID).every((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id }))
+    providerList(providerID).every((x) => models.visible({ modelID: x.id, providerID: x.provider.id }))
   const setProviderVisibility = (providerID: string, checked: boolean) => {
     providerList(providerID).forEach((x) => {
-      local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
+      models.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
     })
   }
 
@@ -42,7 +42,7 @@ export const DialogManageModels: Component = () => {
         search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.model.empty")}
         key={(x) => `${x?.provider?.id}:${x?.id}`}
-        items={local.model.list()}
+        items={models.list()}
         filterKeys={["provider.name", "name", "id"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         groupBy={(x) => x.provider.id}
@@ -79,7 +79,7 @@ export const DialogManageModels: Component = () => {
         onSelect={(x) => {
           if (!x) return
           const key = { modelID: x.id, providerID: x.provider.id }
-          local.model.setVisibility(key, !local.model.visible(key))
+          models.setVisibility(key, !models.visible(key))
         }}
       >
         {(i) => (
@@ -87,9 +87,9 @@ export const DialogManageModels: Component = () => {
             <span>{i.name}</span>
             <div onClick={(e) => e.stopPropagation()}>
               <Switch
-                checked={!!local.model.visible({ modelID: i.id, providerID: i.provider.id })}
+                checked={!!models.visible({ modelID: i.id, providerID: i.provider.id })}
                 onChange={(checked) => {
-                  local.model.setVisibility({ modelID: i.id, providerID: i.provider.id }, checked)
+                  models.setVisibility({ modelID: i.id, providerID: i.provider.id }, checked)
                 }}
               />
             </div>
