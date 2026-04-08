@@ -16,6 +16,25 @@ import {
   settingsUpdatesStartupSelector,
 } from "../selectors"
 
+const open = async (trigger, items) => {
+  await trigger.click()
+  const ok = await expect
+    .poll(async () => (await items.count()) > 0, { timeout: 5_000 })
+    .toBe(true)
+    .then(() => true)
+    .catch(() => false)
+  if (!ok) {
+    await trigger.click()
+    await expect.poll(async () => (await items.count()) > 0, { timeout: 10_000 }).toBe(true)
+  }
+  await expect(items.first()).toBeVisible({ timeout: 10_000 })
+}
+
+const pick = async (item) => {
+  await expect(item).toBeVisible({ timeout: 10_000 })
+  await item.click({ timeout: 10_000 })
+}
+
 test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSession }) => {
   await gotoSession()
 
@@ -41,15 +60,16 @@ test("changing language updates settings labels", async ({ page, gotoSession }) 
   await expect(heading).toHaveText("General")
 
   const select = dialog.locator(settingsLanguageSelectSelector)
+  const trigger = select.locator('[data-slot="select-select-trigger"]')
+  const items = page.locator('[data-slot="select-select-item"]')
   await expect(select).toBeVisible()
-  await select.locator('[data-slot="select-select-trigger"]').click()
-
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Deutsch" }).click()
+  await open(trigger, items)
+  await pick(items.filter({ hasText: "Deutsch" }).first())
 
   await expect(heading).toHaveText("Allgemein")
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "English" }).click()
+  await open(trigger, items)
+  await pick(items.filter({ hasText: "English" }).first())
   await expect(heading).toHaveText("General")
 })
 
@@ -58,18 +78,20 @@ test("changing color scheme persists in localStorage", async ({ page, gotoSessio
 
   const dialog = await openSettings(page)
   const select = dialog.locator(settingsColorSchemeSelector)
+  const trigger = select.locator('[data-slot="select-select-trigger"]')
+  const items = page.locator('[data-slot="select-select-item"]')
   await expect(select).toBeVisible()
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
+  await open(trigger, items)
+  await pick(items.filter({ hasText: "Dark" }).first())
 
   const colorScheme = await page.evaluate(() => {
     return document.documentElement.getAttribute("data-color-scheme")
   })
   expect(colorScheme).toBe("dark")
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Light" }).click()
+  await open(trigger, items)
+  await pick(items.filter({ hasText: "Light" }).first())
 
   const lightColorScheme = await page.evaluate(() => {
     return document.documentElement.getAttribute("data-color-scheme")
@@ -91,17 +113,7 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   const trigger = select.locator('[data-slot="select-select-trigger"]')
   const items = page.locator('[data-slot="select-select-item"]')
 
-  await trigger.click()
-  const open = await expect
-    .poll(async () => (await items.count()) > 0, { timeout: 5_000 })
-    .toBe(true)
-    .then(() => true)
-    .catch(() => false)
-  if (!open) {
-    await trigger.click()
-    await expect.poll(async () => (await items.count()) > 0, { timeout: 10_000 }).toBe(true)
-  }
-  await expect(items.first()).toBeVisible()
+  await open(trigger, items)
   const count = await items.count()
   expect(count).toBeGreaterThan(1)
 
@@ -110,7 +122,7 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
     .find((x) => x && x !== currentTheme)
   expect(nextTheme).toBeTruthy()
 
-  await items.filter({ hasText: nextTheme! }).first().click()
+  await pick(items.filter({ hasText: nextTheme! }).first())
 
   await page.keyboard.press("Escape")
 
@@ -361,9 +373,11 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   const dialog = await openSettings(page)
 
   const colorSchemeSelect = dialog.locator(settingsColorSchemeSelector)
+  const ctrig = colorSchemeSelect.locator('[data-slot="select-select-trigger"]')
+  const citems = page.locator('[data-slot="select-select-item"]')
   await expect(colorSchemeSelect).toBeVisible()
-  await colorSchemeSelect.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
+  await open(ctrig, citems)
+  await pick(citems.filter({ hasText: "Dark" }).first())
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
 
   const code = dialog.locator(settingsCodeFontSelector)
@@ -562,12 +576,12 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
 
   const dialog = await openSettings(page)
   const select = dialog.locator(settingsSoundsAgentSelector)
+  const trigger = select.locator('[data-slot="select-select-trigger"]')
+  const items = page.locator('[data-slot="select-select-item"]')
   await expect(select).toBeVisible()
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-
-  const items = page.locator('[data-slot="select-select-item"]')
-  await items.nth(2).click()
+  await open(trigger, items)
+  await pick(items.nth(2))
 
   const stored = await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
@@ -583,13 +597,12 @@ test("selecting none disables agent sound", async ({ page, gotoSession }) => {
   const dialog = await openSettings(page)
   const select = dialog.locator(settingsSoundsAgentSelector)
   const trigger = select.locator('[data-slot="select-select-trigger"]')
+  const items = page.locator('[data-slot="select-select-item"]')
   await expect(select).toBeVisible()
   await expect(trigger).toBeEnabled()
 
-  await trigger.click()
-  const items = page.locator('[data-slot="select-select-item"]')
-  await expect(items.first()).toBeVisible()
-  await items.first().click()
+  await open(trigger, items)
+  await pick(items.first())
 
   const stored = await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
@@ -605,6 +618,10 @@ test("changing permissions and errors sounds updates localStorage", async ({ pag
   const dialog = await openSettings(page)
   const permissionsSelect = dialog.locator(settingsSoundsPermissionsSelector)
   const errorsSelect = dialog.locator(settingsSoundsErrorsSelector)
+  const ptrig = permissionsSelect.locator('[data-slot="select-select-trigger"]')
+  const etrig = errorsSelect.locator('[data-slot="select-select-trigger"]')
+  const pitems = page.locator('[data-slot="select-select-item"]')
+  const eitems = page.locator('[data-slot="select-select-item"]')
   await expect(permissionsSelect).toBeVisible()
   await expect(errorsSelect).toBeVisible()
 
@@ -615,26 +632,24 @@ test("changing permissions and errors sounds updates localStorage", async ({ pag
 
   const permissionsCurrent =
     (await permissionsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await permissionsSelect.locator('[data-slot="select-select-trigger"]').click()
-  const permissionItems = page.locator('[data-slot="select-select-item"]')
-  expect(await permissionItems.count()).toBeGreaterThan(1)
+  await open(ptrig, pitems)
+  expect(await pitems.count()).toBeGreaterThan(1)
   if (permissionsCurrent) {
-    await permissionItems.filter({ hasNotText: permissionsCurrent }).first().click()
+    await pick(pitems.filter({ hasNotText: permissionsCurrent }).first())
   }
   if (!permissionsCurrent) {
-    await permissionItems.nth(1).click()
+    await pick(pitems.nth(1))
   }
 
   const errorsCurrent =
     (await errorsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-  await errorsSelect.locator('[data-slot="select-select-trigger"]').click()
-  const errorItems = page.locator('[data-slot="select-select-item"]')
-  expect(await errorItems.count()).toBeGreaterThan(1)
+  await open(etrig, eitems)
+  expect(await eitems.count()).toBeGreaterThan(1)
   if (errorsCurrent) {
-    await errorItems.filter({ hasNotText: errorsCurrent }).first().click()
+    await pick(eitems.filter({ hasNotText: errorsCurrent }).first())
   }
   if (!errorsCurrent) {
-    await errorItems.nth(1).click()
+    await pick(eitems.nth(1))
   }
 
   await expect
