@@ -1,39 +1,47 @@
 import { describe, expect, test } from "bun:test"
-import { createUniverSdk } from "./index"
+import "@univerjs/sheets/facade"
+import type { Nullable, CellValue } from "@univerjs/core"
+import { createUniverSdk, type UniverHostApi } from "./index"
 
 function setup() {
-  const cell = [
+  const cell: Nullable<CellValue>[][] = [
     ["h1", "h2"],
     [1, 2],
     [3, 4],
   ]
+
+  const calls: Array<{ id: string; data: object }> = []
+
   const sheet = {
     getSheetId: () => "sheet-1",
-    getName: () => "Sheet 1",
-    getRange: () => ({
+    getSheetName: () => "Sheet 1",
+    getRange: (_r1: number, _c1: number, _numRows: number, _numCols: number) => ({
       getValues: () => cell,
-      setValues: () => undefined,
-      addChart: async (data: unknown) => {
-        calls.push({ id: "facade.addChart", data })
-        return true
-      },
+      setValues: (_v: CellValue[][]) => undefined,
     }),
   }
+
   const wb = {
-    getUnitId: () => "unit-1",
+    getId: () => "unit-1",
     getActiveSheet: () => sheet,
     getSheets: () => [sheet],
     getSheetBySheetId: (id: string) => (id === "sheet-1" ? sheet : null),
   }
-  const calls: Array<{ id: string; data: unknown }> = []
+
   const api = {
     importXLSXToUnitIdAsync: async () => "unit-x",
     loadServerUnit: () => undefined,
     toggleDarkMode: () => undefined,
-    getUniver: () => ({
-      getActiveWorkbook: () => wb,
-    }),
-  }
+    executeCommand: async (id: string, _params?: object) => {
+      if (id === "sheet.mutation.insert-chart") {
+        calls.push({ id: "facade.insert-chart", data: _params ?? {} })
+        return true
+      }
+      return false
+    },
+    getActiveWorkbook: () => wb,
+  } as unknown as UniverHostApi
+
   return { sdk: createUniverSdk({ univerAPI: api }), calls }
 }
 
@@ -66,6 +74,6 @@ describe("univer-sdk", () => {
     await sdk.addChart({
       range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 },
     })
-    expect(calls[0]?.id).toBe("facade.addChart")
+    expect(calls[0]?.id).toBe("facade.insert-chart")
   })
 })

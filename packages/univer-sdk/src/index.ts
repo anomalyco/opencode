@@ -1,3 +1,17 @@
+/** Pulls in `interface FUniver` augmentation (sheets API: `getActiveWorkbook`, etc.). */
+import "@univerjs/sheets/facade"
+import type { CellValue, Univer } from "@univerjs/core"
+import { FUniver } from "@univerjs/core/facade"
+import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade"
+
+/**
+ * `FUniver` from `@univerjs/core` + sheets facade, plus host wiring (import/load) that presets / import plugins add at runtime.
+ */
+export type UniverHostApi = FUniver & {
+  importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
+  loadServerUnit(unitId: string, unitType: number): void | Promise<unknown>
+}
+
 export type RangeRect = {
   startRow: number
   endRow: number
@@ -22,10 +36,16 @@ export type ExtractTableInput = {
   withHeaders?: boolean
 }
 
+/** What `getSheetRange` / `extractTable` read from the live sheet (includes rich text cells). */
+export type SheetCellMatrix = ReturnType<FRange["getValues"]>
+
+/**
+ * Matrix write for `setRangeValues`. (Object-matrix / `ICellData` shapes are supported by Univer via `executeCommand` directly.)
+ */
 export type SetRangeValuesInput = {
   sheetId?: string
   range: RangeRect
-  values: unknown[][]
+  values: CellValue[][]
 }
 
 export type AddChartInput = {
@@ -35,15 +55,41 @@ export type AddChartInput = {
   anchor?: { row: number; column: number }
 }
 
+/** Mutation payload aligned with `sheet.mutation.insert-chart`. */
+type InsertChartMutationParams = {
+  unitId: string
+  subUnitId: string
+  chartId: string
+  chartType: number
+  isRowDirection: boolean
+  trigger: string
+  range: {
+    startRow: number
+    endRow: number
+    startColumn: number
+    endColumn: number
+    startAbsoluteRefType: number
+    endAbsoluteRefType: number
+    rangeType: number
+  }
+  sourceRange: {
+    startRow: number
+    endRow: number
+    startColumn: number
+    endColumn: number
+  }
+  anchor: { row: number; column: number }
+}
+
 type SheetRef = {
   getSheetId(): string
   getName(): string
   getRange(r1: number, c1: number, r2: number, c2: number): {
-    getValues(): unknown[][]
-    setValues(v: unknown[][]): void
-    addChart?: (params: unknown) => Promise<boolean> | boolean
+    getValues(): SheetCellMatrix
+    setValues(v: CellValue[][]): void
+    addChart?: (params: InsertChartMutationParams) => Promise<boolean> | boolean
   }
-  addChart?: (params: unknown) => Promise<boolean> | boolean
+  addChart?: (params: InsertChartMutationParams) => Promise<boolean> | boolean
 }
 
 type WorkbookRef = {
@@ -51,47 +97,7 @@ type WorkbookRef = {
   getActiveSheet(): SheetRef | null
   getSheets(): SheetRef[]
   getSheetBySheetId(id: string): SheetRef | null
-  addChart?: (params: unknown) => Promise<boolean> | boolean
-}
-
-type RawSheetRef = {
-  getSheetId?: () => string
-  getName?: () => string
-  getRange?: (r1: number, c1: number, r2: number, c2: number) => { getValues(): unknown[][]; setValues(v: unknown[][]): void }
-  sheetId?: string
-  id?: string
-  name?: string
-}
-
-type RawWorkbookRef = {
-  getUnitId?: () => string
-  getActiveSheet?: () => RawSheetRef | null
-  getSheets?: () => RawSheetRef[]
-  getSheetBySheetId?: (id: string) => RawSheetRef | null
-  unitId?: string
-  id?: string
-  activeSheet?: RawSheetRef | null
-  sheets?: RawSheetRef[]
-}
-
-type CmdRef = {
-  executeCommand(id: string, data: unknown): Promise<boolean> | boolean
-}
-
-type UniverRef = {
-  getActiveWorkbook(): WorkbookRef | null
-  __getInjector?: () => { get(token: unknown): CmdRef }
-}
-
-type ApiRef = {
-  importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
-  loadServerUnit(unitId: string, unitType: number): void
-  toggleDarkMode(on: boolean): void
-  executeCommand?: (id: string, data: unknown) => Promise<boolean> | boolean
-  getUniver?(): UniverRef
-  getActiveWorkbook?(): WorkbookRef | null
-  __getInjector?: () => { get(token: unknown): CmdRef }
-  addChart?: (params: unknown) => Promise<boolean> | boolean
+  addChart?: (params: InsertChartMutationParams) => Promise<boolean> | boolean
 }
 
 class SdkError extends Error {
@@ -101,82 +107,61 @@ class SdkError extends Error {
   }
 }
 
-function resolveWorkbook(input: { univerAPI: ApiRef; univer?: unknown }): WorkbookRef | null {
-  const fromApi = input.univerAPI.getActiveWorkbook?.()
-  if (fromApi) return normalizeWorkbook(fromApi as RawWorkbookRef)
+function normalizeSheetFromFacade(fws: FWorksheet): SheetRef {
+  return {
+    getSheetId: () => fws.getSheetId(),
+    getName: () => fws.getSheetName(),
+    getRange: (r1, c1, r2, c2) => {
+      const numRows = r2 - r1 + 1
+      const numColumns = c2 - c1 + 1
+      const r = fws.getRange(r1, c1, numRows, numColumns)
+      return {
+        getValues: () => r.getValues(),
+        setValues: (v: CellValue[][]) => {
+          r.setValues(v)
+        },
+      }
+    },
+  }
+}
 
-  const fromGetUniver = input.univerAPI.getUniver?.()?.getActiveWorkbook?.()
-  if (fromGetUniver) return normalizeWorkbook(fromGetUniver as RawWorkbookRef)
+function normalizeWorkbookFromFacade(fwb: FWorkbook): WorkbookRef {
+  return {
+    getUnitId: () => fwb.getId(),
+    getActiveSheet: () => {
+      const s = fwb.getActiveSheet()
+      return s ? normalizeSheetFromFacade(s) : null
+    },
+    getSheets: () => fwb.getSheets().map((s) => normalizeSheetFromFacade(s)),
+    getSheetBySheetId: (id: string) => {
+      const s = fwb.getSheetBySheetId(id)
+      return s ? normalizeSheetFromFacade(s) : null
+    },
+  }
+}
 
-  const raw = input.univer as { getActiveWorkbook?: () => WorkbookRef | null; getUniver?: () => UniverRef } | undefined
-  const fromRaw = raw?.getActiveWorkbook?.()
-  if (fromRaw) return normalizeWorkbook(fromRaw as RawWorkbookRef)
+export type UniverSdkRuntime = { univerAPI: UniverHostApi; univer?: Univer }
 
-  const fromRawGetUniver = raw?.getUniver?.()?.getActiveWorkbook?.()
-  if (fromRawGetUniver) return normalizeWorkbook(fromRawGetUniver as RawWorkbookRef)
+function resolveWorkbook(input: UniverSdkRuntime): WorkbookRef | null {
+  const primary = input.univerAPI.getActiveWorkbook()
+  if (primary) return normalizeWorkbookFromFacade(primary)
+
+  if (input.univer) {
+    const api = FUniver.newAPI(input.univer)
+    const wb = api.getActiveWorkbook()
+    if (wb) return normalizeWorkbookFromFacade(wb)
+  }
 
   return null
 }
 
-function normalizeSheet(raw: RawSheetRef): SheetRef {
-  const sid = raw.getSheetId?.() ?? raw.sheetId ?? raw.id
-  if (!sid) throw new SdkError("Sheet id is unavailable on Univer sheet object")
-  const name = raw.getName?.() ?? raw.name ?? sid
-  if (!raw.getRange) throw new SdkError("getRange is unavailable on Univer sheet object")
-  return {
-    getSheetId: () => sid,
-    getName: () => name,
-    getRange: (r1, c1, r2, c2) => raw.getRange!(r1, c1, r2, c2),
-  }
-}
-
-function normalizeWorkbook(raw: RawWorkbookRef): WorkbookRef {
-  const unitId = raw.getUnitId?.() ?? raw.unitId ?? raw.id
-  if (!unitId) throw new SdkError("Workbook unit id is unavailable on Univer workbook object")
-  return {
-    getUnitId: () => unitId,
-    getActiveSheet: () => {
-      const sheet = raw.getActiveSheet?.() ?? raw.activeSheet ?? null
-      return sheet ? normalizeSheet(sheet) : null
-    },
-    getSheets: () => {
-      const sheets = raw.getSheets?.() ?? raw.sheets ?? []
-      return sheets.map((s) => normalizeSheet(s))
-    },
-    getSheetBySheetId: (id: string) => {
-      const viaMethod = raw.getSheetBySheetId?.(id) ?? null
-      if (viaMethod) return normalizeSheet(viaMethod)
-      const sheets = raw.getSheets?.() ?? raw.sheets ?? []
-      const found = sheets.find((s) => (s.getSheetId?.() ?? s.sheetId ?? s.id) === id)
-      return found ? normalizeSheet(found) : null
-    },
-  }
-}
-
-function resolveInjector(input: { univerAPI: ApiRef; univer?: unknown }): { get(token: unknown): CmdRef } | undefined {
-  const fromApi = input.univerAPI.__getInjector?.()
-  if (fromApi) return fromApi
-
-  const fromGetUniver = input.univerAPI.getUniver?.().__getInjector?.()
-  if (fromGetUniver) return fromGetUniver
-
-  const raw = input.univer as { __getInjector?: () => { get(token: unknown): CmdRef }; getUniver?: () => UniverRef } | undefined
-  const fromRaw = raw?.__getInjector?.()
-  if (fromRaw) return fromRaw
-
-  const fromRawGetUniver = raw?.getUniver?.().__getInjector?.()
-  if (fromRawGetUniver) return fromRawGetUniver
-
-  return undefined
-}
-
-function mustWorkbook(input: { univerAPI: ApiRef; univer?: unknown }): WorkbookRef {
+function mustWorkbook(input: UniverSdkRuntime): WorkbookRef {
   const wb = resolveWorkbook(input)
   if (wb) return wb
   throw new SdkError("No active workbook in Univer runtime")
 }
 
-function mustSheet(input: { univerAPI: ApiRef; univer?: unknown }, sheetId?: string): SheetRef {
+function mustSheet(input: UniverSdkRuntime, sheetId?: string): SheetRef {
   const wb = mustWorkbook(input)
   if (!sheetId) {
     const sh = wb.getActiveSheet()
@@ -195,13 +180,13 @@ function mustRect(range: RangeRect) {
   }
 }
 
-function normalizeRows(rows: unknown[][], withHeaders: boolean) {
+function normalizeRows(rows: SheetCellMatrix, withHeaders: boolean) {
   if (!withHeaders || rows.length === 0) {
     return { headers: undefined as string[] | undefined, rows }
   }
   const first = rows[0]
   if (!first) {
-    return { headers: undefined as string[] | undefined, rows: [] as unknown[][] }
+    return { headers: undefined as string[] | undefined, rows: [] as SheetCellMatrix }
   }
   return {
     headers: first.map((x) => String(x ?? "")),
@@ -209,15 +194,13 @@ function normalizeRows(rows: unknown[][], withHeaders: boolean) {
   }
 }
 
-function methodNames(obj: unknown): string[] {
-  if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return []
+function methodNames(obj: object): string[] {
   const own = Object.getOwnPropertyNames(obj)
   const proto = Object.getPrototypeOf(obj)
   const p = proto ? Object.getOwnPropertyNames(proto) : []
   return [...new Set([...own, ...p])].filter((k) => {
     if (k === "constructor") return false
-    const v = (obj as Record<string, unknown>)[k]
-    return typeof v === "function"
+    return typeof Reflect.get(obj, k) === "function"
   })
 }
 
@@ -225,21 +208,24 @@ function randomChartId() {
   return `sdk-${Math.random().toString(36).slice(2, 12)}`
 }
 
-async function addChartViaFacade(input: { runtime: { univerAPI: ApiRef; univer?: unknown }; chartParams: unknown; sheet: SheetRef; wb: WorkbookRef; rangeObj: { addChart?: (params: unknown) => Promise<boolean> | boolean } }) {
-  if (input.runtime.univerAPI.executeCommand) {
-    const ok = await input.runtime.univerAPI.executeCommand("sheet.mutation.insert-chart", input.chartParams)
-    if (ok) return true
-  }
+async function addChartViaFacade(input: {
+  runtime: UniverSdkRuntime
+  chartParams: InsertChartMutationParams
+  sheet: SheetRef
+  wb: WorkbookRef
+  rangeObj: { addChart?: (params: InsertChartMutationParams) => Promise<boolean> | boolean }
+}) {
+  const ok = await input.runtime.univerAPI.executeCommand("sheet.mutation.insert-chart", input.chartParams)
+  if (ok) return true
   if (input.rangeObj.addChart) return await input.rangeObj.addChart(input.chartParams)
   if (input.sheet.addChart) return await input.sheet.addChart(input.chartParams)
   if (input.wb.addChart) return await input.wb.addChart(input.chartParams)
-  if (input.runtime.univerAPI.addChart) return await input.runtime.univerAPI.addChart(input.chartParams)
   throw new SdkError("Facade chart API is unavailable in this Univer runtime")
 }
 
-export function createUniverSdk(input: { univerAPI: ApiRef; univer?: unknown }) {
+export function createUniverSdk(input: UniverSdkRuntime) {
   const api = input.univerAPI
-  const runtime = { univerAPI: api, univer: input.univer }
+  const runtime: UniverSdkRuntime = { univerAPI: api, univer: input.univer }
   return {
     importXlsxToUnit(file: File) {
       return api.importXLSXToUnitIdAsync(file)
@@ -264,14 +250,14 @@ export function createUniverSdk(input: { univerAPI: ApiRef; univer?: unknown }) 
       const wb = mustWorkbook(runtime)
       return wb.getSheets().map((x) => ({ id: x.getSheetId(), name: x.getName() }))
     },
-    getSheetRange(input: { sheetId?: string; range: RangeRect }): unknown[][] {
+    getSheetRange(input: { sheetId?: string; range: RangeRect }): SheetCellMatrix {
       mustRect(input.range)
       const sh = mustSheet(runtime, input.sheetId)
       return sh
         .getRange(input.range.startRow, input.range.startColumn, input.range.endRow, input.range.endColumn)
         .getValues()
     },
-    extractTable(input: ExtractTableInput): { headers?: string[]; rows: unknown[][] } {
+    extractTable(input: ExtractTableInput): { headers?: string[]; rows: SheetCellMatrix } {
       const rows = this.getSheetRange({ sheetId: input.sheetId, range: input.range })
       return normalizeRows(rows, input.withHeaders !== false)
     },
@@ -280,36 +266,32 @@ export function createUniverSdk(input: { univerAPI: ApiRef; univer?: unknown }) 
       if (input.values.length === 0) throw new SdkError("values must include at least one row")
       const wb = mustWorkbook(runtime)
       const sh = mustSheet(runtime, input.sheetId)
-      if (api.executeCommand) {
-        const cellValue: Record<string, Record<string, { v: unknown }>> = {}
-        for (let r = 0; r < input.values.length; r++) {
-          const rowMap: Record<string, { v: unknown }> = {}
-          const row = input.values[r] ?? []
-          for (let c = 0; c < row.length; c++) {
-            rowMap[String(input.range.startColumn + c)] = { v: row[c] }
-          }
-          cellValue[String(input.range.startRow + r)] = rowMap
+      const cellValue: Record<string, Record<string, { v: CellValue }>> = {}
+      for (let r = 0; r < input.values.length; r++) {
+        const rowMap: Record<string, { v: CellValue }> = {}
+        const row = input.values[r] ?? []
+        for (let c = 0; c < row.length; c++) {
+          rowMap[String(input.range.startColumn + c)] = { v: row[c] }
         }
-        api.executeCommand("sheet.mutation.set-range-values", {
-          unitId: wb.getUnitId(),
-          subUnitId: sh.getSheetId(),
-          range: {
-            startRow: input.range.startRow,
-            endRow: input.range.endRow,
-            startColumn: input.range.startColumn,
-            endColumn: input.range.endColumn,
-          },
-          cellValue,
-        })
-        return
+        cellValue[String(input.range.startRow + r)] = rowMap
       }
-      sh.getRange(input.range.startRow, input.range.startColumn, input.range.endRow, input.range.endColumn).setValues(input.values)
+      api.executeCommand("sheet.mutation.set-range-values", {
+        unitId: wb.getUnitId(),
+        subUnitId: sh.getSheetId(),
+        range: {
+          startRow: input.range.startRow,
+          endRow: input.range.endRow,
+          startColumn: input.range.startColumn,
+          endColumn: input.range.endColumn,
+        },
+        cellValue,
+      })
     },
     async addChart(input: AddChartInput) {
       mustRect(input.range)
       const wb = mustWorkbook(runtime)
       const sh = mustSheet(runtime, input.sheetId)
-      const chartParams = {
+      const chartParams: InsertChartMutationParams = {
         unitId: wb.getUnitId(),
         subUnitId: sh.getSheetId(),
         chartId: randomChartId(),

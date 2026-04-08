@@ -108,7 +108,7 @@ export function SpreadsheetViewer(props: Props) {
     runtime = instance
     if (import.meta.env.DEV) {
       const w = window as VeritlyWindow
-      w.__veritlyUniverSdk = () => createUniverSdk({ univerAPI: instance.univerAPI, univer: instance.univer as never })
+      w.__veritlyUniverSdk = () => createUniverSdk({ univerAPI: instance.univerAPI, univer: instance.univer })
     }
 
     onCleanup(() => {
@@ -126,7 +126,7 @@ export function SpreadsheetViewer(props: Props) {
   createEffect(() => {
     const cur = runtime
     if (!cur) return
-    createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer as never }).toggleDarkMode(theme.mode() === "dark")
+    createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer }).toggleDarkMode(theme.mode() === "dark")
   })
 
   createEffect(() => {
@@ -139,7 +139,7 @@ export function SpreadsheetViewer(props: Props) {
     const join = wsBase.includes("?") ? "&" : "?"
     const ws = new WebSocket(`${wsBase}${join}role=browser`)
     relaySocket = ws
-    const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer as never })
+    const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
 
     const respond = (payload: RelayResponse) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
@@ -186,16 +186,25 @@ export function SpreadsheetViewer(props: Props) {
             })
             return
           case "execute_command": {
-            const p = (req.params ?? {}) as { id?: string; params?: unknown }
-            if (!p.id) {
-              respond({ id: req.id, ok: false, error: "execute_command requires params.id" })
+            const raw = req.params
+            if (raw === null || typeof raw !== "object") {
+              respond({ id: req.id, ok: false, error: "execute_command requires params object" })
               return
             }
-            if (!cur.univerAPI.executeCommand) {
-              respond({ id: req.id, ok: false, error: "univerAPI.executeCommand unavailable" })
+            const cmdId = Reflect.get(raw, "id")
+            if (typeof cmdId !== "string") {
+              respond({ id: req.id, ok: false, error: "execute_command requires params.id (string)" })
               return
             }
-            const result = await cur.univerAPI.executeCommand(p.id, p.params)
+            const cmdParams = Reflect.get(raw, "params")
+            if (cmdParams !== undefined && (cmdParams === null || typeof cmdParams !== "object")) {
+              respond({ id: req.id, ok: false, error: "execute_command params.params must be an object when set" })
+              return
+            }
+            const result = await cur.univerAPI.executeCommand(
+              cmdId,
+              cmdParams === undefined ? undefined : cmdParams,
+            )
             respond({ id: req.id, ok: true, result })
             return
           }
@@ -246,7 +255,7 @@ export function SpreadsheetViewer(props: Props) {
         const id = ++seq
         const stale = () => id !== seq || runtime !== cur
 
-        const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer as never })
+        const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
 
         try {
           if (stale()) return

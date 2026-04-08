@@ -7,12 +7,18 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit -p .",
     "test": "bun test ./src",
     "sdk-relay": "bun ./script/sdk-relay.ts"
   },
+  "peerDependencies": {
+    "@univerjs/core": "0.18.0",
+    "@univerjs/sheets": "0.18.0"
+  },
   "devDependencies": {
     "@typescript/native-preview": "catalog:",
+    "@univerjs/core": "0.18.0",
+    "@univerjs/sheets": "0.18.0",
     "typescript": "catalog:"
   }
 }

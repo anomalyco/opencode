@@ -1,40 +1,50 @@
 import { describe, expect, test } from "bun:test"
-import { createUniverSdk } from "@opencode-ai/univer-sdk"
+import "@univerjs/sheets/facade"
+import type { Nullable, CellValue } from "@univerjs/core"
+import { createUniverSdk, type UniverHostApi } from "@opencode-ai/univer-sdk"
 
 function mockSdk() {
-  const rows = [
+  const rows: Nullable<CellValue>[][] = [
     ["name", "value"],
     ["a", 1],
     ["b", 2],
   ]
+
+  const calls: string[] = []
+
   const sheet = {
     getSheetId: () => "sheet-1",
-    getName: () => "Sheet 1",
-    getRange: () => ({
+    getSheetName: () => "Sheet 1",
+    getRange: (_r1: number, _c1: number, _nr: number, _nc: number) => ({
       getValues: () => rows,
-      setValues: () => undefined,
-      addChart: async () => {
-        calls.push("facade.addChart")
-        return true
-      },
+      setValues: (_v: CellValue[][]) => undefined,
     }),
   }
+
   const wb = {
-    getUnitId: () => "unit-1",
+    getId: () => "unit-1",
     getActiveSheet: () => sheet,
     getSheets: () => [sheet],
     getSheetBySheetId: () => sheet,
   }
-  const calls: string[] = []
+
   const sdk = createUniverSdk({
     univerAPI: {
       importXLSXToUnitIdAsync: async () => "unit-1",
-      loadServerUnit: () => calls.push("load"),
+      loadServerUnit: async () => {
+        calls.push("load")
+        return null
+      },
       toggleDarkMode: () => undefined,
-      getUniver: () => ({
-        getActiveWorkbook: () => wb,
-      }),
-    },
+      executeCommand: async (id: string) => {
+        if (id === "sheet.mutation.insert-chart") {
+          calls.push("facade.insert-chart")
+          return true
+        }
+        return false
+      },
+      getActiveWorkbook: () => wb,
+    } as unknown as UniverHostApi,
   })
   return { sdk, calls }
 }
@@ -52,6 +62,6 @@ describe("spreadsheet viewer sdk smoke", () => {
     await sdk.addChart({
       range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 },
     })
-    expect(calls).toEqual(["load", "facade.addChart"])
+    expect(calls).toEqual(["load", "facade.insert-chart"])
   })
 })
