@@ -56,7 +56,6 @@ const TIPS = [
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public link to your conversation at mammouth.ai",
   "Drag and drop images or PDFs into the terminal to add them as context",
-:packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx
   "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
@@ -139,5 +138,4 @@ const TIPS = [
   ...(process.platform === "win32"
     ? ["Press {highlight}Ctrl+Z{/highlight} to undo changes in your prompt"]
     : ["Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell"]),
-:packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx
 ]
