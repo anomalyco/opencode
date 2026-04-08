@@ -31,14 +31,16 @@ async function seedMessage(sdk: Sdk, sessionID: string) {
     .toBeGreaterThan(0)
 }
 
-test("session can be renamed via header menu", async ({ page, sdk, gotoSession }) => {
+test("session can be renamed via header menu", async ({ page, project }) => {
   const stamp = Date.now()
   const originalTitle = `e2e rename test ${stamp}`
   const renamedTitle = `e2e renamed ${stamp}`
 
-  await withSession(sdk, originalTitle, async (session) => {
-    await seedMessage(sdk, session.id)
-    await gotoSession(session.id)
+  await project.open()
+  await withSession(project.sdk, originalTitle, async (session) => {
+    project.trackSession(session.id)
+    await seedMessage(project.sdk, session.id)
+    await project.gotoSession(session.id)
     await expect(page.getByRole("heading", { level: 1 }).first()).toHaveText(originalTitle)
 
     const menu = await openSessionMoreMenu(page, session.id)
@@ -54,7 +56,7 @@ test("session can be renamed via header menu", async ({ page, sdk, gotoSession }
     await expect
       .poll(
         async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+          const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
           return data?.title
         },
         { timeout: 30_000 },
@@ -65,20 +67,22 @@ test("session can be renamed via header menu", async ({ page, sdk, gotoSession }
   })
 })
 
-test("session can be archived via header menu", async ({ page, sdk, gotoSession }) => {
+test("session can be archived via header menu", async ({ page, project }) => {
   const stamp = Date.now()
   const title = `e2e archive test ${stamp}`
 
-  await withSession(sdk, title, async (session) => {
-    await seedMessage(sdk, session.id)
-    await gotoSession(session.id)
+  await project.open()
+  await withSession(project.sdk, title, async (session) => {
+    project.trackSession(session.id)
+    await seedMessage(project.sdk, session.id)
+    await project.gotoSession(session.id)
     const menu = await openSessionMoreMenu(page, session.id)
     await clickMenuItem(menu, /archive/i)
 
     await expect
       .poll(
         async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+          const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
           return data?.time?.archived
         },
         { timeout: 30_000 },
@@ -90,13 +94,15 @@ test("session can be archived via header menu", async ({ page, sdk, gotoSession 
   })
 })
 
-test("session can be deleted via header menu", async ({ page, sdk, gotoSession }) => {
+test("session can be deleted via header menu", async ({ page, project }) => {
   const stamp = Date.now()
   const title = `e2e delete test ${stamp}`
 
-  await withSession(sdk, title, async (session) => {
-    await seedMessage(sdk, session.id)
-    await gotoSession(session.id)
+  await project.open()
+  await withSession(project.sdk, title, async (session) => {
+    project.trackSession(session.id)
+    await seedMessage(project.sdk, session.id)
+    await project.gotoSession(session.id)
     const menu = await openSessionMoreMenu(page, session.id)
     await clickMenuItem(menu, /delete/i)
     await confirmDialog(page, /delete/i)
@@ -104,7 +110,7 @@ test("session can be deleted via header menu", async ({ page, sdk, gotoSession }
     await expect
       .poll(
         async () => {
-          const data = await sdk.session
+          const data = await project.sdk.session
             .get({ sessionID: session.id })
             .then((r) => r.data)
             .catch(() => undefined)
@@ -119,15 +125,17 @@ test("session can be deleted via header menu", async ({ page, sdk, gotoSession }
   })
 })
 
-test("session can be shared and unshared via header button", async ({ page, sdk, gotoSession }) => {
+test("session can be shared and unshared via header button", async ({ page, project }) => {
   test.skip(shareDisabled, "Share is disabled in this environment (OPENCODE_DISABLE_SHARE).")
 
   const stamp = Date.now()
   const title = `e2e share test ${stamp}`
 
-  await withSession(sdk, title, async (session) => {
-    await seedMessage(sdk, session.id)
-    await gotoSession(session.id)
+  await project.open()
+  await withSession(project.sdk, title, async (session) => {
+    project.trackSession(session.id)
+    await project.gotoSession(session.id)
+    await project.prompt(`share seed ${stamp}`)
 
     const shared = await openSharePopover(page)
     const publish = shared.popoverBody.getByRole("button", { name: "Publish" }).first()
@@ -141,7 +149,7 @@ test("session can be shared and unshared via header button", async ({ page, sdk,
     await expect
       .poll(
         async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+          const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
           return data?.share?.url || undefined
         },
         { timeout: 30_000 },
@@ -159,7 +167,7 @@ test("session can be shared and unshared via header button", async ({ page, sdk,
     await expect
       .poll(
         async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+          const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
           return data?.share?.url || undefined
         },
         { timeout: 30_000 },

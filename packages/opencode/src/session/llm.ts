@@ -25,6 +25,7 @@ export namespace LLM {
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
+    parentSessionID?: string
     model: Provider.Model
     agent: Agent.Info
     permission?: Permission.Ruleset
@@ -53,32 +54,22 @@ export namespace LLM {
     Effect.gen(function* () {
       return Service.of({
         stream(input) {
-          const stream: Stream.Stream<Event, unknown> = Stream.scoped(
+          return Stream.scoped(
             Stream.unwrap(
               Effect.gen(function* () {
                 const ctrl = yield* Effect.acquireRelease(
                   Effect.sync(() => new AbortController()),
                   (ctrl) => Effect.sync(() => ctrl.abort()),
                 )
-                const queue = yield* Queue.unbounded<Event, unknown | Cause.Done>()
 
-                yield* Effect.promise(async () => {
-                  const result = await LLM.stream({ ...input, abort: ctrl.signal })
-                  for await (const event of result.fullStream) {
-                    if (!Queue.offerUnsafe(queue, event)) break
-                  }
-                  Queue.endUnsafe(queue)
-                }).pipe(
-                  Effect.catchCause((cause) => Effect.sync(() => void Queue.failCauseUnsafe(queue, cause))),
-                  Effect.onInterrupt(() => Effect.sync(() => ctrl.abort())),
-                  Effect.forkScoped,
+                const result = yield* Effect.promise(() => LLM.stream({ ...input, abort: ctrl.signal }))
+
+                return Stream.fromAsyncIterable(result.fullStream, (e) =>
+                  e instanceof Error ? e : new Error(String(e)),
                 )
-
-                return Stream.fromQueue(queue)
               }),
             ),
           )
-          return stream
         },
       })
     }),
@@ -136,7 +127,9 @@ export namespace LLM {
     }
 
     const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+      !input.small && input.model.variants && input.user.model.variant
+        ? input.model.variants[input.user.model.variant]
+        : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
@@ -184,6 +177,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
         options,
       },
     )
@@ -201,11 +195,6 @@ export namespace LLM {
         headers: {},
       },
     )
-
-    const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -300,7 +289,7 @@ export namespace LLM {
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
-      maxOutputTokens,
+      maxOutputTokens: params.maxOutputTokens,
       abortSignal: input.abort,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
@@ -311,6 +300,8 @@ export namespace LLM {
               "x-opencode-client": Flag.OPENCODE_CLIENT,
             }
           : {
+              "x-session-affinity": input.sessionID,
+              ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
         ...input.model.headers,

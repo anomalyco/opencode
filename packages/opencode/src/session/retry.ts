@@ -54,8 +54,21 @@ export namespace SessionRetry {
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
       if (error.data.responseBody?.includes("FreeUsageLimitError"))
-        return `Free usage exceeded, add credits https://opencode.ai/zen`
+        return `Free usage exceeded, subscribe to Go https://opencode.ai/go`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
+    }
+
+    // Check for rate limit patterns in plain text error messages
+    const msg = error.data?.message
+    if (typeof msg === "string") {
+      const lower = msg.toLowerCase()
+      if (
+        lower.includes("rate increased too quickly") ||
+        lower.includes("rate limit") ||
+        lower.includes("too many requests")
+      ) {
+        return msg
+      }
     }
 
     const json = iife(() => {
