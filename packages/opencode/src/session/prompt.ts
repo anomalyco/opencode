@@ -1378,6 +1378,28 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
+              // Before exiting, check if new messages arrived while we were running
+              // This handles the race condition in prompt_async where messages can arrive
+              // while the runner is transitioning between states
+              // See: https://github.com/anomalyco/opencode/issues/...
+              const latestMsgs = yield* MessageV2.filterCompactedEffect(sessionID)
+              const newUserMsg = latestMsgs.findLast(
+                (m) => m.info.role === "user" && m.info.id > lastAssistant.id,
+              )
+              
+              // If a new user message arrived while we were running, continue the loop
+              // instead of exiting, so we can process it
+              if (newUserMsg) {
+                log.info("detected new message during exit, continuing loop", {
+                  sessionID,
+                  lastAssistantId: lastAssistant.id,
+                  newMsgId: newUserMsg.info.id,
+                })
+                // Reset step counter for the new message
+                step = 0
+                continue
+              }
+              
               log.info("exiting loop", { sessionID })
               break
             }
