@@ -124,9 +124,7 @@
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
-    "tree-sitter-powershell",
-    "web-tree-sitter",
-    "electron"
+    "web-tree-sitter"
   ],
   "overrides": {
     "@opentui/core": "catalog:",

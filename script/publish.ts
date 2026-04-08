@@ -24,12 +24,7 @@ async function prepareReleaseFiles() {
     await Bun.file(file).write(pkg)
   }
 
-  const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
-  let toml = await Bun.file(extensionToml).text()
-  toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-  toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-  console.log("updated:", extensionToml)
-  await Bun.file(extensionToml).write(toml)
+  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
 
   await $`bun install`
   await $`./packages/sdk/js/script/build.ts`
