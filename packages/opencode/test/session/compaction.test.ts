@@ -431,6 +431,53 @@ describe("session.compaction.isOverflow", () => {
   })
 })
 
+describe("session.compaction.isThresholdReached", () => {
+  test("returns false when maxTurns is not configured", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 5 })).toBe(false)
+      },
+    })
+  })
+
+  test("returns true when turnsSinceCompaction reaches maxTurns", async () => {
+    await using tmp = await tmpdir({ config: { compaction: { maxTurns: 3 } } })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 3 })).toBe(true)
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 4 })).toBe(true)
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 10 })).toBe(true)
+      },
+    })
+  })
+
+  test("returns false when turnsSinceCompaction is below maxTurns", async () => {
+    await using tmp = await tmpdir({ config: { compaction: { maxTurns: 3 } } })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 0 })).toBe(false)
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 1 })).toBe(false)
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 2 })).toBe(false)
+      },
+    })
+  })
+
+  test("returns false for turnsSinceCompaction 0 even with maxTurns 1", async () => {
+    await using tmp = await tmpdir({ config: { compaction: { maxTurns: 1 } } })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 0 })).toBe(false)
+        expect(await SessionCompaction.isThresholdReached({ turnsSinceCompaction: 1 })).toBe(true)
+      },
+    })
+  })
+})
+
 describe("session.compaction.create", () => {
   test("creates a compaction user message and part", async () => {
     await using tmp = await tmpdir()

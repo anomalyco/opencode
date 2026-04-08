@@ -1341,6 +1341,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const ctx = yield* InstanceState.context
           let structured: unknown | undefined
           let step = 0
+          let turnsSinceCompaction = 0
           const session = yield* sessions.get(sessionID)
 
           while (true) {
@@ -1417,6 +1418,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
             ) {
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              turnsSinceCompaction = 0
+              continue
+            }
+
+            if (
+              lastFinished &&
+              lastFinished.summary !== true &&
+              (yield* compaction.isThresholdReached({ turnsSinceCompaction }))
+            ) {
+              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              turnsSinceCompaction = 0
               continue
             }
 
@@ -1550,6 +1562,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     auto: true,
                     overflow: !handle.message.finish,
                   })
+                  turnsSinceCompaction = 0
                 }
                 return "continue" as const
               }),
@@ -1558,6 +1571,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatMap((x) => x))
               }),
             )
+            turnsSinceCompaction++
             if (outcome === "break") break
             continue
           }

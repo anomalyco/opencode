@@ -1015,6 +1015,12 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          maxTurns: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Trigger compaction every N agent turns regardless of context size (default: disabled)"),
         })
         .optional(),
       experimental: z

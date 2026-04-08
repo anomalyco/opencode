@@ -20,3 +20,8 @@ export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistan
     : context - ProviderTransform.maxOutputTokens(input.model)
   return count >= usable
 }
+
+export function isThresholdReached(input: { cfg: Config.Info; turnsSinceCompaction: number }) {
+  const maxTurns = input.cfg.compaction?.maxTurns
+  return maxTurns !== undefined && input.turnsSinceCompaction >= maxTurns
+}

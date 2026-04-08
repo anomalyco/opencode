@@ -18,7 +18,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow } from "./overflow"
+import { isOverflow as overflow, isThresholdReached as thresholdReached } from "./overflow"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -41,6 +41,7 @@ export namespace SessionCompaction {
       tokens: MessageV2.Assistant["tokens"]
       model: Provider.Model
     }) => Effect.Effect<boolean>
+    readonly isThresholdReached: (input: { turnsSinceCompaction: number }) => Effect.Effect<boolean>
     readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
     readonly process: (input: {
       parentID: MessageID
@@ -86,6 +87,12 @@ export namespace SessionCompaction {
         model: Provider.Model
       }) {
         return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
+      })
+
+      const isThresholdReached = Effect.fn("SessionCompaction.isThresholdReached")(function* (input: {
+        turnsSinceCompaction: number
+      }) {
+        return thresholdReached({ cfg: yield* config.get(), turnsSinceCompaction: input.turnsSinceCompaction })
       })
 
       // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
@@ -372,6 +379,7 @@ When constructing the summary, try to stick to this template:
 
       return Service.of({
         isOverflow,
+        isThresholdReached,
         prune,
         process: processCompaction,
         create,
@@ -397,6 +405,10 @@ When constructing the summary, try to stick to this template:
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     return runPromise((svc) => svc.isOverflow(input))
+  }
+
+  export async function isThresholdReached(input: { turnsSinceCompaction: number }) {
+    return runPromise((svc) => svc.isThresholdReached(input))
   }
 
   export async function prune(input: { sessionID: SessionID }) {
