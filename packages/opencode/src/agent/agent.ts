@@ -2,11 +2,10 @@ import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { generateObject, streamObject, type ModelMessage } from "ai"
+import type { ModelMessage } from "ai"
 import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncate"
 import { Auth } from "../auth"
-import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -22,6 +21,7 @@ import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { LLM } from "@/session/llm"
 
 export namespace Agent {
   export const Info = z
@@ -73,7 +73,6 @@ export namespace Agent {
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
-      const auth = yield* Auth.Service
       const skill = yield* Skill.Service
       const provider = yield* Provider.Service
 
@@ -330,10 +329,8 @@ export namespace Agent {
           description: string
           model?: { providerID: ProviderID; modelID: ModelID }
         }) {
-          const cfg = yield* config.get()
           const model = input.model ?? (yield* provider.defaultModel())
           const resolved = yield* provider.getModel(model.providerID, model.modelID)
-          const language = yield* provider.getLanguage(resolved)
 
           const system = [PROMPT_GENERATE]
           yield* Effect.promise(() =>
@@ -341,61 +338,25 @@ export namespace Agent {
           )
           const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
-          // TODO: clean this up so provider specific logic doesnt bleed over
-          const authInfo = yield* auth.get(model.providerID).pipe(Effect.orDie)
-
-          const isOpenaiOauth = model.providerID === "openai" && authInfo?.type === "oauth"
-
           const USER_MESSAGE_CONTENT = {
             role: "user",
             content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
           } as ModelMessage
 
-          const params = {
-            experimental_telemetry: {
-              isEnabled: cfg.experimental?.openTelemetry,
-              metadata: {
-                userId: cfg.username ?? "unknown",
-              },
-            },
-            temperature: 0.3,
-            messages: isOpenaiOauth
-              ? [USER_MESSAGE_CONTENT]
-              : [
-                  ...system.map(
-                    (item): ModelMessage => ({
-                      role: "system",
-                      content: item,
-                    }),
-                  ),
-                  USER_MESSAGE_CONTENT,
-                ],
-            model: language,
-            schema: z.object({
-              identifier: z.string(),
-              whenToUse: z.string(),
-              systemPrompt: z.string(),
+          return yield* Effect.promise((abort) =>
+            LLM.generateObject({
+              abort,
+              temperature: 0.3,
+              messages: [USER_MESSAGE_CONTENT],
+              model: resolved,
+              system,
+              schema: z.object({
+                identifier: z.string(),
+                whenToUse: z.string(),
+                systemPrompt: z.string(),
+              }),
             }),
-          } satisfies Parameters<typeof generateObject>[0]
-
-          if (model.providerID === "openai" && authInfo?.type === "oauth") {
-            return yield* Effect.promise(async () => {
-              const result = streamObject({
-                ...params,
-                providerOptions: ProviderTransform.providerOptions(resolved, {
-                  instructions: system.join("\n"),
-                  store: false,
-                }),
-                onError: () => {},
-              })
-              for await (const part of result.fullStream) {
-                if (part.type === "error") throw part.error
-              }
-              return result.object
-            })
-          }
-
-          return yield* Effect.promise(() => generateObject(params).then((r) => r.object))
+          )
         }),
       })
     }),

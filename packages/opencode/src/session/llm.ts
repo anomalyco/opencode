@@ -3,7 +3,16 @@ import { Log } from "@/util/log"
 import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
 import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
+import {
+  generateObject as generateObjectAI,
+  streamText,
+  streamObject,
+  wrapLanguageModel,
+  type ModelMessage,
+  type Tool,
+  tool,
+  jsonSchema,
+} from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -17,6 +26,7 @@ import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import z from "zod"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -38,6 +48,18 @@ export namespace LLM {
   }
 
   export type StreamRequest = StreamInput & {
+    abort: AbortSignal
+  }
+
+  export type ObjectInput<Schema extends z.ZodType> = {
+    model: Provider.Model
+    system: string[]
+    messages: ModelMessage[]
+    schema: Schema
+    temperature?: number
+  }
+
+  export type ObjectRequest<Schema extends z.ZodType> = ObjectInput<Schema> & {
     abort: AbortSignal
   }
 
@@ -334,6 +356,56 @@ export namespace LLM {
         },
       },
     })
+  }
+
+  export async function generateObject<Schema extends z.ZodType>(input: ObjectRequest<Schema>) {
+    const [language, cfg, auth] = await Promise.all([
+      Provider.getLanguage(input.model),
+      Config.get(),
+      Auth.get(input.model.providerID),
+    ])
+    const isOpenaiOauth = input.model.providerID === "openai" && auth?.type === "oauth"
+    const messages = isOpenaiOauth
+      ? input.messages
+      : [
+          ...input.system.map(
+            (x): ModelMessage => ({
+              role: "system",
+              content: x,
+            }),
+          ),
+          ...input.messages,
+        ]
+    const params = {
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+        },
+      },
+      temperature: input.temperature,
+      messages,
+      model: language,
+      schema: input.schema,
+      abortSignal: input.abort,
+    } satisfies Parameters<typeof generateObjectAI<Schema>>[0]
+
+    if (isOpenaiOauth) {
+      const result = streamObject({
+        ...params,
+        providerOptions: ProviderTransform.providerOptions(input.model, {
+          instructions: input.system.join("\n"),
+          store: false,
+        }),
+        onError: () => {},
+      })
+      for await (const part of result.fullStream) {
+        if (part.type === "error") throw part.error
+      }
+      return result.object
+    }
+
+    return generateObjectAI(params).then((x) => x.object)
   }
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
