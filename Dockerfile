@@ -28,8 +28,8 @@ RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-RUN adduser -D -u 1000 -h /home/jovyan jovyan
-RUN chown -R 1000:1000 ${PLAYWRIGHT_BROWSERS_PATH}
+RUN adduser --disabled-password --gecos "" --uid 1000 --home /home/jovyan jovyan
+RUN chown -R jovyan:jovyan ${PLAYWRIGHT_BROWSERS_PATH}
 ENV OPENCODE_CONFIG_DIR=/etc/opencode HOME=/home/jovyan
 WORKDIR /home/jovyan/project
 
