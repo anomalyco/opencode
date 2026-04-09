@@ -31,7 +31,10 @@ export namespace SessionProcessor {
 
   export interface Handle {
     readonly message: MessageV2.Assistant
-    readonly partFromToolCall: (toolCallID: string) => MessageV2.ToolPart | undefined
+    readonly updateToolCall: (
+      toolCallID: string,
+      update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
+    ) => Effect.Effect<MessageV2.ToolPart | undefined>
     readonly completeToolCall: (
       toolCallID: string,
       output: {
@@ -55,7 +58,9 @@ export namespace SessionProcessor {
   }
 
   type ToolCall = {
-    part: MessageV2.ToolPart
+    partID: MessageV2.ToolPart["id"]
+    messageID: MessageV2.ToolPart["messageID"]
+    sessionID: MessageV2.ToolPart["sessionID"]
     done: Deferred.Deferred<void>
   }
 
@@ -129,6 +134,37 @@ export namespace SessionProcessor {
           if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
         })
 
+        const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
+          const call = ctx.toolcalls[toolCallID]
+          if (!call) return
+          const part = yield* session.getPart({
+            partID: call.partID,
+            messageID: call.messageID,
+            sessionID: call.sessionID,
+          })
+          if (!part || part.type !== "tool") {
+            delete ctx.toolcalls[toolCallID]
+            return
+          }
+          return { call, part }
+        })
+
+        const updateToolCall = Effect.fn("SessionProcessor.updateToolCall")(function* (
+          toolCallID: string,
+          update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
+        ) {
+          const match = yield* readToolCall(toolCallID)
+          if (!match) return
+          const part = yield* session.updatePart(update(match.part))
+          ctx.toolcalls[toolCallID] = {
+            ...match.call,
+            partID: part.id,
+            messageID: part.messageID,
+            sessionID: part.sessionID,
+          }
+          return part
+        })
+
         const completeToolCall = Effect.fn("SessionProcessor.completeToolCall")(function* (
           toolCallID: string,
           output: {
@@ -138,7 +174,7 @@ export namespace SessionProcessor {
             attachments?: MessageV2.FilePart[]
           },
         ) {
-          const match = ctx.toolcalls[toolCallID]
+          const match = yield* readToolCall(toolCallID)
           if (!match || match.part.state.status !== "running") return
           yield* session.updatePart({
             ...match.part,
@@ -156,7 +192,7 @@ export namespace SessionProcessor {
         })
 
         const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
-          const match = ctx.toolcalls[toolCallID]
+          const match = yield* readToolCall(toolCallID)
           if (!match || match.part.state.status !== "running") return false
           yield* session.updatePart({
             ...match.part,
@@ -220,18 +256,21 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
+              const part = yield* session.updatePart({
+                id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.assistantMessage.sessionID,
+                type: "tool",
+                tool: value.toolName,
+                callID: value.id,
+                state: { status: "pending", input: {}, raw: "" },
+                metadata: value.providerExecuted ? { providerExecuted: true } : undefined,
+              } satisfies MessageV2.ToolPart)
               ctx.toolcalls[value.id] = {
                 done: yield* Deferred.make<void>(),
-                part: yield* session.updatePart({
-                  id: ctx.toolcalls[value.id]?.part.id ?? PartID.ascending(),
-                  messageID: ctx.assistantMessage.id,
-                  sessionID: ctx.assistantMessage.sessionID,
-                  type: "tool",
-                  tool: value.toolName,
-                  callID: value.id,
-                  state: { status: "pending", input: {}, raw: "" },
-                  metadata: value.providerExecuted ? { providerExecuted: true } : undefined,
-                } satisfies MessageV2.ToolPart),
+                partID: part.id,
+                messageID: part.messageID,
+                sessionID: part.sessionID,
               }
               return
 
@@ -245,23 +284,18 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
-              const match = ctx.toolcalls[value.toolCallId]
-              if (!match) return
-              ctx.toolcalls[value.toolCallId] = {
+              yield* updateToolCall(value.toolCallId, (match) => ({
                 ...match,
-                part: yield* session.updatePart({
-                  ...match.part,
-                  tool: value.toolName,
-                  state: {
-                    status: "running",
-                    input: value.input,
-                    time: { start: Date.now() },
-                  },
-                  metadata: match.part.metadata?.providerExecuted
-                    ? { ...value.providerMetadata, providerExecuted: true }
-                    : value.providerMetadata,
-                } satisfies MessageV2.ToolPart),
-              }
+                tool: value.toolName,
+                state: {
+                  status: "running",
+                  input: value.input,
+                  time: { start: Date.now() },
+                },
+                metadata: match.metadata?.providerExecuted
+                  ? { ...value.providerMetadata, providerExecuted: true }
+                  : value.providerMetadata,
+              }))
 
               const parts = MessageV2.parts(ctx.assistantMessage.id)
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
@@ -456,8 +490,10 @@ export namespace SessionProcessor {
             { concurrency: "unbounded" },
           )
 
-          for (const call of Object.values(ctx.toolcalls)) {
-            const part = call.part
+          for (const toolCallID of Object.keys(ctx.toolcalls)) {
+            const match = yield* readToolCall(toolCallID)
+            if (!match) continue
+            const part = match.part
             const end = Date.now()
             const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
             yield* session.updatePart({
@@ -547,9 +583,7 @@ export namespace SessionProcessor {
           get message() {
             return ctx.assistantMessage
           },
-          partFromToolCall(toolCallID: string) {
-            return ctx.toolcalls[toolCallID]?.part
-          },
+          updateToolCall,
           completeToolCall,
           process,
         } satisfies Handle

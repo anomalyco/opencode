@@ -388,7 +388,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: Provider.Model
         session: Session.Info
         tools?: Record<string, boolean>
-        processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall" | "completeToolCall">
+        processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
         bypassAgentCheck: boolean
         messages: MessageV2.WithParts[]
       }) {
@@ -405,10 +405,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           messages: input.messages,
           metadata: (val) =>
             Effect.runPromise(
-              Effect.gen(function* () {
-                const match = input.processor.partFromToolCall(options.toolCallId)
-                if (!match || !["running", "pending"].includes(match.state.status)) return
-                yield* sessions.updatePart({
+              input.processor.updateToolCall(options.toolCallId, (match) => {
+                if (!["running", "pending"].includes(match.state.status)) return match
+                return {
                   ...match,
                   state: {
                     title: val.title,
@@ -417,7 +416,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     input: args,
                     time: { start: Date.now() },
                   },
-                })
+                }
               }),
             ),
           ask: (req) =>
