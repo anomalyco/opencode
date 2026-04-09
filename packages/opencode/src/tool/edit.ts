@@ -42,6 +42,9 @@ export const EditTool = Tool.define("edit", {
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
   }),
+  aliases: {
+    filePath: ["file", "path", "file_path", "filepath"],
+  },
   async execute(params, ctx) {
     if (!params.filePath) {
       throw new Error("filePath is required")

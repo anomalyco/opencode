@@ -28,6 +28,9 @@ export const LspTool = Tool.define("lsp", {
     line: z.number().int().min(1).describe("The line number (1-based, as shown in editors)"),
     character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
   }),
+  aliases: {
+    filePath: ["file", "path", "file_path", "filepath"],
+  },
   execute: async (args, ctx) => {
     const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
     await assertExternalDirectory(ctx, file)

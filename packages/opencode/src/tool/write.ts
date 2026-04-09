@@ -23,6 +23,9 @@ export const WriteTool = Tool.define("write", {
     content: z.string().describe("The content to write to the file"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
+  aliases: {
+    filePath: ["file", "path", "file_path", "filepath"],
+  },
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)

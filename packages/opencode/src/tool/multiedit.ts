@@ -20,6 +20,9 @@ export const MultiEditTool = Tool.define("multiedit", {
       )
       .describe("Array of edit operations to perform sequentially on the file"),
   }),
+  aliases: {
+    filePath: ["file", "path", "file_path", "filepath"],
+  },
   async execute(params, ctx) {
     const tool = await EditTool.init()
     const results = []

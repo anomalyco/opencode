@@ -1,3 +1,5 @@
+if (process.env.OPENCODE_CWD) process.chdir(process.env.OPENCODE_CWD)
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"

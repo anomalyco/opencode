@@ -233,6 +233,7 @@ export namespace ToolRegistry {
                 .filter(Boolean)
                 .join("\n"),
               parameters: output.parameters,
+              aliases: tool.aliases,
               execute: tool.execute,
               formatValidationError: tool.formatValidationError,
             }

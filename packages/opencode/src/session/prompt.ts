@@ -43,6 +43,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { createAliasTransformer, schemaWithAliases } from "@/util/alias"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -349,6 +350,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         using _ = log.time("resolveTools")
         const tools: Record<string, AITool> = {}
+        const aliases: Record<string, Record<string, string[]>> = {}
 
         const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
           sessionID: input.session.id,
@@ -390,7 +392,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           providerID: input.model.providerID,
           agent: input.agent,
         })) {
-          const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+          // @ts-ignore - z.object with Record<string, ZodAny> return type is not properly inferred
+          const parametersWithAliases = schemaWithAliases(item.parameters, item.aliases)
+          const schema = ProviderTransform.schema(input.model, z.toJSONSchema(parametersWithAliases))
+          const aliasTransformer = createAliasTransformer(item.aliases)
+          if (item.aliases && Object.keys(item.aliases).length > 0) {
+            aliases[item.id] = item.aliases
+          }
           tools[item.id] = tool({
             id: item.id as any,
             description: item.description,
@@ -398,13 +406,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             execute(args, options) {
               return Effect.runPromise(
                 Effect.gen(function* () {
-                  const ctx = context(args, options)
+                  const resolvedArgs = aliasTransformer ? aliasTransformer(args) : args
+                  const ctx = context(resolvedArgs, options)
                   yield* plugin.trigger(
                     "tool.execute.before",
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-                    { args },
+                    { args: resolvedArgs },
                   )
-                  const result = yield* Effect.promise(() => item.execute(args, ctx))
+                  const result = yield* Effect.promise(() => item.execute(resolvedArgs, ctx))
                   const output = {
                     ...result,
                     attachments: result.attachments?.map((attachment) => ({
@@ -416,7 +425,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   }
                   yield* plugin.trigger(
                     "tool.execute.after",
-                    { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                    { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args: resolvedArgs },
                     output,
                   )
                   if (options.abortSignal?.aborted) {
@@ -507,7 +516,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           tools[key] = item
         }
 
-        return tools
+        return { tools, aliases }
       })
 
       const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -1423,7 +1432,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
               const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-              const tools = yield* resolveTools({
+              const { tools, aliases } = yield* resolveTools({
                 agent,
                 session,
                 model,
@@ -1482,6 +1491,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 system,
                 messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                 tools,
+                aliases,
                 model,
                 toolChoice: format.type === "json_schema" ? "required" : undefined,
               })

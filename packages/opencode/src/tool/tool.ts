@@ -30,6 +30,7 @@ export namespace Tool {
     id: string
     description: string
     parameters: Parameters
+    aliases?: Record<string, string[]>
     execute(
       args: z.infer<Parameters>,
       ctx: Context,

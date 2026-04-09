@@ -37,6 +37,7 @@ export namespace LLM {
     messages: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
+    aliases?: Record<string, Record<string, string[]>>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
   }
@@ -333,6 +334,39 @@ export namespace LLM {
             toolName: lower,
           }
         }
+
+        const toolAliases = input.aliases?.[failed.toolCall.toolName]
+        if (toolAliases) {
+          try {
+            const args = JSON.parse(failed.toolCall.input)
+            const transformed = { ...args }
+            for (const [canonical, aliasList] of Object.entries(toolAliases)) {
+              for (const alias of aliasList) {
+                if (alias in transformed && !(canonical in transformed)) {
+                  transformed[canonical] = transformed[alias]
+                  delete transformed[alias]
+                }
+              }
+            }
+
+            if (Object.keys(transformed).length > 0) {
+              l.info("repairing tool call with alias mapping", {
+                tool: failed.toolCall.toolName,
+                originalInput: args,
+                repairedInput: transformed,
+              })
+              return {
+                ...failed.toolCall,
+                input: JSON.stringify(transformed),
+              }
+            }
+          } catch (e) {
+            l.warn("failed to repair tool call with aliases", {
+              error: e,
+            })
+          }
+        }
+
         return {
           ...failed.toolCall,
           input: JSON.stringify({
