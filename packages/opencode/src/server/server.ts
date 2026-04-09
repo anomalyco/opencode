@@ -1,12 +1,11 @@
 import { generateSpecs } from "hono-openapi"
 import { Hono } from "hono"
-import { createNodeWebSocket } from "@hono/node-ws"
+import { adapter } from "#hono"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
-import { createAdaptorServer, type ServerType } from "@hono/node-server"
 import { Log } from "@/util/log"
 import { ControlPlaneRoutes } from "./control"
 import { UIRoutes } from "./ui"
@@ -30,7 +29,7 @@ export namespace Server {
 
   function create(opts: { cors?: string[] }) {
     const app = new Hono()
-    const ws = createNodeWebSocket({ app })
+    const runtime = adapter.create(app)
     return {
       app: app
         .onError(ErrorMiddleware)
@@ -39,9 +38,9 @@ export namespace Server {
         .use(CompressionMiddleware)
         .use(CorsMiddleware(opts))
         .route("/", ControlPlaneRoutes())
-        .route("/", InstanceRoutes(ws.upgradeWebSocket))
+        .route("/", InstanceRoutes(runtime.upgradeWebSocket))
         .route("/", UIRoutes()),
-      ws,
+      runtime,
     }
   }
 
@@ -74,46 +73,21 @@ export namespace Server {
     cors?: string[]
   }): Promise<Listener> {
     const built = create(opts)
-    const start = (port: number) =>
-      new Promise<ServerType>((resolve, reject) => {
-        const server = createAdaptorServer({ fetch: built.app.fetch })
-        built.ws.injectWebSocket(server)
-        const fail = (err: Error) => {
-          cleanup()
-          reject(err)
-        }
-        const ready = () => {
-          cleanup()
-          resolve(server)
-        }
-        const cleanup = () => {
-          server.off("error", fail)
-          server.off("listening", ready)
-        }
-        server.once("error", fail)
-        server.once("listening", ready)
-        server.listen(port, opts.hostname)
-      })
-
-    const server = opts.port === 0 ? await start(4096).catch(() => start(0)) : await start(opts.port)
-    const addr = server.address()
-    if (!addr || typeof addr === "string") {
-      throw new Error(`Failed to resolve server address for port ${opts.port}`)
-    }
+    const server = await built.runtime.listen(opts)
 
     const next = new URL("http://localhost")
     next.hostname = opts.hostname
-    next.port = String(addr.port)
+    next.port = String(server.port)
     url = next
 
     const mdns =
       opts.mdns &&
-      addr.port &&
+      server.port &&
       opts.hostname !== "127.0.0.1" &&
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (mdns) {
-      MDNS.publish(addr.port, opts.mdnsDomain)
+      MDNS.publish(server.port, opts.mdnsDomain)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
@@ -121,27 +95,13 @@ export namespace Server {
     let closing: Promise<void> | undefined
     return {
       hostname: opts.hostname,
-      port: addr.port,
+      port: server.port,
       url: next,
       stop(close?: boolean) {
-        closing ??= new Promise((resolve, reject) => {
+        closing ??= (async () => {
           if (mdns) MDNS.unpublish()
-          server.close((err) => {
-            if (err) {
-              reject(err)
-              return
-            }
-            resolve()
-          })
-          if (close) {
-            if ("closeAllConnections" in server && typeof server.closeAllConnections === "function") {
-              server.closeAllConnections()
-            }
-            if ("closeIdleConnections" in server && typeof server.closeIdleConnections === "function") {
-              server.closeIdleConnections()
-            }
-          }
-        })
+          await server.stop(close)
+        })()
         return closing
       },
     }
