@@ -4,6 +4,7 @@ import { proxy } from "hono/proxy"
 import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
 import { createHash } from "node:crypto"
+import * as fs from "node:fs/promises"
 import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
@@ -28,6 +29,7 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { errorHandler } from "./middleware"
+import { getMimeType } from "hono/utils/mime"
 
 const log = Log.create({ service: "server" })
 
@@ -285,13 +287,14 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
       if (embeddedWebUI) {
         const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
         if (!match) return c.json({ error: "Not Found" }, 404)
-        const file = Bun.file(match)
-        if (await file.exists()) {
-          c.header("Content-Type", file.type)
-          if (file.type.startsWith("text/html")) {
+
+        if (await fs.exists(match)) {
+          const mime = getMimeType(match) ?? "text/plain"
+          c.header("Content-Type", mime)
+          if (mime.startsWith("text/html")) {
             c.header("Content-Security-Policy", DEFAULT_CSP)
           }
-          return c.body(await file.arrayBuffer())
+          return c.body(new Uint8Array(await fs.readFile(match)))
         } else {
           return c.json({ error: "Not Found" }, 404)
         }

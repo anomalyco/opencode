@@ -161,6 +161,7 @@ export namespace SessionProcessor {
                 tool: value.toolName,
                 callID: value.id,
                 state: { status: "pending", input: {}, raw: "" },
+                metadata: value.providerExecuted ? { providerExecuted: true } : undefined,
               } satisfies MessageV2.ToolPart)
               return
 
@@ -180,7 +181,9 @@ export namespace SessionProcessor {
                 ...match,
                 tool: value.toolName,
                 state: { status: "running", input: value.input, time: { start: Date.now() } },
-                metadata: value.providerMetadata,
+                metadata: match.metadata?.providerExecuted
+                  ? { ...value.providerMetadata, providerExecuted: true }
+                  : value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
               const parts = MessageV2.parts(ctx.assistantMessage.id)
