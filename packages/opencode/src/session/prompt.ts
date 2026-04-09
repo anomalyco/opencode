@@ -1507,7 +1507,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 Effect.promise(() => SystemPrompt.skills(agent)),
                 Effect.promise(() => SystemPrompt.environment(model)),
                 instruction.system().pipe(Effect.orDie),
-                Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+                MessageV2.toModelMessagesEffect(msgs, model),
               ])
               const system = [...env, ...(skills ? [skills] : []), ...instructions]
               const format = lastUser.format ?? { type: "text" as const }
