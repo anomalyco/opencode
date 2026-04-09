@@ -176,12 +176,22 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
-              const match = ctx.toolcalls[value.toolCallId]
-              if (!match) return
+              const pointer = ctx.toolcalls[value.toolCallId]
+              const match = yield* session.getPart({
+                partID: pointer.id,
+                messageID: pointer.messageID,
+                sessionID: pointer.sessionID,
+              })
+              if (!match || match.type !== "tool") return
               ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                 ...match,
                 tool: value.toolName,
-                state: { status: "running", input: value.input, time: { start: Date.now() } },
+                state: {
+                  ...match.state,
+                  status: "running",
+                  input: value.input,
+                  time: { start: Date.now() },
+                },
                 metadata: match.metadata?.providerExecuted
                   ? { ...value.providerMetadata, providerExecuted: true }
                   : value.providerMetadata,
@@ -237,6 +247,7 @@ export namespace SessionProcessor {
             case "tool-error": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+
               yield* session.updatePart({
                 ...match,
                 state: {
