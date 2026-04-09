@@ -24,7 +24,7 @@ import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { WorkspaceRouterMiddleware } from "./middleware"
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket) =>
+export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
   new Hono()
     .use(WorkspaceRouterMiddleware(upgrade))
     .route("/project", ProjectRoutes())
