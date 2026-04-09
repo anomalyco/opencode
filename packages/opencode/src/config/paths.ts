@@ -14,7 +14,7 @@ export namespace ConfigPaths {
 
   export async function directories(directory: string, worktree: string) {
     return [
-      Global.Path.config,
+      ...(Flag.OPENCODE_DISABLE_GLOBAL_CONFIG ? [] : [Global.Path.config]),
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
