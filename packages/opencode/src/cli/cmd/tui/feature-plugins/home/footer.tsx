@@ -1,8 +1,59 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { Global } from "@/global"
+import { Process } from "@/util/process"
 
 const id = "internal:home-footer"
+
+const EXCLUDED_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "target",
+  "__pycache__",
+  ".gradle",
+  "Pods",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  "venv",
+  ".venv",
+  "vendor",
+  ".yarn",
+  "coverage",
+  ".nyc_output",
+  ".terraform",
+  ".tox",
+  ".cache",
+])
+
+const SOURCE_EXTS = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".swift",
+  ".sh",
+  ".bash",
+  ".zsh",
+])
+
+const FIND_PRUNE = [...EXCLUDED_DIRS].map((d) => `-name "${d}"`).join(" -o ")
+const FIND_NAMES = [...SOURCE_EXTS].map((e) => `-name "*${e}"`).join(" -o ")
+const FIND_CMD = `find . \\( ${FIND_PRUNE} \\) -prune -o -type f \\( ${FIND_NAMES} \\) -print | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'`
+
+async function countLoc(dir: string): Promise<number> {
+  const result = await Process.text(["sh", "-c", FIND_CMD], { cwd: dir, nothrow: true })
+  const n = parseInt(result.text.trim(), 10)
+  return isNaN(n) ? 0 : n
+}
 
 function Directory(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
@@ -54,6 +105,29 @@ function Version(props: { api: TuiPluginApi }) {
   )
 }
 
+function Loc(props: { api: TuiPluginApi }) {
+  const theme = () => props.api.theme.current
+  const [loc, setLoc] = createSignal("")
+  const dir = () => props.api.state.path.directory || process.cwd()
+
+  async function refreshLoc() {
+    const count = await countLoc(dir())
+    if (count > 0) setLoc(`LOC: ${count.toLocaleString()} (${(count / 37000).toFixed(2)} GT)`)
+  }
+
+  onMount(() => {
+    void refreshLoc()
+    const interval = setInterval(() => void refreshLoc(), 60_000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  return (
+    <Show when={loc()}>
+      <text fg={theme().textMuted}>{loc()}</text>
+    </Show>
+  )
+}
+
 function View(props: { api: TuiPluginApi }) {
   return (
     <box
@@ -68,6 +142,7 @@ function View(props: { api: TuiPluginApi }) {
     >
       <Directory api={props.api} />
       <Mcp api={props.api} />
+      <Loc api={props.api} />
       <box flexGrow={1} />
       <Version api={props.api} />
     </box>

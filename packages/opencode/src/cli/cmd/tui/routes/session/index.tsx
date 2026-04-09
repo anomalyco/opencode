@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -83,8 +84,57 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "../../plugin"
+import { Process } from "@/util/process"
 
 addDefaultParsers(parsers.parsers)
+
+const LOC_EXCLUDED = new Set([
+  "node_modules",
+  ".git",
+  "target",
+  "__pycache__",
+  ".gradle",
+  "Pods",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  "venv",
+  ".venv",
+  "vendor",
+  ".yarn",
+  "coverage",
+  ".nyc_output",
+  ".terraform",
+  ".tox",
+  ".cache",
+])
+const LOC_EXTS = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".swift",
+  ".sh",
+  ".bash",
+  ".zsh",
+])
+const LOC_PRUNE = [...LOC_EXCLUDED].map((d) => `-name "${d}"`).join(" -o ")
+const LOC_NAMES = [...LOC_EXTS].map((e) => `-name "*${e}"`).join(" -o ")
+const LOC_CMD = `find . \\( ${LOC_PRUNE} \\) -prune -o -type f \\( ${LOC_NAMES} \\) -print | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'`
+
+async function countLoc(dir: string): Promise<number> {
+  const result = await Process.text(["sh", "-c", LOC_CMD], { cwd: dir, nothrow: true })
+  const n = parseInt(result.text.trim(), 10)
+  return isNaN(n) ? 0 : n
+}
 
 const context = createContext<{
   width: number
@@ -153,6 +203,13 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [loc, setLoc] = createSignal("")
+  const locDir = createMemo(() => sync.data.path.directory || process.cwd())
+
+  async function refreshLoc() {
+    const count = await countLoc(locDir())
+    if (count > 0) setLoc(`LOC: ${count.toLocaleString()} (${(count / 37000).toFixed(2)} GT)`)
+  }
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -181,6 +238,12 @@ export function Session() {
         })
         return navigate({ type: "home" })
       })
+  })
+
+  onMount(() => {
+    void refreshLoc()
+    const interval = setInterval(() => void refreshLoc(), 60_000)
+    onCleanup(() => clearInterval(interval))
   })
 
   const toast = useToast()
@@ -1171,6 +1234,11 @@ export function Session() {
                       toBottom()
                     }}
                     sessionID={route.sessionID}
+                    hint={
+                      <Show when={loc()}>
+                        <text fg={theme.textMuted}>{loc()}</text>
+                      </Show>
+                    }
                     right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                   />
                 </TuiPluginRuntime.Slot>
