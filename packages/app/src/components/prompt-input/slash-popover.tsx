@@ -42,7 +42,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
         }}
         class="absolute inset-x-0 -top-2 -translate-y-full origin-bottom-left max-h-80 min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 rounded-[12px]
-                 bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-lg-border-base)]"
+                 bg-surface-raised-strong shadow-[var(--shadow-popover)]"
         onMouseDown={(e) => e.preventDefault()}
       >
         <Switch>

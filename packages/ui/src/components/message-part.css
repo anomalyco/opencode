@@ -131,7 +131,8 @@
     word-break: break-word;
     overflow: hidden;
     background: var(--surface-base);
-    border: 1px solid var(--border-weak-base);
+    border: none;
+    box-shadow: var(--shadow-user-message);
     padding: 8px 12px;
     border-radius: 6px;
 

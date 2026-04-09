@@ -181,10 +181,10 @@
 [data-component="select-content"][data-trigger-style="settings"] {
   min-width: 160px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-weaker-base);
+  border: none;
   background-color: var(--surface-raised-strong);
   padding: 0;
-  box-shadow: 0 10px 24px -16px rgba(0, 0, 0, 0.45), 0 6px 12px -10px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-popover);
 
   [data-slot="select-select-content-list"] {
     padding: 4px;

@@ -1479,6 +1479,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       class="capitalize max-w-[160px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
+                      contentVariant="settings"
                       triggerProps={{ "data-action": "prompt-agent" }}
                       variant="ghost"
                     />
@@ -1575,6 +1576,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         class="capitalize max-w-[160px] text-text-base"
                         valueClass="truncate text-13-regular text-text-base"
                         triggerStyle={control()}
+                        contentVariant="settings"
                         triggerProps={{ "data-action": "prompt-model-variant" }}
                         variant="ghost"
                       />
