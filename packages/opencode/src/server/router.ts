@@ -89,7 +89,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     }
 
     if (c.req.header("upgrade")?.toLowerCase() === "websocket") {
-      return ServerProxy.websocket(target, c.req.raw, c.env)
+      return ServerProxy.websocket(upgrade, target, c.req.raw, c.env)
     }
 
     const headers = new Headers(c.req.raw.headers)

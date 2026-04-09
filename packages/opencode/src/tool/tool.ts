@@ -60,6 +60,13 @@ export namespace Tool {
   export type InferMetadata<T> =
     T extends Info<any, infer M> ? M : T extends Effect.Effect<Info<any, infer M>, any, any> ? M : never
 
+  export type InferDef<T> =
+    T extends Info<infer P, infer M>
+      ? Def<P, M>
+      : T extends Effect.Effect<Info<infer P, infer M>, any, any>
+        ? Def<P, M>
+        : never
+
   function wrap<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
     init: (() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>,
@@ -118,7 +125,7 @@ export namespace Tool {
     )
   }
 
-  export function init(info: Info): Effect.Effect<Def> {
+  export function init<P extends z.ZodType, M extends Metadata>(info: Info<P, M>): Effect.Effect<Def<P, M>> {
     return Effect.gen(function* () {
       const init = yield* Effect.promise(() => info.init())
       return {

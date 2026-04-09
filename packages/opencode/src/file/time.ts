@@ -46,7 +46,7 @@ export namespace FileTime {
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
 
       const stamp = Effect.fnUntraced(function* (file: string) {
-        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.void))
         return {
           read: yield* DateTime.nowAsDate,
           mtime: info ? Option.getOrUndefined(info.mtime)?.getTime() : undefined,
