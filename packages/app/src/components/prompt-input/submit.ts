@@ -4,12 +4,14 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
+import { useFollowupQueue } from "@/context/followup-queue"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
@@ -57,9 +59,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const globalSync = useGlobalSync()
   const local = useLocal()
   const prompt = usePrompt()
+  const followupQueue = useFollowupQueue()
   const layout = useLayout()
   const language = useLanguage()
   const params = useParams()
+  const settings = useSettings()
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -330,6 +334,18 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     removeCommentItems(commentItems)
     clearInput()
     addOptimisticMessage()
+
+    if (params.id && input.working() && settings.general.followup() === "queue") {
+      followupQueue.enqueue({
+        sessionID: session.id,
+        messageID,
+        parts: requestParts,
+        agent,
+        model,
+        variant,
+      })
+      return
+    }
 
     const waitForWorktree = async () => {
       const worktree = WorktreeState.get(sessionDirectory)

@@ -48,6 +48,10 @@ export const SettingsGeneral: Component = () => {
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
+  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
+  ])
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -276,6 +280,24 @@ export const SettingsGeneral: Component = () => {
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.feed")}</h3>
 
       <div class="bg-surface-raised-base px-4 rounded-lg">
+        <SettingsRow
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <Select
+            data-action="settings-feed-followup"
+            options={followupOptions()}
+            current={followupOptions().find((o) => o.value === settings.general.followup())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setFollowup(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "180px" }}
+          />
+        </SettingsRow>
+
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}

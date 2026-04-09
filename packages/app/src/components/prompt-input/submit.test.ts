@@ -5,10 +5,14 @@ let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
+const promptAsyncCalls: string[] = []
+const queuedMessages: string[] = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 
 let selected = "/repo/worktree-a"
+let currentParams = {} as { id?: string }
+let followupMode: "queue" | "steer" = "steer"
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
@@ -22,6 +26,10 @@ const clientFor = (directory: string) => {
       },
       shell: async () => {
         sentShell.push(directory)
+        return { data: undefined }
+      },
+      promptAsync: async () => {
+        promptAsyncCalls.push(directory)
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
@@ -39,7 +47,7 @@ beforeAll(async () => {
 
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
-    useParams: () => ({}),
+    useParams: () => currentParams,
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -126,6 +134,22 @@ beforeAll(async () => {
     }),
   }))
 
+  mock.module("@/context/followup-queue", () => ({
+    useFollowupQueue: () => ({
+      enqueue: (input: { messageID: string }) => {
+        queuedMessages.push(input.messageID)
+      },
+    }),
+  }))
+
+  mock.module("@/context/settings", () => ({
+    useSettings: () => ({
+      general: {
+        followup: () => followupMode,
+      },
+    }),
+  }))
+
   mock.module("@/context/platform", () => ({
     usePlatform: () => ({
       fetch: fetch,
@@ -145,9 +169,13 @@ beforeAll(async () => {
 beforeEach(() => {
   createdClients.length = 0
   createdSessions.length = 0
+  promptAsyncCalls.length = 0
+  queuedMessages.length = 0
   sentShell.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
+  currentParams = {}
+  followupMode = "steer"
 })
 
 describe("prompt submit worktree selection", () => {
@@ -180,5 +208,33 @@ describe("prompt submit worktree selection", () => {
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+  })
+
+  test("queues follow-up prompts when queue mode is enabled", async () => {
+    currentParams = { id: "session-existing" }
+    followupMode = "queue"
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-existing" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(queuedMessages).toHaveLength(1)
+    expect(promptAsyncCalls).toHaveLength(0)
   })
 })

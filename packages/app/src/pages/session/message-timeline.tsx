@@ -16,6 +16,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useFollowupQueue } from "@/context/followup-queue"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
@@ -115,6 +116,7 @@ export function MessageTimeline(props: {
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
+  const followupQueue = useFollowupQueue()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
@@ -554,6 +556,7 @@ export function MessageTimeline(props: {
             <For each={props.renderedUserMessages}>
               {(message) => {
                 const comments = createMemo(() => messageComments(sync.data.part[message.id] ?? []))
+                const queued = createMemo(() => followupQueue.isQueued(message.sessionID, message.id))
                 return (
                   <div
                     id={props.anchor(message.id)}
@@ -594,6 +597,15 @@ export function MessageTimeline(props: {
                               )}
                             </For>
                           </div>
+                        </div>
+                      </div>
+                    </Show>
+                    <Show when={queued()}>
+                      <div class="w-full px-4 md:px-5 pb-2">
+                        <div class="ml-auto flex max-w-[82%] justify-end">
+                          <span class="inline-flex items-center rounded-full border border-border-weak-base bg-background-stronger px-2 py-0.5 text-11-medium uppercase tracking-wide text-text-weak">
+                            {language.t("session.messages.queued")}
+                          </span>
                         </div>
                       </div>
                     </Show>

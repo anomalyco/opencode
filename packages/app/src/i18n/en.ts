@@ -523,6 +523,7 @@ export const dict = {
   "session.messages.loadEarlier": "Load earlier messages",
   "session.messages.loading": "Loading messages...",
   "session.messages.jumpToLatest": "Jump to latest",
+  "session.messages.queued": "Queued",
 
   "session.context.addToContext": "Add {{selection}} to context",
   "session.todo.title": "Todos",
@@ -634,6 +635,11 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.followup.title": "Follow-up behavior",
+  "settings.general.row.followup.description":
+    "Choose whether follow-up prompts steer immediately or wait in a queue until the current response finishes",
+  "settings.general.row.followup.option.queue": "Queue",
+  "settings.general.row.followup.option.steer": "Steer",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
