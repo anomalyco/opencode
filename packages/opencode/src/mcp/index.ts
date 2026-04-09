@@ -501,7 +501,7 @@ export namespace MCP {
                   return
                 }
 
-                const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.void))
                 if (!result) return
 
                 s.status[key] = result.status

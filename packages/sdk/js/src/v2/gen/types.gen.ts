@@ -1250,6 +1250,29 @@ export type ProviderConfig = {
   env?: Array<string>
   id?: string
   npm?: string
+  whitelist?: Array<string>
+  blacklist?: Array<string>
+  options?: {
+    apiKey?: string
+    baseURL?: string
+    /**
+     * GitHub Enterprise URL for copilot authentication
+     */
+    enterpriseUrl?: string
+    /**
+     * Enable promptCacheKey for this provider (default false)
+     */
+    setCacheKey?: boolean
+    /**
+     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     */
+    timeout?: number | false
+    /**
+     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
+     */
+    chunkTimeout?: number
+    [key: string]: unknown | string | boolean | number | false | number | undefined
+  }
   models?: {
     [key: string]: {
       id?: string
@@ -1288,15 +1311,15 @@ export type ProviderConfig = {
       }
       experimental?: boolean
       status?: "alpha" | "beta" | "deprecated"
+      provider?: {
+        npm?: string
+        api?: string
+      }
       options?: {
         [key: string]: unknown
       }
       headers?: {
         [key: string]: string
-      }
-      provider?: {
-        npm?: string
-        api?: string
       }
       /**
        * Variant-specific configuration
@@ -1311,29 +1334,6 @@ export type ProviderConfig = {
         }
       }
     }
-  }
-  whitelist?: Array<string>
-  blacklist?: Array<string>
-  options?: {
-    apiKey?: string
-    baseURL?: string
-    /**
-     * GitHub Enterprise URL for copilot authentication
-     */
-    enterpriseUrl?: string
-    /**
-     * Enable promptCacheKey for this provider (default false)
-     */
-    setCacheKey?: boolean
-    /**
-     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
-     */
-    timeout?: number | false
-    /**
-     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
-     */
-    chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
   }
 }
 
