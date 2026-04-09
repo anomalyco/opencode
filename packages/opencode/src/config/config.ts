@@ -1057,6 +1057,19 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      context: z
+        .object({
+          exclude: z
+            .array(z.string())
+            .optional()
+            .describe("Glob patterns for instruction files or directories to exclude from automatic loading"),
+          include: z
+            .array(z.string())
+            .optional()
+            .describe("Glob patterns for additional instruction files to include"),
+        })
+        .optional()
+        .describe("Control which instruction files are automatically loaded"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),

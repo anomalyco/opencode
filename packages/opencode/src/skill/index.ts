@@ -17,6 +17,7 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "../util/glob"
 import { Log } from "../util/log"
 import { Discovery } from "./discovery"
+import { ContextMap } from "../util/context-map"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -145,6 +146,7 @@ export namespace Skill {
   ) {
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
       for (const dir of EXTERNAL_DIRS) {
+        if (yield* ContextMap.isExternalDirIgnored(dir)) continue
         const root = path.join(Global.Path.home, dir)
         if (!(yield* fsys.isDir(root))) continue
         yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
@@ -155,6 +157,8 @@ export namespace Skill {
         .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
       for (const root of upDirs) {
+        const dirName = path.basename(root)
+        if (yield* ContextMap.isExternalDirIgnored(dirName)) continue
         yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
       }
     }
