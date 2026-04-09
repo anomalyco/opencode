@@ -11,7 +11,7 @@
   "mcp": {
     "playwright": {
       "type": "local",
-      "command": ["playwright-mcp", "--headless"],
+      "command": ["playwright-mcp", "--headless", "--browser", "chromium"],
       "enabled": true
     }
   }
