@@ -1174,6 +1174,57 @@ unix(
 )
 
 unix(
+  "cancel finalizes interrupted bash tool output through normal truncation",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Interrupted bash truncation",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "build",
+            noReply: true,
+            parts: [{ type: "text", text: "run bash" }],
+          })
+
+          yield* llm.tool("bash", {
+            command:
+              'i=0; while [ "$i" -lt 4000 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; sleep 30',
+            description: "Print many lines",
+            timeout: 30_000,
+            workdir: path.resolve(dir),
+          })
+
+          const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+          yield* llm.wait(1)
+          yield* Effect.sleep(150)
+          yield* prompt.cancel(chat.id)
+
+          const exit = yield* Fiber.await(run)
+          expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isFailure(exit)) return
+
+          const tool = completedTool(exit.value.parts)
+          if (!tool) return
+
+          expect(tool.state.metadata.truncated).toBe(true)
+          expect(typeof tool.state.metadata.outputPath).toBe("string")
+          expect(tool.state.output).toContain("The tool call succeeded but the output was truncated.")
+          expect(tool.state.output).toContain("Full output saved to:")
+          expect(tool.state.output).not.toContain("Tool execution aborted")
+        }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
+
+unix(
   "cancel interrupts loop queued behind shell",
   () =>
     provideTmpdirInstance(

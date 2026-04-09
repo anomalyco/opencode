@@ -388,7 +388,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: Provider.Model
         session: Session.Info
         tools?: Record<string, boolean>
-        processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall">
+        processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall" | "completeToolCall">
         bypassAgentCheck: boolean
         messages: MessageV2.WithParts[]
       }) {
@@ -465,6 +465,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
                     output,
                   )
+                  if (options.abortSignal?.aborted) {
+                    yield* input.processor.completeToolCall(options.toolCallId, output)
+                  }
                   return output
                 }),
               )
@@ -529,7 +532,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ...(truncated.truncated && { outputPath: truncated.outputPath }),
                 }
 
-                return {
+                const output = {
                   title: "",
                   metadata,
                   output: truncated.content,
@@ -541,6 +544,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   })),
                   content: result.content,
                 }
+                if (opts.abortSignal?.aborted) {
+                  yield* input.processor.completeToolCall(opts.toolCallId, output)
+                }
+                return output
               }),
             )
           tools[key] = item

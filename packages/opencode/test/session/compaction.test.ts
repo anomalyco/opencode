@@ -150,6 +150,7 @@ function fake(
         state: { status: "pending", input: {}, raw: "" },
       }
     },
+    completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
     process: Effect.fn("TestSessionProcessor.process")(() => Effect.succeed(result)),
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }
