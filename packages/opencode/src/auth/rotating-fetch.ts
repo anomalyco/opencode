@@ -1,5 +1,5 @@
 import { Auth } from "./index"
-import { withOAuthRecord } from "./context"
+import { withOAuthRecord, getOAuthRecordID } from "./context"
 import { CredentialManager } from "./credential-manager"
 import { Log } from "../util/log"
 
@@ -178,8 +178,19 @@ export async function rotatingFetch(
     let response: Response
     let bodyReplayable = true
 
+    // Create request with OAuth token injected
+    const request = new Request(input, init)
+    const oauthHeaders = new Headers(request.headers)
+    // Remove any conflicting apiKey header
+    oauthHeaders.delete("x-api-key")
+    oauthHeaders.set("Authorization", `Bearer ${record.access}`)
+    const oauthInit: RequestInit = {
+      ...init,
+      headers: oauthHeaders,
+    }
+
     try {
-      response = await withOAuthRecord(providerID, recordID, () => fetch(input, init))
+      response = await withOAuthRecord(providerID, recordID, () => fetch(request, oauthInit))
       bodyReplayable = isReplayableBody(response.body)
     } catch (error) {
       if (isNetworkError(error)) {
@@ -194,12 +205,12 @@ export async function rotatingFetch(
       throw error
     }
 
-    const headers = summarizeResponseHeaders(response)
+    const responseHeaders = summarizeResponseHeaders(response)
     log.debug("rotating-fetch response", {
       providerID,
       recordID,
       status: response.status,
-      headers,
+      headers: responseHeaders,
     })
 
     if (response.ok) {
