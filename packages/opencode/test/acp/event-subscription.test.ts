@@ -369,6 +369,117 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("derives session titles for default titled sessions in listSessions()", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, stop, sdk } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        sdk.session.list = async () => ({
+          data: [
+            {
+              id: "ses_1",
+              directory: cwd,
+              title: "New session - 2026-04-09T15:24:00.000Z",
+              time: { updated: Date.now() },
+            },
+            {
+              id: "ses_2",
+              directory: cwd,
+              title: "Keep custom title",
+              time: { updated: Date.now() - 1 },
+            },
+          ],
+        })
+        sdk.session.messages = async (input?: any) => ({
+          data:
+            input?.sessionID === "ses_1"
+              ? [
+                  {
+                    info: { role: "user", sessionID: "ses_1" },
+                    parts: [
+                      {
+                        id: "part_1",
+                        sessionID: "ses_1",
+                        messageID: "msg_1",
+                        type: "text",
+                        text: "Pressing win + e not opening my doom emacs, why?",
+                      },
+                    ],
+                  },
+                ]
+              : [],
+        })
+
+        const result = await agent.listSessions({ cwd } as any)
+
+        expect(result.sessions[0]?.title).toBe("Pressing win + e not opening my doom emacs, why?")
+        expect(result.sessions[1]?.title).toBe("Keep custom title")
+        stop()
+      },
+    })
+  })
+
+  test("replays history on resumeSession()", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, sessionUpdates, stop, sdk } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        sdk.session.messages = async () => ({
+          data: [
+            {
+              info: {
+                id: "msg_user",
+                role: "user",
+                sessionID: sessionId,
+                model: { providerID: "opencode", modelID: "big-pickle" },
+                agent: "build",
+              },
+              parts: [
+                {
+                  id: "part_user",
+                  sessionID: sessionId,
+                  messageID: "msg_user",
+                  type: "text",
+                  text: "hello from history",
+                },
+              ],
+            },
+            {
+              info: {
+                id: "msg_assistant",
+                role: "assistant",
+                sessionID: sessionId,
+              },
+              parts: [
+                {
+                  id: "part_assistant",
+                  sessionID: sessionId,
+                  messageID: "msg_assistant",
+                  type: "text",
+                  text: "hi back",
+                },
+              ],
+            },
+          ],
+        })
+
+        await agent.unstable_resumeSession({ sessionId, cwd, mcpServers: [] } as any)
+
+        const updates = sessionUpdates.filter((item) => item.sessionId === sessionId).map((item) => item.update.sessionUpdate)
+        expect(updates).toContain("user_message_chunk")
+        expect(updates).toContain("agent_message_chunk")
+        stop()
+      },
+    })
+  })
+
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

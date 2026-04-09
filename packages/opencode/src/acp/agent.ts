@@ -41,6 +41,7 @@ import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
+import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
@@ -126,6 +127,36 @@ export namespace ACP {
       })
   }
 
+  async function getMessages(sdk: OpencodeClient, sessionID: string, directory: string) {
+    return sdk.session
+      .messages({ sessionID, directory }, { throwOnError: true })
+      .then((x) => x.data)
+      .catch((error) => {
+        log.error("failed to fetch session messages", { error, sessionID })
+        return undefined
+      })
+  }
+
+  function getTitle(messages?: SessionMessageResponse[]) {
+    if (!messages) return
+    for (const msg of messages) {
+      if (msg.info.role !== "user") continue
+      const text = msg.parts
+        .flatMap((part) => {
+          if (part.type === "text" && !part.synthetic && !part.ignored) return [part.text]
+          if (part.type === "subtask") return [part.description || part.prompt]
+          return []
+        })
+        .map((part) => part.trim())
+        .find((part) => part.length > 0)
+      if (!text) continue
+      const line = text.replace(/\s+/g, " ").trim()
+      if (!line) continue
+      if (line.length <= 100) return line
+      return line.slice(0, 97) + "..."
+    }
+  }
+
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
@@ -156,6 +187,35 @@ export namespace ACP {
       this.sdk = config.sdk
       this.sessionManager = new ACPSessionManager(this.sdk)
       this.startEventSubscription()
+    }
+
+    private async replay(sessionID: string, directory: string) {
+      const messages = await getMessages(this.sdk, sessionID, directory)
+      for (const msg of messages ?? []) {
+        log.debug("replay message", msg)
+        await this.processMessage(msg)
+      }
+      return messages
+    }
+
+    private hydrate(result: Awaited<ReturnType<Agent["loadSessionMode"]>>, sessionID: string, messages?: SessionMessageResponse[]) {
+      const last = messages?.findLast((msg) => msg.info.role === "user")?.info
+      if (last?.role !== "user") return result
+      result.models.currentModelId = `${last.model.providerID}/${last.model.modelID}`
+      this.sessionManager.setModel(sessionID, {
+        providerID: ProviderID.make(last.model.providerID),
+        modelID: ModelID.make(last.model.modelID),
+      })
+      if (result.modes?.availableModes.some((mode) => mode.id === last.agent)) {
+        result.modes.currentModeId = last.agent
+        this.sessionManager.setMode(sessionID, last.agent)
+      }
+      result.configOptions = buildConfigOptions({
+        currentModelId: result.models.currentModelId,
+        availableModels: result.models.availableModels,
+        modes: result.modes,
+      })
+      return result
     }
 
     private startEventSubscription() {
@@ -638,43 +698,8 @@ export namespace ACP {
           sessionId,
         })
 
-        // Replay session history
-        const messages = await this.sdk.session
-          .messages(
-            {
-              sessionID: sessionId,
-              directory,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data)
-          .catch((err) => {
-            log.error("unexpected error when fetching message", { error: err })
-            return undefined
-          })
-
-        const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
-        if (lastUser?.role === "user") {
-          result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
-          this.sessionManager.setModel(sessionId, {
-            providerID: ProviderID.make(lastUser.model.providerID),
-            modelID: ModelID.make(lastUser.model.modelID),
-          })
-          if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
-            result.modes.currentModeId = lastUser.agent
-            this.sessionManager.setMode(sessionId, lastUser.agent)
-          }
-          result.configOptions = buildConfigOptions({
-            currentModelId: result.models.currentModelId,
-            availableModels: result.models.availableModels,
-            modes: result.modes,
-          })
-        }
-
-        for (const msg of messages ?? []) {
-          log.debug("replay message", msg)
-          await this.processMessage(msg)
-        }
+        const messages = await this.replay(sessionId, directory)
+        this.hydrate(result, sessionId, messages)
 
         await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
 
@@ -709,12 +734,16 @@ export namespace ACP {
         const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
         const page = filtered.slice(0, limit)
 
-        const entries: SessionInfo[] = page.map((session) => ({
-          sessionId: session.id,
-          cwd: session.directory,
-          title: session.title,
-          updatedAt: new Date(session.time.updated).toISOString(),
-        }))
+        const entries: SessionInfo[] = await Promise.all(
+          page.map(async (session) => ({
+            sessionId: session.id,
+            cwd: session.directory,
+            title: Session.isDefaultTitle(session.title)
+              ? getTitle(await getMessages(this.sdk, session.id, session.directory)) ?? session.title
+              : session.title,
+            updatedAt: new Date(session.time.updated).toISOString(),
+          })),
+        )
 
         const last = page[page.length - 1]
         const next = filtered.length > limit && last ? String(last.time.updated) : undefined
@@ -767,24 +796,7 @@ export namespace ACP {
           sessionId,
         })
 
-        const messages = await this.sdk.session
-          .messages(
-            {
-              sessionID: sessionId,
-              directory,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data)
-          .catch((err) => {
-            log.error("unexpected error when fetching message", { error: err })
-            return undefined
-          })
-
-        for (const msg of messages ?? []) {
-          log.debug("replay message", msg)
-          await this.processMessage(msg)
-        }
+        await this.replay(sessionId, directory)
 
         await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
 
@@ -816,6 +828,9 @@ export namespace ACP {
           mcpServers,
           sessionId,
         })
+
+        const messages = await this.replay(sessionId, directory)
+        this.hydrate(result, sessionId, messages)
 
         await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
 
