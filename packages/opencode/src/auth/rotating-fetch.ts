@@ -178,19 +178,10 @@ export async function rotatingFetch(
     let response: Response
     let bodyReplayable = true
 
-    // Create request with OAuth token injected
-    const request = new Request(input, init)
-    const oauthHeaders = new Headers(request.headers)
-    // Remove any conflicting apiKey header
-    oauthHeaders.delete("x-api-key")
-    oauthHeaders.set("Authorization", `Bearer ${record.access}`)
-    const oauthInit: RequestInit = {
-      ...init,
-      headers: oauthHeaders,
-    }
-
+    // For OAuth, SDK adds Authorization header via apiKey, so we don't add another one
+    // But we still track which record was used via withOAuthRecord for health updates
     try {
-      response = await withOAuthRecord(providerID, recordID, () => fetch(request, oauthInit))
+      response = await withOAuthRecord(providerID, recordID, () => fetch(input, init))
       bodyReplayable = isReplayableBody(response.body)
     } catch (error) {
       if (isNetworkError(error)) {
