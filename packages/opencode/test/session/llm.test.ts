@@ -342,8 +342,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
-          variant: "high",
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
@@ -716,8 +715,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-          variant: "high",
+          model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
