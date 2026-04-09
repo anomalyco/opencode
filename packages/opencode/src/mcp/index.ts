@@ -154,6 +154,7 @@ export namespace MCP {
           {
             resetTimeoutOnProgress: true,
             timeout,
+            onprogress: () => {}, // inject progressToken so resetTimeoutOnProgress works
           },
         )
       },
