@@ -20,7 +20,6 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "../tool/registry"
-import { Runner } from "@/effect/runner"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
@@ -48,6 +47,7 @@ import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { TaskTool } from "@/tool/task"
+import { SessionRunState } from "./run-state"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -66,7 +66,6 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
   export interface Interface {
-    readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
     readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
     readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
@@ -99,55 +98,11 @@ export namespace SessionPrompt {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const scope = yield* Scope.Scope
       const instruction = yield* Instruction.Service
-
-      const state = yield* InstanceState.make(
-        Effect.fn("SessionPrompt.state")(function* () {
-          const runners = new Map<string, Runner<MessageV2.WithParts>>()
-          yield* Effect.addFinalizer(
-            Effect.fnUntraced(function* () {
-              yield* Effect.forEach(runners.values(), (r) => r.cancel, { concurrency: "unbounded", discard: true })
-              runners.clear()
-            }),
-          )
-          return { runners }
-        }),
-      )
-
-      const getRunner = (runners: Map<string, Runner<MessageV2.WithParts>>, sessionID: SessionID) => {
-        const existing = runners.get(sessionID)
-        if (existing) return existing
-        const runner = Runner.make<MessageV2.WithParts>(scope, {
-          onIdle: Effect.gen(function* () {
-            runners.delete(sessionID)
-            yield* status.set(sessionID, { type: "idle" })
-          }),
-          onBusy: status.set(sessionID, { type: "busy" }),
-          onInterrupt: lastAssistant(sessionID),
-          busy: () => {
-            throw new Session.BusyError(sessionID)
-          },
-        })
-        runners.set(sessionID, runner)
-        return runner
-      }
-
-      const assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError> = Effect.fn(
-        "SessionPrompt.assertNotBusy",
-      )(function* (sessionID: SessionID) {
-        const s = yield* InstanceState.get(state)
-        const runner = s.runners.get(sessionID)
-        if (runner?.busy) throw new Session.BusyError(sessionID)
-      })
+      const state = yield* SessionRunState.Service
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         log.info("cancel", { sessionID })
-        const s = yield* InstanceState.get(state)
-        const runner = s.runners.get(sessionID)
-        if (!runner || !runner.busy) {
-          yield* status.set(sessionID, { type: "idle" })
-          return
-        }
-        yield* runner.cancel
+        yield* state.cancel(sessionID)
       })
 
       const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -1574,16 +1529,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
-        const s = yield* InstanceState.get(state)
-        const runner = getRunner(s.runners, input.sessionID)
-        return yield* runner.ensureRunning(runLoop(input.sessionID))
+        return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
         function* (input: ShellInput) {
-          const s = yield* InstanceState.get(state)
-          const runner = getRunner(s.runners, input.sessionID)
-          return yield* runner.startShell(shellImpl(input))
+          return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input))
         },
       )
 
@@ -1704,7 +1655,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       return Service.of({
-        assertNotBusy,
         cancel,
         prompt,
         loop,
@@ -1718,6 +1668,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(SessionRunState.layer),
         Layer.provide(SessionStatus.layer),
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
@@ -1740,10 +1691,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function assertNotBusy(sessionID: SessionID) {
-    return runPromise((svc) => svc.assertNotBusy(SessionID.zod.parse(sessionID)))
-  }
 
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
