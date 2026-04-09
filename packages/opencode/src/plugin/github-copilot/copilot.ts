@@ -1,12 +1,25 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
+import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
+import { Filesystem } from "@/util/filesystem"
+import { Hash } from "@/util/hash"
 import { Log } from "../../util/log"
 import { setTimeout as sleep } from "node:timers/promises"
+import path from "path"
 import { CopilotModels } from "./models"
 
 const log = Log.create({ service: "plugin.copilot" })
+const ttl = 60 * 60 * 1000
+
+function cachefile(url: string) {
+  return path.join(Global.Path.cache, `copilot-models-${Hash.fast(url)}.json`)
+}
+
+function fresh(file: string) {
+  return Date.now() - Number(Filesystem.stat(file)?.mtimeMs ?? 0) < ttl
+}
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server
@@ -47,17 +60,29 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model)]))
         }
 
-        return CopilotModels.get(
-          base(ctx.auth.enterpriseUrl),
-          {
-            Authorization: `Bearer ${ctx.auth.refresh}`,
-            "User-Agent": `opencode/${Installation.VERSION}`,
-          },
-          provider.models,
-        ).catch((error) => {
-          log.error("failed to fetch copilot models", { error })
-          return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model)]))
-        })
+        const url = base(ctx.auth.enterpriseUrl)
+        const file = cachefile(url)
+        const headers = {
+          Authorization: `Bearer ${ctx.auth.refresh}`,
+          "User-Agent": `opencode/${Installation.VERSION}`,
+        }
+
+        if (fresh(file)) {
+          const cached = await Bun.file(file)
+            .json()
+            .catch(() => undefined)
+          if (cached) return cached as Record<string, Model>
+        }
+
+        return CopilotModels.get(url, headers, provider.models)
+          .then(async (result) => {
+            await Bun.write(file, JSON.stringify(result))
+            return result
+          })
+          .catch((error) => {
+            log.error("failed to fetch copilot models", { error })
+            return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model)]))
+          })
       },
     },
     auth: {
