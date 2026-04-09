@@ -28,10 +28,15 @@ RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-RUN adduser --disabled-password --gecos "" --uid 1000 --home /home/jovyan jovyan
-RUN chown -R jovyan:jovyan ${PLAYWRIGHT_BROWSERS_PATH}
-ENV OPENCODE_CONFIG_DIR=/etc/opencode HOME=/home/jovyan
-WORKDIR /home/jovyan/project
+ARG NB_USER="jovyan"
+RUN useradd -l -m -s /bin/bash -N -u 1000 "${NB_USER}"
+
+ENV OPENCODE_CONFIG_DIR=/etc/opencode HOME="/home/${NB_USER}"
+WORKDIR /home/${NB_USER}/project
+
+# 런타임 UID가 빌드 시와 다를 수 있으므로 모두에게 권한을 부여한다.
+RUN chmod -R 777 ${HOME} \
+    && chmod -R 777 ${PLAYWRIGHT_BROWSERS_PATH}
 
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
