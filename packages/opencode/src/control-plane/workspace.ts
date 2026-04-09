@@ -116,17 +116,31 @@ export namespace Workspace {
   async function workspaceEventLoop(space: Info, stop: AbortSignal) {
     while (!stop.aborted) {
       const adaptor = await getAdaptor(space.type)
-      const res = await adaptor.fetch(space, "/event", { method: "GET", signal: stop }).catch(() => undefined)
-      if (!res || !res.ok || !res.body) {
+      const target = await Promise.resolve(adaptor.target(space))
+
+      if (target.type === "local") {
+        return
+      }
+
+      const baseURL = String(target.url).replace(/\/?$/, "/")
+
+      const res = await fetch(new URL(baseURL + "/event"), {
+        method: "GET",
+        signal: stop,
+      })
+
+      if (!res.ok || !res.body) {
         await sleep(1000)
         continue
       }
+
       await parseSSE(res.body, stop, (event) => {
         GlobalBus.emit("event", {
           directory: space.id,
           payload: event,
         })
       })
+
       // Wait 250ms and retry if SSE connection fails
       await sleep(250)
     }

@@ -272,8 +272,8 @@ describe("ShareNext", () => {
             diff: [
               {
                 file: "a.ts",
-                before: "one",
-                after: "two",
+                patch:
+                  "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,1 +1,1 @@\n-one\n\\ No newline at end of file\n+two\n\\ No newline at end of file\n",
                 additions: 1,
                 deletions: 1,
                 status: "modified",
@@ -285,8 +285,8 @@ describe("ShareNext", () => {
             diff: [
               {
                 file: "b.ts",
-                before: "old",
-                after: "new",
+                patch:
+                  "Index: b.ts\n===================================================================\n--- b.ts\t\n+++ b.ts\t\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n",
                 additions: 2,
                 deletions: 0,
                 status: "modified",
@@ -304,8 +304,7 @@ describe("ShareNext", () => {
               type: string
               data: Array<{
                 file: string
-                before: string
-                after: string
+                patch: string
                 additions: number
                 deletions: number
                 status?: string
@@ -318,8 +317,8 @@ describe("ShareNext", () => {
           expect(body.data[0].data).toEqual([
             {
               file: "b.ts",
-              before: "old",
-              after: "new",
+              patch:
+                "Index: b.ts\n===================================================================\n--- b.ts\t\n+++ b.ts\t\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n",
               additions: 2,
               deletions: 0,
               status: "modified",

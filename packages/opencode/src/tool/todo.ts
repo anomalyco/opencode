@@ -43,6 +43,6 @@ export const TodoWriteTool = Tool.defineEffect<typeof parameters, Metadata, Todo
           },
         }
       },
-    } satisfies Tool.Def<typeof parameters, Metadata>
+    } satisfies Tool.DefWithoutID<typeof parameters, Metadata>
   }),
 )
