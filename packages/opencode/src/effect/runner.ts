@@ -99,10 +99,7 @@ export namespace Runner {
         }),
       ).pipe(Effect.flatten)
 
-    const stopShell = (shell: ShellHandle<A, E>) =>
-      Effect.gen(function* () {
-        yield* Fiber.interrupt(shell.fiber)
-      })
+    const stopShell = (shell: ShellHandle<A, E>) => Fiber.interrupt(shell.fiber)
 
     const ensureRunning = (work: Effect.Effect<A, E>) =>
       SynchronizedRef.modifyEffect(
