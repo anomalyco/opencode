@@ -38,8 +38,18 @@ export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
-    oldString: z.string().describe("The text to replace"),
-    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+    oldString: z
+      .preprocess(
+        (v) => (v !== null && typeof v === "object" ? JSON.stringify(v, null, 2) : v),
+        z.string(),
+      )
+      .describe("The text to replace"),
+    newString: z
+      .preprocess(
+        (v) => (v !== null && typeof v === "object" ? JSON.stringify(v, null, 2) : v),
+        z.string(),
+      )
+      .describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
   }),
   async execute(params, ctx) {
