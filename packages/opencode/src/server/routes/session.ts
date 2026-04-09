@@ -14,6 +14,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
+import { Command } from "../../command"
 import { Log } from "../../util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
@@ -292,6 +293,7 @@ export const SessionRoutes = lazy(() =>
         return c.json(session)
       },
     )
+    // TODO(v2): remove this dedicated route and rely on the normal `/init` command flow.
     .post(
       "/:sessionID/init",
       describeRoute({
@@ -317,11 +319,24 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", Session.initialize.schema.omit({ sessionID: true })),
+      validator(
+        "json",
+        z.object({
+          modelID: ModelID.zod,
+          providerID: ProviderID.zod,
+          messageID: MessageID.zod,
+        }),
+      ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        await Session.initialize({ ...body, sessionID })
+        await SessionPrompt.command({
+          sessionID,
+          messageID: body.messageID,
+          model: body.providerID + "/" + body.modelID,
+          command: Command.Default.INIT,
+          arguments: "",
+        })
         return c.json(true)
       },
     )
