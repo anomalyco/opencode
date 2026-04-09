@@ -30,6 +30,7 @@ import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { errorHandler } from "./middleware"
 import { getMimeType } from "hono/utils/mime"
+import { WorkspaceRouterMiddleware } from "./router"
 
 const log = Log.create({ service: "server" })
 
@@ -47,6 +48,7 @@ const csp = (hash = "") =>
 export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()) =>
   app
     .onError(errorHandler(log))
+    .use(WorkspaceRouterMiddleware(upgrade))
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes(upgrade))
     .route("/config", ConfigRoutes())
