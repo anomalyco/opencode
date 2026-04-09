@@ -12,6 +12,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
+import { rotatingFetch } from "../auth/rotating-fetch"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -1399,7 +1400,6 @@ export namespace Provider {
           delete options["chunkTimeout"]
 
           options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-            const fetchFn = customFetch ?? fetch
             const opts = init ?? {}
             const chunkAbortCtl =
               typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
@@ -1428,7 +1428,17 @@ export namespace Provider {
               }
             }
 
-            const res = await fetchFn(input, {
+            const useRotating = await Auth.getOAuthRecords(model.providerID).then((records) => records.length > 0)
+
+            if (useRotating) {
+              return rotatingFetch(input, opts, {
+                providerID: model.providerID,
+                cooldownMs: 30_000,
+                authFailureCooldownMs: 5 * 60_000,
+              })
+            }
+
+            const res = await (customFetch ?? fetch)(input, {
               ...opts,
               // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
               timeout: false,
