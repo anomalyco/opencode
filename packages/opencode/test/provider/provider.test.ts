@@ -183,36 +183,53 @@ test("model blacklist excludes specific models", async () => {
 })
 
 test("deprecated models are filtered from models.dev providers", async () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "test",
+    name: "Test",
+    api: "https://example.com",
+    env: [],
+    models: {
+      "qwen3.6-plus-free": {
+        id: "qwen3.6-plus-free",
+        name: "Qwen3.6 Plus Free",
+        release_date: "2026-04-07",
+        attachment: false,
+        reasoning: false,
+        temperature: true,
+        tool_call: true,
+        limit: { context: 1, output: 1 },
+      },
+      "safe-model": {
+        id: "safe-model",
+        name: "Safe Model",
+        release_date: "2026-04-07",
+        attachment: false,
+        reasoning: false,
+        temperature: true,
+        tool_call: true,
+        limit: { context: 1, output: 1 },
+      },
+    },
+  })
+
+  expect(Object.keys(provider.models)).not.toContain("qwen3.6-plus-free")
+  expect(Object.keys(provider.models)).toContain("safe-model")
+})
+
+test("deprecated models are rejected from config overrides", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
-        path.join(dir, "models.json"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
-          test: {
-            id: "test",
-            name: "Test",
-            api: "https://example.com",
-            env: [],
-            models: {
-              "qwen3.6-plus-free": {
-                id: "qwen3.6-plus-free",
-                name: "Qwen3.6 Plus Free",
-                release_date: "2026-04-07",
-                attachment: false,
-                reasoning: false,
-                temperature: true,
-                tool_call: true,
-                limit: { context: 1, output: 1 },
-              },
-              "safe-model": {
-                id: "safe-model",
-                name: "Safe Model",
-                release_date: "2026-04-07",
-                attachment: false,
-                reasoning: false,
-                temperature: true,
-                tool_call: true,
-                limit: { context: 1, output: 1 },
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              models: {
+                "qwen3.6-plus-free": {
+                  id: "qwen3.6-plus-free",
+                  name: "Qwen3.6 Plus Free",
+                },
               },
             },
           },
@@ -220,16 +237,16 @@ test("deprecated models are filtered from models.dev providers", async () => {
       )
     },
   })
+
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
-      Env.set("OPENCODE_MODELS_PATH", path.join(tmp.path, "models.json"))
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      const p = providers["test" as keyof typeof providers]
-      expect(Object.keys(p.models)).not.toContain("qwen3.6-plus-free")
-      expect(Object.keys(p.models)).toContain("safe-model")
+      await expect(Provider.list()).rejects.toMatchObject({
+        name: "ProviderModelNotFoundError",
+      })
     },
   })
 })

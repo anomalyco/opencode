@@ -993,7 +993,7 @@ export namespace Provider {
     return m
   }
 
-  const hide = new Set(["qwen3.6-plus-free"])
+  const blocked = new Set(["qwen3.6-plus-free"])
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
@@ -1004,7 +1004,7 @@ export namespace Provider {
       options: {},
       models: Object.fromEntries(
         Object.entries(provider.models)
-          .filter(([id]) => !hide.has(id))
+          .filter(([id]) => !blocked.has(id))
           .map(([id, model]) => [id, fromModelsDevModel(provider, model)]),
       ),
     }
@@ -1291,6 +1291,14 @@ export namespace Provider {
             const configProvider = cfg.provider?.[providerID]
 
             for (const [modelID, model] of Object.entries(provider.models)) {
+              const id = model.id ?? modelID
+              if (blocked.has(modelID) || blocked.has(id)) {
+                throw new ModelNotFoundError({
+                  providerID,
+                  modelID: ModelID.make(blocked.has(modelID) ? modelID : id),
+                })
+              }
+
               model.api.id = model.api.id ?? model.id ?? modelID
               if (
                 modelID === "gpt-5-chat-latest" ||

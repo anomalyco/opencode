@@ -5,6 +5,8 @@ import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.j
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 
+const blocked = new Set(["qwen3.6-plus-free"])
+
 export async function OPTIONS(input: APIEvent) {
   return new Response(null, {
     status: 200,
@@ -25,6 +27,7 @@ export async function GET(input: APIEvent) {
       object: "list",
       data: Object.entries(zenData.models)
         .filter(([id]) => !disabledModels.includes(id))
+        .filter(([id]) => !blocked.has(id))
         .filter(([id]) => !id.startsWith("alpha-"))
         .map(([id, _model]) => ({
           id,
