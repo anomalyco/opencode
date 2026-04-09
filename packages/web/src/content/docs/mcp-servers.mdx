@@ -272,6 +272,8 @@ If you want to disable automatic OAuth for a server (e.g., for servers that use 
 | `clientId`     | String          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
 | `clientSecret` | String          | OAuth client secret, if required by the authorization server.                    |
 | `scope`        | String          | OAuth scopes to request during authorization.                                    |
+| `redirectUri`  | String          | Custom OAuth callback URL.                                                       |
+| `callbackHost` | String          | Host address to bind the local callback server to. Use `0.0.0.0` or `::` for wildcard binds. |
 
 #### Debugging
 
@@ -286,6 +288,25 @@ opencode mcp debug my-oauth-server
 ```
 
 The `mcp debug` command shows the current auth status, tests HTTP connectivity, and attempts the OAuth discovery flow.
+
+By default, OpenCode binds the callback server to the `redirectUri` host, or `127.0.0.1` when `redirectUri` is omitted. Set `callbackHost` only when you need to override that bind address.
+
+:::caution
+`callbackHost` only changes the local bind address. If you set it to a concrete host, it must match the `redirectUri` host. Use `0.0.0.0` or `::` when you need a broader bind without changing the callback URL.
+:::
+
+```json title="opencode.json" {4-5}
+{
+  "mcp": {
+    "my-server": {
+      "oauth": {
+        "redirectUri": "http://127.0.0.1:19876/mcp/oauth/callback",
+        "callbackHost": "0.0.0.0"
+      }
+    }
+  }
+}
+```
 
 ---
 

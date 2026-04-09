@@ -689,6 +689,7 @@ export const McpDebugCommand = cmd({
                 clientSecret: oauthConfig?.clientSecret,
                 scope: oauthConfig?.scope,
                 redirectUri: oauthConfig?.redirectUri,
+                callbackHost: oauthConfig?.callbackHost,
               },
               {
                 onRedirect: async () => {},

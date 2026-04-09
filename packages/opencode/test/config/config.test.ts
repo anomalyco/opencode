@@ -2219,6 +2219,39 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   })
 })
 
+describe("MCP OAuth callbackHost validation", () => {
+  test("accepts concrete callbackHost on its own", () => {
+    const result = Config.McpOAuth.safeParse({ callbackHost: "127.0.0.2" })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.callbackHost).toBe("127.0.0.2")
+  })
+
+  test("accepts wildcard callbackHost with explicit redirectUri", () => {
+    const result = Config.McpOAuth.safeParse({
+      redirectUri: "http://127.0.0.1:19876/mcp/oauth/callback",
+      callbackHost: "0.0.0.0",
+    })
+    expect(result.success).toBe(true)
+  })
+
+  test("rejects mismatched concrete callbackHost", () => {
+    const result = Config.McpOAuth.safeParse({
+      redirectUri: "http://127.0.0.1:19876/mcp/oauth/callback",
+      callbackHost: "127.0.0.2",
+    })
+    expect(result.success).toBe(false)
+  })
+
+  test("works with other oauth fields when hosts agree", () => {
+    const result = Config.McpOAuth.safeParse({
+      clientId: "my-client",
+      redirectUri: "http://127.0.0.2:19876/mcp/oauth/callback",
+      callbackHost: "127.0.0.2",
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
 describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
   test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
     const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]

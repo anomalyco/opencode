@@ -1379,6 +1379,10 @@ export type McpOAuthConfig = {
    * OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).
    */
   redirectUri?: string
+  /**
+   * Host address to bind the OAuth callback server to explicitly (for example, '127.0.0.1' or '0.0.0.0').
+   */
+  callbackHost?: string
 }
 
 export type McpRemoteConfig = {

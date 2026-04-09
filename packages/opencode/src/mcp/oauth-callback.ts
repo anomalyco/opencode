@@ -58,6 +58,7 @@ interface PendingAuth {
 
 export namespace McpOAuthCallback {
   let server: ReturnType<typeof createServer> | undefined
+  let currentHost: string | undefined
   const pendingAuths = new Map<string, PendingAuth>()
   // Reverse index: mcpName → oauthState, so cancelPending(mcpName) can
   // find the right entry in pendingAuths (which is keyed by oauthState).
@@ -139,19 +140,20 @@ export namespace McpOAuthCallback {
     res.end(HTML_SUCCESS)
   }
 
-  export async function ensureRunning(redirectUri?: string): Promise<void> {
+  export async function ensureRunning(opts?: { redirectUri?: string; callbackHost?: string }): Promise<void> {
     // Parse the redirect URI to get port and path (uses defaults if not provided)
-    const { port, path } = parseRedirectUri(redirectUri)
+    const { port, path } = parseRedirectUri(opts?.redirectUri)
 
     // If server is running on a different port/path, stop it first
-    if (server && (currentPort !== port || currentPath !== path)) {
+    if (server && (currentPort !== port || currentPath !== path || currentHost !== opts?.callbackHost)) {
       log.info("stopping oauth callback server to reconfigure", { oldPort: currentPort, newPort: port })
       await stop()
     }
 
     if (server) return
 
-    const running = await isPortInUse(port)
+    const targetHost = !opts?.callbackHost || opts.callbackHost === "0.0.0.0" ? "127.0.0.1" : opts.callbackHost === "::" ? "::1" : opts.callbackHost
+    const running = await isPortInUse(port, targetHost)
     if (running) {
       log.info("oauth callback server already running on another instance", { port })
       return
@@ -159,10 +161,11 @@ export namespace McpOAuthCallback {
 
     currentPort = port
     currentPath = path
+    currentHost = opts?.callbackHost
 
     server = createServer(handleRequest)
     await new Promise<void>((resolve, reject) => {
-      server!.listen(currentPort, () => {
+      server!.listen(currentPort, currentHost, () => {
         log.info("oauth callback server started", { port: currentPort, path: currentPath })
         resolve()
       })
@@ -198,9 +201,9 @@ export namespace McpOAuthCallback {
     }
   }
 
-  export async function isPortInUse(port: number = OAUTH_CALLBACK_PORT): Promise<boolean> {
+  export async function isPortInUse(port: number = OAUTH_CALLBACK_PORT, host: string = "127.0.0.1"): Promise<boolean> {
     return new Promise((resolve) => {
-      const socket = createConnection(port, "127.0.0.1")
+      const socket = createConnection(port, host)
       socket.on("connect", () => {
         socket.destroy()
         resolve(true)
@@ -215,6 +218,7 @@ export namespace McpOAuthCallback {
     if (server) {
       await new Promise<void>((resolve) => server!.close(() => resolve()))
       server = undefined
+      currentHost = undefined
       log.info("oauth callback server stopped")
     }
 

@@ -287,6 +287,7 @@ export namespace MCP {
               clientSecret: oauthConfig?.clientSecret,
               scope: oauthConfig?.scope,
               redirectUri: oauthConfig?.redirectUri,
+              callbackHost: oauthConfig?.callbackHost,
             },
             {
               onRedirect: async (url) => {
@@ -721,7 +722,12 @@ export namespace MCP {
         const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
 
         // Start the callback server with custom redirectUri if configured
-        yield* Effect.promise(() => McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri))
+        yield* Effect.promise(() =>
+          McpOAuthCallback.ensureRunning({
+            redirectUri: oauthConfig?.redirectUri,
+            callbackHost: oauthConfig?.callbackHost,
+          }),
+        )
 
         const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
           .map((b) => b.toString(16).padStart(2, "0"))
@@ -736,6 +742,7 @@ export namespace MCP {
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
             redirectUri: oauthConfig?.redirectUri,
+            callbackHost: oauthConfig?.callbackHost,
           },
           {
             onRedirect: async (url) => {

@@ -1,6 +1,6 @@
 import { test, expect, describe, afterEach } from "bun:test"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
-import { parseRedirectUri } from "../../src/mcp/oauth-provider"
+import { McpOAuthProvider, parseRedirectUri } from "../../src/mcp/oauth-provider"
 
 describe("parseRedirectUri", () => {
   test("returns defaults when no URI provided", () => {
@@ -28,7 +28,23 @@ describe("McpOAuthCallback.ensureRunning", () => {
   })
 
   test("starts server with custom redirectUri port and path", async () => {
-    await McpOAuthCallback.ensureRunning("http://127.0.0.1:18000/custom/callback")
+    await McpOAuthCallback.ensureRunning({ redirectUri: "http://127.0.0.1:18000/custom/callback" })
     expect(McpOAuthCallback.isRunning()).toBe(true)
+    expect(await McpOAuthCallback.isPortInUse(18000)).toBe(true)
+  })
+
+  test("allows wildcard callbackHost with explicit redirectUri", async () => {
+    await McpOAuthCallback.ensureRunning({
+      redirectUri: "http://127.0.0.1:18002/custom/callback",
+      callbackHost: "0.0.0.0",
+    })
+
+    expect(McpOAuthCallback.isRunning()).toBe(true)
+    expect(await McpOAuthCallback.isPortInUse(18002, "127.0.0.1")).toBe(true)
+  })
+
+  test("binds to redirectUri host by default", async () => {
+    await McpOAuthCallback.ensureRunning({ redirectUri: "http://127.0.0.1:18003/custom/callback" })
+    expect(await McpOAuthCallback.isPortInUse(18003, "127.0.0.1")).toBe(true)
   })
 })

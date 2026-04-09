@@ -403,8 +403,31 @@ export namespace Config {
         .string()
         .optional()
         .describe("OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback)."),
+      callbackHost: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Host address to bind the OAuth callback server to explicitly (for example, '127.0.0.1' or '0.0.0.0').",
+        ),
     })
     .strict()
+    .refine(
+      (value) => {
+        if (!value.callbackHost || value.callbackHost === "0.0.0.0" || value.callbackHost === "::" || !value.redirectUri) {
+          return true
+        }
+        try {
+          return new URL(value.redirectUri).hostname.replace(/^\[(.*)\]$/, "$1") === value.callbackHost
+        } catch {
+          return true
+        }
+      },
+      {
+        path: ["callbackHost"],
+        message: "callbackHost must match redirectUri host unless it is 0.0.0.0 or ::.",
+      },
+    )
     .meta({
       ref: "McpOAuthConfig",
     })
