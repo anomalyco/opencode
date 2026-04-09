@@ -64,6 +64,7 @@ const shells = (() => {
     (item, i) => list.findIndex((other) => other.shell.toLowerCase() === item.shell.toLowerCase()) === i,
   )
 })()
+
 const PS = new Set(["pwsh", "powershell"])
 const ps = shells.filter((item) => PS.has(item.label))
 
@@ -1188,6 +1189,57 @@ describe("tool.bash truncation", () => {
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
+      },
+    })
+  })
+})
+
+describe("tool.bash env", () => {
+  each("sets environment variables", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await initBash()
+        const expr = `process.env.TEST_VAR`
+        const cmd = `${bin} -p ${evalarg(expr)}`
+        const command = PS.has(sh()) ? `& ${cmd}` : cmd
+        const result = await Effect.runPromise(
+          bash.execute(
+            {
+              command,
+              description: "Echo environment variable",
+              env: { TEST_VAR: "hello_world" },
+            },
+            ctx,
+          ),
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("hello_world")
+      },
+    })
+  })
+
+  each("sets multiple environment variables", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await initBash()
+        const expr = `process.env.VAR1 + " " + process.env.VAR2`
+        const cmd = `${bin} -p ${evalarg(expr)}`
+        const command = PS.has(sh()) ? `& ${cmd}` : cmd
+        const result = await Effect.runPromise(
+          bash.execute(
+            {
+              command,
+              description: "Echo multiple environment variables",
+              env: { VAR1: "foo", VAR2: "bar" },
+            },
+            ctx,
+          ),
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("foo")
+        expect(result.output).toContain("bar")
       },
     })
   })

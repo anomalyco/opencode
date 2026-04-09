@@ -63,6 +63,7 @@ const Parameters = z.object({
     .describe(
       "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
     ),
+  env: z.record(z.string(), z.string()).optional().describe("Environment variables to set for the command"),
 })
 
 type Part = {
@@ -243,9 +244,14 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
   })
 })
 
+function pwshEncodedCommand(command: string) {
+  return Buffer.from(command, "utf16le").toString("base64")
+}
+
 function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && PS.has(name)) {
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    const encoded = pwshEncodedCommand(command)
+    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
       cwd,
       env,
       stdin: "ignore",
@@ -493,7 +499,7 @@ export const BashTool = Tool.define(
                   name,
                   command: params.command,
                   cwd,
-                  env: yield* shellEnv(ctx, cwd),
+                  env: { ...(yield* shellEnv(ctx, cwd)), ...(params.env || {}) },
                   timeout,
                   description: params.description,
                 },
