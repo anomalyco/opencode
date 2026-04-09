@@ -288,6 +288,7 @@ export namespace SessionProcessor {
                 ...match,
                 tool: value.toolName,
                 state: {
+                  ...match.state,
                   status: "running",
                   input: value.input,
                   time: { start: Date.now() },
