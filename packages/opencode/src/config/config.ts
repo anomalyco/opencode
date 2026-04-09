@@ -900,7 +900,7 @@ export namespace Config {
             .passthrough()
             .optional()
             .describe(
-              "AWS Bedrock guardrail applied to every request. Required when the IAM policy enforces bedrock:GuardrailIdentifier. Only used by the amazon-bedrock provider.",
+              "AWS Bedrock guardrail applied to every request. Only used by the amazon-bedrock provider.",
             ),
         })
         .catchall(z.any())
