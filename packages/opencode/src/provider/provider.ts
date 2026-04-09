@@ -326,6 +326,9 @@ export namespace Provider {
           providerOptions.baseURL = endpoint
         }
 
+        // Note: guardrailConfig is intentionally NOT forwarded to createAmazonBedrock.
+        // It is a per-request option consumed via providerOptions.bedrock in session/llm.ts.
+
         return {
           autoload: true,
           options: providerOptions,
