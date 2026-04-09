@@ -303,9 +303,10 @@ const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
 
 const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
   const prompt = yield* SessionPrompt.Service
+  const run = yield* SessionRunState.Service
   const sessions = yield* Session.Service
   const chat = yield* sessions.create(input ?? { title: "Pinned" })
-  return { prompt, sessions, chat }
+  return { prompt, run, sessions, chat }
 })
 
 // Loop semantics
@@ -716,7 +717,7 @@ it.live("concurrent loop callers get same result", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const { prompt, chat } = yield* boot()
+        const { prompt, run, chat } = yield* boot()
         yield* seed(chat.id, { finish: "stop" })
 
         const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
@@ -725,7 +726,7 @@ it.live("concurrent loop callers get same result", () =>
 
         expect(a.info.id).toBe(b.info.id)
         expect(a.info.role).toBe("assistant")
-        yield* prompt.assertNotBusy(chat.id)
+        yield* run.assertNotBusy(chat.id)
       }),
     { git: true },
   ),
@@ -829,6 +830,7 @@ it.live(
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {
         const prompt = yield* SessionPrompt.Service
+        const run = yield* SessionRunState.Service
         const sessions = yield* Session.Service
         yield* llm.hang
 
@@ -838,7 +840,7 @@ it.live(
         const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         yield* llm.wait(1)
 
-        const exit = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
+        const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
           expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
@@ -856,11 +858,11 @@ it.live("assertNotBusy succeeds when idle", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const prompt = yield* SessionPrompt.Service
+        const run = yield* SessionRunState.Service
         const sessions = yield* Session.Service
 
         const chat = yield* sessions.create({})
-        const exit = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
+        const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
         expect(Exit.isSuccess(exit)).toBe(true)
       }),
     { git: true },
@@ -901,7 +903,7 @@ unix("shell captures stdout and stderr in completed tool output", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const { prompt, chat } = yield* boot()
+        const { prompt, run, chat } = yield* boot()
         const result = yield* prompt.shell({
           sessionID: chat.id,
           agent: "build",
@@ -916,7 +918,7 @@ unix("shell captures stdout and stderr in completed tool output", () =>
         expect(tool.state.output).toContain("err")
         expect(tool.state.metadata.output).toContain("out")
         expect(tool.state.metadata.output).toContain("err")
-        yield* prompt.assertNotBusy(chat.id)
+        yield* run.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
   ),
@@ -926,7 +928,7 @@ unix("shell completes a fast command on the preferred shell", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const { prompt, chat } = yield* boot()
+        const { prompt, run, chat } = yield* boot()
         const result = yield* prompt.shell({
           sessionID: chat.id,
           agent: "build",
@@ -940,7 +942,7 @@ unix("shell completes a fast command on the preferred shell", () =>
         expect(tool.state.input.command).toBe("pwd")
         expect(tool.state.output).toContain(dir)
         expect(tool.state.metadata.output).toContain(dir)
-        yield* prompt.assertNotBusy(chat.id)
+        yield* run.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
   ),
@@ -950,7 +952,7 @@ unix("shell lists files from the project directory", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const { prompt, chat } = yield* boot()
+        const { prompt, run, chat } = yield* boot()
         yield* Effect.promise(() => Bun.write(path.join(dir, "README.md"), "# e2e\n"))
 
         const result = yield* prompt.shell({
@@ -966,7 +968,7 @@ unix("shell lists files from the project directory", () =>
         expect(tool.state.input.command).toBe("command ls")
         expect(tool.state.output).toContain("README.md")
         expect(tool.state.metadata.output).toContain("README.md")
-        yield* prompt.assertNotBusy(chat.id)
+        yield* run.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
   ),
@@ -976,7 +978,7 @@ unix("shell captures stderr from a failing command", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const { prompt, chat } = yield* boot()
+        const { prompt, run, chat } = yield* boot()
         const result = yield* prompt.shell({
           sessionID: chat.id,
           agent: "build",
@@ -989,7 +991,7 @@ unix("shell captures stderr from a failing command", () =>
 
         expect(tool.state.output).toContain("not found")
         expect(tool.state.metadata.output).toContain("not found")
-        yield* prompt.assertNotBusy(chat.id)
+        yield* run.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
   ),
@@ -1114,7 +1116,7 @@ unix(
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
-            const { prompt, chat } = yield* boot()
+            const { prompt, run, chat } = yield* boot()
 
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
@@ -1125,7 +1127,7 @@ unix(
 
             const status = yield* SessionStatus.Service
             expect((yield* status.get(chat.id)).type).toBe("idle")
-            const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
+            const busy = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
             expect(Exit.isSuccess(busy)).toBe(true)
 
             const exit = yield* Fiber.await(sh)

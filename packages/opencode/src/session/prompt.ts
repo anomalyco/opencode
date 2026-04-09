@@ -66,7 +66,6 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
   export interface Interface {
-    readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
     readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
     readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
@@ -1650,7 +1649,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       return Service.of({
-        assertNotBusy: state.assertNotBusy,
         cancel,
         prompt,
         loop,
@@ -1687,10 +1685,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function assertNotBusy(sessionID: SessionID) {
-    return runPromise((svc) => svc.assertNotBusy(SessionID.zod.parse(sessionID)))
-  }
 
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
