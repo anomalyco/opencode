@@ -14,6 +14,7 @@ import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
 import { Provider } from "../../provider/provider"
+import type { ProviderID, ModelID } from "../../provider/schema"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -145,7 +146,7 @@ export const GiteaInstallCommand = cmd({
           const token = await prompts.password({
             message: "Enter a GITEA_TOKEN with repository access",
             validate(value) {
-              if (value.trim().length > 0) return
+              if ((value ?? "").trim().length > 0) return
               return "GITEA_TOKEN is required"
             },
           })
@@ -792,7 +793,7 @@ function subscribeSessionEvents(session: { id: SessionID }) {
 
 async function chat(
   session: { id: SessionID },
-  model: { providerID: string; modelID: string },
+  model: { providerID: ProviderID; modelID: ModelID },
   variant: string | undefined,
   message: string,
   files: PromptFile[] = [],
@@ -869,7 +870,7 @@ async function chat(
 
 async function summarize(
   session: { id: SessionID },
-  model: { providerID: string; modelID: string },
+  model: { providerID: ProviderID; modelID: ModelID },
   variant: string | undefined,
   response: string,
   payload: Payload,

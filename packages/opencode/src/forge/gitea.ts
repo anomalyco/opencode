@@ -156,8 +156,8 @@ export class GiteaForge implements ForgeProvider {
 
     const nodes = await Promise.all(
       reviews.map(async (item) => {
-        const comments = await this.api<ReviewComment[]>("GET", `${this.prPath(number)}/reviews/${item.id}/comments`)
-        return review(item, comments.data)
+        const data = await this.list<ReviewComment>(`${this.prPath(number)}/reviews/${item.id}/comments`)
+        return review(item, data)
       }),
     )
 
@@ -378,23 +378,20 @@ export class GiteaForge implements ForgeProvider {
   }
 
   private async list<T>(path: string, query?: Record<string, string | number | boolean | undefined>): Promise<T[]> {
-    return this.page<T>(path, query, 1)
+    return this.paginate<T>(path, query, 1)
   }
 
-  private async page<T>(
+  private async paginate<T>(
     path: string,
     query: Record<string, string | number | boolean | undefined> | undefined,
     page: number,
   ): Promise<T[]> {
     const result = await this.api<T[]>("GET", path, {
-      query: {
-        ...query,
-        page,
-        limit: 100,
-      },
+      query: { ...query, page, limit: 100 },
     })
-    if (result.data.length < 100) return result.data
-    return [...result.data, ...(await this.page(path, query, page + 1))]
+    if (result.data.length < 100) return result.data as unknown as T[]
+    const next = await this.paginate<T>(path, query, page + 1)
+    return [...(result.data as unknown as T[]), ...next]
   }
 
   private async api<T = void>(method: string, path: string, opts?: Opts): Promise<{ status: number; data: T }> {
@@ -418,7 +415,7 @@ export class GiteaForge implements ForgeProvider {
     const text = await result.text()
     if (!ok.includes(result.status)) throw new Error(this.error(result.status, text, result.statusText))
     if (!text) return { status: result.status, data: undefined as T }
-    return { status: result.status, data: json(text) as T }
+    return { status: result.status, data: json(text) as unknown as T }
   }
 
   private error(status: number, text: string, body: string) {
