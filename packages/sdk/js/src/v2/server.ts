@@ -37,6 +37,8 @@ export async function createOpencodeServer(options?: ServerOptions) {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
     },
+    // Start in a new process group so we can kill the entire tree
+    detached: true
   })
   let clear = () => {}
 

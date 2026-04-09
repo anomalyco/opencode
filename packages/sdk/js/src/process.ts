@@ -8,7 +8,8 @@ export function stop(proc: ChildProcess) {
     const out = spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
     if (!out.error && out.status === 0) return
   }
-  proc.kill()
+  // Kill the entire process group (negative PID) to prevent orphaned processes
+  process.kill(-proc.pid, "SIGTERM");
 }
 
 export function bindAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: () => void) {
