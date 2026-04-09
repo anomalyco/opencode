@@ -304,7 +304,11 @@ async function ask(ctx: Tool.Context, scan: Scan) {
 }
 
 async function shellEnv(ctx: Tool.Context, cwd: string) {
-  const extra = await Plugin.trigger("shell.env", { cwd, sessionID: ctx.sessionID, callID: ctx.callID }, { env: {} })
+  const extra = await Plugin.trigger(
+    "shell.env",
+    { cwd, sessionID: ctx.sessionID, callID: ctx.callID, messageID: ctx.messageID, agent: ctx.agent },
+    { env: {} },
+  )
   return {
     ...process.env,
     ...extra.env,
