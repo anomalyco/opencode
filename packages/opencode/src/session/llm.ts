@@ -311,12 +311,6 @@ export namespace LLM {
       })
     }
 
-    const providerOptions = ProviderTransform.providerOptions(input.model, params.options)
-    if (input.model.providerID === "amazon-bedrock") {
-      const guardrail = cfg.provider?.["amazon-bedrock"]?.options?.guardrailConfig
-      if (guardrail) providerOptions.bedrock = { ...(providerOptions.bedrock ?? {}), guardrailConfig: guardrail }
-    }
-
     return streamText({
       onError(error) {
         l.error("stream error", {
@@ -347,7 +341,7 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions,
+      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,

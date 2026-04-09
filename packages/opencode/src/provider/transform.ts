@@ -785,6 +785,10 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = input.sessionID
     }
 
+    if (input.model.providerID === "amazon-bedrock" && input.providerOptions?.guardrailConfig) {
+      result["guardrailConfig"] = input.providerOptions.guardrailConfig
+    }
+
     if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
       if (input.model.capabilities.reasoning) {
         result["thinkingConfig"] = {
