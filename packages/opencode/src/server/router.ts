@@ -4,11 +4,9 @@ import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
 import { ServerProxy } from "./proxy"
-import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { InstanceRoutes } from "./instance"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -27,9 +25,7 @@ function local(method: string, path: string) {
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
-  const routes = lazy(() => InstanceRoutes(upgrade))
-
-  return async (c) => {
+  return async (c, next) => {
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
     const directory = Filesystem.resolve(
       (() => {
@@ -53,7 +49,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
         directory,
         init: InstanceBootstrap,
         async fn() {
-          return routes().fetch(c.req.raw, c.env)
+          return next()
         },
       })
     }
@@ -77,7 +73,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
         directory: target.directory,
         init: InstanceBootstrap,
         async fn() {
-          return routes().fetch(c.req.raw, c.env)
+          return next()
         },
       })
     }
@@ -85,7 +81,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     if (local(c.req.method, url.pathname)) {
       // No instance provided because we are serving cached data; there
       // is no instance to work with
-      return routes().fetch(c.req.raw, c.env)
+      return next()
     }
 
     if (c.req.header("upgrade")?.toLowerCase() === "websocket") {
