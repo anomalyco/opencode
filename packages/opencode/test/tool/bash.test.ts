@@ -1097,3 +1097,43 @@ describe("tool.bash truncation", () => {
     })
   })
 })
+
+describe("tool.bash env", () => {
+  test("sets environment variables", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo $TEST_VAR",
+            description: "Echo environment variable",
+            env: { TEST_VAR: "hello_world" },
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("hello_world")
+      },
+    })
+  })
+
+  test("sets multiple environment variables", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo $VAR1 $VAR2",
+            description: "Echo multiple environment variables",
+            env: { VAR1: "foo", VAR2: "bar" },
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("foo bar")
+      },
+    })
+  })
+})
