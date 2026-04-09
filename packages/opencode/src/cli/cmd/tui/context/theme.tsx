@@ -121,10 +121,12 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   carbonfox,
 }
 
+type Scheme = "auto" | "dark" | "light"
+
 type State = {
   themes: Record<string, ThemeJson>
   mode: "dark" | "light"
-  lock: "dark" | "light" | undefined
+  scheme: Scheme
   active: string
   ready: boolean
 }
@@ -154,7 +156,7 @@ function syncThemes() {
 const [store, setStore] = createStore<State>({
   themes: listThemes(),
   mode: "dark",
-  lock: undefined,
+  scheme: "auto",
   active: "opencode",
   ready: false,
 })
@@ -306,17 +308,31 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const renderer = useRenderer()
     const config = useTuiConfig()
     const kv = useKV()
-    const pick = (value: unknown) => {
+    const pickMode = (value: unknown) => {
       if (value === "dark" || value === "light") return value
+      return
+    }
+
+    const pickScheme = (value: unknown): Scheme | undefined => {
+      if (value === "auto" || value === "dark" || value === "light") return value
       return
     }
 
     setStore(
       produce((draft) => {
-        const lock = pick(kv.get("theme_mode_lock"))
-        const mode = pick(kv.get("theme_mode", props.mode))
-        draft.mode = lock ?? mode ?? props.mode
-        draft.lock = lock
+        // Read scheme from KV, falling back to legacy theme_mode_lock for backward compat
+        const saved = pickScheme(kv.get("theme_scheme"))
+        const legacy = pickMode(kv.get("theme_mode_lock"))
+        const scheme = saved ?? (legacy ? legacy : "auto")
+        draft.scheme = scheme
+
+        const mode = pickMode(kv.get("theme_mode", props.mode))
+        if (scheme === "auto") {
+          draft.mode = mode ?? props.mode
+        } else {
+          draft.mode = scheme
+        }
+
         const active = config.theme ?? kv.get("theme", "opencode")
         draft.active = typeof active === "string" ? active : "opencode"
         draft.ready = false
@@ -380,21 +396,19 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       resolveSystemTheme(mode)
     }
 
-    function pin(mode: "dark" | "light" = store.mode) {
-      setStore("lock", mode)
-      kv.set("theme_mode_lock", mode)
-      apply(mode)
-    }
-
-    function free() {
-      setStore("lock", undefined)
-      kv.set("theme_mode_lock", undefined)
-      const mode = renderer.themeMode
-      if (mode) apply(mode)
+    function setScheme(scheme: Scheme) {
+      setStore("scheme", scheme)
+      kv.set("theme_scheme", scheme)
+      if (scheme === "auto") {
+        const mode = renderer.themeMode
+        if (mode) apply(mode)
+      } else {
+        apply(scheme)
+      }
     }
 
     const handle = (mode: "dark" | "light") => {
-      if (store.lock) return
+      if (store.scheme !== "auto") return
       apply(mode)
     }
     renderer.on(CliRenderEvents.THEME_MODE, handle)
@@ -451,17 +465,21 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode() {
         return store.mode
       },
+      scheme() {
+        return store.scheme
+      },
+      setScheme,
       locked() {
-        return store.lock !== undefined
+        return store.scheme !== "auto"
       },
       lock() {
-        pin(store.mode)
+        setScheme(store.mode)
       },
       unlock() {
-        free()
+        setScheme("auto")
       },
       setMode(mode: "dark" | "light") {
-        pin(mode)
+        setScheme(mode)
       },
       set(theme: string) {
         if (!hasTheme(theme)) return false

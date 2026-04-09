@@ -263,7 +263,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const sdk = useSDK()
   const toast = useToast()
   const themeState = useTheme()
-  const { theme, mode, setMode, locked, lock, unlock } = themeState
+  const { theme, mode, setMode, locked, lock, unlock, scheme, setScheme } = themeState
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
@@ -673,20 +673,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle theme mode",
+      title: `Theme mode: ${scheme()}`,
       value: "theme.switch_mode",
       onSelect: (dialog) => {
-        setMode(mode() === "dark" ? "light" : "dark")
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
-      title: locked() ? "Unlock theme mode" : "Lock theme mode",
-      value: "theme.mode.lock",
-      onSelect: (dialog) => {
-        if (locked()) unlock()
-        else lock()
+        const next = scheme() === "auto" ? "dark" : scheme() === "dark" ? "light" : "auto"
+        setScheme(next)
         dialog.clear()
       },
       category: "System",
