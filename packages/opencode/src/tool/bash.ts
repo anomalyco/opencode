@@ -50,6 +50,14 @@ const FILES = new Set([
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
+function trim(input: string) {
+  return input.replace(/^['"]|['"]$/g, "")
+}
+
+function redirect(input: string) {
+  return /(^|[^<])>>?|&>|>&|<>/.test(input)
+}
+
 const Parameters = z.object({
   command: z.string().describe("The command to execute"),
   timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -75,6 +83,7 @@ type Scan = {
   dirs: Set<string>
   patterns: Set<string>
   always: Set<string>
+  edits?: Set<string>
 }
 
 export const log = Log.create({ service: "bash-tool" })
@@ -244,11 +253,27 @@ async function collect(root: Node, cwd: string, ps: boolean, shell: string): Pro
     patterns: new Set<string>(),
     always: new Set<string>(),
   }
+  const edits = new Set<string>()
 
   for (const node of commands(root)) {
     const command = parts(node)
+    const commandText = command.map((item) => item.text).join(" ")
     const tokens = command.map((item) => item.text)
     const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
+
+    if (node.parent?.type === "redirected_statement" && redirect(commandText)) {
+      edits.add("*")
+    }
+    if (command[0] === "sed" && command.includes("-i")) {
+      const arg = command.at(-1)
+      if (!arg || arg.startsWith("-")) {
+        edits.add("*")
+      } else {
+        const file = path.resolve(cwd, trim(arg))
+        if (!Instance.containsPath(file)) edits.add("*")
+        else edits.add(path.relative(Instance.worktree, file))
+      }
+    }
 
     if (cmd && FILES.has(cmd)) {
       for (const arg of pathArgs(command, ps)) {
@@ -266,7 +291,7 @@ async function collect(root: Node, cwd: string, ps: boolean, shell: string): Pro
     }
   }
 
-  return scan
+  return { ...scan, edits: edits.size > 0 ? edits : undefined }
 }
 
 function preview(text: string) {
@@ -290,6 +315,15 @@ async function ask(ctx: Tool.Context, scan: Scan) {
       permission: "external_directory",
       patterns: globs,
       always: globs,
+      metadata: {},
+    })
+  }
+
+  if (scan.edits?.size) {
+    await ctx.ask({
+      permission: "edit",
+      patterns: Array.from(scan.edits),
+      always: ["*"],
       metadata: {},
     })
   }
