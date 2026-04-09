@@ -1,6 +1,8 @@
-import { TextAttributes } from "@opentui/core"
+import { RGBA, TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
-import { useTheme } from "@tui/context/theme"
+import open from "open"
+import { createSignal } from "solid-js"
+import { selectedForeground, useTheme } from "@tui/context/theme"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { Link } from "@tui/ui/link"
 
@@ -10,14 +12,31 @@ export type DialogGoUpsellProps = {
   onClose?: () => void
 }
 
+function subscribe(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
+  open(GO_URL).catch(() => {})
+  props.onClose?.()
+  dialog.clear()
+}
+
+function close(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
+  props.onClose?.()
+  dialog.clear()
+}
+
 export function DialogGoUpsell(props: DialogGoUpsellProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const fg = selectedForeground(theme)
+  const [selected, setSelected] = createSignal(0)
 
   useKeyboard((evt) => {
+    if (evt.name === "left" || evt.name === "right" || evt.name === "tab") {
+      setSelected((s) => (s === 0 ? 1 : 0))
+      return
+    }
     if (evt.name !== "return") return
-    props.onClose?.()
-    dialog.clear()
+    if (selected() === 0) subscribe(props, dialog)
+    else close(props, dialog)
   })
 
   return (
@@ -32,24 +51,37 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
       </box>
       <box gap={1} paddingBottom={1}>
         <text fg={theme.textMuted}>
-          Subscribe to OpenCode Go for generous and reliable access to the best open coding models starting at $5/month.
+          Subscribe to OpenCode Go for generous access to the best open-source models starting at $5/month.
         </text>
         <box flexDirection="row" gap={1}>
-          <text fg={theme.text}>Subscribe:</text>
           <Link href={GO_URL} fg={theme.primary} />
         </box>
       </box>
-      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
+      <box flexDirection="row" justifyContent="flex-end" gap={1} paddingBottom={1}>
         <box
           paddingLeft={3}
           paddingRight={3}
-          backgroundColor={theme.primary}
-          onMouseUp={() => {
-            props.onClose?.()
-            dialog.clear()
-          }}
+          backgroundColor={selected() === 0 ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+          onMouseOver={() => setSelected(0)}
+          onMouseUp={() => subscribe(props, dialog)}
         >
-          <text fg={theme.selectedListItemText}>close</text>
+          <text fg={selected() === 0 ? fg : theme.text} attributes={selected() === 0 ? TextAttributes.BOLD : undefined}>
+            subscribe
+          </text>
+        </box>
+        <box
+          paddingLeft={3}
+          paddingRight={3}
+          backgroundColor={selected() === 1 ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+          onMouseOver={() => setSelected(1)}
+          onMouseUp={() => close(props, dialog)}
+        >
+          <text
+            fg={selected() === 1 ? fg : theme.textMuted}
+            attributes={selected() === 1 ? TextAttributes.BOLD : undefined}
+          >
+            close
+          </text>
         </box>
       </box>
     </box>
