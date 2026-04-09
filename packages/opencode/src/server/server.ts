@@ -42,6 +42,7 @@ import { Filesystem } from "@/util/filesystem";
 import { QuestionRoutes } from "./routes/question";
 import { PermissionRoutes } from "./routes/permission";
 import { GlobalRoutes } from "./routes/global";
+import { UniverSdkRelayRoutes } from "./routes/univer-sdk-relay";
 import { MDNS } from "./mdns";
 import { lazy } from "@/util/lazy";
 
@@ -127,6 +128,7 @@ export namespace Server {
 				}),
 			)
 			.route("/global", GlobalRoutes())
+			.route("/univer-sdk-relay", UniverSdkRelayRoutes())
 			.put(
 				"/auth/:providerID",
 				describeRoute({
@@ -630,6 +632,12 @@ export namespace Server {
 		};
 		const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port);
 		if (!server) throw new Error(`Failed to start server on port ${opts.port}`);
+
+		const relayP = Number(process.env.UNIVER_SDK_PORT ?? "18766");
+		log.info("univer-sdk-relay bridge listening with OpenCode", {
+			bridgePath: "/univer-sdk-relay/ws",
+			upstreamRelay: `ws://127.0.0.1:${relayP}/ws`,
+		});
 
 		const shouldPublishMDNS =
 			opts.mdns &&

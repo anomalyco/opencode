@@ -60,6 +60,61 @@ log(`generated=${managedInstructionsPath}`);
 log(`opencode_projects_root=${process.env.OPENCODE_PROJECTS_ROOT}`);
 log(`skills.paths[0]=${vendoredSkillDir}`);
 
+const relayPort = Number(process.env.UNIVER_SDK_PORT ?? "18766");
+const relayHealthUrl = `http://127.0.0.1:${relayPort}/health`;
+
+async function relayHealthy(): Promise<boolean> {
+	try {
+		const r = await fetch(relayHealthUrl, { signal: AbortSignal.timeout(400) });
+		return r.ok;
+	} catch {
+		return false;
+	}
+}
+
+let ownedRelay: ReturnType<typeof Bun.spawn> | null = null;
+
+function stopOwnedRelay() {
+	if (!ownedRelay) return;
+	try {
+		ownedRelay.kill("SIGTERM");
+	} catch {
+		/* ignore */
+	}
+	ownedRelay = null;
+}
+
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+	process.on(sig, stopOwnedRelay);
+}
+process.on("exit", stopOwnedRelay);
+
+if (await relayHealthy()) {
+	log(`univer-sdk-relay: already healthy at ${relayHealthUrl} — not spawning another Bun relay`);
+} else {
+	const relayScript = path.join(packageRoot, "..", "univer-sdk", "script", "sdk-relay.ts");
+	log(`univer-sdk-relay: spawning Bun relay (${relayScript})`);
+	ownedRelay = Bun.spawn(["bun", relayScript], {
+		cwd: opencodeRoot,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	const deadline = Date.now() + 20_000;
+	while (Date.now() < deadline) {
+		if (await relayHealthy()) {
+			log(
+				`univer-sdk-relay: listening ws://127.0.0.1:${relayPort}/ws — Python/agents connect here; OpenCode exposes /univer-sdk-relay/ws → same relay`,
+			);
+			break;
+		}
+		await new Promise((r) => setTimeout(r, 150));
+	}
+	if (!(await relayHealthy())) {
+		stopOwnedRelay();
+		throw new Error(`[veritly-debug-serve] Univer SDK relay never became healthy (${relayHealthUrl})`);
+	}
+}
+
 // Make the downstream CLI parse as `opencode serve --port 4096`.
 process.argv = [process.argv[0] ?? "bun", path.join(packageRoot, "src", "index.ts"), "serve", "--port", "4096"];
 

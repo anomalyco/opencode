@@ -45,6 +45,18 @@ type Props = {
 const UNIVERSER_BASE = univerBackendOrigin()
 const UNIVER_LICENSE = import.meta.env.VITE_UNIVER_LICENSE?.trim() ?? ""
 
+/** Relative `VITE_UNIVER_SDK_WS` (e.g. `/api/univer-sdk-relay/ws`) → same-origin wss/ws for hosted builds. */
+function browserUniverSdkWsUrl(viteValue: string | undefined): string {
+  const v = viteValue?.trim() ?? ""
+  if (!v) return ""
+  if (v.startsWith("/")) {
+    if (typeof window === "undefined") return ""
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
+    return `${proto}//${window.location.host}${v}`
+  }
+  return v
+}
+
 type VeritlyWindow = Window & { __veritlyUniverSdk?: () => ReturnType<typeof createUniverSdk> }
 
 function base64ToFile(base64: string, name: string, mimeType?: string): File {
@@ -134,10 +146,10 @@ export function SpreadsheetViewer(props: Props) {
     if (!el || typeof window === "undefined") return
     const cur = runtime
     if (!cur) return
-    const wsBase = import.meta.env.VITE_UNIVER_SDK_WS?.trim()
+    const wsBase = browserUniverSdkWsUrl(import.meta.env.VITE_UNIVER_SDK_WS)
     if (!wsBase) {
       console.warn(
-        "[veritly] VITE_UNIVER_SDK_WS was empty at vite build/dev — the SDK relay WebSocket is disabled. Set VITE_UNIVER_SDK_WS=ws://127.0.0.1:18766/ws in .env, restart `vite`/dev, or rebuild the app so the client bundle includes it.",
+        "[veritly] VITE_UNIVER_SDK_WS was empty at vite build/dev — the SDK relay WebSocket is disabled. Local: ws://127.0.0.1:18766/ws. Hosted (via OpenCode): /api/univer-sdk-relay/ws — rebuild after setting.",
       )
       return
     }

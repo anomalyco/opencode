@@ -19,6 +19,7 @@ COPY . .
 RUN bun install
 
 # Browser-facing Univer + SDK relay (Vite inlines `import.meta.env.VITE_*` at build time).
+# Hosted: VITE_UNIVER_SDK_WS=/api/univer-sdk-relay/ws (OpenCode bridges to loopback sdk-relay).
 # Pass as Docker build-args (e.g. Railway "Build" variables) for production images.
 # If a variable is omitted, it is not exported so `packages/app/.env` can still supply it when present in the build context.
 ARG VITE_UNIVER_BACKEND_URL
