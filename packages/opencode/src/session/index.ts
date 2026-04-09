@@ -503,12 +503,12 @@ export namespace Session {
             .get(),
         )
         if (!row) return
-        return MessageV2.Part.parse({
+        return {
           ...row.data,
           id: row.id,
           sessionID: row.session_id,
           messageID: row.message_id,
-        })
+        } as MessageV2.Part
       })
 
       const create = Effect.fn("Session.create")(function* (input?: {
