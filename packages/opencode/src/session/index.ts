@@ -12,7 +12,7 @@ import { Installation } from "../installation"
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
-import { SessionTable } from "./session.sql"
+import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -345,6 +345,11 @@ export namespace Session {
       messageID: MessageID
       partID: PartID
     }) => Effect.Effect<PartID>
+    readonly getPart: (input: {
+      sessionID: SessionID
+      messageID: MessageID
+      partID: PartID
+    }) => Effect.Effect<MessageV2.Part | undefined>
     readonly updatePart: <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
     readonly updatePartDelta: (input: {
       sessionID: SessionID
@@ -491,6 +496,29 @@ export namespace Session {
           )
           return part
         }).pipe(Effect.withSpan("Session.updatePart"))
+
+      const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
+        const row = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(
+              and(
+                eq(PartTable.session_id, input.sessionID),
+                eq(PartTable.message_id, input.messageID),
+                eq(PartTable.id, input.partID),
+              ),
+            )
+            .get(),
+        )
+        if (!row) return
+        return {
+          ...row.data,
+          id: row.id,
+          sessionID: row.session_id,
+          messageID: row.message_id,
+        } as MessageV2.Part
+      })
 
       const create = Effect.fn("Session.create")(function* (input?: {
         parentID?: SessionID
@@ -675,6 +703,7 @@ export namespace Session {
         removeMessage,
         removePart,
         updatePart,
+        getPart,
         updatePartDelta,
         initialize,
       })
