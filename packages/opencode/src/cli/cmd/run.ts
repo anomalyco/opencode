@@ -7,7 +7,7 @@ import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
-import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
@@ -680,7 +680,7 @@ export const RunCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
-        return Server.Default().fetch(request)
+        return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
       await execute(sdk)
