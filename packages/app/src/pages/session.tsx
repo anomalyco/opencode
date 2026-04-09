@@ -1,4 +1,4 @@
-import type { FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
@@ -58,6 +58,7 @@ import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
+import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
@@ -68,7 +69,7 @@ type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
 const emptyFollowups: FollowupItem[] = []
 
-type ChangeMode = "git" | "branch" | "session" | "turn"
+type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
 
 type SessionHistoryWindowInput = {
@@ -430,7 +431,7 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
   const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasSessionReview = createMemo(() => sessionCount() > 0)
   const canReview = createMemo(() => !!sync.project)
@@ -463,13 +464,6 @@ export default function Page() {
     if (!id) return false
     return sync.session.history.loading(id)
   })
-  const diffsReady = createMemo(() => {
-    const id = params.id
-    if (!id) return true
-    if (!hasSessionReview()) return true
-    return sync.data.session_diff[id] !== undefined
-  })
-
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
     emptyUserMessages,
@@ -527,10 +521,19 @@ export default function Page() {
     deferRender: false,
   })
 
-  const [vcs, setVcs] = createStore({
+  const [vcs, setVcs] = createStore<{
     diff: {
-      git: [] as FileDiff[],
-      branch: [] as FileDiff[],
+      git: VcsFileDiff[]
+      branch: VcsFileDiff[]
+    }
+    ready: {
+      git: boolean
+      branch: boolean
+    }
+  }>({
+    diff: {
+      git: [] as VcsFileDiff[],
+      branch: [] as VcsFileDiff[],
     },
     ready: {
       git: false,
@@ -609,7 +612,7 @@ export default function Page() {
       .diff({ mode })
       .then((result) => {
         if (vcsRun.get(mode) !== run) return
-        setVcs("diff", mode, result.data ?? [])
+        setVcs("diff", mode, list(result.data))
         setVcs("ready", mode, true)
       })
       .catch((error) => {
@@ -647,7 +650,8 @@ export default function Page() {
     return open
   }, desktopReviewOpen())
 
-  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
+  const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     if (sync.project?.vcs === "git") list.push("git")
@@ -659,29 +663,22 @@ export default function Page() {
     ) {
       list.push("branch")
     }
-    list.push("session", "turn")
+    list.push("turn")
     return list
   })
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     if (store.changes === "git" || store.changes === "branch") return store.changes
   })
   const reviewDiffs = createMemo(() => {
-    if (store.changes === "git") return vcs.diff.git
-    if (store.changes === "branch") return vcs.diff.branch
-    if (store.changes === "session") return diffs()
+    if (store.changes === "git") return list(vcs.diff.git)
+    if (store.changes === "branch") return list(vcs.diff.branch)
     return turnDiffs()
   })
-  const reviewCount = createMemo(() => {
-    if (store.changes === "git") return vcs.diff.git.length
-    if (store.changes === "branch") return vcs.diff.branch.length
-    if (store.changes === "session") return sessionCount()
-    return turnDiffs().length
-  })
+  const reviewCount = createMemo(() => reviewDiffs().length)
   const hasReview = createMemo(() => reviewCount() > 0)
   const reviewReady = createMemo(() => {
     if (store.changes === "git") return vcs.ready.git
     if (store.changes === "branch") return vcs.ready.branch
-    if (store.changes === "session") return !hasSessionReview() || diffsReady()
     return true
   })
 
@@ -748,13 +745,6 @@ export default function Page() {
     autoScroll.pause()
     scrollToMessage(msgs[targetIndex], "auto")
   }
-
-  const sessionEmptyKey = createMemo(() => {
-    const project = sync.project
-    if (project && !project.vcs) return "session.review.noVcs"
-    if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
-    return "session.review.empty"
-  })
 
   function upsert(next: Project) {
     const list = globalSync.data.project
@@ -1156,7 +1146,6 @@ export default function Page() {
     const label = (option: ChangeMode) => {
       if (option === "git") return language.t("ui.sessionReview.title.git")
       if (option === "branch") return language.t("ui.sessionReview.title.branch")
-      if (option === "session") return language.t("ui.sessionReview.title")
       return language.t("ui.sessionReview.title.lastTurn")
     }
 
@@ -1179,11 +1168,26 @@ export default function Page() {
     </div>
   )
 
+  const createGit = (input: { emptyClass: string }) => (
+    <div class={input.emptyClass}>
+      <div class="flex flex-col gap-3">
+        <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
+        <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
+          {language.t("session.review.noVcs.createGit.description")}
+        </div>
+      </div>
+      <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
+        {gitMutation.isPending
+          ? language.t("session.review.noVcs.createGit.actionLoading")
+          : language.t("session.review.noVcs.createGit.action")}
+      </Button>
+    </div>
+  )
+
   const reviewEmptyText = createMemo(() => {
     if (store.changes === "git") return language.t("session.review.noUncommittedChanges")
     if (store.changes === "branch") return language.t("session.review.noBranchChanges")
-    if (store.changes === "turn") return language.t("session.review.noChanges")
-    return language.t(sessionEmptyKey())
+    return language.t("session.review.noChanges")
   })
 
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
@@ -1193,29 +1197,8 @@ export default function Page() {
     }
 
     if (store.changes === "turn") {
+      if (nogit()) return createGit(input)
       return empty(reviewEmptyText())
-    }
-
-    if (hasSessionReview() && !diffsReady()) {
-      return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
-    }
-
-    if (sessionEmptyKey() === "session.review.noVcs") {
-      return (
-        <div class={input.emptyClass}>
-          <div class="flex flex-col gap-3">
-            <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
-            <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-              {language.t("session.review.noVcs.createGit.description")}
-            </div>
-          </div>
-          <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
-            {gitMutation.isPending
-              ? language.t("session.review.noVcs.createGit.actionLoading")
-              : language.t("session.review.noVcs.createGit.action")}
-          </Button>
-        </div>
-      )
     }
 
     return (

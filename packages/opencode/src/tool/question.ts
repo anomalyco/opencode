@@ -41,6 +41,6 @@ export const QuestionTool = Tool.defineEffect<typeof parameters, Metadata, Quest
           },
         }
       },
-    } satisfies Tool.Def<typeof parameters, Metadata>
+    }
   }),
 )

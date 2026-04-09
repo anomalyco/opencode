@@ -99,6 +99,37 @@ describe("tool.registry", () => {
         )
 
         await Bun.write(
+          path.join(opencodeDir, "package-lock.json"),
+          JSON.stringify({
+            name: "custom-tools",
+            lockfileVersion: 3,
+            packages: {
+              "": {
+                dependencies: {
+                  "@opencode-ai/plugin": "^0.0.0",
+                  cowsay: "^1.6.0",
+                },
+              },
+            },
+          }),
+        )
+
+        const cowsayDir = path.join(opencodeDir, "node_modules", "cowsay")
+        await fs.mkdir(cowsayDir, { recursive: true })
+        await Bun.write(
+          path.join(cowsayDir, "package.json"),
+          JSON.stringify({
+            name: "cowsay",
+            type: "module",
+            exports: "./index.js",
+          }),
+        )
+        await Bun.write(
+          path.join(cowsayDir, "index.js"),
+          ["export function say({ text }) {", "  return `moo ${text}`", "}", ""].join("\n"),
+        )
+
+        await Bun.write(
           path.join(toolsDir, "cowsay.ts"),
           [
             "import { say } from 'cowsay'",
