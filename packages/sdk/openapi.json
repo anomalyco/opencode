@@ -12491,6 +12491,12 @@
           },
           "directory": {
             "type": "string"
+          },
+          "serveDomain": {
+            "type": "string"
+          },
+          "jupyterhubUser": {
+            "type": "string"
           }
         },
         "required": ["home", "state", "config", "worktree", "directory"]

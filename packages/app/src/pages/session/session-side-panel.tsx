@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -18,6 +18,7 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -33,6 +34,7 @@ export function SessionSidePanel(props: {
   size: Sizing
 }) {
   const layout = useLayout()
+  const sdk = useSDK()
   const sync = useSync()
   const file = useFile()
   const language = useLanguage()
@@ -69,6 +71,37 @@ export function SessionSidePanel(props: {
     if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
     return "session.review.noChanges"
   })
+
+  const previewUrl = createMemo(() => {
+    const path = sync.data.path
+    const domain = path?.serveDomain
+    const user = path?.jupyterhubUser
+    if (!domain || !user) return undefined
+    return `https://${user}.${domain}`
+  })
+
+  const [previewReady, setPreviewReady] = createSignal(false)
+  {
+    const checkServer = async () => {
+      const url = previewUrl()
+      if (!url) return setPreviewReady(false)
+      try {
+        const res = await fetch(url, { cache: "no-store", mode: "cors" })
+        setPreviewReady(res.ok)
+      } catch {
+        setPreviewReady(false)
+      }
+    }
+
+    void checkServer()
+    const timer = setInterval(checkServer, 10_000)
+    onCleanup(() => clearInterval(timer))
+
+    const unsub = sdk.event.on("session.idle", () => void checkServer())
+    onCleanup(unsub)
+  }
+
+  const previewSrc = createMemo(() => (previewReady() ? previewUrl() : undefined))
 
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
@@ -250,6 +283,13 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Show when={previewSrc()}>
+                        <Tabs.Trigger value="preview">
+                          <div class="flex items-center gap-1.5">
+                            <div>미리보기</div>
+                          </div>
+                        </Tabs.Trigger>
+                      </Show>
                       <Show when={contextOpen()}>
                         <Tabs.Trigger
                           value="context"
@@ -322,6 +362,18 @@ export function SessionSidePanel(props: {
                       </div>
                     </Show>
                   </Tabs.Content>
+
+                  <Show when={previewSrc()}>
+                    <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "preview"}>
+                        <iframe
+                          src={previewSrc()}
+                          class="w-full h-full border-0"
+                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                        />
+                      </Show>
+                    </Tabs.Content>
+                  </Show>
 
                   <Show when={contextOpen()}>
                     <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
