@@ -116,35 +116,39 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const prep = await prepareSystem({
-      model: input.model,
-      sessionID: input.sessionID,
-      system: [
-        [
-          // use agent prompt otherwise provider prompt
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-          // any custom prompt passed into this call
-          ...input.system,
-          // any custom prompt from last user message
-          ...(input.user.system ? [input.user.system] : []),
-        ]
-          .filter((x) => x)
-          .join("\n"),
-      ],
-    })
+    const [language, cfg, provider, auth] = await Promise.all([
+      Provider.getLanguage(input.model),
+      Config.get(),
+      Provider.getProvider(input.model.providerID),
+      Auth.get(input.model.providerID),
+    ])
+    const system = [
+      [
+        // use agent prompt otherwise provider prompt
+        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        // any custom prompt passed into this call
+        ...input.system,
+        // any custom prompt from last user message
+        ...(input.user.system ? [input.user.system] : []),
+      ]
+        .filter((x) => x)
+        .join("\n"),
+    ]
+    await Plugin.trigger(
+      "experimental.chat.system.transform",
+      { sessionID: input.sessionID, model: input.model },
+      { system },
+    )
 
-    const header = prep.system[0]
+    const header = system[0]
     // rejoin to maintain 2-part structure for caching if header unchanged
-    if (prep.system.length > 2 && prep.system[0] === header) {
-      const rest = prep.system.slice(1)
-      prep.system.length = 0
-      prep.system.push(header, rest.join("\n"))
+    if (system.length > 2 && system[0] === header) {
+      const rest = system.slice(1)
+      system.length = 0
+      system.push(header, rest.join("\n"))
     }
 
-    const language = prep.language
-    const cfg = prep.cfg
-    const provider = prep.provider
-    const isOpenaiOauth = provider.id === "openai" && prep.auth?.type === "oauth"
+    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
     const variant =
       !input.small && input.model.variants && input.user.model.variant
@@ -165,14 +169,24 @@ export namespace LLM {
     )
     if (isOpenaiOauth) {
       // OpenAI OAuth expects instructions instead of system-role messages.
-      options.instructions = prep.system.join("\n")
+      options.instructions = system.join("\n")
     }
 
     const isWorkflow = language instanceof GitLabWorkflowLanguageModel
     // Workflow models receive the system prompt separately via `systemPrompt`.
     const messages = isWorkflow
       ? input.messages
-      : buildMessages({ system: prep.system, messages: input.messages, provider: prep.provider, auth: prep.auth })
+      : isOpenaiOauth
+        ? input.messages
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -244,7 +258,7 @@ export namespace LLM {
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language
       workflowModel.sessionID = input.sessionID
-      workflowModel.systemPrompt = prep.system.join("\n")
+      workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
@@ -399,31 +413,44 @@ export namespace LLM {
   }
 
   export async function generateObject<Schema extends z.ZodType>(input: ObjectRequest<Schema>) {
-    const prep = await prepareSystem({ model: input.model, system: input.system })
+    const [language, cfg, provider, auth] = await Promise.all([
+      Provider.getLanguage(input.model),
+      Config.get(),
+      Provider.getProvider(input.model.providerID),
+      Auth.get(input.model.providerID),
+    ])
+    const system = [...input.system]
+    await Plugin.trigger("experimental.chat.system.transform", { model: input.model }, { system })
     const params = {
       experimental_telemetry: {
-        isEnabled: prep.cfg.experimental?.openTelemetry,
+        isEnabled: cfg.experimental?.openTelemetry,
         metadata: {
-          userId: prep.cfg.username ?? "unknown",
+          userId: cfg.username ?? "unknown",
         },
       },
       temperature: input.temperature,
-      messages: buildMessages({
-        system: prep.system,
-        messages: input.messages,
-        provider: prep.provider,
-        auth: prep.auth,
-      }),
-      model: prep.language,
+      messages:
+        provider.id === "openai" && auth?.type === "oauth"
+          ? input.messages
+          : [
+              ...system.map(
+                (x): ModelMessage => ({
+                  role: "system",
+                  content: x,
+                }),
+              ),
+              ...input.messages,
+            ],
+      model: language,
       schema: input.schema,
       abortSignal: input.abort,
     } satisfies Parameters<typeof generateObjectAI<Schema>>[0]
 
-    if (prep.provider.id === "openai" && prep.auth?.type === "oauth") {
+    if (provider.id === "openai" && auth?.type === "oauth") {
       const result = streamObject({
         ...params,
         providerOptions: ProviderTransform.providerOptions(input.model, {
-          instructions: prep.system.join("\n"),
+          instructions: system.join("\n"),
           store: false,
         }),
         onError: () => {},
@@ -435,41 +462,6 @@ export namespace LLM {
     }
 
     return generateObjectAI(params).then((x) => x.object)
-  }
-
-  async function prepareSystem(input: { model: Provider.Model; system: string[]; sessionID?: string }) {
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
-      Config.get(),
-      Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
-    ])
-    const system = [...input.system]
-    await Plugin.trigger(
-      "experimental.chat.system.transform",
-      input.sessionID ? { sessionID: input.sessionID, model: input.model } : { model: input.model },
-      { system },
-    )
-    return {
-      language,
-      cfg,
-      provider,
-      auth,
-      system,
-    }
-  }
-
-  function buildMessages(input: { system: string[]; messages: ModelMessage[]; provider: Provider.Info; auth?: Auth.Info }): ModelMessage[] {
-    if (input.provider.id === "openai" && input.auth?.type === "oauth") return input.messages
-    return [
-      ...input.system.map(
-        (x): ModelMessage => ({
-          role: "system",
-          content: x,
-        }),
-      ),
-      ...input.messages,
-    ]
   }
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
