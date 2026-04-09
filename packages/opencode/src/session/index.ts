@@ -5,7 +5,6 @@ import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type ProviderMetadata } from "ai"
-import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
@@ -30,7 +29,7 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
-import { Effect, Layer, Scope, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
@@ -319,8 +318,6 @@ export namespace Session {
     readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
     readonly touch: (sessionID: SessionID) => Effect.Effect<void>
     readonly get: (id: SessionID) => Effect.Effect<Info>
-    readonly share: (id: SessionID) => Effect.Effect<{ url: string }>
-    readonly unshare: (id: SessionID) => Effect.Effect<void>
     readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
     readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
     readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
@@ -364,12 +361,10 @@ export namespace Session {
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))
 
-  export const layer: Layer.Layer<Service, never, Bus.Service | Config.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      const config = yield* Config.Service
-      const scope = yield* Scope.Scope
 
       const createNext = Effect.fn("Session.createNext")(function* (input: {
         id?: SessionID
@@ -399,11 +394,6 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
-        const cfg = yield* config.get()
-        if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
-          yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
-        }
-
         if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // This only exist for backwards compatibility. We should not be
           // manually publishing this event; it is a sync event now
@@ -420,25 +410,6 @@ export namespace Session {
         const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
         if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
         return fromRow(row)
-      })
-
-      const share = Effect.fn("Session.share")(function* (id: SessionID) {
-        const cfg = yield* config.get()
-        if (cfg.share === "disabled") throw new Error("Sharing is disabled in configuration")
-        const result = yield* Effect.promise(async () => {
-          const { ShareNext } = await import("@/share/share-next")
-          return ShareNext.create(id)
-        })
-        yield* Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: result.url } } }))
-        return result
-      })
-
-      const unshare = Effect.fn("Session.unshare")(function* (id: SessionID) {
-        yield* Effect.promise(async () => {
-          const { ShareNext } = await import("@/share/share-next")
-          await ShareNext.remove(id)
-        })
-        yield* Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null } } }))
       })
 
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -460,7 +431,6 @@ export namespace Session {
           for (const child of kids) {
             yield* remove(child.id)
           }
-          yield* unshare(sessionID).pipe(Effect.ignore)
           yield* Effect.sync(() => {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
@@ -661,8 +631,6 @@ export namespace Session {
         fork,
         touch,
         get,
-        share,
-        unshare,
         setTitle,
         setArchived,
         setPermission,
@@ -683,7 +651,7 @@ export namespace Session {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -704,8 +672,6 @@ export namespace Session {
   )
 
   export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
-  export const share = fn(SessionID.zod, (id) => runPromise((svc) => svc.share(id)))
-  export const unshare = fn(SessionID.zod, (id) => runPromise((svc) => svc.unshare(id)))
 
   export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
     runPromise((svc) => svc.setTitle(input)),
