@@ -582,7 +582,7 @@ export namespace MessageV2 {
   export const toModelMessagesEffect = Effect.fnUntraced(function* (
     input: WithParts[],
     model: Provider.Model,
-    options?: { stripMedia?: boolean },
+    options?: { stripMedia?: boolean; remind?: string },
   ) {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
@@ -645,6 +645,7 @@ export namespace MessageV2 {
       if (msg.parts.length === 0) continue
 
       if (msg.info.role === "user") {
+        const wrapped = options?.remind && msg.info.id > options.remind
         const userMessage: UIMessage = {
           id: msg.info.id,
           role: "user",
@@ -652,11 +653,23 @@ export namespace MessageV2 {
         }
         result.push(userMessage)
         for (const part of msg.parts) {
-          if (part.type === "text" && !part.ignored)
+          if (part.type === "text" && !part.ignored) {
+            const text =
+              wrapped && !part.synthetic && part.text.trim()
+                ? [
+                    "<system-reminder>",
+                    "The user sent the following message:",
+                    part.text,
+                    "",
+                    "Please address this message and continue with your tasks.",
+                    "</system-reminder>",
+                  ].join("\n")
+                : part.text
             userMessage.parts.push({
               type: "text",
-              text: part.text,
+              text,
             })
+          }
           // text/plain and directory files are converted into text parts, ignore them
           if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
             if (options?.stripMedia && isMedia(part.mime)) {
@@ -821,7 +834,7 @@ export namespace MessageV2 {
   export function toModelMessages(
     input: WithParts[],
     model: Provider.Model,
-    options?: { stripMedia?: boolean },
+    options?: { stripMedia?: boolean; remind?: string },
   ): Promise<ModelMessage[]> {
     return Effect.runPromise(toModelMessagesEffect(input, model, options))
   }
