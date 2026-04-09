@@ -574,6 +574,7 @@ export namespace Provider {
               const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
               const model = sdk.workflowChat(sdkModelID, {
                 featureFlags,
+                workflowDefinition: options?.workflowDefinition as string | undefined,
               })
               if (workflowRef) {
                 model.selectedModelRef = workflowRef
@@ -937,8 +938,8 @@ export namespace Provider {
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
-      headers: model.headers ?? {},
-      options: model.options ?? {},
+      headers: {},
+      options: {},
       cost: {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,

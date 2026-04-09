@@ -6,96 +6,101 @@ import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
-import { iife } from "@/util/iife"
-import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { Effect } from "effect"
 
-export const TaskTool = Tool.define("task", async () => {
-  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
-  const list = agents.toSorted((a, b) => a.name.localeCompare(b.name))
-  const agentList = list
-    .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-    .join("\n")
-  const description = [`Available agent types and the tools they have access to:`, agentList].join("\n")
+const id = "task"
 
-  return {
-    description,
-    parameters: z.object({
-      description: z.string().describe("A short (3-5 words) description of the task"),
-      prompt: z.string().describe("The task for the agent to perform"),
-      subagent_type: z.string().describe("The type of specialized agent to use for this task"),
-      task_id: z
-        .string()
-        .describe(
-          "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-        )
-        .optional(),
-      command: z.string().describe("The command that triggered this task").optional(),
-    }),
-    async execute(params, ctx) {
-      const config = await Config.get()
+const parameters = z.object({
+  description: z.string().describe("A short (3-5 words) description of the task"),
+  prompt: z.string().describe("The task for the agent to perform"),
+  subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  task_id: z
+    .string()
+    .describe(
+      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+    )
+    .optional(),
+  command: z.string().describe("The command that triggered this task").optional(),
+})
 
-      // Skip permission check when user explicitly invoked via @ or command subtask
+export const TaskTool = Tool.defineEffect(
+  id,
+  Effect.gen(function* () {
+    const agent = yield* Agent.Service
+    const config = yield* Config.Service
+
+    const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
+      const cfg = yield* config.get()
+
       if (!ctx.extra?.bypassAgentCheck) {
-        await ctx.ask({
-          permission: "task",
-          patterns: [params.subagent_type],
-          always: ["*"],
-          metadata: {
-            description: params.description,
-            subagent_type: params.subagent_type,
-          },
-        })
+        yield* Effect.promise(() =>
+          ctx.ask({
+            permission: id,
+            patterns: [params.subagent_type],
+            always: ["*"],
+            metadata: {
+              description: params.description,
+              subagent_type: params.subagent_type,
+            },
+          }),
+        )
       }
 
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      const next = yield* agent.get(params.subagent_type)
+      if (!next) {
+        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
+      }
 
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
-      const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")
+      const canTask = next.permission.some((rule) => rule.permission === id)
+      const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
-      const session = await iife(async () => {
-        if (params.task_id) {
-          const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
-          if (found) return found
-        }
+      const taskID = params.task_id
+      const session = taskID
+        ? yield* Effect.promise(() => {
+            const id = SessionID.make(taskID)
+            return Session.get(id).catch(() => undefined)
+          })
+        : undefined
+      const nextSession =
+        session ??
+        (yield* Effect.promise(() =>
+          Session.create({
+            parentID: ctx.sessionID,
+            title: params.description + ` (@${next.name} subagent)`,
+            permission: [
+              ...(canTodo
+                ? []
+                : [
+                    {
+                      permission: "todowrite" as const,
+                      pattern: "*" as const,
+                      action: "deny" as const,
+                    },
+                  ]),
+              ...(canTask
+                ? []
+                : [
+                    {
+                      permission: id,
+                      pattern: "*" as const,
+                      action: "deny" as const,
+                    },
+                  ]),
+              ...(cfg.experimental?.primary_tools?.map((item) => ({
+                pattern: "*",
+                action: "allow" as const,
+                permission: item,
+              })) ?? []),
+            ],
+          }),
+        ))
 
-        return await Session.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
-          permission: [
-            ...(hasTodoWritePermission
-              ? []
-              : [
-                  {
-                    permission: "todowrite" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(config.experimental?.primary_tools?.map((t) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: t,
-            })) ?? []),
-          ],
-        })
-      })
-      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
-      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+      const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
-      const model = agent.model ?? {
+      const model = next.model ?? {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }
@@ -103,7 +108,7 @@ export const TaskTool = Tool.define("task", async () => {
       ctx.metadata({
         title: params.description,
         metadata: {
-          sessionId: session.id,
+          sessionId: nextSession.id,
           model,
         },
       })
@@ -111,59 +116,77 @@ export const TaskTool = Tool.define("task", async () => {
       const messageID = MessageID.ascending()
 
       function cancel() {
-        SessionPrompt.cancel(session.id)
+        SessionPrompt.cancel(nextSession.id)
       }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          ...(hasTodoWritePermission ? {} : { todowrite: false }),
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
-      })
+      return yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          ctx.abort.addEventListener("abort", cancel)
+        }),
+        () =>
+          Effect.gen(function* () {
+            const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(params.prompt))
+            const result = yield* Effect.promise(() =>
+              SessionPrompt.prompt({
+                messageID,
+                sessionID: nextSession.id,
+                model: {
+                  modelID: model.modelID,
+                  providerID: model.providerID,
+                },
+                agent: next.name,
+                tools: {
+                  ...(canTodo ? {} : { todowrite: false }),
+                  ...(canTask ? {} : { task: false }),
+                  ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+                },
+                parts,
+              }),
+            )
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+            return {
+              title: params.description,
+              metadata: {
+                sessionId: nextSession.id,
+                model,
+              },
+              output: [
+                `task_id: ${nextSession.id} (for resuming to continue this task if needed)`,
+                "",
+                "<task_result>",
+                result.parts.findLast((item) => item.type === "text")?.text ?? "",
+                "</task_result>",
+              ].join("\n"),
+            }
+          }),
+        () =>
+          Effect.sync(() => {
+            ctx.abort.removeEventListener("abort", cancel)
+          }),
+      )
+    })
 
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
-
-      return {
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-        output,
-      }
-    },
-  }
-})
+    return {
+      description: DESCRIPTION,
+      parameters,
+      async execute(params: z.infer<typeof parameters>, ctx) {
+        return Effect.runPromise(run(params, ctx))
+      },
+    }
+  }),
+)
 
 export const TaskDescription: Tool.DynamicDescription = (agent) =>
   Effect.gen(function* () {
-    const agents = yield* Effect.promise(() => Agent.list().then((x) => x.filter((a) => a.mode !== "primary")))
-    const accessibleAgents = agents.filter(
-      (a) => Permission.evaluate("task", a.name, agent.permission).action !== "deny",
+    const items = yield* Effect.promise(() =>
+      Agent.list().then((items) => items.filter((item) => item.mode !== "primary")),
     )
-    const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
+    const filtered = items.filter((item) => Permission.evaluate(id, item.name, agent.permission).action !== "deny")
+    const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
     const description = list
-      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+      .map(
+        (item) => `- ${item.name}: ${item.description ?? "This subagent should only be called manually by the user."}`,
+      )
       .join("\n")
-    return [`Available agent types and the tools they have access to:`, description].join("\n")
+    return ["Available agent types and the tools they have access to:", description].join("\n")
   })

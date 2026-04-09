@@ -60,6 +60,13 @@ export namespace Tool {
   export type InferMetadata<T> =
     T extends Info<any, infer M> ? M : T extends Effect.Effect<Info<any, infer M>, any, any> ? M : never
 
+  export type InferDef<T> =
+    T extends Info<infer P, infer M>
+      ? Def<P, M>
+      : T extends Effect.Effect<Info<infer P, infer M>, any, any>
+        ? Def<P, M>
+        : never
+
   function wrap<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
     init: (() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>,
@@ -98,24 +105,27 @@ export namespace Tool {
     }
   }
 
-  export function define<Parameters extends z.ZodType, Result extends Metadata>(
-    id: string,
+  export function define<Parameters extends z.ZodType, Result extends Metadata, ID extends string = string>(
+    id: ID,
     init: (() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>,
-  ): Info<Parameters, Result> {
+  ): Info<Parameters, Result> & { id: ID } {
     return {
       id,
       init: wrap(id, init),
     }
   }
 
-  export function defineEffect<Parameters extends z.ZodType, Result extends Metadata, R>(
-    id: string,
+  export function defineEffect<Parameters extends z.ZodType, Result extends Metadata, R, ID extends string = string>(
+    id: ID,
     init: Effect.Effect<(() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>, never, R>,
-  ): Effect.Effect<Info<Parameters, Result>, never, R> {
-    return Effect.map(init, (next) => ({ id, init: wrap(id, next) }))
+  ): Effect.Effect<Info<Parameters, Result>, never, R> & { id: ID } {
+    return Object.assign(
+      Effect.map(init, (next) => ({ id, init: wrap(id, next) })),
+      { id },
+    )
   }
 
-  export function init(info: Info): Effect.Effect<Def, never, any> {
+  export function init<P extends z.ZodType, M extends Metadata>(info: Info<P, M>): Effect.Effect<Def<P, M>> {
     return Effect.gen(function* () {
       const init = yield* Effect.promise(() => info.init())
       return {
