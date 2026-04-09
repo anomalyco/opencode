@@ -122,7 +122,11 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    const system = [
+    // TODO: move this to a proper hook
+    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+
+    const system: string[] = []
+    system.push(
       [
         // use agent prompt otherwise provider prompt
         ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
@@ -133,22 +137,21 @@ export namespace LLM {
       ]
         .filter((x) => x)
         .join("\n"),
-    ]
+    )
+
+    const header = system[0]
     await Plugin.trigger(
       "experimental.chat.system.transform",
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
 
-    const header = system[0]
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
       system.length = 0
       system.push(header, rest.join("\n"))
     }
-
-    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
     const variant =
       !input.small && input.model.variants && input.user.model.variant
@@ -173,7 +176,6 @@ export namespace LLM {
     }
 
     const isWorkflow = language instanceof GitLabWorkflowLanguageModel
-    // Workflow models receive the system prompt separately via `systemPrompt`.
     const messages = isWorkflow
       ? input.messages
       : isOpenaiOauth
