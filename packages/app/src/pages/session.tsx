@@ -465,15 +465,21 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
   const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    () => {
+      const msgs = messages()
+      if (!msgs || !messagesReady()) return emptyUserMessages
+      return msgs.filter((m) => m.role === "user") as UserMessage[]
+    },
     emptyUserMessages,
     { equals: same },
   )
   const visibleUserMessages = createMemo(
     () => {
+      const msgs = userMessages()
+      if (!msgs) return emptyUserMessages
       const revert = revertMessageID()
-      if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      if (!revert) return msgs
+      return msgs.filter((m) => m.id < revert)
     },
     emptyUserMessages,
     {
@@ -1497,7 +1503,7 @@ export default function Page() {
   const historyWindow = createSessionHistoryWindow({
     sessionID: () => params.id,
     messagesReady,
-    loaded: () => messages().length,
+    loaded: () => (messages() ?? []).length,
     visibleUserMessages,
     historyMore,
     historyLoading,
