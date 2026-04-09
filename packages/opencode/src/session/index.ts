@@ -20,16 +20,13 @@ import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
-import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
-import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
@@ -358,12 +355,6 @@ export namespace Session {
       field: string
       delta: string
     }) => Effect.Effect<void>
-    readonly initialize: (input: {
-      sessionID: SessionID
-      modelID: ModelID
-      providerID: ProviderID
-      messageID: MessageID
-    }) => Effect.Effect<void>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Session") {}
@@ -616,7 +607,7 @@ export namespace Session {
 
       const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
         return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
-          Effect.orElseSucceed(() => [] as Snapshot.FileDiff[]),
+          Effect.orElseSucceed((): Snapshot.FileDiff[] => []),
         )
       })
 
@@ -665,23 +656,6 @@ export namespace Session {
         yield* bus.publish(MessageV2.Event.PartDelta, input)
       })
 
-      const initialize = Effect.fn("Session.initialize")(function* (input: {
-        sessionID: SessionID
-        modelID: ModelID
-        providerID: ProviderID
-        messageID: MessageID
-      }) {
-        yield* Effect.promise(() =>
-          SessionPrompt.command({
-            sessionID: input.sessionID,
-            messageID: input.messageID,
-            model: input.providerID + "/" + input.modelID,
-            command: Command.Default.INIT,
-            arguments: "",
-          }),
-        )
-      })
-
       return Service.of({
         create,
         fork,
@@ -705,7 +679,6 @@ export namespace Session {
         updatePart,
         getPart,
         updatePartDelta,
-        initialize,
       })
     }),
   )
@@ -894,10 +867,5 @@ export namespace Session {
       delta: z.string(),
     }),
     (input) => runPromise((svc) => svc.updatePartDelta(input)),
-  )
-
-  export const initialize = fn(
-    z.object({ sessionID: SessionID.zod, modelID: ModelID.zod, providerID: ProviderID.zod, messageID: MessageID.zod }),
-    (input) => runPromise((svc) => svc.initialize(input)),
   )
 }
