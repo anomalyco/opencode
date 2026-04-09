@@ -1,18 +1,48 @@
 use futures::{FutureExt, Stream, StreamExt, future};
+use process_wrap::tokio::CommandWrap;
+#[cfg(unix)]
+use process_wrap::tokio::ProcessGroup;
+#[cfg(windows)]
+use process_wrap::tokio::{CommandWrapper, JobObject, KillOnDrop};
+use std::collections::HashMap;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+use std::path::Path;
+use std::process::Stdio;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_shell::{
-    ShellExt,
-    process::{CommandChild, CommandEvent, TerminatedPayload},
-};
-use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
-use tokio::sync::oneshot;
+use tokio::{
+    io::{AsyncBufRead, AsyncBufReadExt, BufReader},
+    process::Command,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
+#[cfg(windows)]
+use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
-use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
+use crate::server::get_wsl_config;
+
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+// Keep this as a custom wrapper instead of process_wrap::CreationFlags.
+// JobObject pre_spawn rewrites creation flags, so this must run after it.
+struct WinCreationFlags;
+
+#[cfg(windows)]
+impl CommandWrapper for WinCreationFlags {
+    fn pre_spawn(&mut self, command: &mut Command, _core: &CommandWrap) -> std::io::Result<()> {
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+        Ok(())
+    }
+}
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
+const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(serde::Deserialize, Debug)]
 pub struct ServerConfig {
@@ -25,15 +55,43 @@ pub struct Config {
     pub server: Option<ServerConfig>,
 }
 
+#[derive(Clone, Debug)]
+pub enum CommandEvent {
+    Stdout(String),
+    Stderr(String),
+    Error(String),
+    Terminated(TerminatedPayload),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TerminatedPayload {
+    pub code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CommandChild {
+    kill: mpsc::Sender<()>,
+}
+
+impl CommandChild {
+    pub fn kill(&self) -> std::io::Result<()> {
+        self.kill
+            .try_send(())
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    }
+}
+
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
     let (events, _) = spawn_command(app, "debug config", &[]).ok()?;
 
     events
         .fold(String::new(), async |mut config_str, event| {
-            if let CommandEvent::Stdout(stdout) = event
-                && let Ok(s) = str::from_utf8(&stdout)
-            {
-                config_str += s
+            if let CommandEvent::Stdout(s) = &event {
+                config_str += s.as_str()
+            }
+            if let CommandEvent::Stderr(s) = &event {
+                config_str += s.as_str()
             }
 
             config_str
@@ -163,16 +221,8 @@ fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-fn is_wsl_enabled(app: &tauri::AppHandle) -> bool {
-    let Ok(store) = app.store(SETTINGS_STORE) else {
-        return false;
-    };
-
-    store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
+fn is_wsl_enabled(_app: &tauri::AppHandle) -> bool {
+    get_wsl_config(_app.clone()).is_ok_and(|v| v.enabled)
 }
 
 fn shell_escape(input: &str) -> String {
@@ -186,11 +236,138 @@ fn shell_escape(input: &str) -> String {
     escaped
 }
 
+fn parse_shell_env(stdout: &[u8]) -> HashMap<String, String> {
+    String::from_utf8_lossy(stdout)
+        .split('\0')
+        .filter_map(|line| {
+            if line.is_empty() {
+                return None;
+            }
+
+            let (key, value) = line.split_once('=')?;
+            if key.is_empty() {
+                return None;
+            }
+
+            Some((key.to_string(), value.to_string()))
+        })
+        .collect()
+}
+
+fn command_output_with_timeout(
+    mut cmd: std::process::Command,
+    timeout: Duration,
+) -> std::io::Result<Option<std::process::Output>> {
+    let mut child = cmd.spawn()?;
+    let start = Instant::now();
+
+    loop {
+        if child.try_wait()?.is_some() {
+            return child.wait_with_output().map(Some);
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+enum ShellEnvProbe {
+    Loaded(HashMap<String, String>),
+    Timeout,
+    Unavailable,
+}
+
+fn probe_shell_env(shell: &str, mode: &str) -> ShellEnvProbe {
+    let mut cmd = std::process::Command::new(shell);
+    cmd.args([mode, "-c", "env -0"]);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::null());
+    let output = match command_output_with_timeout(cmd, SHELL_ENV_TIMEOUT) {
+        Ok(Some(output)) => output,
+        Ok(None) => return ShellEnvProbe::Timeout,
+        Err(error) => {
+            tracing::debug!(shell, mode, ?error, "Shell env probe failed");
+            return ShellEnvProbe::Unavailable;
+        }
+    };
+    if !output.status.success() {
+        tracing::debug!(shell, mode, "Shell env probe exited with non-zero status");
+        return ShellEnvProbe::Unavailable;
+    }
+    let env = parse_shell_env(&output.stdout);
+    if env.is_empty() {
+        tracing::debug!(shell, mode, "Shell env probe returned empty env");
+        return ShellEnvProbe::Unavailable;
+    }
+
+    ShellEnvProbe::Loaded(env)
+}
+
+fn is_nushell(shell: &str) -> bool {
+    let shell_name = Path::new(shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(shell)
+        .to_ascii_lowercase();
+    shell_name == "nu" || shell_name == "nu.exe" || shell.to_ascii_lowercase().ends_with("\\nu.exe")
+}
+fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
+    if is_nushell(shell) {
+        tracing::debug!(shell, "Skipping shell env probe for nushell");
+        return None;
+    }
+
+    match probe_shell_env(shell, "-il") {
+        ShellEnvProbe::Loaded(env) => {
+            tracing::info!(
+                shell,
+                env_count = env.len(),
+                "Loaded shell environment with -il"
+            );
+            return Some(env);
+        }
+        ShellEnvProbe::Timeout => {
+            tracing::warn!(shell, "Interactive shell env probe timed out");
+            return None;
+        }
+        ShellEnvProbe::Unavailable => {}
+    }
+
+    if let ShellEnvProbe::Loaded(env) = probe_shell_env(shell, "-l") {
+        tracing::info!(
+            shell,
+            env_count = env.len(),
+            "Loaded shell environment with -l"
+        );
+        return Some(env);
+    }
+    tracing::warn!(shell, "Falling back to app environment");
+    None
+}
+
+fn merge_shell_env(
+    shell_env: Option<HashMap<String, String>>,
+    envs: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let mut merged = shell_env.unwrap_or_default();
+    for (key, value) in envs {
+        merged.insert(key, value);
+    }
+
+    merged.into_iter().collect()
+}
+
 pub fn spawn_command(
     app: &tauri::AppHandle,
     args: &str,
     extra_env: &[(&str, String)],
-) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), tauri_plugin_shell::Error> {
+) -> Result<(impl Stream<Item = CommandEvent> + 'static, CommandChild), std::io::Error> {
     let state_dir = app
         .path()
         .resolve("", BaseDirectory::AppLocalData)
@@ -217,7 +394,7 @@ pub fn spawn_command(
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
 
-    let cmd = if cfg!(windows) {
+    let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
             tracing::info!("WSL is enabled, spawning CLI server in WSL");
             let version = app.package_info().version.to_string();
@@ -249,18 +426,16 @@ pub fn spawn_command(
 
             script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
 
-            app.shell()
-                .command("wsl")
-                .args(["-e", "bash", "-lc", &script.join("\n")])
+            let mut cmd = Command::new("wsl");
+            cmd.args(["-e", "bash", "-lc", &script.join("\n")]);
+            cmd
         } else {
-            let mut cmd = app
-                .shell()
-                .sidecar("opencode-cli")
-                .unwrap()
-                .args(args.split_whitespace());
+            let sidecar = get_sidecar_path(app);
+            let mut cmd = Command::new(sidecar);
+            cmd.args(args.split_whitespace());
 
             for (key, value) in envs {
-                cmd = cmd.env(key, value);
+                cmd.env(key, value);
             }
 
             cmd
@@ -268,27 +443,110 @@ pub fn spawn_command(
     } else {
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
+        let envs = merge_shell_env(load_shell_env(&shell), envs);
 
-        let cmd = if shell.ends_with("/nu") {
+        let line = if shell.ends_with("/nu") {
             format!("^\"{}\" {}", sidecar.display(), args)
         } else {
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
-        let mut cmd = app.shell().command(&shell).args(["-il", "-c", &cmd]);
+        let mut cmd = Command::new(shell);
+        cmd.args(["-l", "-c", &line]);
 
         for (key, value) in envs {
-            cmd = cmd.env(key, value);
+            cmd.env(key, value);
         }
 
         cmd
     };
 
-    let (rx, child) = cmd.spawn()?;
-    let event_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+
+    let mut wrap = CommandWrap::from(cmd);
+
+    #[cfg(unix)]
+    {
+        wrap.wrap(ProcessGroup::leader());
+    }
+
+    #[cfg(windows)]
+    {
+        wrap.wrap(JobObject).wrap(WinCreationFlags).wrap(KillOnDrop);
+    }
+
+    let mut child = wrap.spawn()?;
+    let guard = Arc::new(tokio::sync::RwLock::new(()));
+    let (tx, rx) = mpsc::channel(256);
+    let (kill_tx, mut kill_rx) = mpsc::channel(1);
+
+    let stdout = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stdout().take().unwrap()),
+        CommandEvent::Stdout,
+    );
+    let stderr = spawn_pipe_reader(
+        tx.clone(),
+        guard.clone(),
+        BufReader::new(child.stderr().take().unwrap()),
+        CommandEvent::Stderr,
+    );
+
+    tokio::task::spawn(async move {
+        let mut kill_open = true;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Ok(status),
+                Ok(None) => {}
+                Err(err) => break Err(err),
+            }
+
+            tokio::select! {
+                msg = kill_rx.recv(), if kill_open => {
+                    if msg.is_some() {
+                        let _ = child.start_kill();
+                    }
+                    kill_open = false;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+            }
+        };
+
+        match status {
+            Ok(status) => {
+                let payload = TerminatedPayload {
+                    code: status.code(),
+                    signal: signal_from_status(status),
+                };
+                let _ = tx.send(CommandEvent::Terminated(payload)).await;
+            }
+            Err(err) => {
+                let _ = tx.send(CommandEvent::Error(err.to_string())).await;
+            }
+        }
+
+        stdout.abort();
+        stderr.abort();
+    });
+
+    let event_stream = ReceiverStream::new(rx);
     let event_stream = sqlite_migration::logs_middleware(app.clone(), event_stream);
 
-    Ok((event_stream, child))
+    Ok((event_stream, CommandChild { kill: kill_tx }))
+}
+
+fn signal_from_status(status: std::process::ExitStatus) -> Option<i32> {
+    #[cfg(unix)]
+    return status.signal();
+
+    #[cfg(not(unix))]
+    {
+        let _ = status;
+        None
+    }
 }
 
 pub fn serve(
@@ -318,12 +576,10 @@ pub fn serve(
         events
             .for_each(move |event| {
                 match event {
-                    CommandEvent::Stdout(line_bytes) => {
-                        let line = String::from_utf8_lossy(&line_bytes);
+                    CommandEvent::Stdout(line) => {
                         tracing::info!("{line}");
                     }
-                    CommandEvent::Stderr(line_bytes) => {
-                        let line = String::from_utf8_lossy(&line_bytes);
+                    CommandEvent::Stderr(line) => {
                         tracing::info!("{line}");
                     }
                     CommandEvent::Error(err) => {
@@ -340,7 +596,6 @@ pub fn serve(
                             let _ = tx.send(payload);
                         }
                     }
-                    _ => {}
                 }
 
                 future::ready(())
@@ -376,11 +631,7 @@ pub mod sqlite_migration {
             }
 
             future::ready(match &event {
-                CommandEvent::Stdout(stdout) => {
-                    let Ok(s) = str::from_utf8(stdout) else {
-                        return future::ready(None);
-                    };
-
+                CommandEvent::Stdout(s) | CommandEvent::Stderr(s) => {
                     if let Some(s) = s.strip_prefix("sqlite-migration:").map(|s| s.trim()) {
                         if let Ok(progress) = s.parse::<u8>() {
                             let _ = SqliteMigrationProgress::InProgress(progress).emit(&app);
@@ -397,5 +648,94 @@ pub mod sqlite_migration {
                 _ => Some(event),
             })
         })
+    }
+}
+
+fn spawn_pipe_reader<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    tx: mpsc::Sender<CommandEvent>,
+    guard: Arc<tokio::sync::RwLock<()>>,
+    pipe_reader: impl AsyncBufRead + Send + Unpin + 'static,
+    wrapper: F,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let _lock = guard.read().await;
+        let reader = BufReader::new(pipe_reader);
+
+        read_line(reader, tx, wrapper).await;
+    })
+}
+
+async fn read_line<F: Fn(String) -> CommandEvent + Send + Copy + 'static>(
+    reader: BufReader<impl AsyncBufRead + Unpin>,
+    tx: mpsc::Sender<CommandEvent>,
+    wrapper: F,
+) {
+    let mut lines = reader.lines();
+    loop {
+        let line = lines.next_line().await;
+
+        match line {
+            Ok(s) => {
+                if let Some(s) = s {
+                    let _ = tx.clone().send(wrapper(s)).await;
+                }
+            }
+            Err(e) => {
+                let tx_ = tx.clone();
+                let _ = tx_.send(CommandEvent::Error(e.to_string())).await;
+                break;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn parse_shell_env_supports_null_delimited_pairs() {
+        let env = parse_shell_env(b"PATH=/usr/bin:/bin\0FOO=bar=baz\0\0");
+
+        assert_eq!(env.get("PATH"), Some(&"/usr/bin:/bin".to_string()));
+        assert_eq!(env.get("FOO"), Some(&"bar=baz".to_string()));
+    }
+
+    #[test]
+    fn parse_shell_env_ignores_invalid_entries() {
+        let env = parse_shell_env(b"INVALID\0=empty\0OK=1\0");
+
+        assert_eq!(env.len(), 1);
+        assert_eq!(env.get("OK"), Some(&"1".to_string()));
+    }
+
+    #[test]
+    fn merge_shell_env_keeps_explicit_overrides() {
+        let mut shell_env = HashMap::new();
+        shell_env.insert("PATH".to_string(), "/shell/path".to_string());
+        shell_env.insert("HOME".to_string(), "/tmp/home".to_string());
+
+        let merged = merge_shell_env(
+            Some(shell_env),
+            vec![
+                ("PATH".to_string(), "/desktop/path".to_string()),
+                ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
+            ],
+        )
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
+        assert_eq!(merged.get("PATH"), Some(&"/desktop/path".to_string()));
+        assert_eq!(merged.get("HOME"), Some(&"/tmp/home".to_string()));
+        assert_eq!(merged.get("OPENCODE_CLIENT"), Some(&"desktop".to_string()));
+    }
+
+    #[test]
+    fn is_nushell_handles_path_and_binary_name() {
+        assert!(is_nushell("nu"));
+        assert!(is_nushell("/opt/homebrew/bin/nu"));
+        assert!(is_nushell("C:\\Program Files\\nu.exe"));
+        assert!(!is_nushell("/bin/zsh"));
     }
 }

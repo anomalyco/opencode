@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
@@ -42,15 +43,17 @@ jobs:
               throw error;
             }
 
-            // Parse the .td file for denounced users
+            // Parse the .td file for vouched and denounced users
+            const vouched = new Set();
             const denounced = new Map();
             for (const line of content.split('\n')) {
               const trimmed = line.trim();
               if (!trimmed || trimmed.startsWith('#')) continue;
-              if (!trimmed.startsWith('-')) continue;
 
-              const rest = trimmed.slice(1).trim();
+              const isDenounced = trimmed.startsWith('-');
+              const rest = isDenounced ? trimmed.slice(1).trim() : trimmed;
               if (!rest) continue;
+
               const spaceIdx = rest.indexOf(' ');
               const handle = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
               const reason = spaceIdx === -1 ? null : rest.slice(spaceIdx + 1).trim();
@@ -65,29 +68,47 @@ jobs:
               const username = colonIdx === -1 ? handle : handle.slice(colonIdx + 1);
               if (!username) continue;
 
-              denounced.set(username.toLowerCase(), reason);
+              if (isDenounced) {
+                denounced.set(username.toLowerCase(), reason);
+                continue;
+              }
+
+              vouched.add(username.toLowerCase());
             }
 
             // Check if the author is denounced
             const reason = denounced.get(author.toLowerCase());
-            if (reason === undefined) {
-              core.info(`User ${author} is not denounced. Allowing PR.`);
+            if (reason !== undefined) {
+              // Author is denounced — close the PR
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: 'This pull request has been automatically closed.',
+              });
+
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                state: 'closed',
+              });
+
+              core.info(`Closed PR #${prNumber} from denounced user ${author}`);
               return;
             }
 
-            // Author is denounced — close the PR
-            await github.rest.issues.createComment({
+            // Author is positively vouched — add label
+            if (!vouched.has(author.toLowerCase())) {
+              core.info(`User ${author} is not denounced or vouched. Allowing PR.`);
+              return;
+            }
+
+            await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              body: 'This pull request has been automatically closed.',
+              labels: ['Vouched'],
             });
 
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              state: 'closed',
-            });
-
-            core.info(`Closed PR #${prNumber} from denounced user ${author}`);
+            core.info(`Added vouched label to PR #${prNumber} from ${author}`);

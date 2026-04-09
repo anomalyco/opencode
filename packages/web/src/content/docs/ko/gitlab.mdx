@@ -1,34 +1,34 @@
 ---
 title: GitLab
-description: GitLab 이슈 및 머지 리퀘스트에서 opencode를 사용하세요.
+description: GitLab 이슈와 merge request에서 OpenCode를 사용하세요.
 ---
 
-opencode는 GitLab CI/CD 파이프라인 또는 GitLab Duo를 통해 GitLab 워크플로우와 통합됩니다.
+OpenCode는 GitLab CI/CD 파이프라인 또는 GitLab Duo를 통해 GitLab 워크플로에 통합됩니다.
 
-두 경우, opencode는 GitLab runners에서 실행됩니다.
+두 경우 모두 OpenCode는 GitLab runner에서 실행됩니다.
 
 ---
 
-# GitLab CI 소개
+## GitLab CI
 
-opencode는 일반 GitLab 파이프라인에서 작동합니다. [CI 컴포넌트](https://docs.gitlab.com/ee/ci/components/)로 파이프라인에 구축할 수 있습니다.
+OpenCode는 일반 GitLab 파이프라인에서 작동합니다. [CI component](https://docs.gitlab.com/ee/ci/components/)로 파이프라인에 통합할 수 있습니다.
 
-여기에서 우리는 opencode에 대한 커뮤니티 생성 CI / CD 구성품을 사용하고 있습니다. [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+여기서는 OpenCode용 커뮤니티 제작 CI/CD component인 [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)를 사용합니다.
 
 ---
 
 ### 기능
 
-- **실행별 사용자 지정 구성 사용**: 사용자 정의 구성 디렉토리와 opencode 구성, 예를 들어 `./config/#custom-directory`는 opencode 실행마다 활성화하거나 비활성화 할 수 있습니다.
-- ** 최소 설정**: CI 구성 요소는 opencode를 배경으로 설정하면 opencode 구성과 초기 프롬프트를 만들 필요가 있습니다.
-- **Flexible**: CI 구성 요소는 여러 입력을 지원합니다.
+- **job별 custom config 사용**: custom config 디렉터리(예: `./config/#custom-directory`)를 사용해 OpenCode를 각 실행 단위로 설정하고 기능을 켜거나 끌 수 있습니다.
+- **최소 설정**: CI component가 백그라운드에서 OpenCode를 설정하므로 OpenCode config와 초기 prompt만 만들면 됩니다.
+- **유연함**: CI component는 동작을 사용자화할 수 있도록 여러 입력값을 지원합니다.
 
 ---
 
-## 설정
+### Setup
 
-1. opencode 인증 JSON을 **Settings** > **CI/CD** > **Variables**에서 파일 유형 CI 환경 변수로 저장하십시오. "Masked and hidden"로 표시하십시오.
-2. `.gitlab-ci.yml` 파일에 뒤에 추가하십시오.
+1. OpenCode 인증 JSON을 **Settings** > **CI/CD** > **Variables** 아래의 File 타입 CI 환경 변수로 저장하세요. 반드시 "Masked and hidden"으로 표시하세요.
+2. 아래 내용을 `.gitlab-ci.yml` 파일에 추가하세요.
 
    ```yaml title=".gitlab-ci.yml"
    include:
@@ -40,40 +40,40 @@ opencode는 일반 GitLab 파이프라인에서 작동합니다. [CI 컴포넌�
          message: "Your prompt here"
    ```
 
-더 많은 입력 및 사용 사례 [docs를 체크 아웃](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) 이 구성 요소에 대한.
+더 많은 입력값과 사용 사례는 이 component의 [docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode)에서 확인하세요.
 
 ---
 
 ## GitLab Duo
 
-opencode는 GitLab 워크플로우와 통합됩니다.
-코멘트에 Mention `@opencode`, opencode는 GitLab CI 파이프라인 내에서 작업을 실행합니다.
+OpenCode는 GitLab 워크플로에 통합됩니다.
+댓글에서 `@opencode`를 멘션하면 OpenCode가 GitLab CI 파이프라인 안에서 작업을 실행합니다.
 
 ---
 
 ### 기능
 
-- **이슈**: opencode가 문제점을 보고 당신을 설명합니다.
-- **수정 및 구현**: 이슈를 수정하거나 기능을 구현하려면 opencode에 문의하십시오.
-  새로운 지점을 만들고 변화를 병합 요청을 제기합니다.
-- **보안**: opencode는 GitLab runners에서 실행됩니다.
+- **이슈 분류**: OpenCode에 이슈를 살펴보고 설명해 달라고 요청할 수 있습니다.
+- **수정 및 구현**: OpenCode에 이슈를 수정하거나 기능을 구현해 달라고 요청할 수 있습니다.
+  OpenCode는 새 브랜치를 만들고 변경 사항이 담긴 merge request를 생성합니다.
+- **보안**: OpenCode는 GitLab runner에서 실행됩니다.
 
 ---
 
-## 설정
+### Setup
 
-opencode는 GitLab CI/CD 파이프라인에서 실행되며, 여기서 설정해야 할 일은 다음과 같습니다.
+OpenCode는 GitLab CI/CD 파이프라인에서 실행되며, 설정에 필요한 항목은 다음과 같습니다.
 
 :::tip
-[**GitLab docs**](https://docs.gitlab.com/user/duo agent platform/agent assistant/) 를 체크 아웃하십시오.
+[최신 안내는 **GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)를 확인하세요.
 :::
 
-1.  GitLab 환경 설정
-2.  CI/CD 설치
-3.  AI 모형 공급자 API 열쇠를 얻으십시오
-4.  서비스 계정 만들기
-5.  CI/CD 변수 구성
-6.  Flow config 파일을 만들려면 다음과 같습니다.
+1.  GitLab 환경을 설정합니다.
+2.  CI/CD를 설정합니다.
+3.  AI model provider API 키를 준비합니다.
+4.  서비스 계정을 생성합니다.
+5.  CI/CD 변수를 설정합니다.
+6.  flow config 파일을 생성합니다. 예시는 다음과 같습니다.
 
         <details>
 
@@ -152,44 +152,44 @@ opencode는 GitLab CI/CD 파이프라인에서 실행되며, 여기서 설정해
 
         </details>
 
-자세한 지침에 대한 [GitLab CLI Agent docs](https://docs.gitlab.com/user/duo agent platform/agent assistant/)를 참조할 수 있습니다.
+[GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)에서 자세한 안내를 확인할 수 있습니다.
 
 ---
 
 ### 예제
 
-다음은 GitLab에서 opencode를 사용할 수있는 몇 가지 예입니다.
+다음은 GitLab에서 OpenCode를 사용하는 몇 가지 예시입니다.
 
 :::tip
-`@opencode`보다 다른 트리거 구문을 사용할 수 있습니다.
+`@opencode` 대신 다른 trigger phrase를 사용하도록 설정할 수 있습니다.
 :::
 
 - **이슈 설명**
 
-GitLab 문제에서이 코멘트를 추가하십시오.
+GitLab 이슈에 아래 댓글을 남기세요.
 
 ```
   @opencode explain this issue
 ```
 
-opencode는 문제와 대답을 명확하게 설명합니다.
+OpenCode가 이슈를 읽고 명확한 설명으로 답변합니다.
 
 - **이슈 해결**
 
-GitLab 문제에서, 말한다:
+GitLab 이슈에서 다음과 같이 요청하세요.
 
 ```
   @opencode fix this
 ```
 
-opencode는 새로운 지점을 만들 것이며 변경 사항을 구현하고 변경 사항을 병합 요청을 엽니다.
+OpenCode가 새 브랜치를 만들고 변경 사항을 구현한 뒤, 해당 변경 사항으로 merge request를 엽니다.
 
 - **머지 리퀘스트 검토**
 
-GitLab 병합 요청에 대한 다음 의견을 남겨주세요.
+GitLab merge request에 아래 댓글을 남기세요.
 
 ```
   @opencode review this merge request
 ```
 
-opencode는 병합 요청을 검토하고 피드백을 제공합니다.
+OpenCode가 merge request를 검토하고 피드백을 제공합니다.

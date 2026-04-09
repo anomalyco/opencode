@@ -1,4 +1,4 @@
-import { createProviderDefinedToolFactory } from "@ai-sdk/provider-utils"
+import { createProviderToolFactory } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 // Args validation schema
@@ -40,7 +40,7 @@ export const webSearchPreviewArgsSchema = z.object({
     .optional(),
 })
 
-export const webSearchPreview = createProviderDefinedToolFactory<
+export const webSearchPreview = createProviderToolFactory<
   {
     // Web search doesn't take input parameters - it's controlled by the prompt
   },
@@ -81,7 +81,6 @@ export const webSearchPreview = createProviderDefinedToolFactory<
   }
 >({
   id: "openai.web_search_preview",
-  name: "web_search_preview",
   inputSchema: z.object({
     action: z
       .discriminatedUnion("type", [

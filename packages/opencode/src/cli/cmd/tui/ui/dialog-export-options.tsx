@@ -56,7 +56,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       setStore("active", order[nextIndex])
       evt.preventDefault()
     }
-    if (evt.name === "space") {
+    if (evt.name === "space" || evt.name === " ") {
       if (store.active === "thinking") setStore("thinking", !store.thinking)
       if (store.active === "toolDetails") setStore("toolDetails", !store.toolDetails)
       if (store.active === "assistantMetadata") setStore("assistantMetadata", !store.assistantMetadata)
@@ -100,9 +100,13 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           }}
           height={3}
           keyBindings={[{ name: "return", action: "submit" }]}
-          ref={(val: TextareaRenderable) => (textarea = val)}
+          ref={(val: TextareaRenderable) => {
+            textarea = val
+            val.traits = { status: "FILENAME" }
+          }}
           initialValue={props.defaultFilename}
           placeholder="Enter filename"
+          placeholderColor={theme.textMuted}
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}

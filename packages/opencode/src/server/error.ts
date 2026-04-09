@@ -1,6 +1,6 @@
 import { resolver } from "hono-openapi"
 import z from "zod"
-import { Storage } from "../storage/storage"
+import { NotFoundError } from "../storage/db"
 
 export const ERRORS = {
   400: {
@@ -25,7 +25,7 @@ export const ERRORS = {
     description: "Not found",
     content: {
       "application/json": {
-        schema: resolver(Storage.NotFoundError.Schema),
+        schema: resolver(NotFoundError.Schema),
       },
     },
   },

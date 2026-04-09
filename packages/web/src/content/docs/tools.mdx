@@ -95,7 +95,7 @@ Create new files or overwrite existing ones.
 Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
 
 :::note
-The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`, `multiedit`).
 :::
 
 ---
@@ -191,7 +191,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### patch
+### apply_patch
 
 Apply patches to files.
 
@@ -206,8 +206,12 @@ Apply patches to files.
 
 This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
 
+When handling `tool.execute.before` or `tool.execute.after` hooks, check `input.tool === "apply_patch"` (not `"patch"`).
+
+`apply_patch` uses `output.args.patchText` instead of `output.args.filePath`. Paths are embedded in marker lines within `patchText` and are relative to the project root (for example: `*** Add File: src/new-file.ts`, `*** Update File: src/existing.ts`, `*** Move to: src/renamed.ts`, `*** Delete File: src/obsolete.ts`).
+
 :::note
-The `patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+The `apply_patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`, `multiedit`).
 :::
 
 ---
@@ -241,27 +245,6 @@ Manage todo lists during coding sessions.
 ```
 
 Creates and updates task lists to track progress during complex operations. The LLM uses this to organize multi-step tasks.
-
-:::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
-:::
-
----
-
-### todoread
-
-Read existing todo lists.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todoread": "allow"
-  }
-}
-```
-
-Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
 
 :::note
 This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)

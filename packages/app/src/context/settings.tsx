@@ -22,13 +22,18 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    followup: "queue" | "steer"
+    showReasoningSummaries: boolean
+    shellToolPartsExpanded: boolean
+    editToolPartsExpanded: boolean
   }
   updates: {
     startup: boolean
   }
   appearance: {
     fontSize: number
-    font: string
+    mono: string
+    sans: string
   }
   keybinds: Record<string, string>
   permissions: {
@@ -38,17 +43,63 @@ export interface Settings {
   sounds: SoundSettings
 }
 
+export const monoDefault = "System Mono"
+export const sansDefault = "System Sans"
+
+const monoFallback =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
+const monoBase = monoFallback
+const sansBase = sansFallback
+
+function input(font: string | undefined) {
+  return font ?? ""
+}
+
+function family(font: string) {
+  if (/^[\w-]+$/.test(font)) return font
+  return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+}
+
+function stack(font: string | undefined, base: string) {
+  const value = font?.trim() ?? ""
+  if (!value) return base
+  return `${family(value)}, ${base}`
+}
+
+export function monoInput(font: string | undefined) {
+  return input(font)
+}
+
+export function sansInput(font: string | undefined) {
+  return input(font)
+}
+
+export function monoFontFamily(font: string | undefined) {
+  return stack(font, monoBase)
+}
+
+export function sansFontFamily(font: string | undefined) {
+  return stack(font, sansBase)
+}
+
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    followup: "steer",
+    showReasoningSummaries: false,
+    shellToolPartsExpanded: false,
+    editToolPartsExpanded: false,
   },
   updates: {
     startup: true,
   },
   appearance: {
     fontSize: 14,
-    font: "ibm-plex-mono",
+    mono: "",
+    sans: "",
   },
   keybinds: {},
   permissions: {
@@ -69,28 +120,6 @@ const defaultSettings: Settings = {
   },
 }
 
-const monoFallback =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-
-const monoFonts: Record<string, string> = {
-  "ibm-plex-mono": `"IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "cascadia-code": `"Cascadia Code Nerd Font", "Cascadia Code NF", "Cascadia Mono NF", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "fira-code": `"Fira Code Nerd Font", "FiraMono Nerd Font", "FiraMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  hack: `"Hack Nerd Font", "Hack Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  inconsolata: `"Inconsolata Nerd Font", "Inconsolata Nerd Font Mono","IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "intel-one-mono": `"Intel One Mono Nerd Font", "IntoneMono Nerd Font", "IntoneMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  iosevka: `"Iosevka Nerd Font", "Iosevka Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "jetbrains-mono": `"JetBrains Mono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrainsMonoNL Nerd Font", "JetBrainsMonoNL Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "meslo-lgs": `"Meslo LGS Nerd Font", "MesloLGS Nerd Font", "MesloLGM Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "roboto-mono": `"Roboto Mono Nerd Font", "RobotoMono Nerd Font", "RobotoMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "source-code-pro": `"Source Code Pro Nerd Font", "SauceCodePro Nerd Font", "SauceCodePro Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "ubuntu-mono": `"Ubuntu Mono Nerd Font", "UbuntuMono Nerd Font", "UbuntuMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-}
-
-export function monoFontFamily(font: string | undefined) {
-  return monoFonts[font ?? defaultSettings.appearance.font] ?? monoFonts[defaultSettings.appearance.font]
-}
-
 function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
@@ -102,7 +131,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     createEffect(() => {
       if (typeof document === "undefined") return
-      document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
+      const root = document.documentElement
+      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
+      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+    })
+
+    createEffect(() => {
+      if (store.general?.followup !== "queue") return
+      setStore("general", "followup", "steer")
     })
 
     return {
@@ -119,6 +155,34 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
         },
+        followup: withFallback(
+          () => (store.general?.followup === "queue" ? "steer" : store.general?.followup),
+          defaultSettings.general.followup,
+        ),
+        setFollowup(value: "queue" | "steer") {
+          setStore("general", "followup", value === "queue" ? "steer" : value)
+        },
+        showReasoningSummaries: withFallback(
+          () => store.general?.showReasoningSummaries,
+          defaultSettings.general.showReasoningSummaries,
+        ),
+        setShowReasoningSummaries(value: boolean) {
+          setStore("general", "showReasoningSummaries", value)
+        },
+        shellToolPartsExpanded: withFallback(
+          () => store.general?.shellToolPartsExpanded,
+          defaultSettings.general.shellToolPartsExpanded,
+        ),
+        setShellToolPartsExpanded(value: boolean) {
+          setStore("general", "shellToolPartsExpanded", value)
+        },
+        editToolPartsExpanded: withFallback(
+          () => store.general?.editToolPartsExpanded,
+          defaultSettings.general.editToolPartsExpanded,
+        ),
+        setEditToolPartsExpanded(value: boolean) {
+          setStore("general", "editToolPartsExpanded", value)
+        },
       },
       updates: {
         startup: withFallback(() => store.updates?.startup, defaultSettings.updates.startup),
@@ -131,9 +195,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
         },
-        font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
+        font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
         setFont(value: string) {
-          setStore("appearance", "font", value)
+          setStore("appearance", "mono", value.trim() ? value : "")
+        },
+        uiFont: withFallback(() => store.appearance?.sans, defaultSettings.appearance.sans),
+        setUIFont(value: string) {
+          setStore("appearance", "sans", value.trim() ? value : "")
         },
       },
       keybinds: {

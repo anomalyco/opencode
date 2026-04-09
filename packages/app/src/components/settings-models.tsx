@@ -4,11 +4,11 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
+import { SettingsList } from "./settings-list"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
@@ -59,7 +59,7 @@ export const SettingsModels: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.models.title")}</h2>
           <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
@@ -98,10 +98,10 @@ export const SettingsModels: Component = () => {
               {(group) => (
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2 pb-2">
-                    <ProviderIcon id={group.category as IconName} class="size-5 shrink-0 icon-strong-base" />
+                    <ProviderIcon id={group.category} class="size-5 shrink-0 icon-strong-base" />
                     <span class="text-14-medium text-text-strong">{group.items[0].provider.name}</span>
                   </div>
-                  <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <SettingsList>
                     <For each={group.items}>
                       {(item) => {
                         const key = { providerID: item.provider.id, modelID: item.id }
@@ -125,7 +125,7 @@ export const SettingsModels: Component = () => {
                         )
                       }}
                     </For>
-                  </div>
+                  </SettingsList>
                 </div>
               )}
             </For>
