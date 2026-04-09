@@ -139,7 +139,6 @@ function fake(
     get message() {
       return msg
     },
-    abort: Effect.fn("TestSessionProcessor.abort")(() => Effect.void),
     partFromToolCall() {
       return {
         id: PartID.ascending(),

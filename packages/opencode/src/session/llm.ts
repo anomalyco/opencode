@@ -15,6 +15,10 @@ import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
+import { PermissionID } from "@/permission/schema"
+import { Bus } from "@/bus"
+import { Wildcard } from "@/util/wildcard"
+import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 
@@ -231,6 +235,7 @@ export namespace LLM {
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language
+      workflowModel.sessionID = input.sessionID
       workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
@@ -253,6 +258,57 @@ export namespace LLM {
           return { result: "", error: e.message ?? String(e) }
         }
       }
+
+      const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
+      workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
+        const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
+        return !match || match.action !== "ask"
+      })
+
+      const approvedToolsForSession = new Set<string>()
+      workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
+        const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
+        // Auto-approve tools that were already approved in this session
+        // (prevents infinite approval loops for server-side MCP tools)
+        if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
+          return { approved: true }
+        }
+
+        const id = PermissionID.ascending()
+        let reply: Permission.Reply | undefined
+        let unsub: (() => void) | undefined
+        try {
+          unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
+            if (evt.properties.requestID === id) reply = evt.properties.reply
+          })
+          const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
+            try {
+              const parsed = JSON.parse(t.args) as Record<string, unknown>
+              const title = (parsed?.title ?? parsed?.name ?? "") as string
+              return title ? `${t.name}: ${title}` : t.name
+            } catch {
+              return t.name
+            }
+          })
+          const uniquePatterns = [...new Set(toolPatterns)] as string[]
+          await Permission.ask({
+            id,
+            sessionID: SessionID.make(input.sessionID),
+            permission: "workflow_tool_approval",
+            patterns: uniquePatterns,
+            metadata: { tools: approvalTools },
+            always: uniquePatterns,
+            ruleset: [],
+          })
+          for (const name of uniqueNames) approvedToolsForSession.add(name)
+          workflowModel.sessionPreapprovedTools = [...workflowModel.sessionPreapprovedTools, ...uniqueNames]
+          return { approved: true }
+        } catch {
+          return { approved: false }
+        } finally {
+          unsub?.()
+        }
+      })
     }
 
     return streamText({

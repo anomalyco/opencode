@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { expect, spyOn } from "bun:test"
+import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import z from "zod"
@@ -29,7 +29,6 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
-import { TaskTool } from "../../src/tool/task"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
@@ -627,34 +626,27 @@ it.live(
   "cancel finalizes subtask tool state",
   () =>
     provideTmpdirInstance(
-      (dir) =>
+      () =>
         Effect.gen(function* () {
           const ready = defer<void>()
           const aborted = defer<void>()
-          const init = spyOn(TaskTool, "init").mockImplementation(async () => ({
-            description: "task",
-            parameters: z.object({
-              description: z.string(),
-              prompt: z.string(),
-              subagent_type: z.string(),
-              task_id: z.string().optional(),
-              command: z.string().optional(),
-            }),
-            execute: async (_args, ctx) => {
-              ready.resolve()
-              ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-              await new Promise<void>(() => {})
-              return {
-                title: "",
-                metadata: {
-                  sessionId: SessionID.make("task"),
-                  model: ref,
-                },
-                output: "",
-              }
-            },
-          }))
-          yield* Effect.addFinalizer(() => Effect.sync(() => init.mockRestore()))
+          const registry = yield* ToolRegistry.Service
+          const { task } = yield* registry.named()
+          const original = task.execute
+          task.execute = async (_args, ctx) => {
+            ready.resolve()
+            ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
+            await new Promise<void>(() => {})
+            return {
+              title: "",
+              metadata: {
+                sessionId: SessionID.make("task"),
+                model: ref,
+              },
+              output: "",
+            }
+          }
+          yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
 
           const { prompt, chat } = yield* boot()
           const msg = yield* user(chat.id, "hello")
@@ -1236,6 +1228,112 @@ unix(
           }),
         { git: true, config: cfg },
       ),
+    ),
+  30_000,
+)
+
+// Abort signal propagation tests for inline tool execution
+
+/** Override a tool's execute to hang until aborted. Returns ready/aborted defers and a finalizer. */
+function hangUntilAborted(tool: { execute: (...args: any[]) => any }) {
+  const ready = defer<void>()
+  const aborted = defer<void>()
+  const original = tool.execute
+  tool.execute = async (_args: any, ctx: any) => {
+    ready.resolve()
+    ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
+    await new Promise<void>(() => {})
+    return { title: "", metadata: {}, output: "" }
+  }
+  const restore = Effect.addFinalizer(() => Effect.sync(() => void (tool.execute = original)))
+  return { ready, aborted, restore }
+}
+
+it.live(
+  "interrupt propagates abort signal to read tool via file part (text/plain)",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistry.Service
+          const { read } = yield* registry.named()
+          const { ready, aborted, restore } = hangUntilAborted(read)
+          yield* restore
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({ title: "Abort Test" })
+
+          const testFile = path.join(dir, "test.txt")
+          yield* Effect.promise(() => Bun.write(testFile, "hello world"))
+
+          const fiber = yield* prompt
+            .prompt({
+              sessionID: chat.id,
+              agent: "build",
+              parts: [
+                { type: "text", text: "read this" },
+                { type: "file", url: `file://${testFile}`, filename: "test.txt", mime: "text/plain" },
+              ],
+            })
+            .pipe(Effect.forkChild)
+
+          yield* Effect.promise(() => ready.promise)
+          yield* Fiber.interrupt(fiber)
+
+          yield* Effect.promise(() =>
+            Promise.race([
+              aborted.promise,
+              new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error("abort signal not propagated within 2s")), 2_000),
+              ),
+            ]),
+          )
+        }),
+      { git: true, config: cfg },
+    ),
+  30_000,
+)
+
+it.live(
+  "interrupt propagates abort signal to read tool via file part (directory)",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistry.Service
+          const { read } = yield* registry.named()
+          const { ready, aborted, restore } = hangUntilAborted(read)
+          yield* restore
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({ title: "Abort Test" })
+
+          const fiber = yield* prompt
+            .prompt({
+              sessionID: chat.id,
+              agent: "build",
+              parts: [
+                { type: "text", text: "read this" },
+                { type: "file", url: `file://${dir}`, filename: "dir", mime: "application/x-directory" },
+              ],
+            })
+            .pipe(Effect.forkChild)
+
+          yield* Effect.promise(() => ready.promise)
+          yield* Fiber.interrupt(fiber)
+
+          yield* Effect.promise(() =>
+            Promise.race([
+              aborted.promise,
+              new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error("abort signal not propagated within 2s")), 2_000),
+              ),
+            ]),
+          )
+        }),
+      { git: true, config: cfg },
     ),
   30_000,
 )
