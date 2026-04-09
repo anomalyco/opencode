@@ -451,7 +451,7 @@ export namespace SessionProcessor {
                   if (!ctx.assistantMessage.error) {
                     yield* halt(new DOMException("Aborted", "AbortError"))
                   }
-                }).pipe(Effect.asVoid),
+                }),
               ),
               Effect.catchCauseIf(
                 (cause) => !Cause.hasInterruptsOnly(cause),
