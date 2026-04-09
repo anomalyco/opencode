@@ -19,6 +19,11 @@ import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
 
+// Process-global cache: at most one loopback server per process lifetime.
+// Populated on first call to input.startServer(); cleared on failure so
+// subsequent calls can retry instead of caching a rejected promise forever.
+let _pending: Promise<URL> | undefined
+
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
@@ -134,6 +139,17 @@ export namespace Plugin {
             directory: ctx.directory,
             get serverUrl(): URL {
               return Server.url ?? new URL("http://localhost:4096")
+            },
+            startServer: () => {
+              if (Server.url) return Promise.resolve(Server.url)
+              _pending ??= Server.listen({ port: 0, hostname: "127.0.0.1" }).then(
+                (s) => s.url,
+                (err) => {
+                  _pending = undefined
+                  throw err
+                },
+              )
+              return _pending
             },
             // @ts-expect-error
             $: typeof Bun === "undefined" ? undefined : Bun.$,

@@ -30,6 +30,14 @@ export type PluginInput = {
   directory: string
   worktree: string
   serverUrl: URL
+  /**
+   * Ensures the opencode HTTP server is listening and returns its URL.
+   * Plugins that ship CLI binaries (e.g. `oc`) that need to call back into
+   * opencode via HTTP should call this during init so `OPENCODE_SERVER_URL`
+   * is set in bash child processes before any scripts run.
+   * Safe to call multiple times — the server is started at most once per process.
+   */
+  startServer: () => Promise<URL>
   $: BunShell
 }
 
