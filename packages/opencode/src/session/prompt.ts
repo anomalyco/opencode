@@ -11,7 +11,6 @@ import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
-import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
@@ -21,10 +20,8 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "../tool/registry"
-import { Runner } from "@/effect/runner"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
-import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
@@ -37,7 +34,6 @@ import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
-import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
@@ -50,6 +46,8 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { TaskTool } from "@/tool/task"
+import { SessionRunState } from "./run-state"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -68,7 +66,6 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
   export interface Interface {
-    readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
     readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
     readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
@@ -101,55 +98,11 @@ export namespace SessionPrompt {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const scope = yield* Scope.Scope
       const instruction = yield* Instruction.Service
-
-      const state = yield* InstanceState.make(
-        Effect.fn("SessionPrompt.state")(function* () {
-          const runners = new Map<string, Runner<MessageV2.WithParts>>()
-          yield* Effect.addFinalizer(
-            Effect.fnUntraced(function* () {
-              yield* Effect.forEach(runners.values(), (r) => r.cancel, { concurrency: "unbounded", discard: true })
-              runners.clear()
-            }),
-          )
-          return { runners }
-        }),
-      )
-
-      const getRunner = (runners: Map<string, Runner<MessageV2.WithParts>>, sessionID: SessionID) => {
-        const existing = runners.get(sessionID)
-        if (existing) return existing
-        const runner = Runner.make<MessageV2.WithParts>(scope, {
-          onIdle: Effect.gen(function* () {
-            runners.delete(sessionID)
-            yield* status.set(sessionID, { type: "idle" })
-          }),
-          onBusy: status.set(sessionID, { type: "busy" }),
-          onInterrupt: lastAssistant(sessionID),
-          busy: () => {
-            throw new Session.BusyError(sessionID)
-          },
-        })
-        runners.set(sessionID, runner)
-        return runner
-      }
-
-      const assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError> = Effect.fn(
-        "SessionPrompt.assertNotBusy",
-      )(function* (sessionID: SessionID) {
-        const s = yield* InstanceState.get(state)
-        const runner = s.runners.get(sessionID)
-        if (runner?.busy) throw new Session.BusyError(sessionID)
-      })
+      const state = yield* SessionRunState.Service
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         log.info("cancel", { sessionID })
-        const s = yield* InstanceState.get(state)
-        const runner = s.runners.get(sessionID)
-        if (!runner || !runner.busy) {
-          yield* status.set(sessionID, { type: "idle" })
-          return
-        }
-        yield* runner.cancel
+        yield* state.cancel(sessionID)
       })
 
       const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -390,7 +343,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: Provider.Model
         session: Session.Info
         tools?: Record<string, boolean>
-        processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall">
+        processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
         bypassAgentCheck: boolean
         messages: MessageV2.WithParts[]
       }) {
@@ -407,10 +360,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           messages: input.messages,
           metadata: (val) =>
             Effect.runPromise(
-              Effect.gen(function* () {
-                const match = input.processor.partFromToolCall(options.toolCallId)
-                if (!match || !["running", "pending"].includes(match.state.status)) return
-                yield* sessions.updatePart({
+              input.processor.updateToolCall(options.toolCallId, (match) => {
+                if (!["running", "pending"].includes(match.state.status)) return match
+                return {
                   ...match,
                   state: {
                     title: val.title,
@@ -419,7 +371,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     input: args,
                     time: { start: Date.now() },
                   },
-                })
+                }
               }),
             ),
           ask: (req) =>
@@ -433,10 +385,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             ),
         })
 
-        for (const item of yield* registry.tools(
-          { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
-          input.agent,
-        )) {
+        for (const item of yield* registry.tools({
+          modelID: ModelID.make(input.model.api.id),
+          providerID: input.model.providerID,
+          agent: input.agent,
+        })) {
           const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
           tools[item.id] = tool({
             id: item.id as any,
@@ -466,6 +419,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
                     output,
                   )
+                  if (options.abortSignal?.aborted) {
+                    yield* input.processor.completeToolCall(options.toolCallId, output)
+                  }
                   return output
                 }),
               )
@@ -530,7 +486,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ...(truncated.truncated && { outputPath: truncated.outputPath }),
                 }
 
-                return {
+                const output = {
                   title: "",
                   metadata,
                   output: truncated.content,
@@ -542,6 +498,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   })),
                   content: result.content,
                 }
+                if (opts.abortSignal?.aborted) {
+                  yield* input.processor.completeToolCall(opts.toolCallId, output)
+                }
+                return output
               }),
             )
           tools[key] = item
@@ -560,7 +520,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
-        const taskTool = yield* Effect.promise(() => registry.named.task.init())
+        const { task: taskTool } = yield* registry.named()
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
           id: MessageID.ascending(),
@@ -569,7 +529,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID,
           mode: task.agent,
           agent: task.agent,
-          variant: lastUser.variant,
+          variant: lastUser.model.variant,
           path: { cwd: ctx.directory, root: ctx.worktree },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -583,7 +543,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID: assistantMessage.sessionID,
           type: "tool",
           callID: ulid(),
-          tool: registry.named.task.id,
+          tool: TaskTool.id,
           state: {
             status: "running",
             input: {
@@ -601,7 +561,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           subagent_type: task.agent,
           command: task.command,
         }
-        yield* plugin.trigger("tool.execute.before", { tool: "task", sessionID, callID: part.id }, { args: taskArgs })
+        yield* plugin.trigger(
+          "tool.execute.before",
+          { tool: TaskTool.id, sessionID, callID: part.id },
+          { args: taskArgs },
+        )
 
         const taskAgent = yield* agents.get(task.agent)
         if (!taskAgent) {
@@ -680,7 +644,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         yield* plugin.trigger(
           "tool.execute.after",
-          { tool: "task", sessionID, callID: part.id, args: taskArgs },
+          { tool: TaskTool.id, sessionID, callID: part.id, args: taskArgs },
           result,
         )
 
@@ -740,7 +704,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         } satisfies MessageV2.TextPart)
       })
 
-      const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, signal: AbortSignal) {
+      const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput) {
         const ctx = yield* InstanceState.context
         const session = yield* sessions.get(input.sessionID)
         if (session.revert) {
@@ -961,28 +925,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
         const full =
           !input.variant && ag.variant && same
-            ? yield* provider
-                .getModel(model.providerID, model.modelID)
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            ? yield* provider.getModel(model.providerID, model.modelID).pipe(Effect.catchDefect(() => Effect.void))
             : undefined
         const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
-        const info: MessageV2.Info = {
+        const info: MessageV2.User = {
           id: input.messageID ?? MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
           time: { created: Date.now() },
           tools: input.tools,
           agent: ag.name,
-          model,
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
+            variant,
+          },
           system: input.system,
           format: input.format,
-          variant,
         }
 
-        yield* Effect.addFinalizer(() =>
-          InstanceState.withALS(() => instruction.clear(info.id)).pipe(Effect.flatMap((x) => x)),
-        )
+        yield* Effect.addFinalizer(() => instruction.clear(info.id))
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
         const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
@@ -1074,6 +1037,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const filepath = fileURLToPath(part.url)
                 if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
+                const { read } = yield* registry.named()
+                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) =>
+                  Effect.promise((signal: AbortSignal) =>
+                    read.execute(args, {
+                      sessionID: input.sessionID,
+                      abort: signal,
+                      agent: input.agent!,
+                      messageID: info.id,
+                      extra: { bypassCwdCheck: true, ...extra },
+                      messages: [],
+                      metadata: async () => {},
+                      ask: async () => {},
+                    }),
+                  )
+
                 if (part.mime === "text/plain") {
                   let offset: number | undefined
                   let limit: number | undefined
@@ -1110,29 +1088,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                     },
                   ]
-                  const read = yield* Effect.promise(() => registry.named.read.init()).pipe(
-                    Effect.flatMap((t) =>
-                      provider.getModel(info.model.providerID, info.model.modelID).pipe(
-                        Effect.flatMap((mdl) =>
-                          Effect.promise(() =>
-                            t.execute(args, {
-                              sessionID: input.sessionID,
-                              abort: new AbortController().signal,
-                              agent: input.agent!,
-                              messageID: info.id,
-                              extra: { bypassCwdCheck: true, model: mdl },
-                              messages: [],
-                              metadata: async () => {},
-                              ask: async () => {},
-                            }),
-                          ),
-                        ),
-                      ),
-                    ),
+                  const exit = yield* provider.getModel(info.model.providerID, info.model.modelID).pipe(
+                    Effect.flatMap((mdl) => execRead(args, { model: mdl })),
                     Effect.exit,
                   )
-                  if (Exit.isSuccess(read)) {
-                    const result = read.value
+                  if (Exit.isSuccess(exit)) {
+                    const result = exit.value
                     pieces.push({
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -1154,7 +1115,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
                     }
                   } else {
-                    const error = Cause.squash(read.cause)
+                    const error = Cause.squash(exit.cause)
                     log.error("failed to read file", { error })
                     const message = error instanceof Error ? error.message : String(error)
                     yield* bus.publish(Session.Event.Error, {
@@ -1174,22 +1135,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 if (part.mime === "application/x-directory") {
                   const args = { filePath: filepath }
-                  const result = yield* Effect.promise(() => registry.named.read.init()).pipe(
-                    Effect.flatMap((t) =>
-                      Effect.promise(() =>
-                        t.execute(args, {
-                          sessionID: input.sessionID,
-                          abort: new AbortController().signal,
-                          agent: input.agent!,
-                          messageID: info.id,
-                          extra: { bypassCwdCheck: true },
-                          messages: [],
-                          metadata: async () => {},
-                          ask: async () => {},
-                        }),
-                      ),
-                    ),
-                  )
+                  const exit = yield* execRead(args).pipe(Effect.exit)
+                  if (Exit.isFailure(exit)) {
+                    const error = Cause.squash(exit.cause)
+                    log.error("failed to read directory", { error })
+                    const message = error instanceof Error ? error.message : String(error)
+                    yield* bus.publish(Session.Event.Error, {
+                      sessionID: input.sessionID,
+                      error: new NamedError.Unknown({ message }).toObject(),
+                    })
+                    return [
+                      {
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                      },
+                    ]
+                  }
                   return [
                     {
                       messageID: info.id,
@@ -1203,7 +1167,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       sessionID: input.sessionID,
                       type: "text",
                       synthetic: true,
-                      text: result.output,
+                      text: exit.value.output,
                     },
                     { ...part, messageID: info.id, sessionID: input.sessionID },
                   ]
@@ -1368,7 +1332,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             )
             // Some providers return "stop" even when the assistant message contains tool calls.
             // Keep the loop running so tool results can be sent back to the model.
-            const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
+            // Skip provider-executed tool parts — those were fully handled within the
+            // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
+            const hasToolCalls =
+              lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
             if (
               lastAssistant?.finish &&
@@ -1436,7 +1403,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               role: "assistant",
               mode: agent.name,
               agent: agent.name,
-              variant: lastUser.variant,
+              variant: lastUser.model.variant,
               path: { cwd: ctx.directory, root: ctx.worktree },
               cost: 0,
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -1452,110 +1419,104 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               model,
             })
 
-            const outcome: "break" | "continue" = yield* Effect.onExit(
-              Effect.gen(function* () {
-                const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-                const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+            const outcome: "break" | "continue" = yield* Effect.gen(function* () {
+              const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+              const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-                const tools = yield* resolveTools({
-                  agent,
-                  session,
-                  model,
-                  tools: lastUser.tools,
-                  processor: handle,
-                  bypassAgentCheck,
-                  messages: msgs,
+              const tools = yield* resolveTools({
+                agent,
+                session,
+                model,
+                tools: lastUser.tools,
+                processor: handle,
+                bypassAgentCheck,
+                messages: msgs,
+              })
+
+              if (lastUser.format?.type === "json_schema") {
+                tools["StructuredOutput"] = createStructuredOutputTool({
+                  schema: lastUser.format.schema,
+                  onSuccess(output) {
+                    structured = output
+                  },
                 })
+              }
 
-                if (lastUser.format?.type === "json_schema") {
-                  tools["StructuredOutput"] = createStructuredOutputTool({
-                    schema: lastUser.format.schema,
-                    onSuccess(output) {
-                      structured = output
-                    },
-                  })
-                }
+              if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
 
-                if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
-
-                if (step > 1 && lastFinished) {
-                  for (const m of msgs) {
-                    if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
-                    for (const p of m.parts) {
-                      if (p.type !== "text" || p.ignored || p.synthetic) continue
-                      if (!p.text.trim()) continue
-                      p.text = [
-                        "<system-reminder>",
-                        "The user sent the following message:",
-                        p.text,
-                        "",
-                        "Please address this message and continue with your tasks.",
-                        "</system-reminder>",
-                      ].join("\n")
-                    }
+              if (step > 1 && lastFinished) {
+                for (const m of msgs) {
+                  if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                  for (const p of m.parts) {
+                    if (p.type !== "text" || p.ignored || p.synthetic) continue
+                    if (!p.text.trim()) continue
+                    p.text = [
+                      "<system-reminder>",
+                      "The user sent the following message:",
+                      p.text,
+                      "",
+                      "Please address this message and continue with your tasks.",
+                      "</system-reminder>",
+                    ].join("\n")
                   }
                 }
+              }
 
-                yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+              yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                  Effect.promise(() => SystemPrompt.skills(agent)),
-                  Effect.promise(() => SystemPrompt.environment(model)),
-                  instruction.system().pipe(Effect.orDie),
-                  Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
-                ])
-                const system = [...env, ...(skills ? [skills] : []), ...instructions]
-                const format = lastUser.format ?? { type: "text" as const }
-                if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-                const result = yield* handle.process({
-                  user: lastUser,
-                  agent,
-                  permission: session.permission,
-                  sessionID,
-                  parentSessionID: session.parentID,
-                  system,
-                  messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
-                  tools,
-                  model,
-                  toolChoice: format.type === "json_schema" ? "required" : undefined,
-                })
+              const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+                Effect.promise(() => SystemPrompt.skills(agent)),
+                Effect.promise(() => SystemPrompt.environment(model)),
+                instruction.system().pipe(Effect.orDie),
+                MessageV2.toModelMessagesEffect(msgs, model),
+              ])
+              const system = [...env, ...(skills ? [skills] : []), ...instructions]
+              const format = lastUser.format ?? { type: "text" as const }
+              if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+              const result = yield* handle.process({
+                user: lastUser,
+                agent,
+                permission: session.permission,
+                sessionID,
+                parentSessionID: session.parentID,
+                system,
+                messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+                tools,
+                model,
+                toolChoice: format.type === "json_schema" ? "required" : undefined,
+              })
 
-                if (structured !== undefined) {
-                  handle.message.structured = structured
-                  handle.message.finish = handle.message.finish ?? "stop"
+              if (structured !== undefined) {
+                handle.message.structured = structured
+                handle.message.finish = handle.message.finish ?? "stop"
+                yield* sessions.updateMessage(handle.message)
+                return "break" as const
+              }
+
+              const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+              if (finished && !handle.message.error) {
+                if (format.type === "json_schema") {
+                  handle.message.error = new MessageV2.StructuredOutputError({
+                    message: "Model did not produce structured output",
+                    retries: 0,
+                  }).toObject()
                   yield* sessions.updateMessage(handle.message)
                   return "break" as const
                 }
+              }
 
-                const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
-                if (finished && !handle.message.error) {
-                  if (format.type === "json_schema") {
-                    handle.message.error = new MessageV2.StructuredOutputError({
-                      message: "Model did not produce structured output",
-                      retries: 0,
-                    }).toObject()
-                    yield* sessions.updateMessage(handle.message)
-                    return "break" as const
-                  }
-                }
-
-                if (result === "stop") return "break" as const
-                if (result === "compact") {
-                  yield* compaction.create({
-                    sessionID,
-                    agent: lastUser.agent,
-                    model: lastUser.model,
-                    auto: true,
-                    overflow: !handle.message.finish,
-                  })
-                }
-                return "continue" as const
-              }),
-              Effect.fnUntraced(function* (exit) {
-                if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatMap((x) => x))
-              }),
-            )
+              if (result === "stop") return "break" as const
+              if (result === "compact") {
+                yield* compaction.create({
+                  sessionID,
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  auto: true,
+                  overflow: !handle.message.finish,
+                })
+              }
+              return "continue" as const
+            }).pipe(Effect.ensuring(instruction.clear(handle.message.id)))
             if (outcome === "break") break
             continue
           }
@@ -1568,16 +1529,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
-        const s = yield* InstanceState.get(state)
-        const runner = getRunner(s.runners, input.sessionID)
-        return yield* runner.ensureRunning(runLoop(input.sessionID))
+        return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
         function* (input: ShellInput) {
-          const s = yield* InstanceState.get(state)
-          const runner = getRunner(s.runners, input.sessionID)
-          return yield* runner.startShell((signal) => shellImpl(input, signal))
+          return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input))
         },
       )
 
@@ -1698,7 +1655,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       return Service.of({
-        assertNotBusy,
         cancel,
         prompt,
         loop,
@@ -1712,6 +1668,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(SessionRunState.layer),
         Layer.provide(SessionStatus.layer),
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
@@ -1734,10 +1691,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function assertNotBusy(sessionID: SessionID) {
-    return runPromise((svc) => svc.assertNotBusy(SessionID.zod.parse(sessionID)))
-  }
 
   export const PromptInput = z.object({
     sessionID: SessionID.zod,

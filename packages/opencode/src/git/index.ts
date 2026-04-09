@@ -265,39 +265,7 @@ export namespace Git {
     return runPromise((git) => git.run(args, opts))
   }
 
-  export async function branch(cwd: string) {
-    return runPromise((git) => git.branch(cwd))
-  }
-
-  export async function prefix(cwd: string) {
-    return runPromise((git) => git.prefix(cwd))
-  }
-
   export async function defaultBranch(cwd: string) {
     return runPromise((git) => git.defaultBranch(cwd))
-  }
-
-  export async function hasHead(cwd: string) {
-    return runPromise((git) => git.hasHead(cwd))
-  }
-
-  export async function mergeBase(cwd: string, base: string, head?: string) {
-    return runPromise((git) => git.mergeBase(cwd, base, head))
-  }
-
-  export async function show(cwd: string, ref: string, file: string, prefix?: string) {
-    return runPromise((git) => git.show(cwd, ref, file, prefix))
-  }
-
-  export async function status(cwd: string) {
-    return runPromise((git) => git.status(cwd))
-  }
-
-  export async function diff(cwd: string, ref: string) {
-    return runPromise((git) => git.diff(cwd, ref))
-  }
-
-  export async function stats(cwd: string, ref: string) {
-    return runPromise((git) => git.stats(cwd, ref))
   }
 }

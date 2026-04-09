@@ -239,22 +239,28 @@ export namespace Skill {
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) return "No skills are currently available."
-
     if (opts.verbose) {
       return [
         "<available_skills>",
-        ...list.flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
-          "  </skill>",
-        ]),
+        ...list
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .flatMap((skill) => [
+            "  <skill>",
+            `    <name>${skill.name}</name>`,
+            `    <description>${skill.description}</description>`,
+            `    <location>${pathToFileURL(skill.location).href}</location>`,
+            "  </skill>",
+          ]),
         "</available_skills>",
       ].join("\n")
     }
 
-    return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
+    return [
+      "## Available Skills",
+      ...list
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+        .map((skill) => `- **${skill.name}**: ${skill.description}`),
+    ].join("\n")
   }
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
