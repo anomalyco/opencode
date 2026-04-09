@@ -329,6 +329,28 @@ export namespace LLM {
             toolName: lower,
           }
         }
+        // When the tool name is valid but args failed to parse, the output
+        // was likely truncated by the token limit.  Give the model a clear
+        // signal so it can retry with smaller input instead of looping.
+        if (tools[failed.toolCall.toolName] || tools[lower]) {
+          l.warn("truncated tool call detected", {
+            tool: failed.toolCall.toolName,
+            error: failed.error.message,
+          })
+          return {
+            ...failed.toolCall,
+            input: JSON.stringify({
+              tool: failed.toolCall.toolName,
+              error:
+                "Your output was truncated because it exceeded the token limit. " +
+                "The tool arguments were cut off and could not be parsed. " +
+                "Split your operation into smaller pieces and try again. " +
+                "For file writes, use the Edit tool for targeted changes or write smaller sections. " +
+                "For bash commands, break long heredocs into multiple shorter commands.",
+            }),
+            toolName: "invalid",
+          }
+        }
         return {
           ...failed.toolCall,
           input: JSON.stringify({

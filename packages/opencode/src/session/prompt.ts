@@ -1376,6 +1376,35 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const hasToolCalls =
               lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
+            // When the model hit the output token limit (finishReason: "length"),
+            // its response was truncated.  Instead of silently exiting, inject a
+            // continuation message so the model can finish its work.
+            if (lastAssistant?.finish === "length" && lastUser.id < lastAssistant.id) {
+              log.warn("output truncated by token limit, auto-continuing", { sessionID })
+              const continuationMsg: MessageV2.User = {
+                id: MessageID.ascending(),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(continuationMsg)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: continuationMsg.id,
+                sessionID,
+                type: "text",
+                text:
+                  "Your previous response was truncated because it exceeded the output token limit. " +
+                  "If you were writing a file, split it into smaller pieces. " +
+                  "If you were using a tool, use smaller arguments. " +
+                  "Continue where you left off.",
+                synthetic: true,
+              })
+              continue
+            }
+
             if (
               lastAssistant?.finish &&
               !["tool-calls"].includes(lastAssistant.finish) &&
