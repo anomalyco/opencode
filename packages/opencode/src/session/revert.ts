@@ -9,8 +9,9 @@ import { Log } from "../util/log"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
-import { SessionPrompt } from "./prompt"
+import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
+import { SessionStatus } from "./status"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -38,9 +39,10 @@ export namespace SessionRevert {
       const storage = yield* Storage.Service
       const bus = yield* Bus.Service
       const summary = yield* SessionSummary.Service
+      const state = yield* SessionRunState.Service
 
       const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
-        yield* Effect.promise(() => SessionPrompt.assertNotBusy(input.sessionID))
+        yield* state.assertNotBusy(input.sessionID)
         const all = yield* sessions.messages({ sessionID: input.sessionID })
         let lastUser: MessageV2.User | undefined
         const session = yield* sessions.get(input.sessionID)
@@ -93,7 +95,7 @@ export namespace SessionRevert {
 
       const unrevert = Effect.fn("SessionRevert.unrevert")(function* (input: { sessionID: SessionID }) {
         log.info("unreverting", input)
-        yield* Effect.promise(() => SessionPrompt.assertNotBusy(input.sessionID))
+        yield* state.assertNotBusy(input.sessionID)
         const session = yield* sessions.get(input.sessionID)
         if (!session.revert) return session
         if (session.revert.snapshot) yield* snap.restore(session.revert!.snapshot!)
@@ -151,6 +153,8 @@ export namespace SessionRevert {
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(SessionRunState.layer),
+        Layer.provide(SessionStatus.layer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(Snapshot.defaultLayer),
         Layer.provide(Storage.defaultLayer),
