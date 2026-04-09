@@ -306,6 +306,11 @@ export const dict = {
   "mcp.status.needs_auth": "needs auth",
   "mcp.status.disabled": "disabled",
 
+  "mcp.oauth.title": "OAuth Authorization Required",
+  "mcp.oauth.authorizeRequired":
+    "Please complete authorization in the opened browser window, then try connecting again.",
+  "mcp.oauth.openBrowser": "Authorize",
+
   "dialog.fork.empty": "No messages to fork from",
 
   "dialog.directory.search.placeholder": "Search folders",

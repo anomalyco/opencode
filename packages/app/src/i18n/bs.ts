@@ -302,6 +302,10 @@ export const dict = {
   "mcp.status.needs_auth": "potrebna autentifikacija",
   "mcp.status.disabled": "onemogućeno",
 
+  "mcp.oauth.title": "OAuth autorizacija je potrebna",
+  "mcp.oauth.authorizeRequired":
+    "Završi autorizaciju u otvorenom prozoru preglednika, zatim pokušaj ponovo da se povežeš.",
+  "mcp.oauth.openBrowser": "Autorizuj",
   "dialog.fork.empty": "Nema poruka za fork",
 
   "dialog.directory.search.placeholder": "Pretraži foldere",

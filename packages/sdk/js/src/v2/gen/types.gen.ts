@@ -4543,6 +4543,23 @@ export type McpAddResponses = {
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
 
+export type McpOauthCallbackData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/oauth/callback"
+}
+
+export type McpOauthCallbackResponses = {
+  /**
+   * OAuth callback processed
+   */
+  200: unknown
+}
+
 export type McpAuthRemoveData = {
   body?: never
   path: {
@@ -4609,6 +4626,10 @@ export type McpAuthStartResponses = {
      * URL to open in browser for authorization
      */
     authorizationUrl: string
+    /**
+     * OAuth state for callback verification
+     */
+    oauthState: string
   }
 }
 
@@ -4701,9 +4722,14 @@ export type McpConnectData = {
 
 export type McpConnectResponses = {
   /**
-   * MCP server connected successfully
+   * MCP server connected successfully or needs OAuth
    */
-  200: boolean
+  200:
+    | boolean
+    | {
+        needs_oauth: true
+        authorization_url: string
+      }
 }
 
 export type McpConnectResponse = McpConnectResponses[keyof McpConnectResponses]

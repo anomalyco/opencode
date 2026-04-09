@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/solid-query"
-import { Component, createEffect, createMemo, on, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Component, createEffect, createMemo, For, on, Show } from "solid-js"
+import { createStore, produce } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -24,6 +24,8 @@ export const DialogSelectMcp: Component = () => {
     done: false,
     loading: false,
   })
+
+  const [pendingAuthUrls, setPendingAuthUrls] = createStore<Record<string, string>>({})
 
   createEffect(
     on(
@@ -75,7 +77,12 @@ export const DialogSelectMcp: Component = () => {
       if (status?.status === "connected") {
         await sdk.client.mcp.disconnect({ name })
       } else {
-        await sdk.client.mcp.connect({ name })
+        const connectResult = await sdk.client.mcp.connect({ name })
+        if (connectResult.data && typeof connectResult.data === "object" && "needs_oauth" in connectResult.data) {
+          const { authorization_url } = connectResult.data as { needs_oauth: true; authorization_url: string }
+          setPendingAuthUrls(name, authorization_url)
+          return
+        }
       }
 
       const result = await sdk.client.mcp.status()
@@ -102,6 +109,32 @@ export const DialogSelectMcp: Component = () => {
           if (!x || toggle.isPending) return
           toggle.mutate(x.name)
         }}
+        itemWrapper={(item, node) => (
+          <div class="w-full">
+            {node}
+            <Show when={pendingAuthUrls[item.name]}>
+              <div class="flex flex-col gap-3 p-4 bg-surface-raised-base rounded-sm">
+                <p class="text-14-regular text-text-base">{language.t("mcp.oauth.authorizeRequired")}</p>
+                <button
+                  type="button"
+                  class="self-end px-3 py-1.5 text-14-medium text-text-on-accent bg-accent-base rounded-md hover:bg-accent-base-hover transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const url = pendingAuthUrls[item.name]
+                    if (url) window.open(url, "_blank")
+                    setPendingAuthUrls(
+                      produce((draft) => {
+                        delete draft[item.name]
+                      }),
+                    )
+                  }}
+                >
+                  {language.t("mcp.oauth.openBrowser")}
+                </button>
+              </div>
+            </Show>
+          </div>
+        )}
       >
         {(i) => {
           const mcpStatus = () => sync.data.mcp[i.name]

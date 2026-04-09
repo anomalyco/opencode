@@ -300,6 +300,10 @@ export const dict = {
   "mcp.status.needs_auth": "kræver godkendelse",
   "mcp.status.disabled": "deaktiveret",
 
+  "mcp.oauth.title": "OAuth-godkendelse kræves",
+  "mcp.oauth.authorizeRequired":
+    "Fuldfør godkendelsen i det åbnede browservindue, og prøv derefter at oprette forbindelse igen.",
+  "mcp.oauth.openBrowser": "Godkend",
   "dialog.fork.empty": "Ingen beskeder at forgrene fra",
 
   "dialog.directory.search.placeholder": "Søg mapper",

@@ -283,6 +283,10 @@ export const dict = {
   "mcp.status.failed": "fehlgeschlagen",
   "mcp.status.needs_auth": "benötigt Authentifizierung",
   "mcp.status.disabled": "deaktiviert",
+  "mcp.oauth.title": "OAuth-Autorisierung erforderlich",
+  "mcp.oauth.authorizeRequired":
+    "Bitte schließen Sie die Autorisierung im geöffneten Browserfenster ab und versuchen Sie dann erneut, eine Verbindung herzustellen.",
+  "mcp.oauth.openBrowser": "Autorisieren",
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
   "dialog.directory.search.placeholder": "Ordner durchsuchen",
   "dialog.directory.empty": "Keine Ordner gefunden",

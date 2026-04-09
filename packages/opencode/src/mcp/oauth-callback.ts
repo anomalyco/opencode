@@ -213,4 +213,45 @@ export namespace McpOAuthCallback {
   export function isRunning(): boolean {
     return server !== undefined
   }
+
+  export async function receiveCallback(params: {
+    code?: string | null
+    state?: string | null
+    error?: string | null
+    errorDescription?: string | null
+  }): Promise<{ success: boolean; error?: string }> {
+    const { code, state, error, errorDescription } = params
+
+    if (!state) {
+      return { success: false, error: "Missing required state parameter" }
+    }
+
+    if (error) {
+      const errorMsg = errorDescription || error
+      if (pendingAuths.has(state)) {
+        const pending = pendingAuths.get(state)!
+        clearTimeout(pending.timeout)
+        pendingAuths.delete(state)
+        cleanupStateIndex(state)
+        pending.reject(new Error(errorMsg))
+      }
+      return { success: false, error: errorMsg }
+    }
+
+    if (!code) {
+      return { success: false, error: "No authorization code provided" }
+    }
+
+    if (!pendingAuths.has(state)) {
+      return { success: false, error: "Invalid or expired state parameter" }
+    }
+
+    const pending = pendingAuths.get(state)!
+    clearTimeout(pending.timeout)
+    pendingAuths.delete(state)
+    cleanupStateIndex(state)
+    pending.resolve(code)
+
+    return { success: true }
+  }
 }

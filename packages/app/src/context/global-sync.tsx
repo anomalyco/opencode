@@ -325,6 +325,13 @@ function createGlobalSync() {
           })
       },
     })
+    if (event.type === "mcp.tools.changed") {
+      sdkFor(directory)
+        .mcp.status()
+        .then((x) => {
+          if (x.data) setStore("mcp", x.data)
+        })
+    }
   })
 
   onCleanup(unsub)

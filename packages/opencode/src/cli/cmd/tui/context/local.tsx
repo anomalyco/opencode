@@ -13,6 +13,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+import open from "open"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -375,11 +376,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       async toggle(name: string) {
         const status = sync.data.mcp[name]
         if (status?.status === "connected") {
-          // Disable: disconnect the MCP
           await sdk.client.mcp.disconnect({ name })
         } else {
-          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
-          await sdk.client.mcp.connect({ name })
+          const res = await sdk.client.mcp.connect({ name })
+          if (res.data && typeof res.data === "object" && "needs_oauth" in res.data) {
+            const { authorization_url } = res.data as { needs_oauth: true; authorization_url: string }
+            open(authorization_url).catch(() => {
+              toast.show({
+                variant: "warning",
+                message: `Authorization required. Open this URL manually: ${authorization_url}`,
+                duration: 10000,
+              })
+            })
+          }
         }
       },
     }

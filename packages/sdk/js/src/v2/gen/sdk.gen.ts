@@ -67,6 +67,7 @@ import type {
   McpConnectResponses,
   McpDisconnectResponses,
   McpLocalConfig,
+  McpOauthCallbackResponses,
   McpRemoteConfig,
   McpStatusResponses,
   OutputFormat,
@@ -3142,6 +3143,38 @@ export class Event extends HeyApiClient {
   }
 }
 
+export class Oauth2 extends HeyApiClient {
+  /**
+   * OAuth callback
+   *
+   * Handle OAuth callback from browser for MCP server authentication.
+   */
+  public callback<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<McpOauthCallbackResponses, unknown, ThrowOnError>({
+      url: "/mcp/oauth/callback",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Auth2 extends HeyApiClient {
   /**
    * Remove MCP OAuth
@@ -3409,6 +3442,11 @@ export class Mcp extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _oauth?: Oauth2
+  get oauth(): Oauth2 {
+    return (this._oauth ??= new Oauth2({ client: this.client }))
   }
 
   private _auth?: Auth2

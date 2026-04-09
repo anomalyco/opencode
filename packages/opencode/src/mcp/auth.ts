@@ -28,6 +28,7 @@ export namespace McpAuth {
     codeVerifier: z.string().optional(),
     oauthState: z.string().optional(),
     serverUrl: z.string().optional(),
+    redirectUrl: z.string().optional(),
   })
   export type Entry = z.infer<typeof Entry>
 
@@ -41,6 +42,7 @@ export namespace McpAuth {
     readonly remove: (mcpName: string) => Effect.Effect<void>
     readonly updateTokens: (mcpName: string, tokens: Tokens, serverUrl?: string) => Effect.Effect<void>
     readonly updateClientInfo: (mcpName: string, clientInfo: ClientInfo, serverUrl?: string) => Effect.Effect<void>
+    readonly updateRedirectUrl: (mcpName: string, redirectUrl: string) => Effect.Effect<void>
     readonly updateCodeVerifier: (mcpName: string, codeVerifier: string) => Effect.Effect<void>
     readonly clearCodeVerifier: (mcpName: string) => Effect.Effect<void>
     readonly updateOAuthState: (mcpName: string, oauthState: string) => Effect.Effect<void>
@@ -108,6 +110,7 @@ export namespace McpAuth {
       const updateClientInfo = updateField("clientInfo", "updateClientInfo")
       const updateCodeVerifier = updateField("codeVerifier", "updateCodeVerifier")
       const updateOAuthState = updateField("oauthState", "updateOAuthState")
+      const updateRedirectUrl = updateField("redirectUrl", "updateRedirectUrl")
       const clearCodeVerifier = clearField("codeVerifier", "clearCodeVerifier")
       const clearOAuthState = clearField("oauthState", "clearOAuthState")
 
@@ -131,6 +134,7 @@ export namespace McpAuth {
         remove,
         updateTokens,
         updateClientInfo,
+        updateRedirectUrl,
         updateCodeVerifier,
         clearCodeVerifier,
         updateOAuthState,
@@ -165,9 +169,14 @@ export namespace McpAuth {
   export const updateClientInfo = async (mcpName: string, clientInfo: ClientInfo, serverUrl?: string) =>
     runPromise((svc) => svc.updateClientInfo(mcpName, clientInfo, serverUrl))
 
+  export const updateRedirectUrl = async (mcpName: string, redirectUrl: string) =>
+    runPromise((svc) => svc.updateRedirectUrl(mcpName, redirectUrl))
+
   export const updateCodeVerifier = async (mcpName: string, codeVerifier: string) =>
     runPromise((svc) => svc.updateCodeVerifier(mcpName, codeVerifier))
 
   export const updateOAuthState = async (mcpName: string, oauthState: string) =>
     runPromise((svc) => svc.updateOAuthState(mcpName, oauthState))
+
+  export const clearOAuthState = async (mcpName: string) => runPromise((svc) => svc.clearOAuthState(mcpName))
 }

@@ -301,6 +301,9 @@ export const dict = {
   "mcp.status.needs_auth": "需要授權",
   "mcp.status.disabled": "已停用",
 
+  "mcp.oauth.title": "需要 OAuth 授權",
+  "mcp.oauth.authorizeRequired": "請在已開啟的瀏覽器視窗中完成授權，然後再試一次連線。",
+  "mcp.oauth.openBrowser": "授權",
   "dialog.fork.empty": "沒有可用於分支的訊息",
 
   "dialog.directory.search.placeholder": "搜尋資料夾",

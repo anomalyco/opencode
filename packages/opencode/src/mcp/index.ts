@@ -117,6 +117,8 @@ export namespace MCP {
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
+  // Store callback promises so authenticate() can await them without double-registering
+  const pendingCallbacks = new Map<string, Promise<string>>()
 
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
@@ -230,7 +232,10 @@ export namespace MCP {
       clientName: string,
       resourceUri: string,
     ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
-    readonly startAuth: (mcpName: string) => Effect.Effect<{ authorizationUrl: string; oauthState: string }>
+    readonly startAuth: (
+      mcpName: string,
+      redirectUrl?: string,
+    ) => Effect.Effect<{ authorizationUrl: string; oauthState: string }>
     readonly authenticate: (mcpName: string) => Effect.Effect<Status>
     readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status>
     readonly removeAuth: (mcpName: string) => Effect.Effect<void>
@@ -710,7 +715,7 @@ export namespace MCP {
         return mcpConfig
       })
 
-      const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
+      const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string, redirectUrl?: string) {
         const mcpConfig = yield* getMcpConfig(mcpName)
         if (!mcpConfig) throw new Error(`MCP server ${mcpName} not found or disabled`)
         if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
@@ -737,6 +742,7 @@ export namespace MCP {
               capturedUrl = url
             },
           },
+          redirectUrl,
         )
 
         const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), { authProvider })
@@ -751,6 +757,36 @@ export namespace MCP {
           Effect.catch((error) => {
             if (error instanceof UnauthorizedError && capturedUrl) {
               pendingOAuthTransports.set(mcpName, transport)
+              // Register the state so receiveCallback() can resolve it when the
+              // OAuth server redirects back to the backend /mcp/oauth/callback route.
+              // authenticate() (TUI) will await this promise directly instead of re-registering.
+              const callbackPromise = McpOAuthCallback.waitForCallback(oauthState, mcpName)
+              pendingCallbacks.set(mcpName, callbackPromise)
+              log.info("registered callback promise", { mcpName, oauthState })
+              callbackPromise.then(
+                async (code) => {
+                  log.info("callback promise resolved", { mcpName, owned: pendingCallbacks.has(mcpName) })
+                  // If authenticate() already took ownership (deleted from pendingCallbacks), skip
+                  if (!pendingCallbacks.has(mcpName)) return
+                  pendingCallbacks.delete(mcpName)
+                  const entry = await McpAuth.get(mcpName)
+                  if (entry?.oauthState !== oauthState) {
+                    log.info("oauthState mismatch, skipping finishAuth", { mcpName })
+                    return
+                  }
+                  await McpAuth.clearOAuthState(mcpName)
+                  log.info("calling finishAuth from fire-and-forget", { mcpName })
+                  await Effect.runPromise(
+                    finishAuth(mcpName, code).pipe(
+                      Effect.flatMap(() => bus.publish(ToolsChanged, { server: mcpName })),
+                    ),
+                  )
+                },
+                (err) => {
+                  pendingCallbacks.delete(mcpName)
+                  log.error("oauth callback failed", { mcpName, error: err })
+                },
+              )
               return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState })
             }
             return Effect.die(error)
@@ -764,7 +800,8 @@ export namespace MCP {
 
         log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
 
-        const callbackPromise = McpOAuthCallback.waitForCallback(oauthState, mcpName)
+        // startAuth already registered waitForCallback; reuse its promise to avoid double-registration
+        const callbackPromise = pendingCallbacks.get(mcpName) ?? McpOAuthCallback.waitForCallback(oauthState, mcpName)
 
         yield* Effect.tryPromise(() => open(authorizationUrl)).pipe(
           Effect.flatMap((subprocess) =>
@@ -789,6 +826,8 @@ export namespace MCP {
         )
 
         const code = yield* Effect.promise(() => callbackPromise)
+        // Signal to the fire-and-forget in startAuth that authenticate() owns finishAuth
+        pendingCallbacks.delete(mcpName)
 
         const storedState = yield* auth.getOAuthState(mcpName)
         if (storedState !== oauthState) {
@@ -904,7 +943,8 @@ export namespace MCP {
   export const getPrompt = async (clientName: string, name: string, args?: Record<string, string>) =>
     runPromise((svc) => svc.getPrompt(clientName, name, args))
 
-  export const startAuth = async (mcpName: string) => runPromise((svc) => svc.startAuth(mcpName))
+  export const startAuth = async (mcpName: string, redirectUrl?: string) =>
+    runPromise((svc) => svc.startAuth(mcpName, redirectUrl))
 
   export const authenticate = async (mcpName: string) => runPromise((svc) => svc.authenticate(mcpName))
 

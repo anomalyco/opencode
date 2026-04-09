@@ -301,6 +301,10 @@ export const dict = {
   "mcp.status.needs_auth": "ต้องการการตรวจสอบสิทธิ์",
   "mcp.status.disabled": "ปิดใช้งาน",
 
+  "mcp.oauth.title": "ต้องมีการอนุญาต OAuth",
+  "mcp.oauth.authorizeRequired":
+    "โปรดดำเนินการอนุญาตให้เสร็จสิ้นในหน้าต่างเบราว์เซอร์ที่เปิดอยู่ จากนั้นลองเชื่อมต่ออีกครั้ง",
+  "mcp.oauth.openBrowser": "อนุญาต",
   "dialog.fork.empty": "ไม่มีข้อความให้แตกแขนง",
 
   "dialog.directory.search.placeholder": "ค้นหาโฟลเดอร์",

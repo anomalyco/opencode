@@ -29,10 +29,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
     private serverUrl: string,
     private config: McpOAuthConfig,
     private callbacks: McpOAuthCallbacks,
+    private _redirectUrl?: string,
   ) {}
 
   get redirectUrl(): string {
-    return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
+    return this._redirectUrl ?? `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -59,6 +60,18 @@ export class McpOAuthProvider implements OAuthClientProvider {
     // Use getForUrl to validate credentials are for the current server URL
     const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
     if (entry?.clientInfo) {
+      // Only force re-registration when redirect_uri changed AND there are no tokens yet.
+      // If tokens exist the existing client_id is already trusted by the server — changing
+      // redirect_uri at this point would invalidate the token unnecessarily.
+      if (!entry.tokens && entry.redirectUrl !== this.redirectUrl) {
+        log.info("redirect_url changed or missing, clearing stale client info", {
+          mcpName: this.mcpName,
+          stored: entry.redirectUrl,
+          current: this.redirectUrl,
+        })
+        await this.invalidateCredentials("client")
+        return undefined
+      }
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
         log.info("client secret expired, need to re-register", { mcpName: this.mcpName })
@@ -85,9 +98,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
       },
       this.serverUrl,
     )
+    await McpAuth.updateRedirectUrl(this.mcpName, this.redirectUrl)
     log.info("saved dynamically registered client", {
       mcpName: this.mcpName,
       clientId: info.client_id,
+      redirectUrl: this.redirectUrl,
     })
   }
 

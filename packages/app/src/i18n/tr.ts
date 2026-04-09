@@ -306,6 +306,10 @@ export const dict = {
   "mcp.status.needs_auth": "kimlik doğrulama gerekli",
   "mcp.status.disabled": "devre dışı",
 
+  "mcp.oauth.title": "OAuth yetkilendirmesi gerekli",
+  "mcp.oauth.authorizeRequired":
+    "Lütfen açık tarayıcı penceresindeki yetkilendirmeyi tamamlayın, ardından yeniden bağlanmayı deneyin.",
+  "mcp.oauth.openBrowser": "Yetkilendir",
   "dialog.fork.empty": "Dallandırılacak mesaj yok",
 
   "dialog.directory.search.placeholder": "Klasör ara",

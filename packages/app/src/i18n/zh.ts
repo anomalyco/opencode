@@ -321,6 +321,9 @@ export const dict = {
   "mcp.status.needs_auth": "需要授权",
   "mcp.status.disabled": "已禁用",
 
+  "mcp.oauth.title": "需要 OAuth 授权",
+  "mcp.oauth.authorizeRequired": "请在已打开的浏览器窗口中完成授权，然后再次尝试连接。",
+  "mcp.oauth.openBrowser": "授权",
   "dialog.fork.empty": "没有可用于分叉的消息",
 
   "dialog.directory.search.placeholder": "搜索文件夹",

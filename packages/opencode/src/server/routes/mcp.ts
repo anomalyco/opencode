@@ -5,6 +5,7 @@ import { MCP } from "../../mcp"
 import { Config } from "../../config/config"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { McpOAuthCallback } from "../../mcp/oauth-callback"
 
 export const McpRoutes = lazy(() =>
   new Hono()
@@ -60,6 +61,80 @@ export const McpRoutes = lazy(() =>
         return c.json(result.status)
       },
     )
+    .get(
+      "/oauth/callback",
+      describeRoute({
+        summary: "OAuth callback",
+        description: "Handle OAuth callback from browser for MCP server authentication.",
+        operationId: "mcp.oauth.callback",
+        responses: {
+          200: {
+            description: "OAuth callback processed",
+          },
+        },
+      }),
+      async (c) => {
+        const url = new URL(c.req.url)
+        const code = url.searchParams.get("code")
+        const state = url.searchParams.get("state")
+        const error = url.searchParams.get("error")
+        const errorDescription = url.searchParams.get("error_description")
+
+        const result = await McpOAuthCallback.receiveCallback({
+          code,
+          state,
+          error,
+          errorDescription,
+        })
+
+        if (result.success) {
+          return c.html(
+            `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - Authorization Successful</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #4ade80; margin-bottom: 1rem; }
+    p { color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Authorization Successful</h1>
+    <p>You can close this window and return to OpenCode.</p>
+  </div>
+  <script>setTimeout(() => window.close(), 2000);</script>
+</body>
+</html>`,
+          )
+        } else {
+          return c.html(
+            `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - Authorization Failed</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #f87171; margin-bottom: 1rem; }
+    p { color: #aaa; }
+    .error { color: #fca5a5; font-family: monospace; margin-top: 1rem; padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Authorization Failed</h1>
+    <p>An error occurred during authorization.</p>
+    <div class="error">${result.error}</div>
+  </div>
+</body>
+</html>`,
+          )
+        }
+      },
+    )
     .post(
       "/:name/auth",
       describeRoute({
@@ -74,6 +149,7 @@ export const McpRoutes = lazy(() =>
                 schema: resolver(
                   z.object({
                     authorizationUrl: z.string().describe("URL to open in browser for authorization"),
+                    oauthState: z.string().describe("OAuth state for callback verification"),
                   }),
                 ),
               },
@@ -183,10 +259,18 @@ export const McpRoutes = lazy(() =>
         operationId: "mcp.connect",
         responses: {
           200: {
-            description: "MCP server connected successfully",
+            description: "MCP server connected successfully or needs OAuth",
             content: {
               "application/json": {
-                schema: resolver(z.boolean()),
+                schema: resolver(
+                  z.union([
+                    z.boolean(),
+                    z.object({
+                      needs_oauth: z.literal(true),
+                      authorization_url: z.string(),
+                    }),
+                  ]),
+                ),
               },
             },
           },
@@ -195,6 +279,17 @@ export const McpRoutes = lazy(() =>
       validator("param", z.object({ name: z.string() })),
       async (c) => {
         const { name } = c.req.valid("param")
+        const supportsOAuth = await MCP.supportsOAuth(name)
+        const hasTokens = supportsOAuth ? await MCP.hasStoredTokens(name) : false
+
+        if (supportsOAuth && !hasTokens) {
+          const proto = c.req.header("x-forwarded-proto") ?? (c.req.url.startsWith("https") ? "https" : "http")
+          const host = c.req.header("host")
+          const redirectUrl = host ? `${proto}://${host}/mcp/oauth/callback` : undefined
+          const { authorizationUrl } = await MCP.startAuth(name, redirectUrl)
+          return c.json({ needs_oauth: true, authorization_url: authorizationUrl })
+        }
+
         await MCP.connect(name)
         return c.json(true)
       },

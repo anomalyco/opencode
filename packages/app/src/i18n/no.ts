@@ -304,6 +304,10 @@ export const dict = {
   "mcp.status.needs_auth": "trenger autentisering",
   "mcp.status.disabled": "deaktivert",
 
+  "mcp.oauth.title": "OAuth-autorisering kreves",
+  "mcp.oauth.authorizeRequired":
+    "Fullfør autoriseringen i det åpne nettleservinduet, og prøv deretter å koble til igjen.",
+  "mcp.oauth.openBrowser": "Godkjenn",
   "dialog.fork.empty": "Ingen meldinger å forgrene fra",
 
   "dialog.directory.search.placeholder": "Søk etter mapper",

@@ -7,7 +7,7 @@ import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -133,7 +133,7 @@ const useDefaultServerKey = (
   }
 }
 
-const useMcpToggleMutation = () => {
+const useMcpToggleMutation = (onOAuth: (name: string, url: string) => void) => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
@@ -141,7 +141,16 @@ const useMcpToggleMutation = () => {
   return useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
-      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      if (status?.status === "connected") {
+        await sdk.client.mcp.disconnect({ name })
+      } else {
+        const connectResult = await sdk.client.mcp.connect({ name })
+        if (connectResult.data && typeof connectResult.data === "object" && "needs_oauth" in connectResult.data) {
+          const { authorization_url } = connectResult.data as { needs_oauth: true; authorization_url: string }
+          onOAuth(name, authorization_url)
+          return
+        }
+      }
       const result = await sdk.client.mcp.status()
       if (result.data) sync.set("mcp", result.data)
     },
@@ -163,6 +172,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const sdk = useSDK()
+  const [pendingAuthUrls, setPendingAuthUrls] = createStore<Record<string, string>>({})
 
   const [load, setLoad] = createStore({
     lspDone: false,
@@ -232,7 +242,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   })
   const health = useServerHealth(servers, props.shown)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
-  const toggleMcp = useMcpToggleMutation()
+  const toggleMcp = useMcpToggleMutation((name, url) => setPendingAuthUrls(name, url))
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
@@ -352,38 +362,61 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                   {(name) => {
                     const status = () => mcpStatus(name)
                     const enabled = () => status() === "connected"
+                    const authUrl = () => pendingAuthUrls[name]
                     return (
-                      <button
-                        type="button"
-                        class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                        onClick={() => {
-                          if (toggleMcp.isPending) return
-                          toggleMcp.mutate(name)
-                        }}
-                        disabled={toggleMcp.isPending && toggleMcp.variables === name}
-                      >
-                        <div
-                          classList={{
-                            "size-1.5 rounded-full shrink-0": true,
-                            "bg-icon-success-base": status() === "connected",
-                            "bg-icon-critical-base": status() === "failed",
-                            "bg-border-weak-base": status() === "disabled",
-                            "bg-icon-warning-base":
-                              status() === "needs_auth" || status() === "needs_client_registration",
+                      <>
+                        <button
+                          type="button"
+                          class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                          onClick={() => {
+                            if (toggleMcp.isPending) return
+                            toggleMcp.mutate(name)
                           }}
-                        />
-                        <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
-                        <div onClick={(event) => event.stopPropagation()}>
-                          <Switch
-                            checked={enabled()}
-                            disabled={toggleMcp.isPending && toggleMcp.variables === name}
-                            onChange={() => {
-                              if (toggleMcp.isPending) return
-                              toggleMcp.mutate(name)
+                          disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                        >
+                          <div
+                            classList={{
+                              "size-1.5 rounded-full shrink-0": true,
+                              "bg-icon-success-base": status() === "connected",
+                              "bg-icon-critical-base": status() === "failed",
+                              "bg-border-weak-base": status() === "disabled",
+                              "bg-icon-warning-base":
+                                status() === "needs_auth" || status() === "needs_client_registration",
                             }}
                           />
-                        </div>
-                      </button>
+                          <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
+                          <div onClick={(event) => event.stopPropagation()}>
+                            <Switch
+                              checked={enabled()}
+                              disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                              onChange={() => {
+                                if (toggleMcp.isPending) return
+                                toggleMcp.mutate(name)
+                              }}
+                            />
+                          </div>
+                        </button>
+                        <Show when={authUrl()}>
+                          <div class="flex flex-col gap-2 p-3 bg-surface-raised-base rounded-sm">
+                            <p class="text-13-regular text-text-base">{language.t("mcp.oauth.authorizeRequired")}</p>
+                            <button
+                              type="button"
+                              class="self-end px-3 py-1 text-13-medium text-text-on-accent bg-accent-base rounded-md hover:bg-accent-base-hover transition-colors"
+                              onClick={() => {
+                                const url = authUrl()
+                                if (url) window.open(url, "_blank")
+                                setPendingAuthUrls(
+                                  produce((draft) => {
+                                    delete draft[name]
+                                  }),
+                                )
+                              }}
+                            >
+                              {language.t("mcp.oauth.openBrowser")}
+                            </button>
+                          </div>
+                        </Show>
+                      </>
                     )
                   }}
                 </For>

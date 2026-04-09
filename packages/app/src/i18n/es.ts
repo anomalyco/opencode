@@ -301,6 +301,10 @@ export const dict = {
   "mcp.status.needs_auth": "necesita auth",
   "mcp.status.disabled": "deshabilitado",
 
+  "mcp.oauth.title": "Se requiere autorización OAuth",
+  "mcp.oauth.authorizeRequired":
+    "Completa la autorización en la ventana del navegador abierta y vuelve a intentar conectarte.",
+  "mcp.oauth.openBrowser": "Autorizar",
   "dialog.fork.empty": "No hay mensajes desde donde bifurcar",
 
   "dialog.directory.search.placeholder": "Buscar carpetas",
