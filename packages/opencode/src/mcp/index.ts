@@ -906,9 +906,6 @@ export namespace MCP {
 
   export const disconnect = async (name: string) => runPromise((svc) => svc.disconnect(name))
 
-  export const getPrompt = async (clientName: string, name: string, args?: Record<string, string>) =>
-    runPromise((svc) => svc.getPrompt(clientName, name, args))
-
   export const startAuth = async (mcpName: string) => runPromise((svc) => svc.startAuth(mcpName))
 
   export const authenticate = async (mcpName: string) => runPromise((svc) => svc.authenticate(mcpName))
