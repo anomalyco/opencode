@@ -817,7 +817,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const cwd = ctx.directory
         const shellEnv = yield* plugin.trigger(
           "shell.env",
-          { cwd, sessionID: input.sessionID, callID: part.callID },
+          { cwd, sessionID: input.sessionID, callID: part.callID, agent: input.agent },
           { env: {} },
         )
 
