@@ -882,6 +882,14 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      runtime: z
+        .object({
+          systemPrompt: z.enum(["anthropic", "beast", "codex", "gemini", "groq", "qwen", "trinity"]).optional(),
+          disableLocalTools: z.boolean().optional(),
+          maxActiveTools: z.number().int().positive().optional(),
+          toolPriority: z.array(z.string()).optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Model",
