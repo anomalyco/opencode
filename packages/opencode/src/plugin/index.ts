@@ -169,8 +169,10 @@ export namespace Plugin {
 
                   if (stage === "install") {
                     const parsed = parsePluginSpecifier(spec)
+                    const installMsg = `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`
                     log.error("failed to install plugin", { pkg: parsed.pkg, version: parsed.version, error: message })
-                    publishPluginError(bus, `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
+                    process.stderr.write(`[plugin] ${installMsg}\n`)
+                    publishPluginError(bus, installMsg)
                     return
                   }
 
@@ -181,13 +183,17 @@ export namespace Plugin {
                   }
 
                   if (stage === "entry") {
+                    const entryMsg = `Failed to load plugin ${spec}: ${message}`
                     log.error("failed to resolve plugin server entry", { path: spec, error: message })
-                    publishPluginError(bus, `Failed to load plugin ${spec}: ${message}`)
+                    process.stderr.write(`[plugin] ${entryMsg}\n`)
+                    publishPluginError(bus, entryMsg)
                     return
                   }
 
+                  const loadMsg = `Failed to load plugin ${spec}: ${message}`
                   log.error("failed to load plugin", { path: spec, target: resolved?.entry, error: message })
-                  publishPluginError(bus, `Failed to load plugin ${spec}: ${message}`)
+                  process.stderr.write(`[plugin] ${loadMsg}\n`)
+                  publishPluginError(bus, loadMsg)
                 },
               },
             }),
@@ -201,15 +207,15 @@ export namespace Plugin {
               try: () => applyPlugin(load, input, hooks),
               catch: (err) => {
                 const message = errorMessage(err)
+                const applyMsg = `Failed to load plugin ${load.spec}: ${message}`
                 log.error("failed to load plugin", { path: load.spec, error: message })
-                return message
+                process.stderr.write(`[plugin] ${applyMsg}\n`)
+                return applyMsg
               },
             }).pipe(
               Effect.catch((message) =>
                 bus.publish(Session.Event.Error, {
-                  error: new NamedError.Unknown({
-                    message: `Failed to load plugin ${load.spec}: ${message}`,
-                  }).toObject(),
+                  error: new NamedError.Unknown({ message }).toObject(),
                 }),
               ),
             )
