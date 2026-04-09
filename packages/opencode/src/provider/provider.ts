@@ -926,24 +926,25 @@ export namespace Provider {
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Provider") {}
 
   function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
-    return {
+    const result: Model["cost"] = {
       input: c?.input ?? 0,
       output: c?.output ?? 0,
       cache: {
         read: c?.cache_read ?? 0,
         write: c?.cache_write ?? 0,
       },
-      experimentalOver200K: c?.context_over_200k
-        ? {
-            cache: {
-              read: c.context_over_200k.cache_read ?? 0,
-              write: c.context_over_200k.cache_write ?? 0,
-            },
-            input: c.context_over_200k.input,
-            output: c.context_over_200k.output,
-          }
-        : undefined,
     }
+    if (c?.context_over_200k) {
+      result.experimentalOver200K = {
+        cache: {
+          read: c.context_over_200k.cache_read ?? 0,
+          write: c.context_over_200k.cache_write ?? 0,
+        },
+        input: c.context_over_200k.input,
+        output: c.context_over_200k.output,
+      }
+    }
+    return result
   }
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
@@ -1000,18 +1001,18 @@ export namespace Provider {
     const models: Record<string, Model> = {}
     for (const [key, model] of Object.entries(provider.models)) {
       models[key] = fromModelsDevModel(provider, model)
-      for (const [mode, cfg] of Object.entries(model.experimental?.modes ?? {})) {
+      for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
         const id = `${model.id}-${mode}`
         const m = fromModelsDevModel(provider, model)
         m.id = ModelID.make(id)
         m.name = `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`
-        if (cfg.cost) m.cost = cost(cfg.cost)
+        if (opts.cost) m.cost = mergeDeep(m.cost, cost(opts.cost))
         // convert body params to camelCase for ai sdk compatibility
-        if (cfg.provider?.body)
+        if (opts.provider?.body)
           m.options = Object.fromEntries(
-            Object.entries(cfg.provider.body).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]),
+            Object.entries(opts.provider.body).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]),
           )
-        if (cfg.provider?.headers) m.headers = cfg.provider.headers
+        if (opts.provider?.headers) m.headers = opts.provider.headers
         models[id] = m
       }
     }
