@@ -447,7 +447,7 @@ export function SessionTurn(
                   <div data-component="session-turn-diffs-content">
                     <Accordion
                       multiple
-                      style={{ "--sticky-accordion-offset": "40px" }}
+                      style={{ "--sticky-accordion-offset": "44px" }}
                       value={expanded()}
                       onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
                     >
