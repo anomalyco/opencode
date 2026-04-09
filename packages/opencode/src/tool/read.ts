@@ -67,9 +67,7 @@ export const ReadTool = Tool.defineEffect(
           if (item.type === "directory") return item.name + "/"
           if (item.type !== "symlink") return item.name
 
-          const target = yield* fs
-            .stat(path.join(filepath, item.name))
-            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const target = yield* fs.stat(path.join(filepath, item.name)).pipe(Effect.catch(() => Effect.void))
           if (target?.type === "Directory") return item.name + "/"
           return item.name
         }),

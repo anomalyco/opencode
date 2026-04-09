@@ -559,7 +559,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
-        const taskTool = yield* registry.fromID(TaskTool.id)
+        const { task: taskTool } = yield* registry.named()
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
           id: MessageID.ascending(),
@@ -964,9 +964,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
         const full =
           !input.variant && ag.variant && same
-            ? yield* provider
-                .getModel(model.providerID, model.modelID)
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            ? yield* provider.getModel(model.providerID, model.modelID).pipe(Effect.catchDefect(() => Effect.void))
             : undefined
         const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
@@ -986,9 +984,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           format: input.format,
         }
 
-        yield* Effect.addFinalizer(() =>
-          InstanceState.withALS(() => instruction.clear(info.id)).pipe(Effect.flatMap((x) => x)),
-        )
+        yield* Effect.addFinalizer(() => instruction.clear(info.id))
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
         const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
@@ -1080,6 +1076,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const filepath = fileURLToPath(part.url)
                 if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
+                const { read } = yield* registry.named()
+                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) =>
+                  Effect.promise((signal: AbortSignal) =>
+                    read.execute(args, {
+                      sessionID: input.sessionID,
+                      abort: signal,
+                      agent: input.agent!,
+                      messageID: info.id,
+                      extra: { bypassCwdCheck: true, ...extra },
+                      messages: [],
+                      metadata: async () => {},
+                      ask: async () => {},
+                    }),
+                  )
+
                 if (part.mime === "text/plain") {
                   let offset: number | undefined
                   let limit: number | undefined
@@ -1116,29 +1127,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                     },
                   ]
-                  const read = yield* registry.fromID("read").pipe(
-                    Effect.flatMap((t) =>
-                      provider.getModel(info.model.providerID, info.model.modelID).pipe(
-                        Effect.flatMap((mdl) =>
-                          Effect.promise(() =>
-                            t.execute(args, {
-                              sessionID: input.sessionID,
-                              abort: new AbortController().signal,
-                              agent: input.agent!,
-                              messageID: info.id,
-                              extra: { bypassCwdCheck: true, model: mdl },
-                              messages: [],
-                              metadata: async () => {},
-                              ask: async () => {},
-                            }),
-                          ),
-                        ),
-                      ),
-                    ),
+                  const exit = yield* provider.getModel(info.model.providerID, info.model.modelID).pipe(
+                    Effect.flatMap((mdl) => execRead(args, { model: mdl })),
                     Effect.exit,
                   )
-                  if (Exit.isSuccess(read)) {
-                    const result = read.value
+                  if (Exit.isSuccess(exit)) {
+                    const result = exit.value
                     pieces.push({
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -1160,7 +1154,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
                     }
                   } else {
-                    const error = Cause.squash(read.cause)
+                    const error = Cause.squash(exit.cause)
                     log.error("failed to read file", { error })
                     const message = error instanceof Error ? error.message : String(error)
                     yield* bus.publish(Session.Event.Error, {
@@ -1180,22 +1174,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 if (part.mime === "application/x-directory") {
                   const args = { filePath: filepath }
-                  const result = yield* registry.fromID("read").pipe(
-                    Effect.flatMap((t) =>
-                      Effect.promise(() =>
-                        t.execute(args, {
-                          sessionID: input.sessionID,
-                          abort: new AbortController().signal,
-                          agent: input.agent!,
-                          messageID: info.id,
-                          extra: { bypassCwdCheck: true },
-                          messages: [],
-                          metadata: async () => {},
-                          ask: async () => {},
-                        }),
-                      ),
-                    ),
-                  )
+                  const exit = yield* execRead(args).pipe(Effect.exit)
+                  if (Exit.isFailure(exit)) {
+                    const error = Cause.squash(exit.cause)
+                    log.error("failed to read directory", { error })
+                    const message = error instanceof Error ? error.message : String(error)
+                    yield* bus.publish(Session.Event.Error, {
+                      sessionID: input.sessionID,
+                      error: new NamedError.Unknown({ message }).toObject(),
+                    })
+                    return [
+                      {
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                      },
+                    ]
+                  }
                   return [
                     {
                       messageID: info.id,
@@ -1209,7 +1206,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       sessionID: input.sessionID,
                       type: "text",
                       synthetic: true,
-                      text: result.output,
+                      text: exit.value.output,
                     },
                     { ...part, messageID: info.id, sessionID: input.sessionID },
                   ]
@@ -1374,7 +1371,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             )
             // Some providers return "stop" even when the assistant message contains tool calls.
             // Keep the loop running so tool results can be sent back to the model.
-            const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
+            // Skip provider-executed tool parts — those were fully handled within the
+            // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
+            const hasToolCalls =
+              lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
             if (
               lastAssistant?.finish &&
@@ -1458,110 +1458,104 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               model,
             })
 
-            const outcome: "break" | "continue" = yield* Effect.onExit(
-              Effect.gen(function* () {
-                const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-                const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+            const outcome: "break" | "continue" = yield* Effect.gen(function* () {
+              const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+              const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-                const tools = yield* resolveTools({
-                  agent,
-                  session,
-                  model,
-                  tools: lastUser.tools,
-                  processor: handle,
-                  bypassAgentCheck,
-                  messages: msgs,
+              const tools = yield* resolveTools({
+                agent,
+                session,
+                model,
+                tools: lastUser.tools,
+                processor: handle,
+                bypassAgentCheck,
+                messages: msgs,
+              })
+
+              if (lastUser.format?.type === "json_schema") {
+                tools["StructuredOutput"] = createStructuredOutputTool({
+                  schema: lastUser.format.schema,
+                  onSuccess(output) {
+                    structured = output
+                  },
                 })
+              }
 
-                if (lastUser.format?.type === "json_schema") {
-                  tools["StructuredOutput"] = createStructuredOutputTool({
-                    schema: lastUser.format.schema,
-                    onSuccess(output) {
-                      structured = output
-                    },
-                  })
-                }
+              if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
 
-                if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
-
-                if (step > 1 && lastFinished) {
-                  for (const m of msgs) {
-                    if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
-                    for (const p of m.parts) {
-                      if (p.type !== "text" || p.ignored || p.synthetic) continue
-                      if (!p.text.trim()) continue
-                      p.text = [
-                        "<system-reminder>",
-                        "The user sent the following message:",
-                        p.text,
-                        "",
-                        "Please address this message and continue with your tasks.",
-                        "</system-reminder>",
-                      ].join("\n")
-                    }
+              if (step > 1 && lastFinished) {
+                for (const m of msgs) {
+                  if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                  for (const p of m.parts) {
+                    if (p.type !== "text" || p.ignored || p.synthetic) continue
+                    if (!p.text.trim()) continue
+                    p.text = [
+                      "<system-reminder>",
+                      "The user sent the following message:",
+                      p.text,
+                      "",
+                      "Please address this message and continue with your tasks.",
+                      "</system-reminder>",
+                    ].join("\n")
                   }
                 }
+              }
 
-                yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+              yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                  Effect.promise(() => SystemPrompt.skills(agent)),
-                  Effect.promise(() => SystemPrompt.environment(model)),
-                  instruction.system().pipe(Effect.orDie),
-                  Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
-                ])
-                const system = [...env, ...(skills ? [skills] : []), ...instructions]
-                const format = lastUser.format ?? { type: "text" as const }
-                if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-                const result = yield* handle.process({
-                  user: lastUser,
-                  agent,
-                  permission: session.permission,
-                  sessionID,
-                  parentSessionID: session.parentID,
-                  system,
-                  messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
-                  tools,
-                  model,
-                  toolChoice: format.type === "json_schema" ? "required" : undefined,
-                })
+              const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+                Effect.promise(() => SystemPrompt.skills(agent)),
+                Effect.promise(() => SystemPrompt.environment(model)),
+                instruction.system().pipe(Effect.orDie),
+                Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+              ])
+              const system = [...env, ...(skills ? [skills] : []), ...instructions]
+              const format = lastUser.format ?? { type: "text" as const }
+              if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+              const result = yield* handle.process({
+                user: lastUser,
+                agent,
+                permission: session.permission,
+                sessionID,
+                parentSessionID: session.parentID,
+                system,
+                messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+                tools,
+                model,
+                toolChoice: format.type === "json_schema" ? "required" : undefined,
+              })
 
-                if (structured !== undefined) {
-                  handle.message.structured = structured
-                  handle.message.finish = handle.message.finish ?? "stop"
+              if (structured !== undefined) {
+                handle.message.structured = structured
+                handle.message.finish = handle.message.finish ?? "stop"
+                yield* sessions.updateMessage(handle.message)
+                return "break" as const
+              }
+
+              const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+              if (finished && !handle.message.error) {
+                if (format.type === "json_schema") {
+                  handle.message.error = new MessageV2.StructuredOutputError({
+                    message: "Model did not produce structured output",
+                    retries: 0,
+                  }).toObject()
                   yield* sessions.updateMessage(handle.message)
                   return "break" as const
                 }
+              }
 
-                const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
-                if (finished && !handle.message.error) {
-                  if (format.type === "json_schema") {
-                    handle.message.error = new MessageV2.StructuredOutputError({
-                      message: "Model did not produce structured output",
-                      retries: 0,
-                    }).toObject()
-                    yield* sessions.updateMessage(handle.message)
-                    return "break" as const
-                  }
-                }
-
-                if (result === "stop") return "break" as const
-                if (result === "compact") {
-                  yield* compaction.create({
-                    sessionID,
-                    agent: lastUser.agent,
-                    model: lastUser.model,
-                    auto: true,
-                    overflow: !handle.message.finish,
-                  })
-                }
-                return "continue" as const
-              }),
-              Effect.fnUntraced(function* (exit) {
-                if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatMap((x) => x))
-              }),
-            )
+              if (result === "stop") return "break" as const
+              if (result === "compact") {
+                yield* compaction.create({
+                  sessionID,
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  auto: true,
+                  overflow: !handle.message.finish,
+                })
+              }
+              return "continue" as const
+            }).pipe(Effect.ensuring(instruction.clear(handle.message.id)))
             if (outcome === "break") break
             continue
           }
