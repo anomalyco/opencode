@@ -730,7 +730,6 @@ export namespace Session {
     runPromise((svc) => svc.fork(input)),
   )
 
-  export const touch = fn(SessionID.zod, (id) => runPromise((svc) => svc.touch(id)))
   export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
   export const share = fn(SessionID.zod, (id) => runPromise((svc) => svc.share(id)))
   export const unshare = fn(SessionID.zod, (id) => runPromise((svc) => svc.unshare(id)))
@@ -743,23 +742,11 @@ export namespace Session {
     runPromise((svc) => svc.setArchived(input)),
   )
 
-  export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset }), (input) =>
-    runPromise((svc) => svc.setPermission(input)),
-  )
-
   export const setRevert = fn(
     z.object({ sessionID: SessionID.zod, revert: Info.shape.revert, summary: Info.shape.summary }),
     (input) =>
       runPromise((svc) => svc.setRevert({ sessionID: input.sessionID, revert: input.revert, summary: input.summary })),
   )
-
-  export const clearRevert = fn(SessionID.zod, (id) => runPromise((svc) => svc.clearRevert(id)))
-
-  export const setSummary = fn(z.object({ sessionID: SessionID.zod, summary: Info.shape.summary }), (input) =>
-    runPromise((svc) => svc.setSummary({ sessionID: input.sessionID, summary: input.summary })),
-  )
-
-  export const diff = fn(SessionID.zod, (id) => runPromise((svc) => svc.diff(id)))
 
   export const messages = fn(z.object({ sessionID: SessionID.zod, limit: z.number().optional() }), (input) =>
     runPromise((svc) => svc.messages(input)),
