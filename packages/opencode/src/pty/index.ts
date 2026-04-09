@@ -4,6 +4,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
 import type { Proc } from "#pty"
+import path from "path"
 import z from "zod"
 import { Log } from "../util/log"
 import { lazy } from "@opencode-ai/util/lazy"
@@ -183,10 +184,16 @@ export namespace Pty {
 
         const cwd = input.cwd || s.dir
         const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })
+        // Extract plugin PATH before spreading to compose rather than stomp
+        const pluginEnv: Record<string, string> = { ...shell.env }
+        const pluginPath = pluginEnv.PATH ?? ""
+        delete pluginEnv.PATH
         const env = {
           ...process.env,
           ...input.env,
-          ...shell.env,
+          ...pluginEnv,
+          // Compose PATH: plugin bins prepended, system PATH preserved
+          ...(pluginPath && { PATH: `${pluginPath}${path.delimiter}${process.env.PATH ?? ""}` }),
           TERM: "xterm-256color",
           OPENCODE_TERMINAL: "1",
         } as Record<string, string>

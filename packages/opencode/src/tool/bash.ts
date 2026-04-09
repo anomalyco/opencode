@@ -363,9 +363,15 @@ export const BashTool = Tool.define(
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
+      // Extract plugin PATH before spreading to compose rather than stomp
+      const env: Record<string, string> = { ...extra.env }
+      const paths = env.PATH ?? ""
+      delete env.PATH
       return {
         ...process.env,
-        ...extra.env,
+        ...env,
+        // Compose PATH: plugin bins prepended, system PATH preserved
+        ...(paths && { PATH: `${paths}${path.delimiter}${process.env.PATH ?? ""}` }),
       }
     })
 
