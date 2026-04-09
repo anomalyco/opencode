@@ -543,6 +543,93 @@ it.live("failed subtask preserves metadata on error tool state", () =>
 )
 
 it.live(
+  "running subtask preserves metadata after tool-call transition",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.hang
+        const msg = yield* user(chat.id, "hello")
+        yield* addSubtask(chat.id, msg.id)
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+
+        const tool = yield* Effect.promise(async () => {
+          const end = Date.now() + 5_000
+          while (Date.now() < end) {
+            const msgs = await Effect.runPromise(MessageV2.filterCompactedEffect(chat.id))
+            const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+            const tool = taskMsg?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+            if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
+            await new Promise((done) => setTimeout(done, 20))
+          }
+          throw new Error("timed out waiting for running subtask metadata")
+        })
+
+        if (tool.state.status !== "running") return
+        expect(typeof tool.state.metadata?.sessionId).toBe("string")
+        expect(tool.state.title).toBeDefined()
+        expect(tool.state.metadata?.model).toBeDefined()
+
+        yield* prompt.cancel(chat.id)
+        yield* Fiber.await(fiber)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  5_000,
+)
+
+it.live(
+  "running task tool preserves metadata after tool-call transition",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Pinned",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        yield* llm.tool("task", {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        })
+        yield* llm.hang
+        yield* user(chat.id, "hello")
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+
+        const tool = yield* Effect.promise(async () => {
+          const end = Date.now() + 5_000
+          while (Date.now() < end) {
+            const msgs = await Effect.runPromise(MessageV2.filterCompactedEffect(chat.id))
+            const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
+            const tool = assistant?.parts.find(
+              (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
+            )
+            if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
+            await new Promise((done) => setTimeout(done, 20))
+          }
+          throw new Error("timed out waiting for running task metadata")
+        })
+
+        if (tool.state.status !== "running") return
+        expect(typeof tool.state.metadata?.sessionId).toBe("string")
+        expect(tool.state.title).toBe("inspect bug")
+        expect(tool.state.metadata?.model).toBeDefined()
+
+        yield* prompt.cancel(chat.id)
+        yield* Fiber.await(fiber)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  10_000,
+)
+
+it.live(
   "loop sets status to busy then idle",
   () =>
     provideTmpdirServer(
@@ -1174,6 +1261,57 @@ unix(
           }),
         { git: true, config: cfg },
       ),
+    ),
+  30_000,
+)
+
+unix(
+  "cancel finalizes interrupted bash tool output through normal truncation",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Interrupted bash truncation",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "build",
+            noReply: true,
+            parts: [{ type: "text", text: "run bash" }],
+          })
+
+          yield* llm.tool("bash", {
+            command:
+              'i=0; while [ "$i" -lt 4000 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; sleep 30',
+            description: "Print many lines",
+            timeout: 30_000,
+            workdir: path.resolve(dir),
+          })
+
+          const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+          yield* llm.wait(1)
+          yield* Effect.sleep(150)
+          yield* prompt.cancel(chat.id)
+
+          const exit = yield* Fiber.await(run)
+          expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isFailure(exit)) return
+
+          const tool = completedTool(exit.value.parts)
+          if (!tool) return
+
+          expect(tool.state.metadata.truncated).toBe(true)
+          expect(typeof tool.state.metadata.outputPath).toBe("string")
+          expect(tool.state.output).toContain("The tool call succeeded but the output was truncated.")
+          expect(tool.state.output).toContain("Full output saved to:")
+          expect(tool.state.output).not.toContain("Tool execution aborted")
+        }),
+      { git: true, config: providerCfg },
     ),
   30_000,
 )
