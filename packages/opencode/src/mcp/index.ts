@@ -144,11 +144,13 @@ export namespace MCP {
     return dynamicTool({
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
-      execute: async (args: unknown) => {
+      execute: async (args: unknown, opts?) => {
+        const meta = (opts as any)?._meta as Record<string, unknown> | undefined
         return client.callTool(
           {
             name: mcpTool.name,
             arguments: (args || {}) as Record<string, unknown>,
+            ...(meta ? { _meta: meta } : {}),
           },
           CallToolResultSchema,
           {
