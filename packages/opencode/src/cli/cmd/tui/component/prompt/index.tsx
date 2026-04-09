@@ -935,6 +935,13 @@ export function Prompt(props: PromptProps) {
                   }
                   // If no image, let the default paste behavior continue
                 }
+                if (keybind.match("input_delete_to_line_start", e)) {
+                  const cursor = input.editorView.getCursor()
+                  if (cursor.col === 0 && cursor.row > 0) {
+                    input.deleteCharBackward()
+                    e.preventDefault()
+                  }
+                }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
                   input.extmarks.clear()
