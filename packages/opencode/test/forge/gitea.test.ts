@@ -64,7 +64,7 @@ describe("GiteaForge", () => {
         state: "open",
         comments: [{ id: 1, body: ":+1:", author: { login: "bob" }, createdAt: "2025-01-02T00:00:00Z" }],
       },
-      2,
+      1,
     )
     expect(data).toContain("Bug fix")
     expect(data).toContain("Something broke")
