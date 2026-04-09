@@ -34,13 +34,14 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-const SERVE_URL = process.env["OPENCODE_SERVE_URL"] ?? ""
+const SERVE_URL = process.env["OPENCODE_SERVE_DOMAIN"] ?? ""
+const SERVE_WILDCARD = SERVE_URL ? `https://*.${SERVE_URL}` : ""
 
 const DEFAULT_CSP =
-  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; frame-src 'self' https:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; frame-src 'self' https:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: ${SERVE_WILDCARD}`
 
 const csp = (hash = "") =>
-  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; frame-src 'self' https:; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; frame-src 'self' https:; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: ${SERVE_WILDCARD}`
 
 export const InstanceRoutes = (app?: Hono) =>
   (app ?? new Hono())
