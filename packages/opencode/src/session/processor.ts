@@ -249,14 +249,13 @@ export namespace SessionProcessor {
 
             case "reasoning-end":
               if (!(value.id in ctx.reasoningMap)) return
-              ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
               ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
               if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
               yield* session.updatePart(ctx.reasoningMap[value.id])
               delete ctx.reasoningMap[value.id]
               return
 
-            case "tool-input-start":
+            case "tool-input-start": {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
@@ -277,6 +276,7 @@ export namespace SessionProcessor {
                 sessionID: part.sessionID,
               }
               return
+            }
 
             case "tool-input-delta":
               return
@@ -431,7 +431,6 @@ export namespace SessionProcessor {
 
             case "text-end":
               if (!ctx.currentText) return
-              ctx.currentText.text = ctx.currentText.text
               ctx.currentText.text = (yield* plugin.trigger(
                 "experimental.text.complete",
                 {

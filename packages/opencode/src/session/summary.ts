@@ -3,10 +3,11 @@ import { Effect, Layer, Context } from "effect"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
+import { Database, and, eq } from "@/storage/db"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
-
+import { MessageTable } from "./session.sql"
 export namespace SessionSummary {
   function unquoteGitPath(input: string) {
     if (!input.startsWith('"')) return input
@@ -106,6 +107,15 @@ export namespace SessionSummary {
         sessionID: SessionID
         messageID: MessageID
       }) {
+        const row = Database.use((db) =>
+          db
+            .select({ data: MessageTable.data })
+            .from(MessageTable)
+            .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+            .get(),
+        )
+        const summary = row?.data.summary
+        if (summary && typeof summary === "object" && "diffs" in summary && summary.diffs) return
         const all = yield* sessions.messages({ sessionID: input.sessionID })
         if (!all.length) return
 
