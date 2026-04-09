@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { expect, spyOn } from "bun:test"
+import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import z from "zod"
@@ -29,7 +29,6 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
-import { TaskTool } from "../../src/tool/task"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
@@ -627,11 +626,13 @@ it.live(
   "cancel finalizes subtask tool state",
   () =>
     provideTmpdirInstance(
-      (dir) =>
+      () =>
         Effect.gen(function* () {
           const ready = defer<void>()
           const aborted = defer<void>()
-          const init = spyOn(TaskTool, "init").mockImplementation(async () => ({
+          const registry = yield* ToolRegistry.Service
+          const init = registry.named.task.init
+          registry.named.task.init = async () => ({
             description: "task",
             parameters: z.object({
               description: z.string(),
@@ -653,8 +654,8 @@ it.live(
                 output: "",
               }
             },
-          }))
-          yield* Effect.addFinalizer(() => Effect.sync(() => init.mockRestore()))
+          })
+          yield* Effect.addFinalizer(() => Effect.sync(() => void (registry.named.task.init = init)))
 
           const { prompt, chat } = yield* boot()
           const msg = yield* user(chat.id, "hello")

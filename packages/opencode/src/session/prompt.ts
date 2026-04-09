@@ -600,7 +600,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           subagent_type: task.agent,
           command: task.command,
         }
-        yield* plugin.trigger("tool.execute.before", { tool: "task", sessionID, callID: part.id }, { args: taskArgs })
+        yield* plugin.trigger(
+          "tool.execute.before",
+          { tool: TaskTool.id, sessionID, callID: part.id },
+          { args: taskArgs },
+        )
 
         const taskAgent = yield* agents.get(task.agent)
         if (!taskAgent) {
@@ -679,7 +683,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         yield* plugin.trigger(
           "tool.execute.after",
-          { tool: "task", sessionID, callID: part.id, args: taskArgs },
+          { tool: TaskTool.id, sessionID, callID: part.id, args: taskArgs },
           result,
         )
 

@@ -50,6 +50,10 @@ export namespace ToolRegistry {
   export interface Interface {
     readonly ids: () => Effect.Effect<string[]>
     readonly all: () => Effect.Effect<Tool.Def[]>
+    readonly named: {
+      task: Tool.Info
+      read: Tool.Info
+    }
     readonly tools: (model: {
       providerID: ProviderID
       modelID: ModelID
@@ -67,6 +71,7 @@ export namespace ToolRegistry {
     | Plugin.Service
     | Question.Service
     | Todo.Service
+    | Agent.Service
     | LSP.Service
     | FileTime.Service
     | Instruction.Service
@@ -77,8 +82,10 @@ export namespace ToolRegistry {
       const config = yield* Config.Service
       const plugin = yield* Plugin.Service
 
-      const build = <T extends Tool.Info>(tool: T | Effect.Effect<T, never, any>) =>
-        Effect.isEffect(tool) ? tool.pipe(Effect.flatMap(Tool.init)) : Tool.init(tool)
+      const task = yield* TaskTool
+      const read = yield* ReadTool
+      const question = yield* QuestionTool
+      const todo = yield* TodoWriteTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -90,11 +97,11 @@ export namespace ToolRegistry {
               parameters: z.object(def.args),
               description: def.description,
               execute: async (args, toolCtx) => {
-                const pluginCtx = {
+                const pluginCtx: PluginToolContext = {
                   ...toolCtx,
                   directory: ctx.directory,
                   worktree: ctx.worktree,
-                } as unknown as PluginToolContext
+                }
                 const result = await def.execute(args as any, pluginCtx)
                 const out = await Truncate.output(result, {}, await Agent.get(toolCtx.agent))
                 return {
@@ -132,34 +139,50 @@ export namespace ToolRegistry {
           }
 
           const cfg = yield* config.get()
-          const question =
+          const questionEnabled =
             ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+
+          const tool = yield* Effect.all({
+            invalid: Tool.init(InvalidTool),
+            bash: Tool.init(BashTool),
+            read: Tool.init(read),
+            glob: Tool.init(GlobTool),
+            grep: Tool.init(GrepTool),
+            edit: Tool.init(EditTool),
+            write: Tool.init(WriteTool),
+            task: Tool.init(task),
+            fetch: Tool.init(WebFetchTool),
+            todo: Tool.init(todo),
+            search: Tool.init(WebSearchTool),
+            code: Tool.init(CodeSearchTool),
+            skill: Tool.init(SkillTool),
+            patch: Tool.init(ApplyPatchTool),
+            question: Tool.init(question),
+            lsp: Tool.init(LspTool),
+            plan: Tool.init(PlanExitTool),
+          })
 
           return {
             custom,
-            builtin: yield* Effect.forEach(
-              [
-                InvalidTool,
-                BashTool,
-                ReadTool,
-                GlobTool,
-                GrepTool,
-                EditTool,
-                WriteTool,
-                TaskTool,
-                WebFetchTool,
-                TodoWriteTool,
-                WebSearchTool,
-                CodeSearchTool,
-                SkillTool,
-                ApplyPatchTool,
-                ...(question ? [QuestionTool] : []),
-                ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-                ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
-              ],
-              build,
-              { concurrency: "unbounded" },
-            ),
+            builtin: [
+              tool.invalid,
+              ...(questionEnabled ? [tool.question] : []),
+              tool.bash,
+              tool.read,
+              tool.glob,
+              tool.grep,
+              tool.edit,
+              tool.write,
+              tool.task,
+              tool.fetch,
+              tool.todo,
+              tool.search,
+              tool.code,
+              tool.skill,
+              tool.patch,
+              ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
+              ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+            ],
           }
         }),
       )
@@ -208,7 +231,6 @@ export namespace ToolRegistry {
               id: tool.id,
               description: [
                 output.description,
-                // TODO: remove this hack
                 tool.id === TaskTool.id ? yield* TaskDescription(input.agent) : undefined,
                 tool.id === SkillTool.id ? yield* SkillDescription(input.agent) : undefined,
               ]
@@ -223,7 +245,7 @@ export namespace ToolRegistry {
         )
       })
 
-      return Service.of({ ids, tools, all, fromID })
+      return Service.of({ ids, all, named: { task, read }, tools, fromID })
     }),
   )
 
@@ -234,6 +256,7 @@ export namespace ToolRegistry {
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Question.defaultLayer),
         Layer.provide(Todo.defaultLayer),
+        Layer.provide(Agent.defaultLayer),
         Layer.provide(LSP.defaultLayer),
         Layer.provide(FileTime.defaultLayer),
         Layer.provide(Instruction.defaultLayer),
