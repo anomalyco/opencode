@@ -1379,11 +1379,14 @@ export namespace Provider {
 
           if (baseURL !== undefined) options["baseURL"] = baseURL
           if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
-          // For OAuth providers, provide a placeholder apiKey so SDK initializes properly
-          // The rotating-fetch will inject the actual Bearer token
+          // For OAuth providers, use the access token from the active record
           const oauthRecords = await Auth.getOAuthRecords(model.providerID)
-          if (options["apiKey"] === undefined && oauthRecords.length > 0) {
-            options["apiKey"] = "oauth-placeholder"
+          if (oauthRecords.length > 0) {
+            const activeID = await Auth.getActiveOAuthRecord(model.providerID)
+            const activeRecord = oauthRecords.find((r) => r.id === activeID) ?? oauthRecords[0]
+            if (activeRecord && options["apiKey"] === undefined) {
+              options["apiKey"] = activeRecord.access
+            }
           }
           if (model.headers)
             options["headers"] = {
