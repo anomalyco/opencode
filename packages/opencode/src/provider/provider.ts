@@ -993,6 +993,8 @@ export namespace Provider {
     return m
   }
 
+  const hide = new Set(["qwen3.6-plus-free"])
+
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
       id: ProviderID.make(provider.id),
@@ -1000,7 +1002,11 @@ export namespace Provider {
       name: provider.name,
       env: provider.env ?? [],
       options: {},
-      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+      models: Object.fromEntries(
+        Object.entries(provider.models)
+          .filter(([id]) => !hide.has(id))
+          .map(([id, model]) => [id, fromModelsDevModel(provider, model)]),
+      ),
     }
   }
 
