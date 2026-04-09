@@ -1,13 +1,13 @@
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
-import { Snapshot } from "@/snapshot"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
 import z from "zod"
@@ -49,6 +49,8 @@ export namespace Vcs {
     map: Map<string, { additions: number; deletions: number }>,
   ) {
     const base = ref ? yield* git.prefix(cwd) : ""
+    const patch = (file: string, before: string, after: string) =>
+      formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
     const next = yield* Effect.forEach(
       list,
       (item) =>
@@ -58,12 +60,11 @@ export namespace Vcs {
           const stat = map.get(item.file)
           return {
             file: item.file,
-            before,
-            after,
+            patch: patch(item.file, before, after),
             additions: stat?.additions ?? (item.status === "added" ? count(after) : 0),
             deletions: stat?.deletions ?? (item.status === "deleted" ? count(before) : 0),
             status: item.status,
-          } satisfies Snapshot.FileDiff
+          } satisfies FileDiff
         }),
       { concurrency: 8 },
     )
@@ -125,11 +126,24 @@ export namespace Vcs {
     })
   export type Info = z.infer<typeof Info>
 
+  export const FileDiff = z
+    .object({
+      file: z.string(),
+      patch: z.string(),
+      additions: z.number(),
+      deletions: z.number(),
+      status: z.enum(["added", "deleted", "modified"]).optional(),
+    })
+    .meta({
+      ref: "VcsFileDiff",
+    })
+  export type FileDiff = z.infer<typeof FileDiff>
+
   export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly branch: () => Effect.Effect<string | undefined>
     readonly defaultBranch: () => Effect.Effect<string | undefined>
-    readonly diff: (mode: Mode) => Effect.Effect<Snapshot.FileDiff[]>
+    readonly diff: (mode: Mode) => Effect.Effect<FileDiff[]>
   }
 
   interface State {
@@ -139,11 +153,13 @@ export namespace Vcs {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
 
-  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service | Bus.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const git = yield* Git.Service
+      const bus = yield* Bus.Service
+
       const state = yield* InstanceState.make<State>(
         Effect.fn("Vcs.state")((ctx) =>
           Effect.gen(function* () {
@@ -151,28 +167,28 @@ export namespace Vcs {
               return { current: undefined, root: undefined }
             }
 
-            const get = () => Effect.runPromise(git.branch(ctx.directory))
+            const get = Effect.fnUntraced(function* () {
+              return yield* git.branch(ctx.directory)
+            })
             const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
               concurrency: 2,
             })
             const value = { current, root }
             log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                Bus.subscribe(
-                  FileWatcher.Event.Updated,
-                  Instance.bind(async (evt) => {
-                    if (!evt.properties.file.endsWith("HEAD")) return
-                    const next = await get()
-                    if (next === value.current) return
+            yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
+              Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
+              Stream.runForEach((_evt) =>
+                Effect.gen(function* () {
+                  const next = yield* get()
+                  if (next !== value.current) {
                     log.info("branch changed", { from: value.current, to: next })
                     value.current = next
-                    Bus.publish(Event.BranchUpdated, { branch: next })
-                  }),
-                ),
+                    yield* bus.publish(Event.BranchUpdated, { branch: next })
+                  }
+                }),
               ),
-              (unsubscribe) => Effect.sync(unsubscribe),
+              Effect.forkScoped,
             )
 
             return value
@@ -212,23 +228,27 @@ export namespace Vcs {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(AppFileSystem.defaultLayer))
+  const defaultLayer = layer.pipe(
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Bus.layer),
+  )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export function init() {
+  export async function init() {
     return runPromise((svc) => svc.init())
   }
 
-  export function branch() {
+  export async function branch() {
     return runPromise((svc) => svc.branch())
   }
 
-  export function defaultBranch() {
+  export async function defaultBranch() {
     return runPromise((svc) => svc.defaultBranch())
   }
 
-  export function diff(mode: Mode) {
+  export async function diff(mode: Mode) {
     return runPromise((svc) => svc.diff(mode))
   }
 }

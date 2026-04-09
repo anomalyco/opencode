@@ -1,8 +1,7 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
@@ -10,11 +9,7 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "../flag/flag"
 import { Log } from "../util/log"
-
-declare global {
-  const OPENCODE_VERSION: string
-  const OPENCODE_CHANNEL: string
-}
+import { CHANNEL as channel, VERSION as version } from "./meta"
 
 import semver from "semver"
 
@@ -61,8 +56,8 @@ export namespace Installation {
     })
   export type Info = z.infer<typeof Info>
 
-  export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
-  export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+  export const VERSION = version
+  export const CHANNEL = channel
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
   export function isPreview() {
@@ -341,16 +336,10 @@ export namespace Installation {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.layer),
-    Layer.provide(NodeFileSystem.layer),
-    Layer.provide(NodePath.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
-
-  export async function info(): Promise<Info> {
-    return runPromise((svc) => svc.info())
-  }
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function method(): Promise<Method> {
     return runPromise((svc) => svc.method())

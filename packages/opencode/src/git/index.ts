@@ -1,7 +1,7 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace Git {
   const cfg = [
@@ -257,51 +257,47 @@ export namespace Git {
     }),
   )
 
-  export const defaultLayer = layer.pipe(
-    Layer.provide(NodeChildProcessSpawner.layer),
-    Layer.provide(NodeFileSystem.layer),
-    Layer.provide(NodePath.layer),
-  )
+  export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export function run(args: string[], opts: Options) {
+  export async function run(args: string[], opts: Options) {
     return runPromise((git) => git.run(args, opts))
   }
 
-  export function branch(cwd: string) {
+  export async function branch(cwd: string) {
     return runPromise((git) => git.branch(cwd))
   }
 
-  export function prefix(cwd: string) {
+  export async function prefix(cwd: string) {
     return runPromise((git) => git.prefix(cwd))
   }
 
-  export function defaultBranch(cwd: string) {
+  export async function defaultBranch(cwd: string) {
     return runPromise((git) => git.defaultBranch(cwd))
   }
 
-  export function hasHead(cwd: string) {
+  export async function hasHead(cwd: string) {
     return runPromise((git) => git.hasHead(cwd))
   }
 
-  export function mergeBase(cwd: string, base: string, head?: string) {
+  export async function mergeBase(cwd: string, base: string, head?: string) {
     return runPromise((git) => git.mergeBase(cwd, base, head))
   }
 
-  export function show(cwd: string, ref: string, file: string, prefix?: string) {
+  export async function show(cwd: string, ref: string, file: string, prefix?: string) {
     return runPromise((git) => git.show(cwd, ref, file, prefix))
   }
 
-  export function status(cwd: string) {
+  export async function status(cwd: string) {
     return runPromise((git) => git.status(cwd))
   }
 
-  export function diff(cwd: string, ref: string) {
+  export async function diff(cwd: string, ref: string) {
     return runPromise((git) => git.diff(cwd, ref))
   }
 
-  export function stats(cwd: string, ref: string) {
+  export async function stats(cwd: string, ref: string) {
     return runPromise((git) => git.stats(cwd, ref))
   }
 }

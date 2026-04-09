@@ -12,6 +12,7 @@ import { decode64 } from "@/utils/base64"
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
   const navigate = useNavigate()
+  const params = useParams()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
 
@@ -20,6 +21,12 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     if (!next || next === props.directory) return
     const path = location.pathname.slice(slug().length + 1)
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void sync.session.sync(id)
   })
 
   return (

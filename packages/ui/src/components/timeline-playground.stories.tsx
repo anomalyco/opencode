@@ -567,6 +567,7 @@ function compactionPart(): CompactionPart {
 const MD = "markdown.css"
 const MP = "message-part.css"
 const ST = "session-turn.css"
+const CL = "collapsible.css"
 
 /**
  * Source mapping for a CSS control.
@@ -1040,6 +1041,48 @@ const CSS_CONTROLS: CSSControl[] = [
 
   // --- Tool parts ---
   {
+    key: "tool-content-gap",
+    label: "Trigger/content gap",
+    group: "Tool Parts",
+    type: "range",
+    initial: "8",
+    selector: '[data-component="collapsible"].tool-collapsible',
+    property: "--tool-content-gap",
+    min: "0",
+    max: "24",
+    step: "1",
+    unit: "px",
+    source: { file: CL, anchor: "&.tool-collapsible {", prop: "--tool-content-gap", format: px },
+  },
+  {
+    key: "context-tool-gap",
+    label: "Explored tool gap",
+    group: "Explored Group",
+    type: "range",
+    initial: "14",
+    selector: '[data-component="context-tool-group-list"]',
+    property: "gap",
+    min: "0",
+    max: "40",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="context-tool-group-list"]', prop: "gap", format: px },
+  },
+  {
+    key: "context-tool-indent",
+    label: "Explored indent",
+    group: "Explored Group",
+    type: "range",
+    initial: "0",
+    selector: '[data-component="context-tool-group-list"]',
+    property: "padding-left",
+    min: "0",
+    max: "48",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="context-tool-group-list"]', prop: "padding-left", format: px },
+  },
+  {
     key: "bash-max-height",
     label: "Shell output max-height",
     group: "Tool Parts",
@@ -1099,8 +1142,9 @@ function Playground() {
       const el = (root.querySelector(sample(ctrl)) ?? root.querySelector(ctrl.selector)) as HTMLElement | null
       if (!el) continue
       const styles = getComputedStyle(el)
-      // Use bracket access — getPropertyValue doesn't resolve shorthands
-      const raw = (styles as any)[ctrl.property] as string
+      const raw = ctrl.property.startsWith("--")
+        ? styles.getPropertyValue(ctrl.property).trim()
+        : ((styles as any)[ctrl.property] as string)
       if (!raw) continue
       // Shorthands may return "24px 0px" — take the first value
       const num = parseFloat(raw.split(" ")[0])

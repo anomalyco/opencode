@@ -98,15 +98,129 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: opencode-cli
-          path: packages/opencode/dist
+          path: |
+            packages/opencode/dist/opencode-darwin*
+            packages/opencode/dist/opencode-linux*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist/opencode-windows*
     outputs:
       version: ${{ needs.version.outputs.version }}
+
+  sign-cli-windows:
+    needs:
+      - build-cli
+      - version
+    runs-on: blacksmith-4vcpu-windows-2025
+    if: github.repository == 'anomalyco/opencode'
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/artifact-signing-action@v1
+        with:
+          endpoint: ${{ env.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          files: |
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Verify Windows CLI signatures
+        shell: pwsh
+        run: |
+          $files = @(
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
+          )
+
+          foreach ($file in $files) {
+            $sig = Get-AuthenticodeSignature $file
+            if ($sig.Status -ne "Valid") {
+              throw "Invalid signature for ${file}: $($sig.Status)"
+            }
+          }
+
+      - name: Repack Windows CLI archives
+        working-directory: packages/opencode/dist
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
+          Compress-Archive -Path "opencode-windows-x64\bin\*" -DestinationPath "opencode-windows-x64.zip" -Force
+          Compress-Archive -Path "opencode-windows-x64-baseline\bin\*" -DestinationPath "opencode-windows-x64-baseline.zip" -Force
+
+      - name: Upload signed Windows CLI release assets
+        if: needs.version.outputs.release != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          gh release upload "v${{ needs.version.outputs.version }}" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64.zip" `
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline.zip" `
+            --clobber `
+            --repo "${{ needs.version.outputs.repo }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-signed-windows
+          path: |
+            packages/opencode/dist/opencode-windows-arm64
+            packages/opencode/dist/opencode-windows-x64
+            packages/opencode/dist/opencode-windows-x64-baseline
 
   build-tauri:
     needs:
       - build-cli
       - version
     continue-on-error: false
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +266,14 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Azure login
+        if: runner.os == 'Windows'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -190,6 +312,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -246,11 +369,34 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
 
+      - name: Verify signed Windows desktop artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @(
+            "${{ github.workspace }}\packages\desktop\src-tauri\sidecars\opencode-cli-${{ matrix.settings.target }}.exe"
+          )
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\src-tauri\target\${{ matrix.settings.target }}\release\bundle\nsis\*.exe" | Select-Object -ExpandProperty FullName
+
+          foreach ($file in $files) {
+            $sig = Get-AuthenticodeSignature $file
+            if ($sig.Status -ne "Valid") {
+              throw "Invalid signature for ${file}: $($sig.Status)"
+            }
+          }
+
   build-electron:
     needs:
       - build-cli
       - version
     continue-on-error: false
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     strategy:
       fail-fast: false
       matrix:
@@ -292,6 +438,14 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Azure login
+        if: runner.os == 'Windows'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -326,6 +480,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -358,6 +513,22 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
+      - name: Verify signed Windows Electron artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @()
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+
+          foreach ($file in $files | Select-Object -Unique) {
+            $sig = Get-AuthenticodeSignature $file
+            if ($sig.Status -ne "Valid") {
+              throw "Invalid signature for ${file}: $($sig.Status)"
+            }
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: opencode-electron-${{ matrix.settings.target }}
@@ -373,6 +544,7 @@ jobs:
     needs:
       - version
       - build-cli
+      - sign-cli-windows
       - build-tauri
       - build-electron
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -409,6 +581,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
+          path: packages/opencode/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli-signed-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4

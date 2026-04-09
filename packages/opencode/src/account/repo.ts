@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
 import { Database } from "@/storage/db"
 import { AccountStateTable, AccountTable } from "./account.sql"
 import { AccessToken, AccountID, AccountRepoError, Info, OrgID, RefreshToken } from "./schema"
+import { normalizeServerUrl } from "./url"
 
 export type AccountRow = (typeof AccountTable)["$inferSelect"]
 
@@ -125,11 +126,13 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
 
       const persistAccount = Effect.fn("AccountRepo.persistAccount")((input) =>
         tx((db) => {
+          const url = normalizeServerUrl(input.url)
+
           db.insert(AccountTable)
             .values({
               id: input.id,
               email: input.email,
-              url: input.url,
+              url,
               access_token: input.accessToken,
               refresh_token: input.refreshToken,
               token_expiry: input.expiry,
@@ -138,7 +141,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
               target: AccountTable.id,
               set: {
                 email: input.email,
-                url: input.url,
+                url,
                 access_token: input.accessToken,
                 refresh_token: input.refreshToken,
                 token_expiry: input.expiry,

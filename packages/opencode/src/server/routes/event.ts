@@ -4,12 +4,11 @@ import { streamSSE } from "hono/streaming"
 import { Log } from "@/util/log"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { lazy } from "../../util/lazy"
 import { AsyncQueue } from "../../util/queue"
 
 const log = Log.create({ service: "server" })
 
-export const EventRoutes = lazy(() =>
+export const EventRoutes = () =>
   new Hono().get(
     "/event",
     describeRoute({
@@ -29,6 +28,7 @@ export const EventRoutes = lazy(() =>
     }),
     async (c) => {
       log.info("event connected")
+      c.header("Cache-Control", "no-cache, no-transform")
       c.header("X-Accel-Buffering", "no")
       c.header("X-Content-Type-Options", "nosniff")
       return streamSSE(c, async (stream) => {
@@ -80,5 +80,4 @@ export const EventRoutes = lazy(() =>
         }
       })
     },
-  ),
-)
+  )

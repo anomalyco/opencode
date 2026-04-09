@@ -110,10 +110,16 @@ describe("SyncEvent", () => {
           type: string
           properties: { id: string; name: string }
         }> = []
-        const unsub = Bus.subscribeAll((event) => events.push(event))
+        const received = new Promise<void>((resolve) => {
+          Bus.subscribeAll((event) => {
+            events.push(event)
+            resolve()
+          })
+        })
 
         SyncEvent.run(Created, { id: "evt_1", name: "test" })
 
+        await received
         expect(events).toHaveLength(1)
         expect(events[0]).toEqual({
           type: "item.created",
@@ -122,8 +128,6 @@ describe("SyncEvent", () => {
             name: "test",
           },
         })
-
-        unsub()
       }),
     )
   })

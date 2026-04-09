@@ -4,6 +4,15 @@ import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "session.projector" })
+
+function foreign(err: unknown) {
+  if (typeof err !== "object" || err === null) return false
+  if ("code" in err && err.code === "SQLITE_CONSTRAINT_FOREIGNKEY") return true
+  return "message" in err && typeof err.message === "string" && err.message.includes("FOREIGN KEY constraint failed")
+}
 
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
 
@@ -76,15 +85,20 @@ export default [
     const time_created = data.info.time.created
     const { id, sessionID, ...rest } = data.info
 
-    db.insert(MessageTable)
-      .values({
-        id,
-        session_id: sessionID,
-        time_created,
-        data: rest,
-      })
-      .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest } })
-      .run()
+    try {
+      db.insert(MessageTable)
+        .values({
+          id,
+          session_id: sessionID,
+          time_created,
+          data: rest,
+        })
+        .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest } })
+        .run()
+    } catch (err) {
+      if (!foreign(err)) throw err
+      log.warn("ignored late message update", { messageID: id, sessionID })
+    }
   }),
 
   SyncEvent.project(MessageV2.Event.Removed, (db, data) => {
@@ -102,15 +116,20 @@ export default [
   SyncEvent.project(MessageV2.Event.PartUpdated, (db, data) => {
     const { id, messageID, sessionID, ...rest } = data.part
 
-    db.insert(PartTable)
-      .values({
-        id,
-        message_id: messageID,
-        session_id: sessionID,
-        time_created: data.time,
-        data: rest,
-      })
-      .onConflictDoUpdate({ target: PartTable.id, set: { data: rest } })
-      .run()
+    try {
+      db.insert(PartTable)
+        .values({
+          id,
+          message_id: messageID,
+          session_id: sessionID,
+          time_created: data.time,
+          data: rest,
+        })
+        .onConflictDoUpdate({ target: PartTable.id, set: { data: rest } })
+        .run()
+    } catch (err) {
+      if (!foreign(err)) throw err
+      log.warn("ignored late part update", { partID: id, messageID, sessionID })
+    }
   }),
 ]

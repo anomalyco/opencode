@@ -3,13 +3,21 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
-import type { Session } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type Session } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { setTimeout as sleep } from "node:timers/promises"
+
+function scoped(sdk: ReturnType<typeof useSDK>, sync: ReturnType<typeof useSync>, workspaceID?: string) {
+  return createOpencodeClient({
+    baseUrl: sdk.url,
+    fetch: sdk.fetch,
+    directory: sync.data.path.directory || sdk.directory,
+    experimental_workspaceID: workspaceID,
+  })
+}
 
 async function openWorkspace(input: {
   dialog: ReturnType<typeof useDialog>
@@ -29,12 +37,7 @@ async function openWorkspace(input: {
     )
   }
 
-  const client = createOpencodeClient({
-    baseUrl: input.sdk.url,
-    fetch: input.sdk.fetch,
-    directory: input.sync.data.path.directory || input.sdk.directory,
-    experimental_workspaceID: input.workspaceID,
-  })
+  const client = scoped(input.sdk, input.sync, input.workspaceID)
   const listed = input.forceCreate ? undefined : await client.session.list({ roots: true, limit: 1 })
   const session = listed?.data?.[0]
   if (session?.id) {
@@ -187,12 +190,7 @@ export function DialogWorkspaceList() {
       await open(workspaceID)
       return
     }
-    const client = createOpencodeClient({
-      baseUrl: sdk.url,
-      fetch: sdk.fetch,
-      directory: sync.data.path.directory || sdk.directory,
-      experimental_workspaceID: workspaceID,
-    })
+    const client = scoped(sdk, sync, workspaceID)
     const listed = await client.session.list({ roots: true, limit: 1 }).catch(() => undefined)
     if (listed?.data?.length) {
       dialog.replace(() => <DialogSessionList workspaceID={workspaceID} />)
@@ -223,12 +221,7 @@ export function DialogWorkspaceList() {
     setCounts(Object.fromEntries(workspaces.map((workspace) => [workspace.id, undefined])))
     void Promise.all(
       workspaces.map(async (workspace) => {
-        const client = createOpencodeClient({
-          baseUrl: sdk.url,
-          fetch: sdk.fetch,
-          directory: sync.data.path.directory || sdk.directory,
-          experimental_workspaceID: workspace.id,
-        })
+        const client = scoped(sdk, sync, workspace.id)
         const result = await client.session.list({ roots: true }).catch(() => undefined)
         return [workspace.id, result ? (result.data?.length ?? 0) : null] as const
       }),

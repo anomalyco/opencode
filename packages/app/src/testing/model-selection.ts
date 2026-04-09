@@ -3,6 +3,14 @@ type ModelKey = {
   modelID: string
 }
 
+type ModelItem = ModelKey & {
+  name: string
+}
+
+type AgentItem = {
+  name: string
+}
+
 type State = {
   agent?: string
   model?: ModelKey | null
@@ -26,6 +34,9 @@ export type ModelProbeState = {
   pick?: State
   base?: State
   current?: string
+  variants?: string[]
+  models?: ModelItem[]
+  agents?: AgentItem[]
 }
 
 export type ModelWindow = Window & {
@@ -33,6 +44,11 @@ export type ModelWindow = Window & {
     model?: {
       enabled?: boolean
       current?: ModelProbeState
+      controls?: {
+        setAgent?: (name: string | undefined) => void
+        setModel?: (value: ModelKey | undefined) => void
+        setVariant?: (value: string | undefined) => void
+      }
     }
   }
 }
@@ -45,6 +61,8 @@ const clone = (state?: State) => {
   }
 }
 
+let active: symbol | undefined
+
 export const modelEnabled = () => {
   if (typeof window === "undefined") return false
   return (window as ModelWindow).__opencode_e2e?.model?.enabled === true
@@ -56,9 +74,15 @@ const root = () => {
 }
 
 export const modelProbe = {
-  set(input: ModelProbeState) {
+  bind(id: symbol, input: NonNullable<NonNullable<ModelWindow["__opencode_e2e"]>["model"]>["controls"]) {
     const state = root()
     if (!state) return
+    active = id
+    state.controls = input
+  },
+  set(id: symbol, input: ModelProbeState) {
+    const state = root()
+    if (!state || active !== id) return
     state.current = {
       ...input,
       model: input.model ? { ...input.model } : undefined,
@@ -70,11 +94,16 @@ export const modelProbe = {
         : undefined,
       pick: clone(input.pick),
       base: clone(input.base),
+      variants: input.variants?.slice(),
+      models: input.models?.map((item) => ({ ...item })),
+      agents: input.agents?.map((item) => ({ ...item })),
     }
   },
-  clear() {
+  clear(id: symbol) {
     const state = root()
-    if (!state) return
+    if (!state || active !== id) return
+    active = undefined
     state.current = undefined
+    state.controls = undefined
   },
 }

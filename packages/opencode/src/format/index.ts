@@ -1,14 +1,13 @@
 import { Effect, Layer, ServiceMap } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
-import { Bus } from "../bus"
 import { Config } from "../config/config"
-import { File } from "../file"
 import { Instance } from "../project/instance"
-import { Process } from "../util/process"
 import { Log } from "../util/log"
 import * as Formatter from "./formatter"
 
@@ -29,6 +28,7 @@ export namespace Format {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly status: () => Effect.Effect<Status[]>
+    readonly file: (filepath: string) => Effect.Effect<void>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Format") {}
@@ -36,12 +36,15 @@ export namespace Format {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const config = yield* Config.Service
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+
       const state = yield* InstanceState.make(
         Effect.fn("Format.state")(function* (_ctx) {
-          const enabled: Record<string, boolean> = {}
+          const commands: Record<string, string[] | false> = {}
           const formatters: Record<string, Formatter.Info> = {}
 
-          const cfg = yield* Effect.promise(() => Config.get())
+          const cfg = yield* config.get()
 
           if (cfg.formatter !== false) {
             for (const item of Object.values(Formatter)) {
@@ -53,30 +56,32 @@ export namespace Format {
                 continue
               }
               const info = mergeDeep(formatters[name] ?? {}, {
-                command: [],
                 extensions: [],
                 ...item,
               })
 
-              if (info.command.length === 0) continue
-
               formatters[name] = {
                 ...info,
                 name,
-                enabled: async () => true,
+                enabled: async () => info.command ?? false,
               }
             }
           } else {
             log.info("all formatters are disabled")
           }
 
-          async function isEnabled(item: Formatter.Info) {
-            let status = enabled[item.name]
-            if (status === undefined) {
-              status = await item.enabled()
-              enabled[item.name] = status
+          async function getCommand(item: Formatter.Info) {
+            let cmd = commands[item.name]
+            if (cmd === false || cmd === undefined) {
+              cmd = await item.enabled()
+              commands[item.name] = cmd
             }
-            return status
+            return cmd
+          }
+
+          async function isEnabled(item: Formatter.Info) {
+            const cmd = await getCommand(item)
+            return cmd !== false
           }
 
           async function getFormatter(ext: string) {
@@ -84,66 +89,68 @@ export namespace Format {
             const checks = await Promise.all(
               matching.map(async (item) => {
                 log.info("checking", { name: item.name, ext })
-                const on = await isEnabled(item)
-                if (on) {
+                const cmd = await getCommand(item)
+                if (cmd) {
                   log.info("enabled", { name: item.name, ext })
                 }
                 return {
                   item,
-                  enabled: on,
+                  cmd,
                 }
               }),
             )
-            return checks.filter((x) => x.enabled).map((x) => x.item)
+            return checks.filter((x) => x.cmd).map((x) => ({ item: x.item, cmd: x.cmd! }))
           }
 
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              Bus.subscribe(
-                File.Event.Edited,
-                Instance.bind(async (payload) => {
-                  const file = payload.properties.file
-                  log.info("formatting", { file })
-                  const ext = path.extname(file)
+          function formatFile(filepath: string) {
+            return Effect.gen(function* () {
+              log.info("formatting", { file: filepath })
+              const ext = path.extname(filepath)
 
-                  for (const item of await getFormatter(ext)) {
-                    log.info("running", { command: item.command })
-                    try {
-                      const proc = Process.spawn(
-                        item.command.map((x) => x.replace("$FILE", file)),
-                        {
-                          cwd: Instance.directory,
-                          env: { ...process.env, ...item.environment },
-                          stdout: "ignore",
-                          stderr: "ignore",
-                        },
-                      )
-                      const exit = await proc.exited
-                      if (exit !== 0) {
-                        log.error("failed", {
-                          command: item.command,
+              for (const { item, cmd } of yield* Effect.promise(() => getFormatter(ext))) {
+                if (cmd === false) continue
+                log.info("running", { command: cmd })
+                const replaced = cmd.map((x) => x.replace("$FILE", filepath))
+                const dir = yield* InstanceState.directory
+                const code = yield* spawner
+                  .spawn(
+                    ChildProcess.make(replaced[0]!, replaced.slice(1), {
+                      cwd: dir,
+                      env: item.environment,
+                      extendEnv: true,
+                    }),
+                  )
+                  .pipe(
+                    Effect.flatMap((handle) => handle.exitCode),
+                    Effect.scoped,
+                    Effect.catch(() =>
+                      Effect.sync(() => {
+                        log.error("failed to format file", {
+                          error: "spawn failed",
+                          command: cmd,
                           ...item.environment,
+                          file: filepath,
                         })
-                      }
-                    } catch (error) {
-                      log.error("failed to format file", {
-                        error,
-                        command: item.command,
-                        ...item.environment,
-                        file,
-                      })
-                    }
-                  }
-                }),
-              ),
-            ),
-            (unsubscribe) => Effect.sync(unsubscribe),
-          )
+                        return ChildProcessSpawner.ExitCode(1)
+                      }),
+                    ),
+                  )
+                if (code !== 0) {
+                  log.error("failed", {
+                    command: cmd,
+                    ...item.environment,
+                  })
+                }
+              }
+            })
+          }
+
           log.info("init")
 
           return {
             formatters,
             isEnabled,
+            formatFile,
           }
         }),
       )
@@ -166,11 +173,21 @@ export namespace Format {
         return result
       })
 
-      return Service.of({ init, status })
+      const file = Effect.fn("Format.file")(function* (filepath: string) {
+        const { formatFile } = yield* InstanceState.get(state)
+        yield* formatFile(filepath)
+      })
+
+      return Service.of({ init, status, file })
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+  )
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function init() {
     return runPromise((s) => s.init())
@@ -178,5 +195,9 @@ export namespace Format {
 
   export async function status() {
     return runPromise((s) => s.status())
+  }
+
+  export async function file(filepath: string) {
+    return runPromise((s) => s.file(filepath))
   }
 }

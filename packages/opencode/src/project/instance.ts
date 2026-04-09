@@ -7,13 +7,14 @@ import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 
-export interface Shape {
+export interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
 }
-const context = Context.create<Shape>("instance")
-const cache = new Map<string, Promise<Shape>>()
+
+const context = Context.create<InstanceContext>("instance")
+const cache = new Map<string, Promise<InstanceContext>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -52,7 +53,7 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
   })
 }
 
-function track(directory: string, next: Promise<Shape>) {
+function track(directory: string, next: Promise<InstanceContext>) {
   const task = next.catch((error) => {
     if (cache.get(directory) === task) cache.delete(directory)
     throw error
@@ -112,6 +113,14 @@ export const Instance = {
   bind<F extends (...args: any[]) => any>(fn: F): F {
     const ctx = context.use()
     return ((...args: any[]) => context.provide(ctx, () => fn(...args))) as F
+  },
+  /**
+   * Run a synchronous function within the given instance context ALS.
+   * Use this to bridge from Effect (where InstanceRef carries context)
+   * back to sync code that reads Instance.directory from ALS.
+   */
+  restore<R>(ctx: InstanceContext, fn: () => R): R {
+    return context.provide(ctx, fn)
   },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
