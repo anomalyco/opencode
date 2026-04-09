@@ -29,7 +29,7 @@ RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 ARG NB_USER="jovyan"
-RUN useradd -l -m -s /bin/bash -N -u 1000 "${NB_USER}"
+RUN userdel -r node && useradd -l -m -s /bin/bash -N -u 1000 "${NB_USER}"
 
 ENV OPENCODE_CONFIG_DIR=/etc/opencode HOME="/home/${NB_USER}"
 WORKDIR /home/${NB_USER}/project
