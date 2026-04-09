@@ -9,7 +9,7 @@ import { Link } from "@tui/ui/link"
 const GO_URL = "https://opencode.ai/go"
 
 export type DialogGoUpsellProps = {
-  onClose?: () => void
+  onClose?: (dontShowAgain?: boolean) => void
 }
 
 function subscribe(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
@@ -18,8 +18,8 @@ function subscribe(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDial
   dialog.clear()
 }
 
-function close(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
-  props.onClose?.()
+function dismiss(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
+  props.onClose?.(true)
   dialog.clear()
 }
 
@@ -36,7 +36,7 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
     }
     if (evt.name !== "return") return
     if (selected() === 0) subscribe(props, dialog)
-    else close(props, dialog)
+    else dismiss(props, dialog)
   })
 
   return (
@@ -74,13 +74,13 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
           paddingRight={3}
           backgroundColor={selected() === 1 ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
           onMouseOver={() => setSelected(1)}
-          onMouseUp={() => close(props, dialog)}
+          onMouseUp={() => dismiss(props, dialog)}
         >
           <text
             fg={selected() === 1 ? fg : theme.textMuted}
             attributes={selected() === 1 ? TextAttributes.BOLD : undefined}
           >
-            close
+            don't show again
           </text>
         </box>
       </box>
@@ -89,10 +89,10 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
 }
 
 DialogGoUpsell.show = (dialog: DialogContext) => {
-  return new Promise<void>((resolve) => {
+  return new Promise<boolean>((resolve) => {
     dialog.replace(
-      () => <DialogGoUpsell onClose={() => resolve()} />,
-      () => resolve(),
+      () => <DialogGoUpsell onClose={(dontShow) => resolve(dontShow ?? false)} />,
+      () => resolve(false),
     )
   })
 }
