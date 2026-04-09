@@ -3,6 +3,9 @@ import path from "path"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { Glob } from "../../../../util/glob"
+import { mkdir } from "fs/promises"
+import { existsSync } from "fs"
+import type ParcelWatcher from "@parcel/watcher"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -346,6 +349,44 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onMount(init)
 
+    const themesDir = path.join(Global.Path.config, "themes")
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined
+    let watcherSub: ParcelWatcher.AsyncSubscription | undefined
+
+    if (!existsSync(themesDir)) {
+      mkdir(themesDir, { recursive: true }).catch(() => {})
+    }
+
+    const reloadCustom = () => {
+      getCustomThemes()
+        .then((custom) => {
+          customThemes = custom
+          syncThemes()
+        })
+        .catch(() => {})
+    }
+
+    const debouncedReload = () => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(reloadCustom, 300)
+    }
+
+    import("@parcel/watcher")
+      .then((watcher) => {
+        return watcher.subscribe(themesDir, (err, events) => {
+          if (err) return
+          for (const evt of events) {
+            if (evt.type === "create" || evt.type === "update" || evt.type === "delete") {
+              debouncedReload()
+            }
+          }
+        })
+      })
+      .then((sub) => {
+        watcherSub = sub
+      })
+      .catch(() => {})
+
     function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
       return renderer
         .getPalette({
@@ -408,6 +449,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     onCleanup(() => {
       renderer.off(CliRenderEvents.THEME_MODE, handle)
       process.off("SIGUSR2", refresh)
+      clearTimeout(debounceTimer)
+      watcherSub?.unsubscribe().catch(() => {})
     })
 
     const values = createMemo(() => {
@@ -476,7 +519,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-async function getCustomThemes() {
+export async function getCustomThemes() {
   const directories = [
     Global.Path.config,
     ...(await Array.fromAsync(
