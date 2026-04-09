@@ -1371,7 +1371,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             )
             // Some providers return "stop" even when the assistant message contains tool calls.
             // Keep the loop running so tool results can be sent back to the model.
-            const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
+            // Skip provider-executed tool parts — those were fully handled within the
+            // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
+            const hasToolCalls =
+              lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
             if (
               lastAssistant?.finish &&

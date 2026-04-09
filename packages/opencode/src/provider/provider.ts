@@ -574,6 +574,7 @@ export namespace Provider {
               const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
               const model = sdk.workflowChat(sdkModelID, {
                 featureFlags,
+                workflowDefinition: options?.workflowDefinition as string | undefined,
               })
               if (workflowRef) {
                 model.selectedModelRef = workflowRef

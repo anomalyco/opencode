@@ -573,6 +573,12 @@ export namespace MessageV2 {
     }))
   }
 
+  function providerMeta(metadata: Record<string, any> | undefined) {
+    if (!metadata) return undefined
+    const { providerExecuted: _, ...rest } = metadata
+    return Object.keys(rest).length > 0 ? rest : undefined
+  }
+
   export const toModelMessagesEffect = Effect.fnUntraced(function* (
     input: WithParts[],
     model: Provider.Model,
@@ -741,7 +747,8 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 output,
-                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             }
             if (part.state.status === "error") {
@@ -753,7 +760,8 @@ export namespace MessageV2 {
                   toolCallId: part.callID,
                   input: part.state.input,
                   output,
-                  ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                  ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                  ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
                 })
               } else {
                 assistantMessage.parts.push({
@@ -762,7 +770,8 @@ export namespace MessageV2 {
                   toolCallId: part.callID,
                   input: part.state.input,
                   errorText: part.state.error,
-                  ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                  ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                  ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
                 })
               }
             }
@@ -775,7 +784,8 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: "[Tool execution was interrupted]",
-                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
           }
           if (part.type === "reasoning") {
