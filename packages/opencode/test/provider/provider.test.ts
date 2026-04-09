@@ -6,6 +6,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
+import { ModelsDev } from "../../src/provider/models"
 import { Provider } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util/filesystem"
@@ -1819,6 +1820,73 @@ test("custom model inherits api.url from models.dev provider", async () => {
       expect(deepseek).toBeDefined()
       expect(deepseek.api.url).toBe("https://openrouter.ai/api/v1")
       expect(deepseek.name).toBe("DeepSeek R1")
+    },
+  })
+})
+
+test("mode cost preserves over-200k pricing from base model", () => {
+  const provider = {
+    id: "openai",
+    name: "OpenAI",
+    env: [],
+    api: "https://api.openai.com/v1",
+    models: {
+      "gpt-5.4": {
+        id: "gpt-5.4",
+        name: "GPT-5.4",
+        family: "gpt",
+        release_date: "2026-03-05",
+        attachment: true,
+        reasoning: true,
+        temperature: false,
+        tool_call: true,
+        cost: {
+          input: 2.5,
+          output: 15,
+          cache_read: 0.25,
+          context_over_200k: {
+            input: 5,
+            output: 22.5,
+            cache_read: 0.5,
+          },
+        },
+        limit: {
+          context: 1_050_000,
+          input: 922_000,
+          output: 128_000,
+        },
+        experimental: {
+          modes: {
+            fast: {
+              cost: {
+                input: 5,
+                output: 30,
+                cache_read: 0.5,
+              },
+              provider: {
+                body: {
+                  service_tier: "priority",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  } as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
+  expect(model.cost.input).toEqual(5)
+  expect(model.cost.output).toEqual(30)
+  expect(model.cost.cache.read).toEqual(0.5)
+  expect(model.cost.cache.write).toEqual(0)
+  expect(model.options["serviceTier"]).toEqual("priority")
+  expect(model.cost.experimentalOver200K).toEqual({
+    input: 5,
+    output: 22.5,
+    cache: {
+      read: 0.5,
+      write: 0,
     },
   })
 })

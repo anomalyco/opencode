@@ -415,7 +415,8 @@ export namespace ProviderTransform {
       id.includes("mistral") ||
       id.includes("kimi") ||
       id.includes("k2p5") ||
-      id.includes("qwen")
+      id.includes("qwen") ||
+      id.includes("big-pickle")
     )
       return {}
 

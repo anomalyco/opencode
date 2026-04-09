@@ -42,7 +42,7 @@ describe("session action routes", () => {
       fn: async () => {
         const session = await Session.create({})
         const cancel = spyOn(SessionPrompt, "cancel").mockResolvedValue()
-        const app = Server.Default()
+        const app = Server.Default().app
 
         const res = await app.request(`/session/${session.id}/abort`, {
           method: "POST",
@@ -66,7 +66,7 @@ describe("session action routes", () => {
         const msg = await user(session.id, "hello")
         const busy = spyOn(SessionPrompt, "assertNotBusy").mockRejectedValue(new Session.BusyError(session.id))
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
-        const app = Server.Default()
+        const app = Server.Default().app
 
         const res = await app.request(`/session/${session.id}/message/${msg.id}`, {
           method: "DELETE",
