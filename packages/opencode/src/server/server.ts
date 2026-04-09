@@ -3,11 +3,18 @@ import { Hono } from "hono"
 import { createNodeWebSocket } from "@hono/node-ws"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
+import { InstanceRoutes } from "./instance"
+import { initProjectors } from "./projectors"
 import { createAdaptorServer, type ServerType } from "@hono/node-server"
 import { Log } from "@/util/log"
+import { ControlPlaneRoutes } from "./control"
+import { UIRoutes } from "./ui"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
+
+initProjectors()
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -21,20 +28,7 @@ export namespace Server {
 
   export const Default = lazy(() => create({}))
 
-  async function create(opts: { cors?: string[] }) {
-    const [
-      { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware },
-      ,
-      { ControlPlaneRoutes },
-      { InstanceRoutes },
-      { UIRoutes },
-    ] = await Promise.all([
-      import("./middleware"),
-      import("./projectors"),
-      import("./control"),
-      import("./instance"),
-      import("./ui"),
-    ])
+  function create(opts: { cors?: string[] }) {
     const app = new Hono()
     const ws = createNodeWebSocket({ app })
     return {
@@ -56,7 +50,7 @@ export namespace Server {
     // hono-openapi can see describeRoute metadata (`.route()` wraps
     // handlers when the sub-app has a custom errorHandler, which
     // strips the metadata symbol).
-    const { app } = await create({})
+    const { app } = create({})
     const result = await generateSpecs(app, {
       documentation: {
         info: {
@@ -79,7 +73,7 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }): Promise<Listener> {
-    const built = await create(opts)
+    const built = create(opts)
     const start = (port: number) =>
       new Promise<ServerType>((resolve, reject) => {
         const server = createAdaptorServer({ fetch: built.app.fetch })
