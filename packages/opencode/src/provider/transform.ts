@@ -6,6 +6,7 @@ import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
+import { Log } from "@/util/log"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -275,9 +276,94 @@ export namespace ProviderTransform {
     })
   }
 
+  const repairLog = Log.create({ service: "provider.transform.repair" })
+
+  /**
+   * Repairs tool_use / tool_result pairing in the ModelMessage array.
+   *
+   * After convertToModelMessages and normalizeMessages, orphaned tool-call
+   * blocks can appear when:
+   *   - A process crash left tool parts in pending/running state
+   *   - normalizeMessages removed an empty tool-role message
+   *   - A plugin mutated tool part state before conversion
+   *
+   * This function forward-walks the message array, tracking tool-call IDs
+   * from assistant messages and matching them against tool-result IDs in
+   * subsequent tool messages. Any unmatched tool-call gets a synthetic
+   * tool-result injected, preventing the API from rejecting the request.
+   */
+  function repairToolPairing(msgs: ModelMessage[]): ModelMessage[] {
+    // Collect all tool-result IDs across the entire message array
+    const resultIds = new Set<string>()
+    for (const msg of msgs) {
+      if (msg.role !== "tool" || !Array.isArray(msg.content)) continue
+      for (const part of msg.content) {
+        if (part.type === "tool-result" && "toolCallId" in part) {
+          resultIds.add(part.toolCallId)
+        }
+      }
+    }
+
+    // Find all tool-call IDs that have no matching tool-result
+    const orphanedCalls: Map<number, Array<{ toolCallId: string; toolName: string }>> = new Map()
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+      for (const part of msg.content) {
+        if (part.type === "tool-call" && "toolCallId" in part && !resultIds.has(part.toolCallId)) {
+          if (!orphanedCalls.has(i)) orphanedCalls.set(i, [])
+          orphanedCalls.get(i)!.push({ toolCallId: part.toolCallId, toolName: part.toolName })
+        }
+      }
+    }
+
+    if (orphanedCalls.size === 0) return msgs
+
+    // Build repaired array: inject synthetic tool-result messages after
+    // each assistant message that has orphaned tool-calls
+    const repaired: ModelMessage[] = []
+    const totalOrphaned = Array.from(orphanedCalls.values()).reduce((sum, arr) => sum + arr.length, 0)
+    repairLog.info("repairing tool pairing", { orphaned: totalOrphaned })
+
+    for (let i = 0; i < msgs.length; i++) {
+      repaired.push(msgs[i])
+
+      const orphans = orphanedCalls.get(i)
+      if (!orphans) continue
+
+      // Check if the next message is a tool message we can append to
+      const next = msgs[i + 1]
+      if (next?.role === "tool" && Array.isArray(next.content)) {
+        // Append synthetic tool-results to the existing tool message
+        for (const orphan of orphans) {
+          next.content.push({
+            type: "tool-result",
+            toolCallId: orphan.toolCallId,
+            toolName: orphan.toolName,
+            output: "[Tool execution was interrupted — result unavailable]",
+          } as any)
+        }
+      } else {
+        // Insert a new tool message with the synthetic results
+        repaired.push({
+          role: "tool",
+          content: orphans.map((orphan) => ({
+            type: "tool-result" as const,
+            toolCallId: orphan.toolCallId,
+            toolName: orphan.toolName,
+            output: "[Tool execution was interrupted — result unavailable]",
+          })),
+        } as ModelMessage)
+      }
+    }
+
+    return repaired
+  }
+
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    msgs = repairToolPairing(msgs)
     if (
       (model.providerID === "anthropic" ||
         model.providerID === "google-vertex-anthropic" ||

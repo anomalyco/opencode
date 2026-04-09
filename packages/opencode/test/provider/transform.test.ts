@@ -802,6 +802,12 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           },
         ],
       },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "test", toolName: "bash", output: "hello" },
+        ],
+      },
     ] as any[]
 
     const result = ProviderTransform.message(
@@ -843,7 +849,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       {},
     )
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toEqual([
       {
         type: "tool-call",
@@ -1128,11 +1134,17 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
         ],
       },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "123", toolName: "bash", output: "file.txt" },
+        ],
+      },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
