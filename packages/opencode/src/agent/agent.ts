@@ -16,7 +16,6 @@ import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
-import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -333,9 +332,6 @@ export namespace Agent {
           const resolved = yield* provider.getModel(model.providerID, model.modelID)
 
           const system = [PROMPT_GENERATE]
-          yield* Effect.promise(() =>
-            Plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system }),
-          )
           const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
           const USER_MESSAGE_CONTENT = {
