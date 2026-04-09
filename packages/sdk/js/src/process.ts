@@ -9,7 +9,11 @@ export function stop(proc: ChildProcess) {
     if (!out.error && out.status === 0) return
   }
   // Kill the entire process group (negative PID) to prevent orphaned processes
-  process.kill(-proc.pid, "SIGTERM");
+  if (proc.pid) {
+    process.kill(-proc.pid, "SIGTERM");
+  } else {
+    proc.kill()
+  }
 }
 
 export function bindAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: () => void) {
