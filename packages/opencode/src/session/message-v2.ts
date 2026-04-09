@@ -751,16 +751,32 @@ export namespace MessageV2 {
                 ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
               })
             }
-            if (part.state.status === "error")
-              assistantMessage.parts.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
-                state: "output-error",
-                toolCallId: part.callID,
-                input: part.state.input,
-                errorText: part.state.error,
-                ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
-              })
+            if (part.state.status === "error") {
+              const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined
+              if (typeof output === "string") {
+                assistantMessage.parts.push({
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-available",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  output,
+                  ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                  ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                })
+              } else {
+                assistantMessage.parts.push({
+                  type: ("tool-" + part.tool) as `tool-${string}`,
+                  state: "output-error",
+                  toolCallId: part.callID,
+                  input: part.state.input,
+                  errorText: part.state.error,
+                  ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                  ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                })
+              }
+            }
+            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
             if (part.state.status === "pending" || part.state.status === "running")
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
