@@ -11579,23 +11579,7 @@
         "limit": { "context": 400000, "input": 272000, "output": 128000 },
         "provider": { "npm": "@ai-sdk/openai" }
       },
-      "qwen3.6-plus-free": {
-        "id": "qwen3.6-plus-free",
-        "name": "Qwen3.6 Plus Free",
-        "family": "qwen-free",
-        "attachment": false,
-        "reasoning": true,
-        "tool_call": true,
-        "interleaved": { "field": "reasoning_content" },
-        "temperature": true,
-        "knowledge": "2024-12",
-        "release_date": "2026-03-30",
-        "last_updated": "2026-03-30",
-        "modalities": { "input": ["text"], "output": ["text"] },
-        "open_weights": false,
-        "cost": { "input": 0, "output": 0, "cache_read": 0 },
-        "limit": { "context": 1048576, "output": 64000 }
-      },
+
       "gpt-5.3-codex-spark": {
         "id": "gpt-5.3-codex-spark",
         "name": "GPT-5.3 Codex Spark",
