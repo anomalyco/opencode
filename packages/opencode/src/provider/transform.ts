@@ -967,32 +967,58 @@ export namespace ProviderTransform {
     }
     */
 
+    const isPlainObject = (node: unknown): node is Record<string, any> =>
+      typeof node === "object" && node !== null && !Array.isArray(node)
+    const hasCombiner = (node: unknown) =>
+      isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
+    const hasSchemaIntent = (node: unknown) => {
+      if (!isPlainObject(node)) return false
+      if (hasCombiner(node)) return true
+      return [
+        "type",
+        "properties",
+        "items",
+        "prefixItems",
+        "enum",
+        "const",
+        "$ref",
+        "additionalProperties",
+        "patternProperties",
+        "required",
+        "not",
+        "if",
+        "then",
+        "else",
+      ].some((key) => key in node)
+    }
+
+    const sanitizeMissingArrayItems = (obj: any): any => {
+      if (obj === null || typeof obj !== "object") {
+        return obj
+      }
+
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeMissingArrayItems)
+      }
+
+      const result: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        result[key] = typeof value === "object" && value !== null ? sanitizeMissingArrayItems(value) : value
+      }
+
+      // OpenAI-compatible tool validators reject array nodes without an explicit items schema.
+      // Adding an empty schema preserves the original "any item shape is allowed" meaning.
+      if (result.type === "array" && result.items == null && !hasCombiner(result)) {
+        result.items = {}
+      }
+
+      return result
+    }
+
+    schema = sanitizeMissingArrayItems(schema)
+
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
-      const isPlainObject = (node: unknown): node is Record<string, any> =>
-        typeof node === "object" && node !== null && !Array.isArray(node)
-      const hasCombiner = (node: unknown) =>
-        isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
-      const hasSchemaIntent = (node: unknown) => {
-        if (!isPlainObject(node)) return false
-        if (hasCombiner(node)) return true
-        return [
-          "type",
-          "properties",
-          "items",
-          "prefixItems",
-          "enum",
-          "const",
-          "$ref",
-          "additionalProperties",
-          "patternProperties",
-          "required",
-          "not",
-          "if",
-          "then",
-          "else",
-        ].some((key) => key in node)
-      }
 
       const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {

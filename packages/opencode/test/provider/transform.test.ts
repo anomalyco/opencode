@@ -440,6 +440,38 @@ describe("ProviderTransform.providerOptions", () => {
   })
 })
 
+describe("ProviderTransform.schema - missing array items", () => {
+  test("adds missing items for openai nested array branches", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: {
+        id: "gpt-5",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        ports: {
+          anyOf: [
+            {
+              type: "object",
+              additionalProperties: {
+                anyOf: [{ type: "string" }, { type: "number" }, { type: "array" }],
+              },
+            },
+            { type: "null" },
+          ],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.ports.anyOf[0].additionalProperties.anyOf[2].items).toEqual({})
+  })
+})
+
 describe("ProviderTransform.schema - gemini array items", () => {
   test("adds missing items for array properties", () => {
     const geminiModel = {
