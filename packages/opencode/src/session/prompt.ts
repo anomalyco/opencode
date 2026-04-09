@@ -743,7 +743,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         } satisfies MessageV2.TextPart)
       })
 
-      const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, signal: AbortSignal) {
+      const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput) {
         const ctx = yield* InstanceState.context
         const session = yield* sessions.get(input.sessionID)
         if (session.revert) {
@@ -1507,7 +1507,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 Effect.promise(() => SystemPrompt.skills(agent)),
                 Effect.promise(() => SystemPrompt.environment(model)),
                 instruction.system().pipe(Effect.orDie),
-                Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+                MessageV2.toModelMessagesEffect(msgs, model),
               ])
               const system = [...env, ...(skills ? [skills] : []), ...instructions]
               const format = lastUser.format ?? { type: "text" as const }
@@ -1577,7 +1577,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         function* (input: ShellInput) {
           const s = yield* InstanceState.get(state)
           const runner = getRunner(s.runners, input.sessionID)
-          return yield* runner.startShell((signal) => shellImpl(input, signal))
+          return yield* runner.startShell(shellImpl(input))
         },
       )
 

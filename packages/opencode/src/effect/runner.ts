@@ -1,10 +1,10 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Scope, SynchronizedRef } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope, SynchronizedRef } from "effect"
 
 export interface Runner<A, E = never> {
   readonly state: Runner.State<A, E>
   readonly busy: boolean
   readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
-  readonly startShell: (work: (signal: AbortSignal) => Effect.Effect<A, E>) => Effect.Effect<A, E>
+  readonly startShell: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
   readonly cancel: Effect.Effect<void>
 }
 
@@ -20,7 +20,6 @@ export namespace Runner {
   interface ShellHandle<A, E> {
     id: number
     fiber: Fiber.Fiber<A, E>
-    abort: AbortController
   }
 
   interface PendingHandle<A, E> {
@@ -100,13 +99,7 @@ export namespace Runner {
         }),
       ).pipe(Effect.flatten)
 
-    const stopShell = (shell: ShellHandle<A, E>) =>
-      Effect.gen(function* () {
-        shell.abort.abort()
-        const exit = yield* Fiber.await(shell.fiber).pipe(Effect.timeoutOption("100 millis"))
-        if (Option.isNone(exit)) yield* Fiber.interrupt(shell.fiber)
-        yield* Fiber.await(shell.fiber).pipe(Effect.exit, Effect.asVoid)
-      })
+    const stopShell = (shell: ShellHandle<A, E>) => Fiber.interrupt(shell.fiber)
 
     const ensureRunning = (work: Effect.Effect<A, E>) =>
       SynchronizedRef.modifyEffect(
@@ -138,7 +131,7 @@ export namespace Runner {
         ),
       )
 
-    const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, E>) =>
+    const startShell = (work: Effect.Effect<A, E>) =>
       SynchronizedRef.modifyEffect(
         ref,
         Effect.fnUntraced(function* (st) {
@@ -153,9 +146,8 @@ export namespace Runner {
           }
           yield* busy
           const id = next()
-          const abort = new AbortController()
-          const fiber = yield* work(abort.signal).pipe(Effect.ensuring(finishShell(id)), Effect.forkChild)
-          const shell = { id, fiber, abort } satisfies ShellHandle<A, E>
+          const fiber = yield* work.pipe(Effect.ensuring(finishShell(id)), Effect.forkChild)
+          const shell = { id, fiber } satisfies ShellHandle<A, E>
           return [
             Effect.gen(function* () {
               const exit = yield* Fiber.await(fiber)

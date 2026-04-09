@@ -18,6 +18,7 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { isRecord } from "@/util/record"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -175,12 +176,22 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
-              const match = ctx.toolcalls[value.toolCallId]
-              if (!match) return
+              const pointer = ctx.toolcalls[value.toolCallId]
+              const match = yield* session.getPart({
+                partID: pointer.id,
+                messageID: pointer.messageID,
+                sessionID: pointer.sessionID,
+              })
+              if (!match || match.type !== "tool") return
               ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                 ...match,
                 tool: value.toolName,
-                state: { status: "running", input: value.input, time: { start: Date.now() } },
+                state: {
+                  ...match.state,
+                  status: "running",
+                  input: value.input,
+                  time: { start: Date.now() },
+                },
                 metadata: match.metadata?.providerExecuted
                   ? { ...value.providerMetadata, providerExecuted: true }
                   : value.providerMetadata,
@@ -236,6 +247,7 @@ export namespace SessionProcessor {
             case "tool-error": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+
               yield* session.updatePart({
                 ...match,
                 state: {
@@ -351,7 +363,10 @@ export namespace SessionProcessor {
                 },
                 { text: ctx.currentText.text },
               )).text
-              ctx.currentText.time = { start: Date.now(), end: Date.now() }
+              {
+                const end = Date.now()
+                ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+              }
               if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
               yield* session.updatePart(ctx.currentText)
               ctx.currentText = undefined
@@ -398,19 +413,21 @@ export namespace SessionProcessor {
           }
           ctx.reasoningMap = {}
 
-          const parts = MessageV2.parts(ctx.assistantMessage.id)
-          for (const part of parts) {
-            if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") continue
+          for (const part of Object.values(ctx.toolcalls)) {
+            const end = Date.now()
+            const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
             yield* session.updatePart({
               ...part,
               state: {
                 ...part.state,
                 status: "error",
                 error: "Tool execution aborted",
-                time: { start: Date.now(), end: Date.now() },
+                metadata: { ...metadata, interrupted: true },
+                time: { start: "time" in part.state ? part.state.time.start : end, end },
               },
             })
           }
+          ctx.toolcalls = {}
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
         })

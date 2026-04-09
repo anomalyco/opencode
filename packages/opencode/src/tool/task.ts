@@ -9,6 +9,7 @@ import { SessionPrompt } from "../session/prompt"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { Effect } from "effect"
+import { Log } from "@/util/log"
 
 const id = "task"
 
