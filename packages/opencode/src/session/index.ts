@@ -493,6 +493,7 @@ export namespace Session {
         }).pipe(Effect.withSpan("Session.updatePart"))
 
       const create = Effect.fn("Session.create")(function* (input?: {
+        id?: SessionID
         parentID?: SessionID
         title?: string
         permission?: Permission.Ruleset
@@ -500,6 +501,7 @@ export namespace Session {
       }) {
         const directory = yield* InstanceState.directory
         return yield* createNext({
+          id: input?.id,
           parentID: input?.parentID,
           directory,
           title: input?.title,
@@ -688,6 +690,7 @@ export namespace Session {
   export const create = fn(
     z
       .object({
+        id: SessionID.zod.optional(),
         parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
