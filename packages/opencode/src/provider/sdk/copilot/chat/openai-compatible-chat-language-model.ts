@@ -645,6 +645,18 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
           },
 
           flush(controller) {
+            // If the stream ended without receiving a finish_reason from the
+            // provider and we still have active output (incomplete text,
+            // reasoning, or tool calls), the stream was truncated. Emit an
+            // error event so downstream consumers can distinguish this from a
+            // normal completion and trigger retry logic.
+            const hasActiveOutput = isActiveReasoning || isActiveText || toolCalls.some((tc) => !tc.hasFinished)
+            if (finishReason.unified === "other" && finishReason.raw === undefined && hasActiveOutput) {
+              controller.enqueue({
+                type: "error",
+                error: new Error("Stream ended unexpectedly — no finish reason received while output was still active"),
+              })
+            }
             if (isActiveReasoning) {
               controller.enqueue({
                 type: "reasoning-end",

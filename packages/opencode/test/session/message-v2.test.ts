@@ -1029,4 +1029,15 @@ describe("session.message-v2.fromError", () => {
 
     expect(result.name).toBe("MessageAbortedError")
   })
+
+  test("classifies SSE read timed out as retryable APIError", () => {
+    const sseTimeout = new Error("SSE read timed out")
+
+    const result = MessageV2.fromError(sseTimeout, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toInclude("timed out")
+    expect((result as MessageV2.APIError).data.metadata?.code).toBe("SSE_TIMEOUT")
+  })
 })

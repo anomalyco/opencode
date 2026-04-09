@@ -184,6 +184,30 @@ describe("session.retry.retryable", () => {
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Response decompression failed")
   })
+
+  test("retries SSE read timed out errors", () => {
+    const msg = "SSE read timed out"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries connection reset errors", () => {
+    const msg = "Connection reset by peer"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries aborted errors", () => {
+    const msg = "The operation was aborted"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries stream ended unexpectedly errors", () => {
+    const msg = "Stream ended unexpectedly — no finish reason received while output was still active"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
 })
 
 describe("session.message-v2.fromError", () => {
