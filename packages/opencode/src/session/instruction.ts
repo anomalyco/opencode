@@ -18,17 +18,17 @@ const log = Log.create({ service: "instruction" })
 
 const FILES = [
   "AGENTS.md",
-  ...(Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT ? [] : ["CLAUDE.md"]),
+  ...(Flag.MAMMOUTH_DISABLE_CLAUDE_CODE_PROMPT ? [] : ["CLAUDE.md"]),
   "CONTEXT.md", // deprecated
 ]
 
 function globalFiles() {
   const files = []
-  if (Flag.OPENCODE_CONFIG_DIR) {
-    files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  if (Flag.MAMMOUTH_CONFIG_DIR) {
+    files.push(path.join(Flag.MAMMOUTH_CONFIG_DIR, "AGENTS.md"))
   }
   files.push(path.join(Global.Path.config, "AGENTS.md"))
-  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+  if (!Flag.MAMMOUTH_DISABLE_CLAUDE_CODE_PROMPT) {
     files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
   }
   return files
@@ -84,19 +84,19 @@ export namespace Instruction {
         )
 
         const relative = Effect.fnUntraced(function* (instruction: string) {
-          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          if (!Flag.MAMMOUTH_DISABLE_PROJECT_CONFIG) {
             return yield* fs
               .globUp(instruction, Instance.directory, Instance.worktree)
               .pipe(Effect.catch(() => Effect.succeed([] as string[])))
           }
-          if (!Flag.OPENCODE_CONFIG_DIR) {
+          if (!Flag.MAMMOUTH_CONFIG_DIR) {
             log.warn(
               `Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project config is disabled`,
             )
             return []
           }
           return yield* fs
-            .globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR)
+            .globUp(instruction, Flag.MAMMOUTH_CONFIG_DIR, Flag.MAMMOUTH_CONFIG_DIR)
             .pipe(Effect.catch(() => Effect.succeed([] as string[])))
         })
 
@@ -124,7 +124,7 @@ export namespace Instruction {
           const paths = new Set<string>()
 
           // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          if (!Flag.MAMMOUTH_DISABLE_PROJECT_CONFIG) {
             for (const file of FILES) {
               const matches = yield* fs.findUp(file, Instance.directory, Instance.worktree)
               if (matches.length > 0) {

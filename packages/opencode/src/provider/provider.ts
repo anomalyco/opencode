@@ -1290,7 +1290,7 @@ export namespace Provider {
                 (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
               )
                 delete provider.models[modelID]
-              if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
+              if (model.status === "alpha" && !Flag.MAMMOUTH_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
               if (model.status === "deprecated") delete provider.models[modelID]
               if (
                 (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||

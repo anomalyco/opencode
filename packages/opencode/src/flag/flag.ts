@@ -40,18 +40,18 @@ export namespace Flag {
   export const MAMMOUTH_DISABLE_MODELS_FETCH = truthy("MAMMOUTH_DISABLE_MODELS_FETCH")
   export const MAMMOUTH_DISABLE_MOUSE = truthy("MAMMOUTH_DISABLE_MOUSE")
   export const MAMMOUTH_DISABLE_CLAUDE_CODE = truthy("MAMMOUTH_DISABLE_CLAUDE_CODE")
-  export const OPENCODE_DISABLE_CLAUDE_CODE_PROMPT =
-    OPENCODE_DISABLE_CLAUDE_CODE || truthy("MAMMOUTH_DISABLE_CLAUDE_CODE_PROMPT")
-  export const OPENCODE_DISABLE_CLAUDE_CODE_SKILLS =
-    OPENCODE_DISABLE_CLAUDE_CODE || truthy("MAMMOUTH_DISABLE_CLAUDE_CODE_SKILLS")
-  export const OPENCODE_DISABLE_EXTERNAL_SKILLS =
-    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS || truthy("MAMMOUTH_DISABLE_EXTERNAL_SKILLS")
-  export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
-  export const OPENCODE_FAKE_VCS = process.env["MAMMOUTH_FAKE_VCS"]
-  export declare const OPENCODE_CLIENT: string
-  export const OPENCODE_SERVER_PASSWORD = process.env["MAMMOUTH_SERVER_PASSWORD"]
-  export const OPENCODE_SERVER_USERNAME = process.env["MAMMOUTH_SERVER_USERNAME"]
-  export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("MAMMOUTH_ENABLE_QUESTION_TOOL")
+  export const MAMMOUTH_DISABLE_CLAUDE_CODE_PROMPT =
+    MAMMOUTH_DISABLE_CLAUDE_CODE || truthy("MAMMOUTH_DISABLE_CLAUDE_CODE_PROMPT")
+  export const MAMMOUTH_DISABLE_CLAUDE_CODE_SKILLS =
+    MAMMOUTH_DISABLE_CLAUDE_CODE || truthy("MAMMOUTH_DISABLE_CLAUDE_CODE_SKILLS")
+  export const MAMMOUTH_DISABLE_EXTERNAL_SKILLS =
+    MAMMOUTH_DISABLE_CLAUDE_CODE_SKILLS || truthy("MAMMOUTH_DISABLE_EXTERNAL_SKILLS")
+  export declare const MAMMOUTH_DISABLE_PROJECT_CONFIG: boolean
+  export const MAMMOUTH_FAKE_VCS = process.env["MAMMOUTH_FAKE_VCS"]
+  export declare const MAMMOUTH_CLIENT: string
+  export const MAMMOUTH_SERVER_PASSWORD = process.env["MAMMOUTH_SERVER_PASSWORD"]
+  export const MAMMOUTH_SERVER_USERNAME = process.env["MAMMOUTH_SERVER_USERNAME"]
+  export const MAMMOUTH_ENABLE_QUESTION_TOOL = truthy("MAMMOUTH_ENABLE_QUESTION_TOOL")
 
   // Experimental
   export const MAMMOUTH_EXPERIMENTAL = truthy("MAMMOUTH_EXPERIMENTAL")
@@ -61,13 +61,13 @@ export namespace Flag {
   export const MAMMOUTH_EXPERIMENTAL_DISABLE_FILEWATCHER = Config.boolean(
     "MAMMOUTH_EXPERIMENTAL_DISABLE_FILEWATCHER",
   ).pipe(Config.withDefault(false))
-  export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
-    OPENCODE_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_ICON_DISCOVERY")
+  export const MAMMOUTH_EXPERIMENTAL_ICON_DISCOVERY =
+    MAMMOUTH_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_ICON_DISCOVERY")
 
   const copy = process.env["MAMMOUTH_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
-  export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
+  export const MAMMOUTH_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
     copy === undefined ? process.platform === "win32" : truthy("MAMMOUTH_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
-  export const OPENCODE_ENABLE_EXA =
+  export const MAMMOUTH_ENABLE_EXA =
     truthy("MAMMOUTH_ENABLE_EXA") || MAMMOUTH_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_EXA")
   export const MAMMOUTH_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("MAMMOUTH_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
   export const MAMMOUTH_EXPERIMENTAL_OUTPUT_TOKEN_MAX = number("MAMMOUTH_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
@@ -96,67 +96,67 @@ export namespace Flag {
   }
 }
 
-// Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
+// Dynamic getter for MAMMOUTH_DISABLE_PROJECT_CONFIG
 // This must be evaluated at access time, not module load time,
 // because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
+Object.defineProperty(Flag, "MAMMOUTH_DISABLE_PROJECT_CONFIG", {
   get() {
-    return truthy("MAMMOUTH_DISABLE_PROJECT_CONFIG") || truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
+    return truthy("MAMMOUTH_DISABLE_PROJECT_CONFIG") || truthy("MAMMOUTH_DISABLE_PROJECT_CONFIG")
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for OPENCODE_TUI_CONFIG
+// Dynamic getter for MAMMOUTH_TUI_CONFIG
 // This must be evaluated at access time, not module load time,
 // because tests and external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_TUI_CONFIG", {
+Object.defineProperty(Flag, "MAMMOUTH_TUI_CONFIG", {
   get() {
-    return env("MAMMOUTH_TUI_CONFIG", "OPENCODE_TUI_CONFIG")
+    return env("MAMMOUTH_TUI_CONFIG", "MAMMOUTH_TUI_CONFIG")
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for OPENCODE_CONFIG_DIR
+// Dynamic getter for MAMMOUTH_CONFIG_DIR
 // This must be evaluated at access time, not module load time,
 // because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
+Object.defineProperty(Flag, "MAMMOUTH_CONFIG_DIR", {
   get() {
-    return env("MAMMOUTH_CONFIG_DIR", "OPENCODE_CONFIG_DIR")
+    return env("MAMMOUTH_CONFIG_DIR", "MAMMOUTH_CONFIG_DIR")
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for OPENCODE_PURE
+// Dynamic getter for MAMMOUTH_PURE
 // This must be evaluated at access time, not module load time,
 // because the CLI can set this flag at runtime
-Object.defineProperty(Flag, "OPENCODE_PURE", {
+Object.defineProperty(Flag, "MAMMOUTH_PURE", {
   get() {
-    return truthy("OPENCODE_PURE")
+    return truthy("MAMMOUTH_PURE")
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for OPENCODE_PLUGIN_META_FILE
+// Dynamic getter for MAMMOUTH_PLUGIN_META_FILE
 // This must be evaluated at access time, not module load time,
 // because tests and external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
+Object.defineProperty(Flag, "MAMMOUTH_PLUGIN_META_FILE", {
   get() {
-    return process.env["OPENCODE_PLUGIN_META_FILE"]
+    return process.env["MAMMOUTH_PLUGIN_META_FILE"]
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for OPENCODE_CLIENT
+// Dynamic getter for MAMMOUTH_CLIENT
 // This must be evaluated at access time, not module load time,
 // because some commands override the client at runtime
-Object.defineProperty(Flag, "OPENCODE_CLIENT", {
+Object.defineProperty(Flag, "MAMMOUTH_CLIENT", {
   get() {
-    return env("MAMMOUTH_CLIENT", "OPENCODE_CLIENT") ?? "cli"
+    return env("MAMMOUTH_CLIENT", "MAMMOUTH_CLIENT") ?? "cli"
   },
   enumerable: true,
   configurable: false,

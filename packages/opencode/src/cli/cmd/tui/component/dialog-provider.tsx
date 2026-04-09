@@ -156,7 +156,7 @@ export function DialogProvider() {
     const opts = options()
     if (opts.length === 1) {
       // sleep to avoid race condition with dialog opening
-      sleep(5).then(() => {
+      Bun.sleep(5).then(() => {
         opts[0].onSelect?.()
       })
     }

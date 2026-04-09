@@ -43,7 +43,7 @@ export namespace FileTime {
     Service,
     Effect.gen(function* () {
       const fsys = yield* AppFileSystem.Service
-      const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
+      const disableCheck = yield* Flag.MAMMOUTH_DISABLE_FILETIME_CHECK
 
       const stamp = Effect.fnUntraced(function* (file: string) {
         const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))

@@ -113,7 +113,7 @@ export const PrCommand = cmd({
         UI.println()
 
         const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const mammouthProcess = Process.spawn(["mammouth", ...mammouthArgs], {
+        const mammouthProcess = Process.spawn(["mammouth", ...opencodeArgs], {
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",

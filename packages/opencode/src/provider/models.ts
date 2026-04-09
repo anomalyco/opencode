@@ -12,6 +12,10 @@ import { Hash } from "@/util/hash"
 const MAMMOUTH_API_BASE = "https://api.mammouth.ai"
 
 export namespace ModelsDev {
+  function url() {
+    return Flag.MAMMOUTH_MODELS_URL || "https://models.dev"
+  }
+
   const log = Log.create({ service: "models.dev" })
   const source = url()
   const filepath = path.join(
@@ -226,7 +230,7 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+    const result = await Filesystem.readJson(Flag.MAMMOUTH_MODELS_PATH ?? filepath).catch(() => {})
     if (result) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot.js")
@@ -268,7 +272,7 @@ export namespace ModelsDev {
   }
 }
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+if (!Flag.MAMMOUTH_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
   ModelsDev.refresh()
   setInterval(
     async () => {

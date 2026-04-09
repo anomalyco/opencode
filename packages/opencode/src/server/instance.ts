@@ -31,7 +31,7 @@ import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
 
-const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
+const embeddedUIPromise = Flag.MAMMOUTH_DISABLE_EMBEDDED_WEB_UI
   ? Promise.resolve(null)
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)

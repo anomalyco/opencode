@@ -117,7 +117,7 @@ export namespace SyncEvent {
     Database.transaction((tx) => {
       projector(tx, event.data)
 
-      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+      if (Flag.MAMMOUTH_EXPERIMENTAL_WORKSPACES) {
         tx.insert(EventSequenceTable)
           .values({
             aggregate_id: event.aggregateID,

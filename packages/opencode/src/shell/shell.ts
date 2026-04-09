@@ -72,7 +72,7 @@ export namespace Shell {
 
   export function gitbash() {
     if (process.platform !== "win32") return
-    if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
+    if (Flag.MAMMOUTH_GIT_BASH_PATH) return Flag.MAMMOUTH_GIT_BASH_PATH
     const git = which("git")
     if (!git) return
     const file = path.join(git, "..", "..", "bin", "bash.exe")

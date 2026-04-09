@@ -1315,12 +1315,12 @@ export namespace Config {
           const global = yield* getGlobal()
           merge(Global.Path.config, global, "global")
 
-          if (Flag.OPENCODE_CONFIG) {
-            merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
-            log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+          if (Flag.MAMMOUTH_CONFIG) {
+            merge(Flag.MAMMOUTH_CONFIG, yield* loadFile(Flag.MAMMOUTH_CONFIG))
+            log.debug("loaded custom config", { path: Flag.MAMMOUTH_CONFIG })
           }
 
-          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          if (!Flag.MAMMOUTH_DISABLE_PROJECT_CONFIG) {
             for (const file of yield* Effect.promise(() =>
               ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
             )) {
@@ -1334,14 +1334,14 @@ export namespace Config {
 
           const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
 
-          if (Flag.OPENCODE_CONFIG_DIR) {
-            log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+          if (Flag.MAMMOUTH_CONFIG_DIR) {
+            log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.MAMMOUTH_CONFIG_DIR })
           }
 
           const deps: Promise<void>[] = []
 
           for (const dir of unique(directories)) {
-            if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+            if (dir.endsWith(".opencode") || dir === Flag.MAMMOUTH_CONFIG_DIR) {
               for (const file of ["opencode.json", "opencode.jsonc"]) {
                 const source = path.join(dir, file)
                 log.debug(`loading config from ${source}`)
@@ -1433,8 +1433,8 @@ export namespace Config {
             })
           }
 
-          if (Flag.OPENCODE_PERMISSION) {
-            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          if (Flag.MAMMOUTH_PERMISSION) {
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.MAMMOUTH_PERMISSION))
           }
 
           if (result.tools) {
@@ -1456,10 +1456,10 @@ export namespace Config {
             result.share = "auto"
           }
 
-          if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+          if (Flag.MAMMOUTH_DISABLE_AUTOCOMPACT) {
             result.compaction = { ...result.compaction, auto: false }
           }
-          if (Flag.OPENCODE_DISABLE_PRUNE) {
+          if (Flag.MAMMOUTH_DISABLE_PRUNE) {
             result.compaction = { ...result.compaction, prune: false }
           }
 

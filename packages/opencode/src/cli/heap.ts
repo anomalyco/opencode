@@ -14,7 +14,7 @@ export namespace Heap {
   let armed = true
 
   export function start() {
-    if (!Flag.OPENCODE_AUTO_HEAP_SNAPSHOT) return
+    if (!Flag.MAMMOUTH_AUTO_HEAP_SNAPSHOT) return
     if (timer) return
 
     const run = async () => {

@@ -114,9 +114,9 @@ export namespace Plugin {
           const client = createOpencodeClient({
             baseUrl: "http://localhost:4096",
             directory: ctx.directory,
-            headers: Flag.OPENCODE_SERVER_PASSWORD
+            headers: Flag.MAMMOUTH_SERVER_PASSWORD
               ? {
-                  Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+                  Authorization: `Basic ${Buffer.from(`${Flag.MAMMOUTH_SERVER_USERNAME ?? "opencode"}:${Flag.MAMMOUTH_SERVER_PASSWORD}`).toString("base64")}`,
                 }
               : undefined,
             fetch: async (...args) => Server.Default().fetch(...args),
@@ -145,8 +145,8 @@ export namespace Plugin {
             if (init._tag === "Some") hooks.push(init.value)
           }
 
-          const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin_origins ?? [])
-          if (Flag.OPENCODE_PURE && cfg.plugin_origins?.length) {
+          const plugins = Flag.MAMMOUTH_PURE ? [] : (cfg.plugin_origins ?? [])
+          if (Flag.MAMMOUTH_PURE && cfg.plugin_origins?.length) {
             log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
           }
           if (plugins.length) yield* config.waitForDependencies()

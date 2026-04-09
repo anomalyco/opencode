@@ -47,7 +47,7 @@ export namespace PluginMeta {
   type Row = Touch & { core: Core }
 
   function storePath() {
-    return Flag.OPENCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
+    return Flag.MAMMOUTH_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
   }
 
   function lock(file: string) {

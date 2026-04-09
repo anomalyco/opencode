@@ -1316,7 +1316,6 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1331,10 +1330,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const model = createMemo(() => {
-    if (props.message.providerID !== "mammouth-ai") return props.message.modelID
-    const parts = props.message.modelID.split("/")
-    return parts[parts.length - 1] || props.message.modelID
+    if (props.message.providerID === "mammouth-ai") {
+      const parts = props.message.modelID.split("/")
+      return parts[parts.length - 1] || props.message.modelID
+    }
+    return Model.name(ctx.providers(), props.message.providerID, props.message.modelID)
   })
+
   const keybind = useKeybind()
 
   return (
@@ -1452,7 +1454,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
-          <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+          <Match when={Flag.MAMMOUTH_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
               streaming={true}
@@ -1462,7 +1464,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               bg={theme.background}
             />
           </Match>
-          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+          <Match when={!Flag.MAMMOUTH_EXPERIMENTAL_MARKDOWN}>
             <code
               filetype="markdown"
               drawUnstyledText={false}

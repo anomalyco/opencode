@@ -10,18 +10,18 @@ import { Identifier } from "../../src/id/id"
 import { Flag } from "../../src/flag/flag"
 import { initProjectors } from "../../src/server/projectors"
 
-const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const original = Flag.MAMMOUTH_EXPERIMENTAL_WORKSPACES
 
 beforeEach(() => {
   Database.close()
 
   // @ts-expect-error don't do this normally, but it works
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+  Flag.MAMMOUTH_EXPERIMENTAL_WORKSPACES = true
 })
 
 afterEach(() => {
   // @ts-expect-error don't do this normally, but it works
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
+  Flag.MAMMOUTH_EXPERIMENTAL_WORKSPACES = original
 })
 
 function withInstance(fn: () => void | Promise<void>) {

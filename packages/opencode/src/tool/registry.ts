@@ -133,7 +133,7 @@ export namespace ToolRegistry {
 
           const cfg = yield* config.get()
           const question =
-            ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+            ["app", "cli", "desktop"].includes(Flag.MAMMOUTH_CLIENT) || Flag.MAMMOUTH_ENABLE_QUESTION_TOOL
 
           return {
             custom,
@@ -154,8 +154,8 @@ export namespace ToolRegistry {
                 SkillTool,
                 ApplyPatchTool,
                 ...(question ? [QuestionTool] : []),
-                ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-                ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
+                ...(Flag.MAMMOUTH_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
+                ...(Flag.MAMMOUTH_EXPERIMENTAL_PLAN_MODE && Flag.MAMMOUTH_CLIENT === "cli" ? [PlanExitTool] : []),
               ],
               build,
               { concurrency: "unbounded" },
@@ -183,7 +183,7 @@ export namespace ToolRegistry {
       const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-            return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+            return input.providerID === ProviderID.opencode || Flag.MAMMOUTH_ENABLE_EXA
           }
 
           const usePatch =
