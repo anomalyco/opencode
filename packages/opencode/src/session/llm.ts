@@ -145,7 +145,6 @@ export namespace LLM {
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
-
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
@@ -171,14 +170,13 @@ export namespace LLM {
       mergeDeep(variant),
     )
     if (isOpenaiOauth) {
-      // OpenAI OAuth expects instructions instead of system-role messages.
       options.instructions = system.join("\n")
     }
 
     const isWorkflow = language instanceof GitLabWorkflowLanguageModel
-    const messages = isWorkflow
+    const messages = isOpenaiOauth
       ? input.messages
-      : isOpenaiOauth
+      : isWorkflow
         ? input.messages
         : [
             ...system.map(
