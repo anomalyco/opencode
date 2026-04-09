@@ -43,7 +43,7 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Free usage limit reached
+          Free limit reached
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc
@@ -51,7 +51,8 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
       </box>
       <box gap={1} paddingBottom={1}>
         <text fg={theme.textMuted}>
-          Subscribe to OpenCode Go for generous access to the best open-source models starting at $5/month.
+          Subscribe to OpenCode Go to keep going with reliable access to the best open-source models, starting at
+          $5/month.
         </text>
         <box flexDirection="row" gap={1}>
           <Link href={GO_URL} fg={theme.primary} />
