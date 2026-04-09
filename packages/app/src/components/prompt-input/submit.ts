@@ -338,8 +338,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (params.id && input.working() && settings.general.followup() === "queue") {
       followupQueue.enqueue({
         sessionID: session.id,
-        messageID,
-        parts: requestParts,
+        optimisticMessage,
+        optimisticParts,
+        requestParts,
         agent,
         model,
         variant,

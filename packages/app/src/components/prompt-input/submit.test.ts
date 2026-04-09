@@ -136,8 +136,8 @@ beforeAll(async () => {
 
   mock.module("@/context/followup-queue", () => ({
     useFollowupQueue: () => ({
-      enqueue: (input: { messageID: string }) => {
-        queuedMessages.push(input.messageID)
+      enqueue: (input: { optimisticMessage: { id: string } }) => {
+        queuedMessages.push(input.optimisticMessage.id)
       },
     }),
   }))
