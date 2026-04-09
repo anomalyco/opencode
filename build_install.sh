@@ -15,6 +15,7 @@ mkdir -p "$INSTALL_DIR"
 echo "==> Writing wrapper script: $WRAPPER"
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
+export OPENCODE_CWD="\$PWD"
 exec bun run --cwd "$REPO_DIR/packages/opencode" --conditions=browser src/index.ts "\$@"
 EOF
 chmod +x "$WRAPPER"
