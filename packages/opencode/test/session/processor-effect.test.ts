@@ -593,9 +593,6 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)
-        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
-          yield* handle.abort()
-        }
         const parts = MessageV2.parts(msg.id)
         const call = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 
@@ -665,9 +662,6 @@ it.live("session.processor effect tests record aborted errors and idle state", (
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)
-        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
-          yield* handle.abort()
-        }
         yield* Effect.promise(() => seen.promise)
         const stored = MessageV2.get({ sessionID: chat.id, messageID: msg.id })
         const state = yield* sts.get(chat.id)

@@ -10596,6 +10596,60 @@
           "npm": {
             "type": "string"
           },
+          "whitelist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blacklist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string"
+              },
+              "baseURL": {
+                "type": "string"
+              },
+              "enterpriseUrl": {
+                "description": "GitHub Enterprise URL for copilot authentication",
+                "type": "string"
+              },
+              "setCacheKey": {
+                "description": "Enable promptCacheKey for this provider (default false)",
+                "type": "boolean"
+              },
+              "timeout": {
+                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                "anyOf": [
+                  {
+                    "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "description": "Disable timeout for this provider entirely.",
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "chunkTimeout": {
+                "description": "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": {}
+          },
           "models": {
             "type": "object",
             "propertyNames": {
@@ -10725,6 +10779,17 @@
                   "type": "string",
                   "enum": ["alpha", "beta", "deprecated"]
                 },
+                "provider": {
+                  "type": "object",
+                  "properties": {
+                    "npm": {
+                      "type": "string"
+                    },
+                    "api": {
+                      "type": "string"
+                    }
+                  }
+                },
                 "options": {
                   "type": "object",
                   "propertyNames": {
@@ -10739,17 +10804,6 @@
                   },
                   "additionalProperties": {
                     "type": "string"
-                  }
-                },
-                "provider": {
-                  "type": "object",
-                  "properties": {
-                    "npm": {
-                      "type": "string"
-                    },
-                    "api": {
-                      "type": "string"
-                    }
                   }
                 },
                 "variants": {
@@ -10771,60 +10825,6 @@
                 }
               }
             }
-          },
-          "whitelist": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "blacklist": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "options": {
-            "type": "object",
-            "properties": {
-              "apiKey": {
-                "type": "string"
-              },
-              "baseURL": {
-                "type": "string"
-              },
-              "enterpriseUrl": {
-                "description": "GitHub Enterprise URL for copilot authentication",
-                "type": "string"
-              },
-              "setCacheKey": {
-                "description": "Enable promptCacheKey for this provider (default false)",
-                "type": "boolean"
-              },
-              "timeout": {
-                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                "anyOf": [
-                  {
-                    "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  {
-                    "description": "Disable timeout for this provider entirely.",
-                    "type": "boolean",
-                    "const": false
-                  }
-                ]
-              },
-              "chunkTimeout": {
-                "description": "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
-                "type": "integer",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991
-              }
-            },
-            "additionalProperties": {}
           }
         },
         "additionalProperties": false
