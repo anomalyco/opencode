@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process"
 import { basename } from "node:path"
 
-const SHELL_ENV_TIMEOUT = 5_000
+const TIMEOUT = 5_000
 
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 
@@ -20,28 +20,28 @@ export function parseShellEnv(out: Buffer) {
   return env
 }
 
-function probeShellEnv(shell: string, mode: "-il" | "-l"): Probe {
+function probe(shell: string, mode: "-il" | "-l"): Probe {
   const out = spawnSync(shell, [mode, "-c", "env -0"], {
     stdio: ["ignore", "pipe", "ignore"],
-    timeout: SHELL_ENV_TIMEOUT,
+    timeout: TIMEOUT,
     windowsHide: true,
   })
 
   const err = out.error as NodeJS.ErrnoException | undefined
   if (err) {
     if (err.code === "ETIMEDOUT") return { type: "Timeout" }
-    console.log(`[cli] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
+    console.log(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
     return { type: "Unavailable" }
   }
 
   if (out.status !== 0) {
-    console.log(`[cli] Shell env probe exited with non-zero status for ${shell} ${mode}`)
+    console.log(`[server] Shell env probe exited with non-zero status for ${shell} ${mode}`)
     return { type: "Unavailable" }
   }
 
   const env = parseShellEnv(out.stdout)
   if (Object.keys(env).length === 0) {
-    console.log(`[cli] Shell env probe returned empty env for ${shell} ${mode}`)
+    console.log(`[server] Shell env probe returned empty env for ${shell} ${mode}`)
     return { type: "Unavailable" }
   }
 
@@ -56,27 +56,27 @@ export function isNushell(shell: string) {
 
 export function loadShellEnv(shell: string) {
   if (isNushell(shell)) {
-    console.log(`[cli] Skipping shell env probe for nushell: ${shell}`)
+    console.log(`[server] Skipping shell env probe for nushell: ${shell}`)
     return null
   }
 
-  const interactive = probeShellEnv(shell, "-il")
+  const interactive = probe(shell, "-il")
   if (interactive.type === "Loaded") {
-    console.log(`[cli] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
+    console.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
   }
   if (interactive.type === "Timeout") {
-    console.warn(`[cli] Interactive shell env probe timed out: ${shell}`)
+    console.warn(`[server] Interactive shell env probe timed out: ${shell}`)
     return null
   }
 
-  const login = probeShellEnv(shell, "-l")
+  const login = probe(shell, "-l")
   if (login.type === "Loaded") {
-    console.log(`[cli] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
+    console.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
     return login.value
   }
 
-  console.warn(`[cli] Falling back to app environment: ${shell}`)
+  console.warn(`[server] Falling back to app environment: ${shell}`)
   return null
 }
 
