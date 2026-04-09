@@ -149,7 +149,7 @@ export namespace Auth {
 
   // Multi-account OAuth store functions
 
-  const oauthFilepath = path.join(Global.Path.data, "oauth.json")
+  const oauthFilepath = path.join(Global.Path.data, "auth.json")
 
   type OAuthProviderRecord = {
     id: string
