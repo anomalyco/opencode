@@ -17,7 +17,18 @@ WORKDIR /app
 COPY . .
 
 RUN bun install
-RUN bun run build:veritly-hosted
+
+# Browser-facing Univer + SDK relay (Vite inlines `import.meta.env.VITE_*` at build time).
+# Pass as Docker build-args (e.g. Railway "Build" variables) for production images.
+# If a variable is omitted, it is not exported so `packages/app/.env` can still supply it when present in the build context.
+ARG VITE_UNIVER_BACKEND_URL
+ARG VITE_UNIVER_SDK_WS
+ARG VITE_UNIVER_LICENSE
+RUN set -e; \
+  if [ -n "${VITE_UNIVER_BACKEND_URL}" ]; then export VITE_UNIVER_BACKEND_URL="${VITE_UNIVER_BACKEND_URL}"; fi; \
+  if [ -n "${VITE_UNIVER_SDK_WS}" ]; then export VITE_UNIVER_SDK_WS="${VITE_UNIVER_SDK_WS}"; fi; \
+  if [ -n "${VITE_UNIVER_LICENSE}" ]; then export VITE_UNIVER_LICENSE="${VITE_UNIVER_LICENSE}"; fi; \
+  bun run build:veritly-hosted
 
 RUN python3 -m venv /opt/veritly-univer-sdk \
   && /opt/veritly-univer-sdk/bin/pip install --no-cache-dir /app/packages/univer-sdk/python
