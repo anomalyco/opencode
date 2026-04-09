@@ -1510,10 +1510,13 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   const ctx = use()
   const sync = useSync()
 
-  // Hide tool if showDetails is false and tool completed successfully
+  // Hide tool if showDetails is false and tool completed successfully.
+  // Task and status parts are always visible — they show subagent summaries
+  // and display-only messages that the user expects to see.
   const shouldHide = createMemo(() => {
     if (ctx.showDetails()) return false
     if (props.part.state.status !== "completed") return false
+    if (props.part.tool === "task" || props.part.tool === "status") return false
     return true
   })
 
