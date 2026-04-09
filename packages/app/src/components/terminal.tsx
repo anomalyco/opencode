@@ -519,9 +519,9 @@ export const Terminal = (props: TerminalProps) => {
         const next = new URL(url + `/pty/${id}/connect`)
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
-        next.searchParams.set("auth_token", btoa(`${username}:${password}`))
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
         if (!sameOrigin && password) {
+          next.searchParams.set("auth_token", btoa(`${username}:${password}`))
           // For same-origin requests, let the browser reuse the page's existing auth.
           next.username = username
           next.password = password
