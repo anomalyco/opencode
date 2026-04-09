@@ -245,7 +245,7 @@ export namespace LSP {
               })
 
             if (!handle) return undefined
-            log.info("spawned lsp server", { serverID: server.id })
+            log.info("spawned lsp server", { serverID: server.id, root })
 
             const client = await LSPClient.create({
               serverID: server.id,
