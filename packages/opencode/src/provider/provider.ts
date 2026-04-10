@@ -1553,6 +1553,16 @@ export namespace Provider {
               }
             }
 
+            if (customFetch) {
+              const res = await customFetch(input, {
+                ...opts,
+                timeout: false,
+              } as BunFetchRequestInit)
+
+              if (!chunkAbortCtl) return res
+              return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+            }
+
             const useRotating = await Auth.getOAuthRecords(model.providerID).then((records) => records.length > 0)
 
             if (useRotating) {
@@ -1563,7 +1573,7 @@ export namespace Provider {
               })
             }
 
-            const res = await (customFetch ?? fetch)(input, {
+            const res = await fetch(input, {
               ...opts,
               timeout: false,
             } as BunFetchRequestInit)
