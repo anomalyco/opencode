@@ -148,7 +148,8 @@ Use this skill.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const tool = await SkillTool.init()
+          const info = await Effect.runPromise(SkillTool)
+          const tool = await info.init()
           const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const ctx: Tool.Context = {
             ...baseCtx,
