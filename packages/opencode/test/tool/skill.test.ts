@@ -5,7 +5,8 @@ import { pathToFileURL } from "url"
 import type { Permission } from "../../src/permission"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
-import { SkillTool, SkillDescription } from "../../src/tool/skill"
+import { SkillTool } from "../../src/tool/skill"
+import { ToolRegistry } from "../../src/tool/registry"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -49,9 +50,11 @@ description: Skill for tool tests.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const desc = await Effect.runPromise(
-            SkillDescription({ name: "build", mode: "primary" as const, permission: [], options: {} }),
-          )
+          const desc = await ToolRegistry.tools({
+            providerID: "opencode" as any,
+            modelID: "gpt-5" as any,
+            agent: { name: "build", mode: "primary" as const, permission: [], options: {} },
+          }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
           expect(desc).toContain(`**tool-skill**: Skill for tool tests.`)
         },
       })
@@ -92,8 +95,14 @@ description: ${description}
         directory: tmp.path,
         fn: async () => {
           const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
-          const first = await Effect.runPromise(SkillDescription(agent))
-          const second = await Effect.runPromise(SkillDescription(agent))
+          const load = () =>
+            ToolRegistry.tools({
+              providerID: "opencode" as any,
+              modelID: "gpt-5" as any,
+              agent,
+            }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
+          const first = await load()
+          const second = await load()
 
           expect(first).toBe(second)
 

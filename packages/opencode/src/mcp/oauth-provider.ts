@@ -17,6 +17,7 @@ export interface McpOAuthConfig {
   clientId?: string
   clientSecret?: string
   scope?: string
+  redirectUri?: string
 }
 
 export interface McpOAuthCallbacks {
@@ -33,7 +34,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
   ) {}
 
   get redirectUrl(): string {
-    return this._redirectUrl ?? `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
+    if (this.config.redirectUri) {
+      return this.config.redirectUri
+    }
+    return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -198,3 +202,22 @@ export class McpOAuthProvider implements OAuthClientProvider {
 }
 
 export { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH }
+
+/**
+ * Parse a redirect URI to extract port and path for the callback server.
+ * Returns defaults if the URI can't be parsed.
+ */
+export function parseRedirectUri(redirectUri?: string): { port: number; path: string } {
+  if (!redirectUri) {
+    return { port: OAUTH_CALLBACK_PORT, path: OAUTH_CALLBACK_PATH }
+  }
+
+  try {
+    const url = new URL(redirectUri)
+    const port = url.port ? parseInt(url.port, 10) : url.protocol === "https:" ? 443 : 80
+    const path = url.pathname || OAUTH_CALLBACK_PATH
+    return { port, path }
+  } catch {
+    return { port: OAUTH_CALLBACK_PORT, path: OAUTH_CALLBACK_PATH }
+  }
+}

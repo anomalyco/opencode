@@ -499,4 +499,3 @@ const rt = lazy(async () => {
 
 type RT = Awaited<ReturnType<typeof rt>>
 export const runPromiseExit: RT["runPromiseExit"] = async (...args) => (await rt()).runPromiseExit(...(args as [any]))
-export const runPromise: RT["runPromise"] = async (...args) => (await rt()).runPromise(...(args as [any]))
