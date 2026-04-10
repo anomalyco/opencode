@@ -14,6 +14,7 @@ import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
+import * as DiagnosticsReporter from "./diagnostics-reporter"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -251,18 +252,18 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
     // Report LSP errors for changed files
-    const MAX_DIAGNOSTICS_PER_FILE = 20
     for (const change of fileChanges) {
       if (change.type === "delete") continue
       const target = change.movePath ?? change.filePath
       const normalized = Filesystem.normalizePath(target)
       const issues = diagnostics[normalized] ?? []
-      const errors = issues.filter((item) => item.severity === 1)
-      if (errors.length > 0) {
-        const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
-        const suffix =
-          errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-        output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target).replaceAll("\\", "/")}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+      const report = DiagnosticsReporter.formatDiagnostics(target, issues)
+      if (report.output) {
+        const relPath = path.relative(Instance.worktree, target).replaceAll("\\", "/")
+        output += report.output.replace(
+          "LSP errors detected in this file, please fix:",
+          `LSP errors detected in ${relPath}, please fix:`,
+        )
       }
     }
 
