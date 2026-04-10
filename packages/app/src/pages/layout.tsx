@@ -87,6 +87,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { projectGitHubUrl } from "@/constants/urls"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -372,11 +373,27 @@ export default function Layout(props: ParentProps) {
         platform.checkUpdate!().then(({ updateAvailable, version }) => {
           if (!updateAvailable) return
           if (toastId !== undefined) return
+          const ver = version ?? ""
+          const url = `${projectGitHubUrl}/releases/tag/v${ver}`
+          const text = language.t("toast.update.description", { version: ver })
+          const parts = text.split(ver)
+          const desc =
+            parts.length === 2 ? (
+              <>
+                {parts[0]}
+                <button class="underline cursor-pointer" onClick={() => platform.openLink(url)}>
+                  {ver}
+                </button>
+                {parts[1]}
+              </>
+            ) : (
+              text
+            )
           toastId = showToast({
             persistent: true,
             icon: "download",
             title: language.t("toast.update.title"),
-            description: language.t("toast.update.description", { version: version ?? "" }),
+            description: desc,
             actions: [
               {
                 label: language.t("toast.update.action.installRestart"),
