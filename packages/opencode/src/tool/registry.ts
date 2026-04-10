@@ -102,6 +102,7 @@ export namespace ToolRegistry {
       const plan = yield* PlanExitTool
       const webfetch = yield* WebFetchTool
       const websearch = yield* WebSearchTool
+      const codesearch = yield* CodeSearchTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -170,7 +171,7 @@ export namespace ToolRegistry {
             fetch: Tool.init(webfetch),
             todo: Tool.init(todo),
             search: Tool.init(websearch),
-            code: Tool.init(CodeSearchTool),
+            code: Tool.init(codesearch),
             skill: Tool.init(SkillTool),
             patch: Tool.init(ApplyPatchTool),
             question: Tool.init(question),
