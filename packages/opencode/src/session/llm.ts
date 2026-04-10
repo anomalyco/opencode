@@ -103,28 +103,20 @@ export namespace LLM {
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
-    const system: string[] = []
-    system.push(
-      [
-        // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-        // any custom prompt passed into this call
-        ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
-      ]
-        .filter((x) => x)
-        .join("\n"),
-    )
+    const header = [...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model))]
+      .filter((x) => x)
+      .join("\n")
+    const tail = [...input.system, ...(input.user.system ? [input.user.system] : [])].filter((x) => x).join("\n")
+    const system = [header, tail].filter((x) => x)
 
-    const header = system[0]
     await Plugin.trigger(
       "experimental.chat.system.transform",
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
-    // rejoin to maintain 2-part structure for caching if header unchanged
-    if (system.length > 2 && system[0] === header) {
+    // Keep a stable header separate from the mutable tail so provider prompt caching
+    // can reuse the static prefix even when turn-level instructions change.
+    if (header && system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
       system.length = 0
       system.push(header, rest.join("\n"))
