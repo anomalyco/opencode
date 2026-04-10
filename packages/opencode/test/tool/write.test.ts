@@ -152,37 +152,46 @@ describe("tool.write", () => {
   })
 
   describe("file permissions", () => {
+    const base = 0o666
+
+    async function put(dir: string, filepath: string, content: string) {
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: filepath,
+              content,
+            },
+            ctx,
+          )
+        },
+      })
+    }
+
     async function writeAndCheckMode(umask: number, expected: number) {
+      if (process.platform === "win32") return
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "sensitive.json")
       const prev = process.umask(umask)
       try {
-        await Instance.provide({
-          directory: tmp.path,
-          fn: async () => {
-            const write = await WriteTool.init()
-            await write.execute(
-              {
-                filePath: filepath,
-                content: JSON.stringify({ secret: "data" }),
-              },
-              ctx,
-            )
+        await put(tmp.path, filepath, JSON.stringify({ secret: "data" }))
 
-            if (process.platform !== "win32") {
-              const stats = await fs.stat(filepath)
-              expect(stats.mode & 0o777).toBe(expected)
-            }
-          },
-        })
+        const stats = await fs.stat(filepath)
+        expect(stats.mode & 0o777).toBe(expected)
       } finally {
         process.umask(prev)
       }
     }
 
-    test("base mode is 0o644 before umask masking", () => writeAndCheckMode(0o000, 0o644))
-    test("respects umask 0o022 → 0o644", () => writeAndCheckMode(0o022, 0o644))
-    test("respects umask 0o077 → 0o600", () => writeAndCheckMode(0o077, 0o600))
+    test("base mode is 0o666 before umask masking", () => writeAndCheckMode(0o000, base))
+    test("respects umask 0o022 → 0o644", () => writeAndCheckMode(0o022, base & ~0o022))
+    test("respects corner umask 0o027 → 0o640", () => writeAndCheckMode(0o027, base & ~0o027))
+    test("respects umask 0o077 → 0o600", () => writeAndCheckMode(0o077, base & ~0o077))
+    test("0o777 fully masks the 0o666 base mode", () => {
+      expect(base & ~0o777).toBe(0o000)
+    })
   })
 
   describe("content types", () => {
