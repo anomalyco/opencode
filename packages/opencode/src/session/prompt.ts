@@ -101,8 +101,11 @@ export namespace SessionPrompt {
       const state = yield* SessionRunState.Service
       const revert = yield* SessionRevert.Service
 
+      const cancelledSessions = new Set<SessionID>()
+
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         log.info("cancel", { sessionID })
+        cancelledSessions.add(sessionID)
         yield* state.cancel(sessionID)
       })
 
@@ -931,7 +934,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
         const info: MessageV2.User = {
-          id: input.messageID ?? MessageID.ascending(),
+          // Always generate a fresh ID at insertion time (not the TUI-provided one).
+          // The TUI creates messageID at keypress time, which would place the message
+          // at the wrong chronological position when queue-delayed.
+          id: MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
           time: { created: Date.now() },
@@ -1269,6 +1275,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
         function* (input: PromptInput) {
+          // Track explicitly cancelled sessions so loop() retry doesn't restart after Esc
+          // Serialization is handled at JS level (_promptQueues in the static prompt() function).
+
+          // Dequeue this message from the JS-level preview queue
+          const previews = _queuePreviews.get(input.sessionID) ?? []
+          previews.shift()
+          if (previews.length === 0) _queuePreviews.delete(input.sessionID)
+          else _queuePreviews.set(input.sessionID, previews)
+          if (previews.length > 0) {
+            yield* status.set(input.sessionID, { type: "busy", queued: previews.length, queuedPreview: [...previews] })
+          }
+
+          // Wait for agent to fully finish before creating this message
+          yield* state.waitForIdle(input.sessionID)
+
           const session = yield* sessions.get(input.sessionID)
           yield* revert.cleanup(session)
           const message = yield* createUserMessage(input)
@@ -1299,6 +1320,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           throw new Error("Impossible")
         })
 
+      // Find the active (most-recent) user message that still needs a reply
+      const activeUserID = (msgs: MessageV2.WithParts[]): MessageID | undefined => {
+        let lastUser: MessageV2.User | undefined
+        let lastAssistant: MessageV2.Assistant | undefined
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const msg = msgs[i]
+          if (!lastUser && msg.info.role === "user") lastUser = msg.info
+          if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
+          if (lastUser && lastAssistant) break
+        }
+        if (!lastUser) return undefined
+        if (lastAssistant && lastUser.id < lastAssistant.id && lastAssistant.finish) return undefined
+        return lastUser.id
+      }
+
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
           const ctx = yield* InstanceState.context
@@ -1307,7 +1343,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const session = yield* sessions.get(sessionID)
 
           while (true) {
-            yield* status.set(sessionID, { type: "busy" })
+            // Preserve queued count when setting busy status
+            const qPreviews = _queuePreviews.get(sessionID)
+            yield* status.set(sessionID, qPreviews && qPreviews.length > 0
+              ? { type: "busy", queued: qPreviews.length, queuedPreview: [...qPreviews] }
+              : { type: "busy" })
             log.info("loop", { step, sessionID })
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
@@ -1448,6 +1488,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               if (step > 1 && lastFinished) {
                 for (const m of msgs) {
                   if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                  // Don't leak queued messages into current turn's context
+                  if (m.info.id !== lastUser!.id) continue
                   for (const p of m.parts) {
                     if (p.type !== "text" || p.ignored || p.synthetic) continue
                     if (!p.text.trim()) continue
@@ -1518,7 +1560,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
               return "continue" as const
             }).pipe(Effect.ensuring(instruction.clear(handle.message.id)))
-            if (outcome === "break") break
+            if (outcome === "break") continue
             continue
           }
 
@@ -1530,7 +1572,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
-        return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+        const result = yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+
+        // Don't retry if user explicitly cancelled (Esc)
+        if (cancelledSessions.has(input.sessionID)) {
+          return result
+        }
+
+        // After the current run finishes, check if there are still unprocessed
+        // messages (timing race safety net).
+        const msgs = yield* MessageV2.filterCompactedEffect(input.sessionID)
+        const pending = activeUserID(msgs)
+        if (pending) {
+          return yield* loop(input)
+        }
+        return result
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
@@ -1759,8 +1815,45 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
+  // Per-session JS-level queue: serializes prompt() calls BEFORE the Effect
+  // runtime. This guarantees FIFO order based on CALL order (not fiber order).
+  const _promptQueues = new Map<string, Promise<any>>()
+  const _queuePreviews = new Map<string, string[]>()
+
   export async function prompt(input: PromptInput) {
-    return runPromise((svc) => svc.prompt(PromptInput.parse(input)))
+    const parsed = PromptInput.parse(input)
+    const sid = parsed.sessionID
+
+    // Extract preview text for queue display
+    const textPart = parsed.parts?.find((p: any) => p.type === "text" && !p.synthetic)
+    const raw = (textPart as any)?.text ?? ""
+    const preview = raw.length > 50 ? raw.slice(0, 47) + "..." : raw
+
+    // Add to queue previews (sync — before any async work)
+    const previews = _queuePreviews.get(sid) ?? []
+    previews.push(preview)
+    _queuePreviews.set(sid, previews)
+
+    // Update status bar with queue info
+    if (previews.length > 0) {
+      SessionStatus.set(sid as any, { type: "busy", queued: previews.length, queuedPreview: [...previews] }).catch(() => {})
+    }
+
+    // Capture previous promise synchronously (JS single-thread = atomic)
+    const prev = _promptQueues.get(sid) ?? Promise.resolve()
+
+    // Create a chained promise that waits for prev, then runs this prompt
+    let resolve!: () => void
+    const done = new Promise<void>((r) => { resolve = r })
+    const work = prev.then(
+      () => runPromise((svc) => svc.prompt(parsed)).finally(() => resolve()),
+      () => runPromise((svc) => svc.prompt(parsed)).finally(() => resolve()),
+    )
+
+    // Update queue synchronously — next caller will chain after us
+    _promptQueues.set(sid, done)
+
+    return work
   }
 
   export async function resolvePromptParts(template: string) {

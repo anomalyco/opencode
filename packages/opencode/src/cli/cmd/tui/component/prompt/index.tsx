@@ -1216,12 +1216,29 @@ export function Prompt(props: PromptProps) {
                   })()}
                 </box>
               </box>
-              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                esc{" "}
-                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                </span>
-              </text>
+              <box flexDirection="row" gap={2}>
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                  esc{" "}
+                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  </span>
+                </text>
+                <Show when={(status() as any).queued > 0}>
+                  <box
+                    onMouseUp={() => {
+                      const items: string[] = (status() as any).queuedPreview ?? []
+                      const body = items.length > 0
+                        ? items.map((msg: string, i: number) => `${i + 1}. ${msg}`).join("\n")
+                        : "(empty)"
+                      DialogAlert.show(dialog, `Queued Messages (${items.length})`, body)
+                    }}
+                  >
+                    <text>
+                      <span style={{ bg: theme.accent, fg: theme.background, bold: true }}> {(status() as any).queued} queued </span>
+                    </text>
+                  </box>
+                </Show>
+              </box>
             </box>
           </Show>
           <Show when={status().type !== "retry"}>

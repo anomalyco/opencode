@@ -11,6 +11,7 @@ export namespace SessionRunState {
   export interface Interface {
     readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+    readonly waitForIdle: (sessionID: SessionID) => Effect.Effect<void>
     readonly ensureRunning: (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
@@ -85,6 +86,13 @@ export namespace SessionRunState {
         yield* existing.cancel
       })
 
+      const waitForIdle = Effect.fn("SessionRunState.waitForIdle")(function* (sessionID: SessionID) {
+        const data = yield* InstanceState.get(state)
+        const existing = data.runners.get(sessionID)
+        if (!existing || !existing.busy) return
+        yield* existing.ensureRunning(Effect.void as any).pipe(Effect.exit, Effect.asVoid)
+      })
+
       const ensureRunning = Effect.fn("SessionRunState.ensureRunning")(function* (
         sessionID: SessionID,
         onInterrupt: Effect.Effect<MessageV2.WithParts>,
@@ -101,7 +109,7 @@ export namespace SessionRunState {
         return yield* (yield* runner(sessionID, onInterrupt)).startShell(work)
       })
 
-      return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+      return Service.of({ assertNotBusy, cancel, waitForIdle, ensureRunning, startShell })
     }),
   )
 

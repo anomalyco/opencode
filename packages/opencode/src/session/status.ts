@@ -20,6 +20,8 @@ export namespace SessionStatus {
       }),
       z.object({
         type: z.literal("busy"),
+        queued: z.number().optional(),
+        queuedPreview: z.array(z.string()).optional(),
       }),
     ])
     .meta({
