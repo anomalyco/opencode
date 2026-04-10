@@ -59,6 +59,7 @@ sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+`go install github.com/sst/opencode@latest` # installs a Go compatibility stub that prints full install instructions
 ```
 
 > [!TIP]
