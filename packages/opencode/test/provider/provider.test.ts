@@ -97,6 +97,8 @@ test("langdock provider uses the curated catalog only", async () => {
       expect(providers[ProviderID.langdock].models["claude-sonnet-4-5-reasoning"]).toBeDefined()
       expect(providers[ProviderID.langdock].models["claude-sonnet-4-6-reasoning"]).toBeDefined()
       expect(providers[ProviderID.langdock].models["gemini-2.5-flash"]).toBeDefined()
+      expect(providers[ProviderID.langdock].models["gemini-3-1-pro-preview"]).toBeDefined()
+      expect(providers[ProviderID.langdock].models["gemini-3-flash-preview"]).toBeDefined()
       expect(providers[ProviderID.langdock].models["gpt-5.4"].api.npm).toBe("@ai-sdk/openai-compatible")
       expect(providers[ProviderID.langdock].models["claude-sonnet-4-5-reasoning"].api.npm).toBe("@ai-sdk/anthropic")
       expect(providers[ProviderID.langdock].models["gemini-2.5-flash"].api.npm).toBe("@ai-sdk/google")
@@ -117,6 +119,12 @@ test("langdock provider uses the curated catalog only", async () => {
       )
       expect(providers[ProviderID.langdock].models["gemini-2.5-flash"].api.url).toBe(
         "https://api.langdock.com/google/eu/v1beta",
+      )
+      expect(providers[ProviderID.langdock].models["gemini-3-1-pro-preview"].api.url).toBe(
+        "https://api.langdock.com/google/global/v1beta",
+      )
+      expect(providers[ProviderID.langdock].models["gemini-3-flash-preview"].api.url).toBe(
+        "https://api.langdock.com/google/global/v1beta",
       )
     },
   })
