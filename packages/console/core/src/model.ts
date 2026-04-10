@@ -8,6 +8,8 @@ import { Actor } from "./actor"
 import { Resource } from "@opencode-ai/console-resource"
 
 export namespace ZenData {
+  const blocked = new Set(["qwen3.6-plus-free"])
+
   const FormatSchema = z.enum(["anthropic", "google", "openai", "oa-compat"])
   export type Format = z.infer<typeof FormatSchema>
 
@@ -100,8 +102,10 @@ export namespace ZenData {
         Resource.ZEN_MODELS30.value,
     )
     const { models, liteModels, providers } = ModelsSchema.parse(json)
+    const clean = <T>(models: Record<string, T>) =>
+      Object.fromEntries(Object.entries(models).filter(([id]) => !blocked.has(id))) as Record<string, T>
     return {
-      models: modelList === "lite" ? liteModels : models,
+      models: clean(modelList === "lite" ? liteModels : models),
       providers,
     }
   })

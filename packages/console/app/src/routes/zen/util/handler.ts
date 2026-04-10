@@ -44,8 +44,6 @@ import { Resource } from "@opencode-ai/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 
-const blocked = new Set(["qwen3.6-plus-free"])
-
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
   excludeProviders: string[]
@@ -392,8 +390,6 @@ export async function handler(
   }
 
   function validateModel(zenData: ZenData, reqModel: string) {
-    if (blocked.has(reqModel)) throw new ModelError(t("zen.api.error.modelNotSupported", { model: reqModel }))
-
     if (!(reqModel in zenData.models)) throw new ModelError(t("zen.api.error.modelNotSupported", { model: reqModel }))
 
     const modelId = reqModel as keyof typeof zenData.models
