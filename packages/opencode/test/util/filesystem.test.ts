@@ -645,6 +645,85 @@ describe("filesystem", () => {
     })
   })
 
+  describe("posixPath()", () => {
+    test("replaces backslashes with forward slashes", () => {
+      expect(Filesystem.posixPath("C:\\Users\\foo\\bar")).toBe("C:/Users/foo/bar")
+    })
+
+    test("normalizes drive root with trailing slashes", () => {
+      expect(Filesystem.posixPath("C:/")).toBe("C:/")
+      expect(Filesystem.posixPath("C:\\")).toBe("C:/")
+      expect(Filesystem.posixPath("C:\\\\")).toBe("C:/")
+      expect(Filesystem.posixPath("d:/")).toBe("d:/")
+    })
+
+    test("normalizes root path", () => {
+      expect(Filesystem.posixPath("/")).toBe("/")
+      expect(Filesystem.posixPath("///")).toBe("/")
+    })
+
+    test("strips trailing slashes", () => {
+      expect(Filesystem.posixPath("C:/Users/foo/")).toBe("C:/Users/foo")
+      expect(Filesystem.posixPath("/a/b/c/")).toBe("/a/b/c")
+      expect(Filesystem.posixPath("/a/b/c///")).toBe("/a/b/c")
+    })
+
+    test("preserves already-normalized posix paths", () => {
+      expect(Filesystem.posixPath("C:/Users/foo")).toBe("C:/Users/foo")
+      expect(Filesystem.posixPath("/home/user/project")).toBe("/home/user/project")
+    })
+
+    test("handles mixed separators", () => {
+      expect(Filesystem.posixPath("C:\\Users/foo\\bar")).toBe("C:/Users/foo/bar")
+    })
+  })
+
+  describe("contains()", () => {
+    test("returns true for child within parent", () => {
+      expect(Filesystem.contains("/a/b", "/a/b/c")).toBe(true)
+      expect(Filesystem.contains("/a/b", "/a/b/c/d")).toBe(true)
+    })
+
+    test("returns false for sibling paths", () => {
+      expect(Filesystem.contains("/a/b", "/a/c")).toBe(false)
+    })
+
+    test("returns false for parent outside child", () => {
+      expect(Filesystem.contains("/a/b/c", "/a/b")).toBe(false)
+    })
+
+    test("returns true for same path", () => {
+      expect(Filesystem.contains("/a/b", "/a/b")).toBe(true)
+    })
+
+    test("returns false for cross-root paths on Windows", () => {
+      if (process.platform !== "win32") return
+      expect(Filesystem.contains("C:\\Users\\foo", "/etc/passwd")).toBe(false)
+      expect(Filesystem.contains("C:\\Users\\foo", "D:\\other")).toBe(false)
+    })
+  })
+
+  describe("overlaps()", () => {
+    test("returns true when paths overlap", () => {
+      expect(Filesystem.overlaps("/a/b", "/a/b/c")).toBe(true)
+      expect(Filesystem.overlaps("/a/b/c", "/a/b")).toBe(true)
+    })
+
+    test("returns true for same path", () => {
+      expect(Filesystem.overlaps("/a/b", "/a/b")).toBe(true)
+    })
+
+    test("returns false for unrelated paths", () => {
+      expect(Filesystem.overlaps("/a", "/b")).toBe(false)
+    })
+
+    test("returns false for cross-root paths on Windows", () => {
+      if (process.platform !== "win32") return
+      expect(Filesystem.overlaps("C:\\Users\\foo", "D:\\other")).toBe(false)
+      expect(Filesystem.overlaps("C:\\Users\\foo", "/etc/passwd")).toBe(false)
+    })
+  })
+
   describe("normalizePathPattern()", () => {
     test("preserves drive root globs on Windows", async () => {
       if (process.platform !== "win32") return

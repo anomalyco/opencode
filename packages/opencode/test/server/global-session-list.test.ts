@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project/project"
 import { Session } from "../../src/session"
+import { Filesystem } from "../../src/util/filesystem"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -34,9 +35,9 @@ describe("Session.listGlobal", () => {
     const secondItem = sessions.find((session) => session.id === secondSession.id)
 
     expect(firstItem?.project?.id).toBe(firstProject?.id)
-    expect(firstItem?.project?.worktree).toBe(firstProject?.worktree)
+    expect(Filesystem.posixPath(firstItem!.project!.worktree)).toBe(Filesystem.posixPath(firstProject!.worktree))
     expect(secondItem?.project?.id).toBe(secondProject?.id)
-    expect(secondItem?.project?.worktree).toBe(secondProject?.worktree)
+    expect(Filesystem.posixPath(secondItem!.project!.worktree)).toBe(Filesystem.posixPath(secondProject!.worktree))
   })
 
   test("excludes archived sessions by default", async () => {

@@ -4,6 +4,7 @@ import { Log } from "../../src/util/log"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
+import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
 import { Effect, Layer, Stream } from "effect"
@@ -226,9 +227,9 @@ describe("Project.fromDirectory with worktrees", () => {
       const { project } = await Project.fromDirectory(worktree2)
 
       expect(project.worktree).toBe(tmp.path)
-      expect(project.sandboxes).toContain(worktree1)
-      expect(project.sandboxes).toContain(worktree2)
-      expect(project.sandboxes).not.toContain(tmp.path)
+      expect(project.sandboxes.map(Filesystem.posixPath)).toContain(Filesystem.posixPath(worktree1))
+      expect(project.sandboxes.map(Filesystem.posixPath)).toContain(Filesystem.posixPath(worktree2))
+      expect(project.sandboxes.map(Filesystem.posixPath)).not.toContain(Filesystem.posixPath(tmp.path))
     } finally {
       await $`git worktree remove ${worktree1}`
         .cwd(tmp.path)
@@ -434,12 +435,12 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
     await Project.addSandbox(project.id, sandboxDir)
 
     let found = Project.get(project.id)
-    expect(found?.sandboxes).toContain(sandboxDir)
+    expect(found?.sandboxes.map(Filesystem.posixPath)).toContain(Filesystem.posixPath(sandboxDir))
 
     await Project.removeSandbox(project.id, sandboxDir)
 
     found = Project.get(project.id)
-    expect(found?.sandboxes).not.toContain(sandboxDir)
+    expect(found?.sandboxes.map(Filesystem.posixPath)).not.toContain(Filesystem.posixPath(sandboxDir))
   })
 
   test("addSandbox emits GlobalBus event", async () => {
