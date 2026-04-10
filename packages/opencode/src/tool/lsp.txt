@@ -10,10 +10,14 @@ Supported operations:
 - prepareCallHierarchy: Get call hierarchy item at a position (functions/methods)
 - incomingCalls: Find all functions/methods that call the function at a position
 - outgoingCalls: Find all functions/methods called by the function at a position
+- restartServer: Restart LSP server(s) for a file extension (useful after installing dependencies)
 
 All operations require:
 - filePath: The file to operate on
 - line: The line number (1-based, as shown in editors)
 - character: The character offset (1-based, as shown in editors)
+
+The restartServer operation requires:
+- extension: The file extension (e.g., ".py", ".ts")
 
 Note: LSP servers must be configured for the file type. If no server is available, an error will be returned.
