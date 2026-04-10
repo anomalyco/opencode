@@ -294,6 +294,7 @@ export default function Page() {
     mobileTab: "session" as "session" | "changes",
     changes: "git" as ChangeMode,
     newSessionWorktree: "main",
+    newSessionPicked: false,
   })
 
   const [vcs, setVcs] = createStore({
@@ -437,6 +438,7 @@ export default function Page() {
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
+    if (store.newSessionPicked) return store.newSessionWorktree
     const project = sync.project
     const directory = sdk.directory
     if (project && directory && directory.trim() !== "" && directory !== project.worktree) {
@@ -670,6 +672,7 @@ export default function Page() {
       (dir) => {
         if (!dir) return
         setStore("newSessionWorktree", "main")
+        setStore("newSessionPicked", false)
       },
       { defer: true },
     ),
@@ -1803,7 +1806,13 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView worktree={newSessionWorktree()} />
+                <NewSessionView
+                  worktree={newSessionWorktree()}
+                  onWorktreeChange={(value) => {
+                    setStore("newSessionWorktree", value)
+                    setStore("newSessionPicked", true)
+                  }}
+                />
               </Match>
             </Switch>
           </div>
@@ -1816,7 +1825,10 @@ export default function Page() {
               inputRef = el
             }}
             newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+            onNewSessionWorktreeReset={() => {
+              setStore("newSessionWorktree", "main")
+              setStore("newSessionPicked", false)
+            }}
             onSubmit={() => {
               comments.clear()
               resumeScroll()

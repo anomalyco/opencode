@@ -15,6 +15,7 @@ import {
   hasProjectPermissions,
   latestProjectSession,
   latestRootSession,
+  sortedProjectSessions,
   latestWorkspaceSession,
   workspaceKey,
 } from "./helpers"
@@ -163,6 +164,47 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("sorts project root sessions across workspaces", () => {
+    const result = sortedProjectSessions(
+      [
+        {
+          path: { directory: "/root" },
+          session: [
+            session({
+              id: "child",
+              directory: "/root",
+              parentID: "root",
+              time: { created: 9, updated: 9, archived: undefined },
+            }),
+            session({
+              id: "root",
+              directory: "/root",
+              time: { created: 1, updated: 1, archived: undefined },
+            }),
+          ],
+        },
+        {
+          path: { directory: "/workspace" },
+          session: [
+            session({
+              id: "archived",
+              directory: "/workspace",
+              time: { created: 8, updated: 8, archived: 8 },
+            }),
+            session({
+              id: "workspace",
+              directory: "/workspace",
+              time: { created: 2, updated: 2, archived: undefined },
+            }),
+          ],
+        },
+      ],
+      120_000,
+    )
+
+    expect(result.map((item) => item.id)).toEqual(["workspace", "root"])
   })
 
   test("finds the latest root session inside one workspace only", () => {

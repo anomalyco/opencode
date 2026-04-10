@@ -1737,9 +1737,14 @@ ToolRegistry.register({
 
 function ShellTool(props: ToolProps & { title: string }) {
   const i18n = useI18n()
+  const running = createMemo(() => props.status === "pending" || props.status === "running")
   const hook = createMemo(() => hookName(props.input ?? {}, props.metadata ?? {}))
   const type = createMemo(() => hookType(props.input ?? {}, props.metadata ?? {}))
   const line = createMemo(() => cmd(props.input ?? {}, props.metadata ?? {}) ?? "")
+  const subtitle = createMemo(() => {
+    if (hook()) return type()
+    return text(props.input.description) ?? text(props.metadata.description) ?? line()
+  })
   const body = createMemo(() => {
     const out = stripAnsi(props.output || props.metadata.output || "")
     return line() ? `$ ${line()}${out ? "\n\n" + out : ""}` : out
@@ -1757,13 +1762,33 @@ function ShellTool(props: ToolProps & { title: string }) {
   return (
     <BasicTool
       {...props}
+      showPendingMeta
+      showPendingDetails={!!body()}
+      forceOpen={running() && !!body()}
       icon="console"
-      trigger={{
-        title: hook() ?? props.title,
-        titleClass: hook() ? "hook-name" : "tool-exec",
-        subtitle: hook() ? type() : (text(props.input.description) ?? text(props.metadata.description) ?? line()),
-        subtitleClass: hook() ? "hook-type" : undefined,
-      }}
+      trigger={
+        <div data-slot="basic-tool-tool-info-structured">
+          <div data-slot="basic-tool-tool-info-main">
+            <span data-slot="basic-tool-tool-title" class={hook() ? "hook-name" : "tool-exec"}>
+              <TextShimmer text={hook() ?? props.title} active={running()} />
+            </span>
+            <Show when={subtitle()}>
+              <span data-slot="basic-tool-tool-subtitle" classList={{ "hook-type": !!hook() }}>
+                {subtitle()}
+              </span>
+            </Show>
+            <Show when={running() && !hook()}>
+              <span data-slot="basic-tool-tool-arg">
+                <ToolStatusTitle
+                  active
+                  activeText={i18n.t("ui.tool.shell.running")}
+                  doneText={i18n.t("ui.tool.shell.ran")}
+                />
+              </span>
+            </Show>
+          </div>
+        </div>
+      }
     >
       <Show when={body()}>
         <div data-component="bash-output">

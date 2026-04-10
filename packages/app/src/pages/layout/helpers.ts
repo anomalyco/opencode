@@ -42,8 +42,10 @@ const roots = (store: SessionStore) =>
 
 export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
 
+export const sortedProjectSessions = (stores: SessionStore[], now: number) => stores.flatMap(roots).sort(sortSessions(now))
+
 export const latestRootSession = (stores: SessionStore[], now: number) =>
-  stores.flatMap(roots).sort(sortSessions(now))[0]
+  sortedProjectSessions(stores, now)[0]
 
 export const latestWorkspaceSession = (store: SessionStore, now: number) => latestRootSession([store], now)
 

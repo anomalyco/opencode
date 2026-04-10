@@ -83,6 +83,7 @@ import {
   errorMessage,
   latestProjectSession,
   latestRootSession,
+  sortedProjectSessions,
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
@@ -678,8 +679,16 @@ export default function Layout(props: ParentProps) {
   const currentSessions = createMemo(() => {
     globalSync.version
     const now = Date.now()
-    const dirs = visibleSessionDirs()
+    const project = currentProject()
+    const dirs = !workspaceSetting() && project ? workspaceIds(project) : visibleSessionDirs()
     if (dirs.length === 0) return [] as Session[]
+
+    if (!workspaceSetting()) {
+      return sortedProjectSessions(
+        dirs.map((dir) => globalSync.child(dir, { bootstrap: false })[0]),
+        now,
+      )
+    }
 
     const result: Session[] = []
     for (const dir of dirs) {

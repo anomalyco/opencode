@@ -114,6 +114,8 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "Web Search",
   "ui.tool.codesearch": "Code Search",
   "ui.tool.shell": "Shell",
+  "ui.tool.shell.running": "Running",
+  "ui.tool.shell.ran": "Ran",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "To-dos",
   "ui.tool.todos.read": "Read to-dos",

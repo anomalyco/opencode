@@ -57,6 +57,8 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   status?: string
+  showPendingMeta?: boolean
+  showPendingDetails?: boolean
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -76,6 +78,8 @@ export function BasicTool(props: BasicToolProps) {
   const open = () => state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
+  const meta = () => !pending() || !!props.showPendingMeta
+  const details = () => !pending() || !!props.showPendingDetails
 
   let frame: number | undefined
 
@@ -146,7 +150,7 @@ export function BasicTool(props: BasicToolProps) {
   })
 
   const handleOpenChange = (value: boolean) => {
-    if (pending()) return
+    if (pending() && !props.showPendingDetails) return
     if (props.locked && !value) return
     suppressAutoScrollResize()
     setState("open", value)
@@ -176,7 +180,7 @@ export function BasicTool(props: BasicToolProps) {
                         >
                           <TextShimmer text={trigger().title} active={pending()} />
                         </span>
-                        <Show when={!pending()}>
+                        <Show when={meta()}>
                           <Show when={trigger().subtitle}>
                             <span
                               data-slot="basic-tool-tool-subtitle"
@@ -220,12 +224,12 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={props.children && !props.hideDetails && !props.locked && !pending()}>
+          <Show when={props.children && !props.hideDetails && !props.locked && details()}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.animated && props.children && !props.hideDetails}>
+      <Show when={props.animated && props.children && !props.hideDetails && details()}>
         <div
           ref={contentRef}
           data-slot="collapsible-content"
@@ -238,7 +242,7 @@ export function BasicTool(props: BasicToolProps) {
           {props.children}
         </div>
       </Show>
-      <Show when={!props.animated && props.children && !props.hideDetails}>
+      <Show when={!props.animated && props.children && !props.hideDetails && details()}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </Collapsible.Content>

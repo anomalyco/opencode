@@ -1,18 +1,25 @@
 import { Show, createMemo } from "solid-js"
-import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { Select } from "@opencode-ai/ui/select"
+import { getFilename } from "@opencode-ai/util/path"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 const MAIN_WORKTREE = "main"
-const CREATE_WORKTREE = "create"
 const ROOT_CLASS = "size-full flex flex-col"
+const GREETINGS = [
+  "session.new.greeting.1",
+  "session.new.greeting.2",
+  "session.new.greeting.3",
+  "session.new.greeting.4",
+] as const
 
 interface NewSessionViewProps {
   worktree: string
+  onWorktreeChange: (value: string) => void
 }
 
 export function NewSessionView(props: NewSessionViewProps) {
@@ -20,75 +27,129 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sdk = useSDK()
   const language = useLanguage()
 
-  const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
-  const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
+  const listed = createMemo(() => {
+    const items = sync.data.vcs?.worktrees ?? []
+    const fallback = sync.project?.worktree || sync.data.path.worktree || sync.data.path.directory || sdk.directory
+    if (items.some((item) => workspaceKey(item.path) === workspaceKey(fallback))) return items
+    return [{ path: fallback, branch: sync.data.vcs?.branch }, ...items]
+  })
+  const root = createMemo(() => sync.project?.worktree || sync.data.path.worktree || sync.data.path.directory || sdk.directory)
+  const worktrees = createMemo(() => {
+    const project = sync.project
+    const main = listed().find((item) => workspaceKey(item.path) === workspaceKey(project?.worktree || ""))
+    const base = listed()
+      .filter((item, index, list) => list.findIndex((x) => workspaceKey(x.path) === workspaceKey(item.path)) === index)
+      .toSorted((a, b) => {
+        if (workspaceKey(a.path) === workspaceKey(root())) return -1
+        if (workspaceKey(b.path) === workspaceKey(root())) return 1
+        return a.path.localeCompare(b.path)
+      })
+    if (!project) return []
+    return [
+      { value: MAIN_WORKTREE, path: project.worktree, branch: main?.branch },
+      ...base
+        .filter((item) => workspaceKey(item.path) !== workspaceKey(project.worktree))
+        .map((item) => ({ value: item.path, path: item.path, branch: item.branch })),
+    ]
+  })
   const current = createMemo(() => {
     const selection = props.worktree
-    if (options().includes(selection)) return selection
-    return MAIN_WORKTREE
+    return worktrees().find((item) => item.value === selection) ?? worktrees()[0]
   })
-  const projectRoot = createMemo(() => sync.project?.worktree ?? sdk.directory)
-  const claw = createMemo(() => projectRoot() === "/openclaw")
-  const isWorktree = createMemo(() => {
-    const project = sync.project
-    if (!project) return false
-    return sdk.directory !== project.worktree
+  const name = createMemo(() => sync.project?.name || getFilename(root()) || root())
+  const claw = createMemo(() => root() === "/openclaw")
+  const branch = createMemo(() => current()?.branch || language.t("session.new.meta.unknown"))
+  const next = createMemo(() => {
+    if (current()?.value === MAIN_WORKTREE) return root()
+    return current()?.path || root()
   })
-
-  const label = (value: string) => {
-    if (value === MAIN_WORKTREE) {
-      if (isWorktree()) return language.t("session.new.worktree.main")
-      const branch = sync.data.vcs?.branch
-      if (branch) return language.t("session.new.worktree.mainWithBranch", { branch })
-      return language.t("session.new.worktree.main")
-    }
-
-    if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
-
-    return getFilename(value)
-  }
+  const picked = createMemo(() => current()?.value !== MAIN_WORKTREE)
+  const greet = createMemo(() => {
+    if (claw()) return language.t("session.new.openclaw.title")
+    const seed = [...root()].reduce((sum, item) => sum + item.charCodeAt(0), 0)
+    return language.t(GREETINGS[seed % GREETINGS.length])
+  })
 
   return (
     <div class={ROOT_CLASS}>
       <div class="h-12 shrink-0" aria-hidden />
       <div class="flex-1 px-6 pb-30 flex items-center justify-center text-center">
-        <div class="w-full max-w-200 flex flex-col items-center text-center gap-4">
+        <div class="w-full max-w-200 flex flex-col items-center text-center gap-6">
           <div class="flex flex-col items-center gap-6">
             <Show when={claw()} fallback={<Mark class="w-10" />}>
               <Icon name="openclaw" size="x-large" />
             </Show>
             <div class="text-20-medium text-text-strong">
-              {claw() ? language.t("session.new.openclaw.title") : language.t("session.new.title")}
+              {greet()}
             </div>
           </div>
-          <div class="w-full flex flex-col gap-4 items-center">
-            <div class="flex items-start justify-center gap-3 min-h-5">
-              <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
-                {getDirectory(projectRoot())}
-                <span class="text-text-strong">{getFilename(projectRoot())}</span>
-              </div>
-            </div>
+          <div class="w-full max-w-180 px-5 py-2">
+            <div class="text-20-medium text-text-strong select-text break-words">{name()}</div>
+            <div class="mt-1 break-all text-12-medium text-text-weak select-text">{root()}</div>
             <Show when={!claw()}>
-              <div class="flex items-start justify-center gap-1.5 min-h-5">
-                <Icon name="branch" size="small" class="mt-0.5 shrink-0" />
-                <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
-                  {label(current())}
+              <div class="mt-5 grid gap-3 text-left">
+                <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
+                  <div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-text-weaker">
+                    <Icon name="branch" size="small" class="shrink-0 text-icon-base" />
+                    <span>{language.t("session.new.meta.branch")}</span>
+                  </div>
+                  <div class="mt-1 break-all text-14-medium text-text-strong select-text">{branch()}</div>
                 </div>
-              </div>
-            </Show>
-            <Show when={!claw() && sync.project}>
-              {(project) => (
-                <div class="flex items-start justify-center gap-3 min-h-5">
-                  <div class="text-12-medium text-text-weak leading-5 min-w-0 max-w-160 break-words text-center">
-                    {language.t("session.new.lastModified")}&nbsp;
-                    <span class="text-text-strong">
-                      {DateTime.fromMillis(project().time.updated ?? project().time.created)
-                        .setLocale(language.intl())
-                        .toRelative()}
-                    </span>
+                <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
+                  <div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-text-weaker">
+                    <Icon name="folder" size="small" class="shrink-0 text-icon-base" />
+                    <span>{language.t("session.new.meta.workspace")}</span>
+                  </div>
+                  <div class="mt-2">
+                    <Select
+                      options={worktrees()}
+                      current={current()}
+                      value={(item) => item.value}
+                      label={(item) => getFilename(item.path) || item.path}
+                      onSelect={(item) => item && props.onWorktreeChange(item.value)}
+                      variant="secondary"
+                      size="normal"
+                      class="w-full"
+                      valueClass="truncate text-left text-14-medium text-text-strong"
+                      triggerStyle={{
+                        width: "100%",
+                        height: "auto",
+                        "min-height": "44px",
+                        "line-height": "normal",
+                        "justify-content": "space-between",
+                        padding: "10px 4px 10px 8px",
+                      }}
+                      contentStyle={{ width: "var(--kb-popper-anchor-width)", "max-width": "var(--kb-popper-anchor-width)" }}
+                    >
+                      {(item) => {
+                        if (!item) return ""
+                        return (
+                          <div class="min-w-0 flex flex-col text-left">
+                            <div class="truncate text-14-medium text-text-strong">{getFilename(item.path) || item.path}</div>
+                            <div class="truncate text-12-regular text-text-weak">{item.path}</div>
+                          </div>
+                        )
+                      }}
+                    </Select>
                   </div>
                 </div>
-              )}
+                <Show when={picked()}>
+                  <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
+                    <div class="text-[10px] uppercase tracking-[0.12em] text-text-weaker">
+                      {language.t("session.new.meta.target")}
+                    </div>
+                    <div class="mt-1 break-all font-mono text-[13px] leading-6 text-text-strong select-text">{next()}</div>
+                  </div>
+                </Show>
+              </div>
+            </Show>
+            <Show when={claw()}>
+              <div class="mt-5 rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
+                <div class="text-[10px] uppercase tracking-[0.12em] text-text-weaker">
+                  {language.t("session.new.meta.workspace")}
+                </div>
+                <div class="mt-1 break-all text-14-medium text-text-strong select-text">{root()}</div>
+              </div>
             </Show>
           </div>
         </div>

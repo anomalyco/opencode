@@ -109,6 +109,8 @@ export const dict = {
   "ui.tool.websearch": "网络搜索",
   "ui.tool.codesearch": "代码搜索",
   "ui.tool.shell": "Shell",
+  "ui.tool.shell.running": "运行中",
+  "ui.tool.shell.ran": "已运行",
   "ui.tool.patch": "补丁",
   "ui.tool.todos": "待办",
   "ui.tool.todos.read": "读取待办",
