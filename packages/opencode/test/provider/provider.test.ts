@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
@@ -70,6 +70,83 @@ function paid(providers: Awaited<ReturnType<typeof list>>) {
   const item = providers[ProviderID.make("opencode")]
   expect(item).toBeDefined()
   return Object.values(item.models).filter((model) => model.cost.input > 0).length
+}
+
+function free(model: { cost: { input: number; output: number; cache: { read: number; write: number } } }) {
+  return (
+    model.cost.input === 0 && model.cost.output === 0 && model.cost.cache.read === 0 && model.cost.cache.write === 0
+  )
+}
+
+function listed(id: string) {
+  return id === "big-pickle" || id.endsWith("-free")
+}
+
+afterEach(() => {
+  mock.restore()
+})
+
+async function freecase(fn: () => Promise<void>) {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            opencode: {
+              whitelist: ["alpha-free", "plain-free"],
+              options: {
+                apiKey: "test-api-key",
+              },
+              models: {
+                "alpha-free": {
+                  name: "Alpha Free",
+                  reasoning: true,
+                  cost: {
+                    input: 0,
+                    output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                  },
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                  variants: {
+                    low: {
+                      effort: "low",
+                    },
+                    high: {
+                      effort: "high",
+                    },
+                  },
+                },
+                "plain-free": {
+                  name: "Plain Free",
+                  reasoning: false,
+                  cost: {
+                    input: 0,
+                    output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                  },
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn,
+  })
 }
 
 const it = testEffect(Provider.defaultLayer)
@@ -472,6 +549,147 @@ test("parseModel handles model IDs with slashes", () => {
   const result = Provider.parseModel("openrouter/anthropic/claude-3-opus")
   expect(String(result.providerID)).toBe("openrouter")
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
+})
+
+test("resolveModel picks only valid opencode free listings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            opencode: {
+              options: {
+                apiKey: "test-api-key",
+              },
+            },
+            openrouter: {
+              options: {
+                apiKey: "test-api-key",
+              },
+              models: {
+                "free-router": {
+                  name: "Free Router",
+                  cost: {
+                    input: 0,
+                    output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                  },
+                  tool_call: true,
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const opencode = providers[ProviderID.opencode]
+      const openrouter = providers[ProviderID.openrouter]
+      expect(opencode).toBeDefined()
+      expect(openrouter).toBeDefined()
+      expect(openrouter.models["free-router"]).toBeDefined()
+
+      const freeModels = Provider.sort(Object.values(opencode.models).filter(free)).map((model) => String(model.id))
+      const listedModels = freeModels.filter(listed)
+      const rest = freeModels.filter((id) => !listed(id))
+
+      expect(listedModels.length).toBeGreaterThan(0)
+      expect(rest.length).toBeGreaterThan(0)
+      expect(rest).toContain("gpt-5-nano")
+
+      spyOn(Math, "random").mockReturnValue(0)
+
+      const model = await Provider.resolveModel("free")
+      const parsed = Provider.parseModel(model)
+
+      expect(String(parsed.providerID)).toBe("opencode")
+      expect(listedModels).toContain(String(parsed.modelID))
+      expect(rest).not.toContain(String(parsed.modelID))
+      expect(String(parsed.modelID)).not.toBe("free-router")
+    },
+  })
+})
+
+test("resolveSelection picks a variant from the chosen free model", async () => {
+  await freecase(async () => {
+    const provider = (await list())[ProviderID.opencode]
+    const models = Provider.sort(
+      Object.values(provider.models)
+        .filter(free)
+        .filter((item) => listed(String(item.id))),
+    )
+    const index = models.findIndex((item) => String(item.id) === "alpha-free")
+    const choices = Object.keys(provider.models["alpha-free"].variants ?? {}).toSorted()
+
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(choices.length).toBeGreaterThan(0)
+
+    let count = 0
+    spyOn(Math, "random").mockImplementation(() => {
+      count += 1
+      if (count === 1) return (index + 0.1) / models.length
+      return (choices.length - 1 + 0.1) / choices.length
+    })
+
+    const result = await Provider.resolveSelection("free", "any")
+
+    expect(result.model).toBe("opencode/alpha-free")
+    expect(result.variant).toBe(choices.at(-1))
+  })
+})
+
+test("resolveSelection keeps explicit variants unchanged", async () => {
+  await freecase(async () => {
+    const provider = (await list())[ProviderID.opencode]
+    const models = Provider.sort(
+      Object.values(provider.models)
+        .filter(free)
+        .filter((item) => listed(String(item.id))),
+    )
+    const index = models.findIndex((item) => String(item.id) === "alpha-free")
+
+    expect(index).toBeGreaterThanOrEqual(0)
+
+    spyOn(Math, "random").mockReturnValue((index + 0.1) / models.length)
+
+    const result = await Provider.resolveSelection("free", "max")
+
+    expect(result.model).toBe("opencode/alpha-free")
+    expect(result.variant).toBe("max")
+  })
+})
+
+test("resolveSelection falls back to no variant when the chosen free model has none", async () => {
+  await freecase(async () => {
+    const provider = (await list())[ProviderID.opencode]
+    const models = Provider.sort(
+      Object.values(provider.models)
+        .filter(free)
+        .filter((item) => listed(String(item.id))),
+    )
+    const index = models.findIndex((item) => String(item.id) === "plain-free")
+
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(provider.models["plain-free"].variants).toEqual({})
+
+    spyOn(Math, "random").mockReturnValue((index + 0.1) / models.length)
+
+    const result = await Provider.resolveSelection("free", "any")
+
+    expect(result.model).toBe("opencode/plain-free")
+    expect(result.variant).toBeUndefined()
+  })
 })
 
 test("defaultModel returns first available model when no config set", async () => {

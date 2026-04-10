@@ -22,6 +22,7 @@ import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -1815,6 +1816,53 @@ export function sort<T extends { id: string }>(models: T[]) {
     [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
     [(model) => model.id, "desc"],
   )
+}
+
+const FREE = "free"
+export const ANY = "any"
+
+function isFree(model: Model) {
+  const extra = model.cost.experimentalOver200K
+  return (
+    model.providerID === ProviderID.opencode &&
+    model.cost.input === 0 &&
+    model.cost.output === 0 &&
+    model.cost.cache.read === 0 &&
+    model.cost.cache.write === 0 &&
+    (!extra || (extra.input === 0 && extra.output === 0 && extra.cache.read === 0 && extra.cache.write === 0))
+  )
+}
+
+function isListed(model: Model) {
+  return model.id === "big-pickle" || model.id.endsWith("-free")
+}
+
+function freeVariants(model: Model) {
+  return Object.keys(model.variants ?? {})
+    .toSorted()
+    .filter((item) => item !== "default")
+}
+
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export async function resolveSelection(model?: string, variant?: string) {
+  if (!model) return { model, variant }
+  if (model !== FREE) return { model, variant }
+  const providers = await runPromise((svc) => svc.list())
+  const provider = providers[ProviderID.opencode]
+  const models = sort(Object.values(provider?.models ?? {}).filter((item) => isFree(item) && isListed(item)))
+  const pick = models[Math.floor(Math.random() * models.length)]
+  if (!pick) throw new Error("No free opencode models found")
+  const next = variant === "any" ? freeVariants(pick) : []
+  const value = variant !== "any" ? variant : next[Math.floor(Math.random() * next.length)]
+  return {
+    model: `${pick.providerID}/${pick.id}`,
+    variant: value,
+  }
+}
+
+export async function resolveModel(model: string) {
+  return (await resolveSelection(model)).model!
 }
 
 export function parseModel(model: string) {
