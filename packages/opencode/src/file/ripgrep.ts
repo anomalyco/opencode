@@ -130,9 +130,9 @@ export namespace Ripgrep {
   const state = lazy(async () => {
     const system = which("rg")
     if (system) {
-      const stat = await fs.stat(system).catch(() => undefined)
-      if (stat?.isFile()) return { filepath: system }
-      log.warn("bun.which returned invalid rg path", { filepath: system })
+      const check = await Process.run([system, "--version"], { nothrow: true })
+      if (check.code === 0) return { filepath: system }
+      log.warn("system rg not executable", { filepath: system })
     }
     const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 

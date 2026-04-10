@@ -590,9 +590,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
       if (!query.trim()) return [...agents, ...pinned]
       const paths = await files.searchFilesAndDirectories(query)
+      // Convert absolute home-dir paths to ~/... format so the display matches
+      // what the user typed and client-side fuzzy filtering works correctly.
+      const home = sync.data.path.home
+      const toDisplay = (p: string) => {
+        if (home && (p === home || p.startsWith(home + "/"))) return "~" + p.slice(home.length)
+        return p
+      }
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
-        .map((path) => ({ type: "file", path, display: path }))
+        .map((path) => ({ type: "file", path, display: toDisplay(path) }))
       return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
