@@ -7,6 +7,7 @@ import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
+import { getDroppedPromptData } from "./drop"
 
 function dataUrl(file: File, mime: string) {
   return new Promise<string>((resolve) => {
@@ -166,19 +167,17 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     event.preventDefault()
     input.setDraggingType(null)
 
-    const plainText = event.dataTransfer?.getData("text/plain")
-    const filePrefix = "file:"
-    if (plainText?.startsWith(filePrefix)) {
-      const filePath = plainText.slice(filePrefix.length)
-      input.focusEditor()
-      input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
+    const dropped = getDroppedPromptData(event.dataTransfer)
+    if (dropped.files.length > 0) {
+      await addAttachments(dropped.files)
       return
     }
 
-    const dropped = event.dataTransfer?.files
-    if (!dropped) return
-
-    await addAttachments(Array.from(dropped))
+    if (dropped.filePath) {
+      input.focusEditor()
+      input.addPart({ type: "file", path: dropped.filePath, content: "@" + dropped.filePath, start: 0, end: 0 })
+      return
+    }
   }
 
   onMount(() => {
