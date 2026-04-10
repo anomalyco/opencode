@@ -2,6 +2,7 @@ import z from "zod"
 import { and, Database, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
+import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
@@ -61,7 +62,7 @@ export namespace Project {
         : undefined
     return {
       id: row.id,
-      worktree: row.worktree,
+      worktree: Filesystem.posixPath(row.worktree),
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
       icon,
@@ -70,7 +71,7 @@ export namespace Project {
         updated: row.time_updated,
         initialized: row.time_initialized ?? undefined,
       },
-      sandboxes: row.sandboxes,
+      sandboxes: row.sandboxes.map(Filesystem.posixPath),
       commands: row.commands ?? undefined,
     }
   }

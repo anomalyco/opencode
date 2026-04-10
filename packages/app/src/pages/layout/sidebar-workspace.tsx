@@ -306,7 +306,7 @@ export const SortableWorkspace = (props: {
     pendingRename: false,
   })
   const slug = createMemo(() => base64Encode(props.directory))
-  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
+  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow(), props.directory))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
@@ -451,7 +451,7 @@ export const LocalWorkspace = (props: {
     return { store, setStore }
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
-  const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
+  const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow(), props.project.worktree))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
   const loading = createMemo(() => !booted() && count() === 0)

@@ -6,6 +6,7 @@ import { Ripgrep } from "../../file/ripgrep"
 import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
+import { Filesystem } from "../../util/filesystem"
 
 export const FileRoutes = lazy(() =>
   new Hono()
@@ -138,7 +139,7 @@ export const FileRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        const path = c.req.valid("query").path
+        const path = Filesystem.posixPath(c.req.valid("query").path)
         const content = await File.list(path)
         return c.json(content)
       },
@@ -167,7 +168,7 @@ export const FileRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        const path = c.req.valid("query").path
+        const path = Filesystem.posixPath(c.req.valid("query").path)
         const content = await File.read(path)
         return c.json(content)
       },

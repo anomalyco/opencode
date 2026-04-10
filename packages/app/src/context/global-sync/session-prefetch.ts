@@ -1,4 +1,6 @@
-const key = (directory: string, sessionID: string) => `${directory}\n${sessionID}`
+import { workspaceKey } from "@/pages/layout/helpers"
+
+const key = (directory: string, sessionID: string) => `${workspaceKey(directory)}\n${sessionID}`
 
 export const SESSION_PREFETCH_TTL = 15_000
 
@@ -89,7 +91,7 @@ export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<str
 }
 
 export function clearSessionPrefetchDirectory(directory: string) {
-  const prefix = `${directory}\n`
+  const prefix = `${workspaceKey(directory)}\n`
   const keys = new Set([...cache.keys(), ...inflight.keys()])
   for (const id of keys) {
     if (!id.startsWith(prefix)) continue

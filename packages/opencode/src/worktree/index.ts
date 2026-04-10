@@ -1,5 +1,6 @@
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
+import { Filesystem } from "../util/filesystem"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
@@ -213,7 +214,7 @@ export namespace Worktree {
           const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
           if (branchCheck.code === 0) continue
 
-          return Info.parse({ name, branch, directory })
+          return Info.parse({ name, branch, directory: Filesystem.posixPath(directory) })
         }
         throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
       })

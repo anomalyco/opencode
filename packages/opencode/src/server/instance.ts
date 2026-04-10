@@ -4,6 +4,7 @@ import { proxy } from "hono/proxy"
 import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
 import { createHash } from "node:crypto"
+import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
@@ -110,11 +111,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
       }),
       async (c) => {
         return c.json({
-          home: Global.Path.home,
-          state: Global.Path.state,
-          config: Global.Path.config,
-          worktree: Instance.worktree,
-          directory: Instance.directory,
+          home: Filesystem.posixPath(Global.Path.home),
+          state: Filesystem.posixPath(Global.Path.state),
+          config: Filesystem.posixPath(Global.Path.config),
+          worktree: Filesystem.posixPath(Instance.worktree),
+          directory: Filesystem.posixPath(Instance.directory),
         })
       },
     )

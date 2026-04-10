@@ -4,6 +4,10 @@ type QueueInput = {
   bootstrapInstance: (directory: string) => Promise<void> | void
 }
 
+function normalizeKey(directory: string) {
+  return directory.replaceAll("\\", "/").replace(/\/+$/, "")
+}
+
 export function createRefreshQueue(input: QueueInput) {
   const queued = new Set<string>()
   let root = false
@@ -33,7 +37,7 @@ export function createRefreshQueue(input: QueueInput) {
 
   const push = (directory: string) => {
     if (!directory) return
-    queued.add(directory)
+    queued.add(normalizeKey(directory))
     if (input.paused()) return
     schedule()
   }
@@ -72,7 +76,7 @@ export function createRefreshQueue(input: QueueInput) {
     push,
     refresh,
     clear(directory: string) {
-      queued.delete(directory)
+      queued.delete(normalizeKey(directory))
     },
     dispose() {
       if (!timer) return

@@ -13,6 +13,7 @@ import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -30,7 +31,7 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
   return promise
 }
 
-const keyFor = (directory: string, id: string) => `${directory}\n${id}`
+const keyFor = (directory: string, id: string) => `${workspaceKey(directory)}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -202,6 +203,29 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return undefined
     }
 
+    const seenFor = (directory: string) => {
+      const wk = workspaceKey(directory)
+      const existing = seen.get(wk)
+      if (existing) {
+        seen.delete(wk)
+        seen.set(wk, existing)
+        return existing
+      }
+      const created = new Set<string>()
+      seen.set(wk, created)
+      while (seen.size > maxDirs) {
+        // `first` is a workspaceKey, not a raw directory.
+        // child()/evict() internally call workspaceKey() which is idempotent.
+        const first = seen.keys().next().value
+        if (!first) break
+        const stale = [...(seen.get(first) ?? [])]
+        seen.delete(first)
+        const [, setStore] = globalSync.child(first, { bootstrap: false })
+        evict(first, setStore, stale)
+      }
+      return created
+    }
+
     const setOptimistic = (directory: string, sessionID: string, item: OptimisticItem) => {
       const key = keyFor(directory, sessionID)
       const list = optimistic.get(key)
@@ -228,26 +252,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const getOptimistic = (directory: string, sessionID: string) => [
       ...(optimistic.get(keyFor(directory, sessionID))?.values() ?? []),
     ]
-
-    const seenFor = (directory: string) => {
-      const existing = seen.get(directory)
-      if (existing) {
-        seen.delete(directory)
-        seen.set(directory, existing)
-        return existing
-      }
-      const created = new Set<string>()
-      seen.set(directory, created)
-      while (seen.size > maxDirs) {
-        const first = seen.keys().next().value
-        if (!first) break
-        const stale = [...(seen.get(first) ?? [])]
-        seen.delete(first)
-        const [, setStore] = globalSync.child(first, { bootstrap: false })
-        evict(first, setStore, stale)
-      }
-      return created
-    }
 
     const clearMeta = (directory: string, sessionIDs: string[]) => {
       if (sessionIDs.length === 0) return
@@ -311,7 +315,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     }
 
-    const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
+    const tracked = (directory: string, sessionID: string) => seen.get(workspaceKey(directory))?.has(sessionID) ?? false
 
     const loadMessages = async (input: {
       directory: string

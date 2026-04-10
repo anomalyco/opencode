@@ -18,6 +18,7 @@ import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 type GlobalStore = {
   ready: boolean
@@ -58,7 +59,7 @@ function errors(list: PromiseSettledResult<unknown>[]) {
 const providerRev = new Map<string, number>()
 
 export function clearProviderRev(directory: string) {
-  providerRev.delete(directory)
+  providerRev.delete(workspaceKey(directory))
 }
 
 function runAll(list: Array<() => Promise<unknown>>) {
@@ -339,16 +340,17 @@ export async function bootstrapDirectory(input: {
 
   if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
 
-  const rev = (providerRev.get(input.directory) ?? 0) + 1
-  providerRev.set(input.directory, rev)
+  const wk = workspaceKey(input.directory)
+  const rev = (providerRev.get(wk) ?? 0) + 1
+  providerRev.set(wk, rev)
   void retry(() => input.sdk.provider.list())
     .then((x) => {
-      if (providerRev.get(input.directory) !== rev) return
+      if (providerRev.get(wk) !== rev) return
       input.setStore("provider", normalizeProviderList(x.data!))
       input.setStore("provider_ready", true)
     })
     .catch((err) => {
-      if (providerRev.get(input.directory) !== rev) return
+      if (providerRev.get(wk) !== rev) return
       console.error("Failed to refresh provider list", err)
       const project = getFilename(input.directory)
       showToast({

@@ -15,6 +15,7 @@ import type { SQL } from "../storage/db"
 import { SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
+import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
@@ -41,6 +42,8 @@ export namespace Session {
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
+
+  const normalizeDirectory = Filesystem.posixPath
 
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
@@ -71,7 +74,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
-      directory: row.directory,
+      directory: normalizeDirectory(row.directory),
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
@@ -389,7 +392,7 @@ export namespace Session {
           slug: Slug.create(),
           version: Installation.VERSION,
           projectID: ctx.project.id,
-          directory: input.directory,
+          directory: normalizeDirectory(input.directory),
           workspaceID: input.workspaceID,
           parentID: input.parentID,
           title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -751,7 +754,7 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, normalizeDirectory(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -791,7 +794,7 @@ export namespace Session {
     const conditions: SQL[] = []
 
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, normalizeDirectory(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))

@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
@@ -156,14 +156,25 @@ export namespace Filesystem {
         .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
     )
   }
+  export function posixPath(p: string): string {
+    const value = p.replaceAll("\\", "/")
+    const drive = value.match(/^([A-Za-z]:)\/+$/)
+    if (drive) return `${drive[1]}/`
+    if (/^\/+$/i.test(value)) return "/"
+    return value.replace(/\/+$/, "")
+  }
+
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
     const relB = relative(b, a)
+    if (isAbsolute(relA) || isAbsolute(relB)) return false
     return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    const rel = relative(parent, child)
+    if (isAbsolute(rel)) return false
+    return !rel.startsWith("..")
   }
 
   export async function findUp(

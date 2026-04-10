@@ -26,6 +26,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 type GlobalStore = {
   ready: boolean
@@ -151,39 +152,42 @@ function createGlobalSync() {
 
   const children = createChildStoreManager({
     owner,
-    isBooting: (directory) => booting.has(directory),
-    isLoadingSessions: (directory) => sessionLoads.has(directory),
+    isBooting: (directory) => booting.has(workspaceKey(directory)),
+    isLoadingSessions: (directory) => sessionLoads.has(workspaceKey(directory)),
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
     onDispose: (directory) => {
+      const key = workspaceKey(directory)
       queue.clear(directory)
-      sessionMeta.delete(directory)
-      sdkCache.delete(directory)
-      clearProviderRev(directory)
-      clearSessionPrefetchDirectory(directory)
+      sessionMeta.delete(key)
+      sdkCache.delete(key)
+      clearProviderRev(key)
+      clearSessionPrefetchDirectory(key)
     },
     translate: language.t,
   })
 
   const sdkFor = (directory: string) => {
-    const cached = sdkCache.get(directory)
+    const key = workspaceKey(directory)
+    const cached = sdkCache.get(key)
     if (cached) return cached
     const sdk = globalSDK.createClient({
       directory,
       throwOnError: true,
     })
-    sdkCache.set(directory, sdk)
+    sdkCache.set(key, sdk)
     return sdk
   }
 
   async function loadSessions(directory: string) {
-    const pending = sessionLoads.get(directory)
+    const key = workspaceKey(directory)
+    const pending = sessionLoads.get(key)
     if (pending) return pending
 
     children.pin(directory)
     const [store, setStore] = children.child(directory, { bootstrap: false })
-    const meta = sessionMeta.get(directory)
+    const meta = sessionMeta.get(key)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
@@ -224,7 +228,7 @@ function createGlobalSync() {
         )
         setStore("session", reconcile(sessions, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
-        sessionMeta.set(directory, { limit })
+        sessionMeta.set(key, { limit })
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
@@ -236,9 +240,9 @@ function createGlobalSync() {
         })
       })
 
-    sessionLoads.set(directory, promise)
+    sessionLoads.set(key, promise)
     promise.finally(() => {
-      sessionLoads.delete(directory)
+      sessionLoads.delete(key)
       children.unpin(directory)
     })
     return promise
@@ -246,13 +250,14 @@ function createGlobalSync() {
 
   async function bootstrapInstance(directory: string) {
     if (!directory) return
-    const pending = booting.get(directory)
+    const key = workspaceKey(directory)
+    const pending = booting.get(key)
     if (pending) return pending
 
     children.pin(directory)
     const promise = (async () => {
       const child = children.ensureChild(directory)
-      const cache = children.vcsCache.get(directory)
+      const cache = children.vcsCache.get(key)
       if (!cache) return
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
@@ -272,9 +277,9 @@ function createGlobalSync() {
       })
     })()
 
-    booting.set(directory, promise)
+    booting.set(key, promise)
     promise.finally(() => {
-      booting.delete(directory)
+      booting.delete(key)
       children.unpin(directory)
     })
     return promise
@@ -297,14 +302,15 @@ function createGlobalSync() {
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
-        for (const directory of Object.keys(children.children)) {
+        for (const directory of children.canonicalDir.values()) {
           queue.push(directory)
         }
       }
       return
     }
 
-    const existing = children.children[directory]
+    const key = workspaceKey(directory)
+    const existing = children.children[key]
     if (!existing) return
     children.mark(directory)
     const [store, setStore] = existing
@@ -315,7 +321,7 @@ function createGlobalSync() {
       setStore,
       push: queue.push,
       setSessionTodo,
-      vcsCache: children.vcsCache.get(directory),
+      vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         sdkFor(directory)
           .lsp.status()

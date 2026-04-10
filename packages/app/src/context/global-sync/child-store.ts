@@ -14,6 +14,7 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -31,31 +32,35 @@ export function createChildStoreManager(input: {
   const pins = new Map<string, number>()
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
+  const canonicalDir = new Map<string, string>()
 
   const mark = (directory: string) => {
     if (!directory) return
-    lifecycle.set(directory, { lastAccessAt: Date.now() })
-    runEviction(directory)
+    const k = workspaceKey(directory)
+    lifecycle.set(k, { lastAccessAt: Date.now() })
+    runEviction(k)
   }
 
   const pin = (directory: string) => {
     if (!directory) return
-    pins.set(directory, (pins.get(directory) ?? 0) + 1)
+    const k = workspaceKey(directory)
+    pins.set(k, (pins.get(k) ?? 0) + 1)
     mark(directory)
   }
 
   const unpin = (directory: string) => {
     if (!directory) return
-    const next = (pins.get(directory) ?? 0) - 1
+    const k = workspaceKey(directory)
+    const next = (pins.get(k) ?? 0) - 1
     if (next > 0) {
-      pins.set(directory, next)
+      pins.set(k, next)
       return
     }
-    pins.delete(directory)
+    pins.delete(k)
     runEviction()
   }
 
-  const pinned = (directory: string) => (pins.get(directory) ?? 0) > 0
+  const pinned = (directory: string) => (pins.get(workspaceKey(directory)) ?? 0) > 0
 
   const pinForOwner = (directory: string) => {
     const current = getOwner()
@@ -78,29 +83,32 @@ export function createChildStoreManager(input: {
   }
 
   function disposeDirectory(directory: string) {
+    const key = workspaceKey(directory)
+    const orig = canonicalDir.get(key) ?? directory
     if (
       !canDisposeDirectory({
-        directory,
-        hasStore: !!children[directory],
+        directory: orig,
+        hasStore: !!children[key],
         pinned: pinned(directory),
-        booting: input.isBooting(directory),
-        loadingSessions: input.isLoadingSessions(directory),
+        booting: input.isBooting(orig),
+        loadingSessions: input.isLoadingSessions(orig),
       })
     ) {
       return false
     }
 
-    vcsCache.delete(directory)
-    metaCache.delete(directory)
-    iconCache.delete(directory)
-    lifecycle.delete(directory)
-    const dispose = disposers.get(directory)
+    vcsCache.delete(key)
+    metaCache.delete(key)
+    iconCache.delete(key)
+    lifecycle.delete(key)
+    canonicalDir.delete(key)
+    const dispose = disposers.get(key)
     if (dispose) {
       dispose()
-      disposers.delete(directory)
+      disposers.delete(key)
     }
-    delete children[directory]
-    input.onDispose(directory)
+    delete children[key]
+    input.onDispose(orig)
     return true
   }
 
@@ -123,7 +131,11 @@ export function createChildStoreManager(input: {
 
   function ensureChild(directory: string) {
     if (!directory) console.error("No directory provided")
-    if (!children[directory]) {
+    const key = workspaceKey(directory)
+    // Prefer backslash format on Windows for API calls that need server-side exact match.
+    // If backslash path is available, always use it as the canonical form.
+    if (!canonicalDir.has(key) || directory.includes("\\")) canonicalDir.set(key, directory)
+    if (!children[key]) {
       const vcs = runWithOwner(input.owner, () =>
         persisted(
           Persist.workspace(directory, "vcs", ["vcs.v1"]),
@@ -132,7 +144,7 @@ export function createChildStoreManager(input: {
       )
       if (!vcs) throw new Error(input.translate("error.childStore.persistedCacheCreateFailed"))
       const vcsStore = vcs[0]
-      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
+      vcsCache.set(key, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
         persisted(
@@ -141,7 +153,7 @@ export function createChildStoreManager(input: {
         ),
       )
       if (!meta) throw new Error(input.translate("error.childStore.persistedProjectMetadataCreateFailed"))
-      metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
+      metaCache.set(key, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
         persisted(
@@ -150,7 +162,7 @@ export function createChildStoreManager(input: {
         ),
       )
       if (!icon) throw new Error(input.translate("error.childStore.persistedProjectIconCreateFailed"))
-      iconCache.set(directory, { store: icon[0], setStore: icon[1], ready: icon[3] })
+      iconCache.set(key, { store: icon[0], setStore: icon[1], ready: icon[3] })
 
       const init = () =>
         createRoot((dispose) => {
@@ -183,13 +195,13 @@ export function createChildStoreManager(input: {
             message: {},
             part: {},
           })
-          children[directory] = child
-          disposers.set(directory, dispose)
+          children[key] = child
+          disposers.set(key, dispose)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
             void init.then(() => {
-              if (children[directory] !== child) return
+              if (children[key] !== child) return
               run()
             })
           }
@@ -214,7 +226,7 @@ export function createChildStoreManager(input: {
       runWithOwner(input.owner, init)
     }
     mark(directory)
-    const childStore = children[directory]
+    const childStore = children[key]
     if (!childStore) throw new Error(input.translate("error.childStore.storeCreateFailed"))
     return childStore
   }
@@ -240,7 +252,7 @@ export function createChildStoreManager(input: {
 
   function projectMeta(directory: string, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
-    const cached = metaCache.get(directory)
+    const cached = metaCache.get(workspaceKey(directory))
     if (!cached) return
     const previous = store.projectMeta ?? {}
     const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
@@ -257,7 +269,7 @@ export function createChildStoreManager(input: {
 
   function projectIcon(directory: string, value: string | undefined) {
     const [store, setStore] = ensureChild(directory)
-    const cached = iconCache.get(directory)
+    const cached = iconCache.get(workspaceKey(directory))
     if (!cached) return
     if (store.icon === value) return
     cached.setStore("value", value)
@@ -266,6 +278,7 @@ export function createChildStoreManager(input: {
 
   return {
     children,
+    canonicalDir,
     ensureChild,
     child,
     peek,
