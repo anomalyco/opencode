@@ -22,7 +22,7 @@ import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
-import { ProjectProvider } from "@tui/context/project"
+import { ProjectProvider, useProject } from "@tui/context/project"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { StartupLoading } from "@tui/component/startup-loading"
@@ -36,7 +36,6 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -465,22 +464,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         dialog.replace(() => <DialogSessionList />)
       },
     },
-    ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-      ? [
-          {
-            title: "Manage workspaces",
-            value: "workspace.list",
-            category: "Workspace",
-            suggested: true,
-            slash: {
-              name: "workspaces",
-            },
-            onSelect: () => {
-              dialog.replace(() => <DialogWorkspaceList />)
-            },
-          },
-        ]
-      : []),
     {
       title: "New session",
       suggested: route.data.type === "session",

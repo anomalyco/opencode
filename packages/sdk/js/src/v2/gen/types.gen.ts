@@ -330,6 +330,15 @@ export type EventWorkspaceFailed = {
   }
 }
 
+export type EventWorkspaceStatus = {
+  type: "workspace.status"
+  properties: {
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+    error?: string
+  }
+}
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -988,6 +997,7 @@ export type Event =
   | EventCommandExecuted
   | EventWorkspaceReady
   | EventWorkspaceFailed
+  | EventWorkspaceStatus
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -2856,6 +2866,30 @@ export type ExperimentalWorkspaceCreateResponses = {
 
 export type ExperimentalWorkspaceCreateResponse =
   ExperimentalWorkspaceCreateResponses[keyof ExperimentalWorkspaceCreateResponses]
+
+export type ExperimentalWorkspaceStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace/status"
+}
+
+export type ExperimentalWorkspaceStatusResponses = {
+  /**
+   * Workspace status
+   */
+  200: Array<{
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+    error?: string
+  }>
+}
+
+export type ExperimentalWorkspaceStatusResponse =
+  ExperimentalWorkspaceStatusResponses[keyof ExperimentalWorkspaceStatusResponses]
 
 export type ExperimentalWorkspaceRemoveData = {
   body?: never

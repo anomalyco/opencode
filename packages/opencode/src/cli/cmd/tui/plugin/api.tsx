@@ -146,14 +146,6 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
         branch: sync.data.vcs.branch,
       }
     },
-    workspace: {
-      list() {
-        return sync.data.workspaceList
-      },
-      get(workspaceID) {
-        return sync.workspace.get(workspaceID)
-      },
-    },
     session: {
       count() {
         return sync.data.session.length
