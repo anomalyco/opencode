@@ -3,10 +3,17 @@ import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
+import { Effect, Layer, ServiceMap } from "effect"
+import * as Stream from "effect/Stream"
+import { ChildProcess } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import type { PlatformError } from "effect/PlatformError"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
 
 import { Filesystem } from "../util/filesystem"
+import { AppFileSystem } from "../filesystem"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { text } from "node:stream/consumers"
@@ -273,6 +280,69 @@ export namespace Ripgrep {
 
     input.signal?.throwIfAborted()
   }
+
+  export interface Interface {
+    readonly files: (input: {
+      cwd: string
+      glob?: string[]
+      hidden?: boolean
+      follow?: boolean
+      maxDepth?: number
+    }) => Stream.Stream<string, PlatformError>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Ripgrep") {}
+
+  export const layer: Layer.Layer<Service, never, ChildProcessSpawner | AppFileSystem.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner
+      const afs = yield* AppFileSystem.Service
+
+      const files = Effect.fn("Ripgrep.files")(function* (input: {
+        cwd: string
+        glob?: string[]
+        hidden?: boolean
+        follow?: boolean
+        maxDepth?: number
+      }) {
+        const rgPath = yield* Effect.promise(() => filepath())
+        const isDir = yield* afs.isDir(input.cwd)
+        if (!isDir) {
+          return yield* Effect.die(
+            Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
+              code: "ENOENT" as const,
+              errno: -2,
+              path: input.cwd,
+            }),
+          )
+        }
+
+        const args = [rgPath, "--files", "--glob=!.git/*"]
+        if (input.follow) args.push("--follow")
+        if (input.hidden !== false) args.push("--hidden")
+        if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
+        if (input.glob) {
+          for (const g of input.glob) {
+            args.push(`--glob=${g}`)
+          }
+        }
+
+        return spawner.streamLines(
+          ChildProcess.make(args[0], args.slice(1), { cwd: input.cwd }),
+        ).pipe(Stream.filter((line: string) => line.length > 0))
+      })
+
+      return Service.of({
+        files: (input) => Stream.unwrap(files(input)),
+      })
+    }),
+  )
+
+  export const defaultLayer = layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+  )
 
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     log.info("tree", input)

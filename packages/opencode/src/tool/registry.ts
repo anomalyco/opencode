@@ -33,6 +33,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Ripgrep } from "../file/ripgrep"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
@@ -89,6 +90,7 @@ export namespace ToolRegistry {
     | AppFileSystem.Service
     | HttpClient.HttpClient
     | ChildProcessSpawner
+    | Ripgrep.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -107,6 +109,7 @@ export namespace ToolRegistry {
       const websearch = yield* WebSearchTool
       const bash = yield* BashTool
       const codesearch = yield* CodeSearchTool
+      const globtool = yield* GlobTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -167,7 +170,7 @@ export namespace ToolRegistry {
             invalid: Tool.init(InvalidTool),
             bash: Tool.init(bash),
             read: Tool.init(read),
-            glob: Tool.init(GlobTool),
+            glob: Tool.init(globtool),
             grep: Tool.init(GrepTool),
             edit: Tool.init(EditTool),
             write: Tool.init(WriteTool),
@@ -320,6 +323,7 @@ export namespace ToolRegistry {
       Layer.provide(AppFileSystem.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
     ),
   )
 

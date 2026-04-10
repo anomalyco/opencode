@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import * as Stream from "effect/Stream"
 import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
@@ -50,5 +52,48 @@ describe("file.ripgrep", () => {
     })
 
     expect(hits).toEqual([])
+  })
+})
+
+describe("Ripgrep.Service", () => {
+  test("files returns stream of filenames", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "a.txt"), "hello")
+        await Bun.write(path.join(dir, "b.txt"), "world")
+      },
+    })
+
+    const files = await Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      return yield* rg.files({ cwd: tmp.path }).pipe(Stream.runCollect, Effect.map((chunk) => [...chunk].sort()))
+    }).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromise)
+
+    expect(files).toEqual(["a.txt", "b.txt"])
+  })
+
+  test("files respects glob filter", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "keep.ts"), "yes")
+        await Bun.write(path.join(dir, "skip.txt"), "no")
+      },
+    })
+
+    const files = await Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      return yield* rg.files({ cwd: tmp.path, glob: ["*.ts"] }).pipe(Stream.runCollect, Effect.map((chunk) => [...chunk]))
+    }).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromise)
+
+    expect(files).toEqual(["keep.ts"])
+  })
+
+  test("files dies on nonexistent directory", async () => {
+    const exit = await Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      return yield* rg.files({ cwd: "/tmp/nonexistent-dir-12345" }).pipe(Stream.runCollect)
+    }).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromiseExit)
+
+    expect(exit._tag).toBe("Failure")
   })
 })

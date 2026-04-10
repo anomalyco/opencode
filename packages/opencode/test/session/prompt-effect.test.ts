@@ -37,6 +37,7 @@ import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Ripgrep } from "../../src/file/ripgrep"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
@@ -172,6 +173,7 @@ function makeHttp() {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Ripgrep.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
