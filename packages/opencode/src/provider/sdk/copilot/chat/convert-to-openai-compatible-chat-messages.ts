@@ -146,13 +146,24 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
             case "error-json":
               contentValue = JSON.stringify(output.value)
               break
+            default: {
+              // Safety net: guarantee contentValue is always a string.
+              // Some providers reject non-string tool output content.
+              // Cast through unknown because TypeScript narrows switch to never on exhaustive matches,
+              // but runtime may encounter unexpected output types (e.g. from stored conversation history).
+              const fallback = (output as { type: string; value?: unknown }).value
+              contentValue = typeof fallback === "string" ? fallback : JSON.stringify(fallback ?? "")
+              break
+            }
           }
 
           const toolResponseMetadata = getOpenAIMetadata(toolResponse)
           messages.push({
             role: "tool",
             tool_call_id: toolResponse.toolCallId,
-            content: contentValue,
+            // Guarantee content is always a string — the Responses API
+            // rejects arrays/objects in function_call_output.output.
+            content: typeof contentValue === "string" ? contentValue : JSON.stringify(contentValue),
             ...toolResponseMetadata,
           })
         }

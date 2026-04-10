@@ -305,12 +305,25 @@ export async function convertToOpenAIResponsesInput({
             case "error-json":
               contentValue = JSON.stringify(output.value)
               break
+            default: {
+              // Safety net: ensure output is always a string for the Responses API
+              // which requires function_call_output.output to be type string.
+              // Cast through unknown because TypeScript narrows switch to never on exhaustive matches,
+              // but runtime may encounter unexpected output types (e.g. from stored conversation history).
+              const fallback = (output as { type: string; value?: unknown }).value
+              contentValue = typeof fallback === "string" ? fallback : JSON.stringify(fallback ?? "")
+              break
+            }
           }
 
           input.push({
             type: "function_call_output",
             call_id: part.toolCallId,
-            output: contentValue,
+            // The Responses API rejects non-string output values with:
+            //   json: cannot unmarshal array into Go struct field
+            //   ResponsesFunctionCallOutput.output of type string
+            // Guarantee it's always a string.
+            output: typeof contentValue === "string" ? contentValue : JSON.stringify(contentValue),
           })
         }
 
