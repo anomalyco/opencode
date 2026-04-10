@@ -7,6 +7,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { ProviderTransform } from "../../src/provider/transform"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import type { Provider } from "../../src/provider/provider"
@@ -533,6 +534,7 @@ describe("session.prompt structured output tool choice", () => {
         npm: "@ai-sdk/openai-compatible",
       },
       name: "Kimi K2.5",
+      family: "kimi",
       capabilities: {
         temperature: true,
         reasoning: true,
@@ -560,7 +562,7 @@ describe("session.prompt structured output tool choice", () => {
       options: {},
     }
 
-    expect(SessionPrompt.getToolChoice(model, { type: "json_schema" })).toBe("auto")
+    expect(ProviderTransform.toolChoice(model, { type: "json_schema" })).toBe("auto")
   })
 
   test("keeps required for non-Kimi json_schema requests", () => {
@@ -600,7 +602,7 @@ describe("session.prompt structured output tool choice", () => {
       options: {},
     }
 
-    expect(SessionPrompt.getToolChoice(model, { type: "json_schema" })).toBe("required")
-    expect(SessionPrompt.getToolChoice(model, { type: "text" })).toBeUndefined()
+    expect(ProviderTransform.toolChoice(model, { type: "json_schema" })).toBe("required")
+    expect(ProviderTransform.toolChoice(model, { type: "text" })).toBeUndefined()
   })
 })

@@ -20,6 +20,15 @@ function mimeToModality(mime: string): Modality | undefined {
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  export function toolChoice(
+    model: Provider.Model,
+    format: { type: "text" | "json_schema" },
+  ): "auto" | "required" | undefined {
+    if (format.type !== "json_schema") return undefined
+    if (model.family?.startsWith("kimi")) return "auto"
+    return "required"
+  }
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
