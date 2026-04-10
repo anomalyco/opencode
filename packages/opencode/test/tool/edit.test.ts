@@ -1,10 +1,12 @@
-import { afterEach, describe, test, expect } from "bun:test"
+import { afterAll, afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { LSP } from "../../src/lsp"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
@@ -27,6 +29,22 @@ async function touch(file: string, time: number) {
   await fs.utimes(file, date, date)
 }
 
+const runtime = ManagedRuntime.make(
+  Layer.mergeAll(LSP.defaultLayer, FileTime.defaultLayer),
+)
+
+afterAll(async () => {
+  await runtime.dispose()
+})
+
+const resolve = () =>
+  runtime.runPromise(
+    Effect.gen(function* () {
+      const info = yield* EditTool
+      return yield* Effect.promise(() => info.init())
+    }),
+  )
+
 describe("tool.edit", () => {
   describe("creating new files", () => {
     test("creates new file when oldString is empty", async () => {
@@ -36,7 +54,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const edit = await EditTool.init()
+          const edit = await resolve()
           const result = await edit.execute(
             {
               filePath: filepath,
@@ -61,7 +79,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await edit.execute(
             {
               filePath: filepath,
@@ -91,7 +109,7 @@ describe("tool.edit", () => {
           const events: string[] = []
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await edit.execute(
             {
               filePath: filepath,
@@ -119,7 +137,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           const result = await edit.execute(
             {
               filePath: filepath,
@@ -146,7 +164,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -169,7 +187,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -194,7 +212,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -217,7 +235,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -249,7 +267,7 @@ describe("tool.edit", () => {
           await touch(filepath, 2_000)
 
           // Try to edit with the new content
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -274,7 +292,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await edit.execute(
             {
               filePath: filepath,
@@ -307,7 +325,7 @@ describe("tool.edit", () => {
           const events: string[] = []
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await edit.execute(
             {
               filePath: filepath,
@@ -335,7 +353,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await edit.execute(
             {
               filePath: filepath,
@@ -361,7 +379,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await edit.execute(
             {
               filePath: filepath,
@@ -385,7 +403,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -410,7 +428,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, dirpath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           await expect(
             edit.execute(
               {
@@ -435,7 +453,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
           const result = await edit.execute(
             {
               filePath: filepath,
@@ -502,7 +520,7 @@ describe("tool.edit", () => {
       return await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const edit = await EditTool.init()
+          const edit = await resolve()
           const filePath = path.join(tmp.path, "test.txt")
           await FileTime.read(ctx.sessionID, filePath)
           await edit.execute(
@@ -647,7 +665,7 @@ describe("tool.edit", () => {
         fn: async () => {
           await FileTime.read(ctx.sessionID, filepath)
 
-          const edit = await EditTool.init()
+          const edit = await resolve()
 
           // Two concurrent edits
           const promise1 = edit.execute(
