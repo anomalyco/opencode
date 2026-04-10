@@ -6,6 +6,7 @@ import * as launch from "../../src/lsp/launch"
 import { LSPServer } from "../../src/lsp/server"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { Npm } from "../../src/npm"
 
 describe("lsp.spawn", () => {
   test("does not spawn builtin LSP for files outside instance", async () => {
@@ -63,6 +64,13 @@ describe("lsp.spawn", () => {
     await fs.mkdir(tsdk, { recursive: true })
     await fs.writeFile(path.join(tsdk, "tsserver.js"), "")
 
+    // Mock Npm.which to return a fake path for typescript-language-server
+    const npmWhichSpy = spyOn(Npm, "which").mockImplementation(async (pkg) => {
+      if (pkg === "typescript-language-server") return path.join(tmp.path, "fake-tsls")
+      return undefined
+    })
+
+    let capturedInitialization: Record<string, any> | undefined
     const spawnSpy = spyOn(launch, "spawn").mockImplementation(
       () =>
         ({
@@ -78,28 +86,36 @@ describe("lsp.spawn", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await LSPServer.Typescript.spawn(tmp.path)
+          const result = await LSPServer.Typescript.spawn(tmp.path)
+          capturedInitialization = result?.initialization
         },
       })
 
       expect(spawnSpy).toHaveBeenCalled()
       const args = spawnSpy.mock.calls[0][1] as string[]
 
-      expect(args).toContain("--tsserver-path")
-      expect(args).toContain("--tsserver-log-verbosity")
-      expect(args).toContain("off")
+      expect(args).toEqual(["--stdio"])
+      expect(capturedInitialization?.tsserver?.path).toBeDefined()
+      expect(capturedInitialization?.tsserver?.logVerbosity).toBe("off")
     } finally {
       spawnSpy.mockRestore()
+      npmWhichSpy.mockRestore()
     }
   })
 
-  test("spawns builtin Typescript LSP with --ignore-node-modules if no config is found", async () => {
+  test("spawns builtin Typescript LSP with --stdio regardless of config presence", async () => {
     await using tmp = await tmpdir()
 
     // Create dummy tsserver to satisfy Module.resolve
     const tsdk = path.join(tmp.path, "node_modules", "typescript", "lib")
     await fs.mkdir(tsdk, { recursive: true })
     await fs.writeFile(path.join(tsdk, "tsserver.js"), "")
+
+    // Mock Npm.which to return a fake path for typescript-language-server
+    const npmWhichSpy = spyOn(Npm, "which").mockImplementation(async (pkg) => {
+      if (pkg === "typescript-language-server") return path.join(tmp.path, "fake-tsls")
+      return undefined
+    })
 
     // NO tsconfig.json or jsconfig.json created here
 
@@ -125,9 +141,10 @@ describe("lsp.spawn", () => {
       expect(spawnSpy).toHaveBeenCalled()
       const args = spawnSpy.mock.calls[0][1] as string[]
 
-      expect(args).toContain("--ignore-node-modules")
+      expect(args).toEqual(["--stdio"])
     } finally {
       spawnSpy.mockRestore()
+      npmWhichSpy.mockRestore()
     }
   })
 })
