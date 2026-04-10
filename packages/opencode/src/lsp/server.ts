@@ -24,6 +24,21 @@ export namespace LSPServer {
       .catch(() => false)
   const run = (cmd: string[], opts: Process.RunOptions = {}) => Process.run(cmd, { ...opts, nothrow: true })
   const output = (cmd: string[], opts: Process.RunOptions = {}) => Process.text(cmd, { ...opts, nothrow: true })
+  const java = async (min: number) => {
+    if (!which("java")) {
+      log.error(`Java ${min} or newer is required. Please install it first.`)
+      return false
+    }
+    const javaMajorVersion = await run(["java", "-version"]).then((result) => {
+      const m = /"(\d+)\.\d+\.\d+"/.exec(result.stderr.toString())
+      return !m ? undefined : parseInt(m[1])
+    })
+    if (javaMajorVersion == null || javaMajorVersion < min) {
+      log.error(`Java ${min} or newer is required.`)
+      return false
+    }
+    return true
+  }
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -1094,19 +1109,9 @@ export namespace LSPServer {
     },
     extensions: [".java"],
     async spawn(root) {
-      const java = which("java")
-      if (!java) {
-        log.error("Java 21 or newer is required to run the JDTLS. Please install it first.")
-        return
-      }
-      const javaMajorVersion = await run(["java", "-version"]).then((result) => {
-        const m = /"(\d+)\.\d+\.\d+"/.exec(result.stderr.toString())
-        return !m ? undefined : parseInt(m[1])
-      })
-      if (javaMajorVersion == null || javaMajorVersion < 21) {
-        log.error("JDTLS requires at least Java 21.")
-        return
-      }
+      if (!(await java(21))) return
+      const javaBin = which("java")
+      if (!javaBin) return
       const distPath = path.join(Global.Path.bin, "jdtls")
       const launcherDir = path.join(distPath, "plugins")
       const installed = await pathExists(launcherDir)
@@ -1163,7 +1168,7 @@ export namespace LSPServer {
       const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
       return {
         process: spawn(
-          java,
+          javaBin,
           [
             "-jar",
             launcherJar,
@@ -1946,11 +1951,7 @@ export namespace LSPServer {
       let bin = which("metals")
 
       if (!bin) {
-        const java = which("java")
-        if (!java) {
-          log.info("Java 11+ is required for Metals LSP")
-          return
-        }
+        if (!(await java(17))) return
 
         let cs = which("cs") || which("coursier")
         if (!cs) {
