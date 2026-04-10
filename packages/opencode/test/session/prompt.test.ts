@@ -556,8 +556,10 @@ describe("session.prompt structured output tool choice", () => {
         },
         interleaved: { field: "reasoning_content" },
       },
-      cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
       limit: { context: 100000, output: 10000 },
+      status: "active",
+      headers: {},
       release_date: "2026-01-01",
       options: {},
     }
@@ -596,8 +598,10 @@ describe("session.prompt structured output tool choice", () => {
         },
         interleaved: false,
       },
-      cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
       limit: { context: 100000, output: 10000 },
+      status: "active",
+      headers: {},
       release_date: "2026-01-01",
       options: {},
     }
