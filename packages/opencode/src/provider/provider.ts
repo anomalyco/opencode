@@ -1233,7 +1233,7 @@ export namespace Provider {
               continue
             }
             const result = yield* fn(data)
-            const configured = data.source === "config" && data.options?.apiKey
+            const configured = data.source === "config" && Boolean(data.options?.apiKey)
             if (result && (result.autoload || providers[providerID] || configured)) {
               if (result.getModel) modelLoaders[providerID] = result.getModel
               if (result.vars) varsLoaders[providerID] = result.vars
