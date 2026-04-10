@@ -1,21 +1,23 @@
 import { PlanExitTool } from "./plan"
+import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
-import { TaskDescription, TaskTool } from "./task"
+import { TaskTool } from "./task"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
-import { SkillDescription, SkillTool } from "./skill"
+import { SkillTool } from "./skill"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { Provider } from "../provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
@@ -28,6 +30,9 @@ import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
@@ -38,6 +43,8 @@ import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "../filesystem"
 import { Agent } from "../agent/agent"
+import { Skill } from "../skill"
+import { Permission } from "@/permission"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -73,20 +80,33 @@ export namespace ToolRegistry {
     | Question.Service
     | Todo.Service
     | Agent.Service
+    | Skill.Service
+    | Session.Service
+    | Provider.Service
     | LSP.Service
     | FileTime.Service
     | Instruction.Service
     | AppFileSystem.Service
+    | HttpClient.HttpClient
+    | ChildProcessSpawner
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const plugin = yield* Plugin.Service
+      const agents = yield* Agent.Service
+      const skill = yield* Skill.Service
 
       const task = yield* TaskTool
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
+      const lsptool = yield* LspTool
+      const plan = yield* PlanExitTool
+      const webfetch = yield* WebFetchTool
+      const websearch = yield* WebSearchTool
+      const bash = yield* BashTool
+      const codesearch = yield* CodeSearchTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -145,22 +165,22 @@ export namespace ToolRegistry {
 
           const tool = yield* Effect.all({
             invalid: Tool.init(InvalidTool),
-            bash: Tool.init(BashTool),
+            bash: Tool.init(bash),
             read: Tool.init(read),
             glob: Tool.init(GlobTool),
             grep: Tool.init(GrepTool),
             edit: Tool.init(EditTool),
             write: Tool.init(WriteTool),
             task: Tool.init(task),
-            fetch: Tool.init(WebFetchTool),
+            fetch: Tool.init(webfetch),
             todo: Tool.init(todo),
-            search: Tool.init(WebSearchTool),
-            code: Tool.init(CodeSearchTool),
+            search: Tool.init(websearch),
+            code: Tool.init(codesearch),
             skill: Tool.init(SkillTool),
             patch: Tool.init(ApplyPatchTool),
             question: Tool.init(question),
-            lsp: Tool.init(LspTool),
-            plan: Tool.init(PlanExitTool),
+            lsp: Tool.init(lsptool),
+            plan: Tool.init(plan),
           })
 
           return {
@@ -199,6 +219,40 @@ export namespace ToolRegistry {
         return (yield* all()).map((tool) => tool.id)
       })
 
+      const describeSkill = Effect.fn("ToolRegistry.describeSkill")(function* (agent: Agent.Info) {
+        const list = yield* skill.available(agent)
+        if (list.length === 0) return "No skills are currently available."
+        return [
+          "Load a specialized skill that provides domain-specific instructions and workflows.",
+          "",
+          "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
+          "",
+          "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
+          "",
+          'Tool output includes a `<skill_content name="...">` block with the loaded content.',
+          "",
+          "The following skills provide specialized sets of instructions for particular tasks",
+          "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+          "",
+          Skill.fmt(list, { verbose: false }),
+        ].join("\n")
+      })
+
+      const describeTask = Effect.fn("ToolRegistry.describeTask")(function* (agent: Agent.Info) {
+        const items = (yield* agents.list()).filter((item) => item.mode !== "primary")
+        const filtered = items.filter(
+          (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
+        )
+        const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
+        const description = list
+          .map(
+            (item) =>
+              `- ${item.name}: ${item.description ?? "This subagent should only be called manually by the user."}`,
+          )
+          .join("\n")
+        return ["Available agent types and the tools they have access to:", description].join("\n")
+      })
+
       const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
@@ -227,8 +281,8 @@ export namespace ToolRegistry {
               id: tool.id,
               description: [
                 output.description,
-                tool.id === TaskTool.id ? yield* TaskDescription(input.agent) : undefined,
-                tool.id === SkillTool.id ? yield* SkillDescription(input.agent) : undefined,
+                tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+                tool.id === SkillTool.id ? yield* describeSkill(input.agent) : undefined,
               ]
                 .filter(Boolean)
                 .join("\n"),
@@ -250,19 +304,22 @@ export namespace ToolRegistry {
     }),
   )
 
-  export const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
-        Layer.provide(Config.defaultLayer),
-        Layer.provide(Plugin.defaultLayer),
-        Layer.provide(Question.defaultLayer),
-        Layer.provide(Todo.defaultLayer),
-        Layer.provide(Agent.defaultLayer),
-        Layer.provide(LSP.defaultLayer),
-        Layer.provide(FileTime.defaultLayer),
-        Layer.provide(Instruction.defaultLayer),
-        Layer.provide(AppFileSystem.defaultLayer),
-      ),
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(Question.defaultLayer),
+      Layer.provide(Todo.defaultLayer),
+      Layer.provide(Skill.defaultLayer),
+      Layer.provide(Agent.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
+      Layer.provide(LSP.defaultLayer),
+      Layer.provide(FileTime.defaultLayer),
+      Layer.provide(Instruction.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
     ),
   )
 

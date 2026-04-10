@@ -11,7 +11,11 @@ import { Git } from "@/git"
 export namespace Storage {
   const log = Log.create({ service: "storage" })
 
-  type Migration = (dir: string, fs: AppFileSystem.Interface) => Effect.Effect<void, AppFileSystem.Error>
+  type Migration = (
+    dir: string,
+    fs: AppFileSystem.Interface,
+    git: Git.Interface,
+  ) => Effect.Effect<void, AppFileSystem.Error>
 
   export const NotFoundError = NamedError.create(
     "NotFoundError",
@@ -83,7 +87,7 @@ export namespace Storage {
   }
 
   const MIGRATIONS: Migration[] = [
-    Effect.fn("Storage.migration.1")(function* (dir: string, fs: AppFileSystem.Interface) {
+    Effect.fn("Storage.migration.1")(function* (dir: string, fs: AppFileSystem.Interface, git: Git.Interface) {
       const project = path.resolve(dir, "../project")
       if (!(yield* fs.isDir(project))) return
       const projectDirs = yield* fs.glob("*", {
@@ -110,11 +114,9 @@ export namespace Storage {
           }
           if (!worktree) continue
           if (!(yield* fs.isDir(worktree))) continue
-          const result = yield* Effect.promise(() =>
-            Git.run(["rev-list", "--max-parents=0", "--all"], {
-              cwd: worktree,
-            }),
-          )
+          const result = yield* git.run(["rev-list", "--max-parents=0", "--all"], {
+            cwd: worktree,
+          })
           const [id] = result
             .text()
             .split("\n")
@@ -220,6 +222,7 @@ export namespace Storage {
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
+      const git = yield* Git.Service
       const locks = yield* RcMap.make({
         lookup: () => TxReentrantLock.make(),
         idleTimeToLive: 0,
@@ -236,7 +239,7 @@ export namespace Storage {
           for (let i = migration; i < MIGRATIONS.length; i++) {
             log.info("running migration", { index: i })
             const step = MIGRATIONS[i]!
-            const exit = yield* Effect.exit(step(dir, fs))
+            const exit = yield* Effect.exit(step(dir, fs, git))
             if (Exit.isFailure(exit)) {
               log.error("failed to run migration", { index: i, cause: exit.cause })
               break
@@ -327,7 +330,7 @@ export namespace Storage {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

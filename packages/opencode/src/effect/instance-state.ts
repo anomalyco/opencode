@@ -1,8 +1,9 @@
 import { Effect, Fiber, ScopedCache, Scope, ServiceMap } from "effect"
 import { Instance, type InstanceContext } from "@/project/instance"
 import { Context } from "@/util/context"
-import { InstanceRef } from "./instance-ref"
+import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 const TypeId = "~opencode/InstanceState"
 
@@ -26,6 +27,10 @@ export namespace InstanceState {
 
   export const context = Effect.gen(function* () {
     return (yield* InstanceRef) ?? Instance.current
+  })
+
+  export const workspaceID = Effect.gen(function* () {
+    return (yield* WorkspaceRef) ?? WorkspaceContext.workspaceID
   })
 
   export const directory = Effect.map(context, (ctx) => ctx.directory)
@@ -73,10 +78,4 @@ export namespace InstanceState {
     Effect.gen(function* () {
       return yield* ScopedCache.invalidate(self.cache, yield* directory)
     })
-
-  /**
-   * Effect finalizers run on the fiber scheduler after the original async
-   * boundary, so ALS reads like Instance.directory can be gone by then.
-   */
-  export const withALS = <T>(fn: () => T) => Effect.map(context, (ctx) => Instance.restore(ctx, fn))
 }

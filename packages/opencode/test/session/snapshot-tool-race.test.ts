@@ -12,12 +12,14 @@
  * tools internally during multi-step processing before emitting events.
  */
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import fs from "fs/promises"
 import path from "path"
 import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Log } from "../../src/util/log"
@@ -27,7 +29,6 @@ import { TestLLMServer } from "../lib/llm-server"
 
 // Same layer setup as prompt-effect.test.ts
 import { NodeFileSystem } from "@effect/platform-node"
-import { Layer } from "effect"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
@@ -39,10 +40,12 @@ import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider/provider"
 import { Question } from "../../src/question"
+import { Skill } from "../../src/skill"
 import { Todo } from "../../src/session/todo"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
+import { SessionRunState } from "../../src/session/run-state"
 import { SessionStatus } from "../../src/session/status"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
@@ -107,6 +110,7 @@ const filetime = Layer.succeed(
 )
 
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
+const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
 function makeHttp() {
@@ -129,6 +133,9 @@ function makeHttp() {
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -139,6 +146,8 @@ function makeHttp() {
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
+      Layer.provide(SessionRevert.defaultLayer),
+      Layer.provideMerge(run),
       Layer.provideMerge(compact),
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),

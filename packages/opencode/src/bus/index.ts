@@ -1,9 +1,9 @@
 import z from "zod"
 import { Effect, Exit, Layer, PubSub, Scope, ServiceMap, Stream } from "effect"
 import { Log } from "../util/log"
-import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -91,8 +91,13 @@ export namespace Bus {
           yield* PubSub.publish(s.wildcard, payload)
 
           const dir = yield* InstanceState.directory
+          const context = yield* InstanceState.context
+          const workspace = yield* InstanceState.workspaceID
+
           GlobalBus.emit("event", {
             directory: dir,
+            project: context.project.id,
+            workspace,
             payload,
           })
         })
