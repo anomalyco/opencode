@@ -56,4 +56,17 @@ describe("trimSessions", () => {
       "root-2",
     ])
   })
+
+  test("selects base roots by last update instead of creation order", () => {
+    const now = 20_000_000
+    const list = [
+      session({ id: "ses_z_old", created: now - 19_000_000, updated: now - 19_000_000 }),
+      session({ id: "ses_a_new", created: now - 1_000, updated: now - 1_000 }),
+      session({ id: "ses_m_resurfaced", created: now - 18_000_000, updated: now - 100 }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+
+    expect(result.map((x) => x.id)).toEqual(["ses_a_new", "ses_m_resurfaced"])
+  })
 })
