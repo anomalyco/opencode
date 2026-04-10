@@ -5,7 +5,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
-import { A, useParams } from "@solidjs/router"
+import { A, useNavigate, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -94,16 +94,20 @@ const SessionRow = (props: {
   sidebarOpened: Accessor<boolean>
   warmPress: () => void
   warmFocus: () => void
+  onSelect: () => void
 }): JSX.Element => {
   const title = () => sessionTitle(props.session.title)
+  const href = () => `/${props.slug}/session/${props.session.id}`
 
   return (
     <A
-      href={`/${props.slug}/session/${props.session.id}`}
+      href={href()}
       class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerDown={props.warmPress}
       onFocus={props.warmFocus}
-      onClick={() => {
+      onClick={(event) => {
+        event.preventDefault()
+        props.onSelect()
         if (props.sidebarOpened()) return
         props.clearHoverProjectSoon()
       }}
@@ -135,6 +139,7 @@ const SessionRow = (props: {
 }
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
+  const navigate = useNavigate()
   const params = useParams()
   const layout = useLayout()
   const language = useLanguage()
@@ -207,6 +212,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       sidebarOpened={layout.sidebar.opened}
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
+      onSelect={() => navigate(`/${props.slug}/session/${props.session.id}`)}
     />
   )
 
