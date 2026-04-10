@@ -1,5 +1,6 @@
 import type { Config } from "@/config/config"
 import type { Provider } from "@/provider/provider"
+import { DEFAULT_CONTEXT_LIMIT } from "@/provider/constants"
 import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
 
@@ -7,8 +8,7 @@ const COMPACTION_BUFFER = 20_000
 
 export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
   if (input.cfg.compaction?.auto === false) return false
-  const context = input.model.limit.context
-  if (context === 0) return false
+  const context = input.model.limit.context || DEFAULT_CONTEXT_LIMIT
 
   const count =
     input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write

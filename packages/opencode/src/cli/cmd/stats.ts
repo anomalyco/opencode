@@ -385,7 +385,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
     for (const [tool, count] of toolsToDisplay) {
       const barLength = Math.max(1, Math.floor((count / maxCount) * 20))
       const bar = "█".repeat(barLength)
-      const percentage = ((count / totalToolUsage) * 100).toFixed(1)
+      const percentage = totalToolUsage > 0 ? ((count / totalToolUsage) * 100).toFixed(1) : "0.0"
 
       const maxToolLength = 18
       const truncatedTool = tool.length > maxToolLength ? tool.substring(0, maxToolLength - 2) + ".." : tool

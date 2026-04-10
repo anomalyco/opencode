@@ -20,6 +20,7 @@ import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { Effect, Layer, ServiceMap } from "effect"
+import { DEFAULT_CONTEXT_LIMIT, DEFAULT_OUTPUT_LIMIT } from "./constants"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -1158,9 +1159,20 @@ export namespace Provider {
                 },
                 options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
                 limit: {
-                  context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+                  context: (() => {
+                    const resolved = model.limit?.context ?? existingModel?.limit?.context
+                    if (resolved === undefined) {
+                      log.info("model has no context limit configured, using default", {
+                        provider: providerID,
+                        model: modelID,
+                        default: DEFAULT_CONTEXT_LIMIT,
+                      })
+                      return DEFAULT_CONTEXT_LIMIT
+                    }
+                    return resolved
+                  })(),
                   input: model.limit?.input ?? existingModel?.limit?.input,
-                  output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+                  output: model.limit?.output ?? existingModel?.limit?.output ?? DEFAULT_OUTPUT_LIMIT,
                 },
                 headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
                 family: model.family ?? existingModel?.family ?? "",

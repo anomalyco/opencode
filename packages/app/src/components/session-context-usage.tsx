@@ -88,7 +88,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-text-invert-strong">{ctx().usage ?? 0}%</span>
+              <span class="text-text-invert-strong">{ctx().usage !== null ? `${ctx().usage}%` : "\u2014"}</span>
               <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
             </div>
           </>
