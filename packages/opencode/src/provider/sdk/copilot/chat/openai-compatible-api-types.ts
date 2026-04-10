@@ -43,6 +43,9 @@ export interface OpenAICompatibleAssistantMessage extends JsonRecord<OpenAICompa
   role: "assistant"
   content?: string | null
   tool_calls?: Array<OpenAICompatibleMessageToolCall>
+  // Generic interleaved reasoning fields used by OpenAI-compatible providers.
+  reasoning_content?: string
+  reasoning_details?: string
   // Copilot-specific reasoning fields
   reasoning_text?: string
   reasoning_opaque?: string

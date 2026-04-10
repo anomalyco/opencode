@@ -9,6 +9,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import type { Provider } from "../../src/provider/provider"
 
 Log.init({ print: false })
 
@@ -519,4 +520,87 @@ describe("session.agent-resolution", () => {
       },
     })
   }, 30000)
+})
+
+describe("session.prompt structured output tool choice", () => {
+  test("uses auto for Kimi json_schema requests", () => {
+    const model: Provider.Model = {
+      id: ModelID.make("kimi-k2.5"),
+      providerID: ProviderID.make("opencode"),
+      api: {
+        id: "kimi-k2.5",
+        url: "https://example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Kimi K2.5",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: { field: "reasoning_content" },
+      },
+      cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      limit: { context: 100000, output: 10000 },
+      release_date: "2026-01-01",
+      options: {},
+    }
+
+    expect(SessionPrompt.getToolChoice(model, { type: "json_schema" })).toBe("auto")
+  })
+
+  test("keeps required for non-Kimi json_schema requests", () => {
+    const model: Provider.Model = {
+      id: ModelID.make("gpt-5.2"),
+      providerID: ProviderID.make("openai"),
+      api: {
+        id: "gpt-5.2",
+        url: "https://example.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "GPT-5.2",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      limit: { context: 100000, output: 10000 },
+      release_date: "2026-01-01",
+      options: {},
+    }
+
+    expect(SessionPrompt.getToolChoice(model, { type: "json_schema" })).toBe("required")
+    expect(SessionPrompt.getToolChoice(model, { type: "text" })).toBeUndefined()
+  })
 })

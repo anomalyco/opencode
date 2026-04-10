@@ -10,6 +10,10 @@ function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderOptions 
   return message?.providerOptions?.copilot ?? {}
 }
 
+function getOpenAICompatibleMetadata(message: { providerOptions?: SharedV3ProviderOptions }) {
+  return message?.providerOptions?.openaiCompatible ?? {}
+}
+
 export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Prompt): OpenAICompatibleChatPrompt {
   const messages: OpenAICompatibleChatPrompt = []
   for (const { role, content, ...message } of prompt) {
@@ -74,6 +78,10 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
         let text = ""
         let reasoningText: string | undefined
         let reasoningOpaque: string | undefined
+        const openAICompatibleMetadata = getOpenAICompatibleMetadata({ ...message }) as {
+          reasoning_content?: string
+          reasoning_details?: string
+        }
         const toolCalls: Array<{
           id: string
           type: "function"
@@ -117,6 +125,14 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
           role: "assistant",
           content: text || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+          reasoning_content:
+            typeof openAICompatibleMetadata.reasoning_content === "string"
+              ? openAICompatibleMetadata.reasoning_content
+              : undefined,
+          reasoning_details:
+            typeof openAICompatibleMetadata.reasoning_details === "string"
+              ? openAICompatibleMetadata.reasoning_details
+              : undefined,
           reasoning_text: reasoningOpaque ? reasoningText : undefined,
           reasoning_opaque: reasoningOpaque,
           ...metadata,

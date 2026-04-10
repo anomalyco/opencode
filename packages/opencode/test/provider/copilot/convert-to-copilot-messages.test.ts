@@ -475,6 +475,74 @@ describe("reasoning (copilot-specific)", () => {
       },
     ])
   })
+
+  test("should include generic reasoning_content from openaiCompatible providerOptions", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "assistant",
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_content: "Let me think before I call the tool.",
+          },
+        },
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call1",
+            toolName: "calculator",
+            input: { a: 1, b: 2 },
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call1",
+            type: "function",
+            function: {
+              name: "calculator",
+              arguments: JSON.stringify({ a: 1, b: 2 }),
+            },
+          },
+        ],
+        reasoning_content: "Let me think before I call the tool.",
+        reasoning_details: undefined,
+        reasoning_text: undefined,
+        reasoning_opaque: undefined,
+      },
+    ])
+  })
+
+  test("should include generic reasoning_details from openaiCompatible providerOptions", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "assistant",
+        providerOptions: {
+          openaiCompatible: {
+            reasoning_details: "Step-by-step replay payload",
+          },
+        },
+        content: [{ type: "text", text: "Done!" }],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: "Done!",
+        tool_calls: undefined,
+        reasoning_content: undefined,
+        reasoning_details: "Step-by-step replay payload",
+        reasoning_text: undefined,
+        reasoning_opaque: undefined,
+      },
+    ])
+  })
 })
 
 describe("full conversation", () => {

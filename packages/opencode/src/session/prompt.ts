@@ -65,6 +65,15 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
+  export function getToolChoice(
+    model: Provider.Model,
+    format: { type: "text" | "json_schema" },
+  ): "auto" | "required" | undefined {
+    if (format.type !== "json_schema") return undefined
+    if (model.api.id.toLowerCase().includes("kimi")) return "auto"
+    return "required"
+  }
+
   export interface Interface {
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
     readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
@@ -1484,7 +1493,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                 tools,
                 model,
-                toolChoice: format.type === "json_schema" ? "required" : undefined,
+                toolChoice: getToolChoice(model, format),
               })
 
               if (structured !== undefined) {
