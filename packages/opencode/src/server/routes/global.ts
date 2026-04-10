@@ -105,6 +105,8 @@ export const GlobalRoutes = lazy(() =>
                   z
                     .object({
                       directory: z.string(),
+                      project: z.string().optional(),
+                      workspace: z.string().optional(),
                       payload: BusEvent.payloads(),
                     })
                     .meta({
