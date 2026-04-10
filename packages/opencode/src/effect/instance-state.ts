@@ -24,9 +24,9 @@ export namespace InstanceState {
     return ((...args: any[]) => Instance.restore(ctx, () => fn(...args))) as F
   }
 
-  export const context = Effect.fnUntraced(function* () {
+  export const context = Effect.gen(function* () {
     return (yield* InstanceRef) ?? Instance.current
-  })()
+  })
 
   export const directory = Effect.map(context, (ctx) => ctx.directory)
 
@@ -37,9 +37,9 @@ export namespace InstanceState {
       const cache = yield* ScopedCache.make<string, A, E, R>({
         capacity: Number.POSITIVE_INFINITY,
         lookup: () =>
-          Effect.fnUntraced(function* () {
+          Effect.gen(function* () {
             return yield* init(yield* context)
-          })(),
+          }),
       })
 
       const off = registerDisposer((directory) => Effect.runPromise(ScopedCache.invalidate(cache, directory)))
@@ -73,10 +73,4 @@ export namespace InstanceState {
     Effect.gen(function* () {
       return yield* ScopedCache.invalidate(self.cache, yield* directory)
     })
-
-  /**
-   * Effect finalizers run on the fiber scheduler after the original async
-   * boundary, so ALS reads like Instance.directory can be gone by then.
-   */
-  export const withALS = <T>(fn: () => T) => Effect.map(context, (ctx) => Instance.restore(ctx, fn))
 }

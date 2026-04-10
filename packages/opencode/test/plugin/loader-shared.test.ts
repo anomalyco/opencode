@@ -9,8 +9,10 @@ const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
 const { Plugin } = await import("../../src/plugin/index")
+const { PluginLoader } = await import("../../src/plugin/loader")
+const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Instance } = await import("../../src/project/instance")
-const { BunProc } = await import("../../src/bun")
+const { Npm } = await import("../../src/npm")
 const { Bus } = await import("../../src/bus")
 const { Session } = await import("../../src/session")
 
@@ -258,18 +260,18 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockImplementation(async (pkg) => {
-      if (pkg === "acme-plugin") return tmp.extra.acme
-      return tmp.extra.scope
+    const add = spyOn(Npm, "add").mockImplementation(async (pkg) => {
+      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: tmp.extra.acme }
+      return { directory: tmp.extra.scope, entrypoint: tmp.extra.scope }
     })
 
     try {
       await load(tmp.path)
 
-      expect(install.mock.calls).toContainEqual(["acme-plugin", "latest", { ignoreScripts: true }])
-      expect(install.mock.calls).toContainEqual(["scope-plugin", "2.3.4", { ignoreScripts: true }])
+      expect(add.mock.calls).toContainEqual(["acme-plugin@latest"])
+      expect(add.mock.calls).toContainEqual(["scope-plugin@2.3.4"])
     } finally {
-      install.mockRestore()
+      add.mockRestore()
     }
   })
 
@@ -321,7 +323,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       await load(tmp.path)
@@ -378,7 +380,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -431,7 +433,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -477,7 +479,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -541,7 +543,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -572,15 +574,15 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue("")
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: "" })
 
     try {
       await load(tmp.path)
 
       const pkgs = install.mock.calls.map((call) => call[0])
-      expect(pkgs).toContain("regular-plugin")
-      expect(pkgs).not.toContain("opencode-openai-codex-auth")
-      expect(pkgs).not.toContain("opencode-copilot-auth")
+      expect(pkgs).toContain("regular-plugin@1.0.0")
+      expect(pkgs).not.toContain("opencode-openai-codex-auth@1.0.0")
+      expect(pkgs).not.toContain("opencode-copilot-auth@1.0.0")
     } finally {
       install.mockRestore()
     }
@@ -593,7 +595,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockRejectedValue(new Error("boom"))
+    const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
 
     try {
       const errors = await errs(tmp.path)
@@ -831,6 +833,304 @@ export default {
       } else {
         process.env.OPENCODE_PURE = pure
       }
+    }
+  })
+
+  test("reads oc-themes from package manifest", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mod")
+        await fs.mkdir(path.join(mod, "themes"), { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify(
+            {
+              name: "acme-plugin",
+              version: "1.0.0",
+              "oc-themes": ["themes/one.json", "./themes/one.json", "themes/two.json"],
+            },
+            null,
+            2,
+          ),
+        )
+
+        return { mod }
+      },
+    })
+
+    const file = path.join(tmp.extra.mod, "package.json")
+    const json = await Filesystem.readJson<Record<string, unknown>>(file)
+    const list = readPackageThemes("acme-plugin", {
+      dir: tmp.extra.mod,
+      pkg: file,
+      json,
+    })
+
+    expect(list).toEqual([
+      Filesystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
+      Filesystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
+    ])
+  })
+
+  test("handles no-entrypoint tui packages via missing callback", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        await fs.mkdir(path.join(mod, "themes"), { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify(
+            {
+              name: "acme-plugin",
+              version: "1.0.0",
+              "oc-themes": ["themes/night.json"],
+            },
+            null,
+            2,
+          ),
+        )
+        await Bun.write(path.join(mod, "themes", "night.json"), "{}\n")
+        return { mod }
+      },
+    })
+
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const missing: string[] = []
+
+    try {
+      const loaded = await PluginLoader.loadExternal({
+        items: [
+          {
+            spec: "acme-plugin@1.0.0",
+            scope: "local" as const,
+            source: tmp.path,
+          },
+        ],
+        kind: "tui",
+        missing: async (item) => {
+          if (!item.pkg) return
+          const themes = readPackageThemes(item.spec, item.pkg)
+          if (!themes.length) return
+          return {
+            spec: item.spec,
+            target: item.target,
+            themes,
+          }
+        },
+        report: {
+          missing(_candidate, _retry, message) {
+            missing.push(message)
+          },
+        },
+      })
+
+      expect(loaded).toEqual([
+        {
+          spec: "acme-plugin@1.0.0",
+          target: tmp.extra.mod,
+          themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+        },
+      ])
+      expect(missing).toHaveLength(0)
+    } finally {
+      install.mockRestore()
+    }
+  })
+
+  test("passes package metadata for entrypoint tui plugins", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        await fs.mkdir(path.join(mod, "themes"), { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify(
+            {
+              name: "acme-plugin",
+              version: "1.0.0",
+              exports: {
+                "./tui": "./tui.js",
+              },
+              "oc-themes": ["themes/night.json"],
+            },
+            null,
+            2,
+          ),
+        )
+        await Bun.write(path.join(mod, "tui.js"), 'export default { id: "demo", tui: async () => {} }\n')
+        await Bun.write(path.join(mod, "themes", "night.json"), "{}\n")
+        return { mod }
+      },
+    })
+
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+
+    try {
+      const loaded = await PluginLoader.loadExternal({
+        items: [
+          {
+            spec: "acme-plugin@1.0.0",
+            scope: "local" as const,
+            source: tmp.path,
+          },
+        ],
+        kind: "tui",
+        finish: async (item) => {
+          if (!item.pkg) return
+          return {
+            spec: item.spec,
+            themes: readPackageThemes(item.spec, item.pkg),
+          }
+        },
+      })
+
+      expect(loaded).toEqual([
+        {
+          spec: "acme-plugin@1.0.0",
+          themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+        },
+      ])
+    } finally {
+      install.mockRestore()
+    }
+  })
+
+  test("rejects oc-themes path traversal", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mod")
+        await fs.mkdir(mod, { recursive: true })
+        const file = path.join(mod, "package.json")
+        await Bun.write(file, JSON.stringify({ name: "acme", "oc-themes": ["../escape.json"] }, null, 2))
+        return { mod, file }
+      },
+    })
+
+    const json = await Filesystem.readJson<Record<string, unknown>>(tmp.extra.file)
+    expect(() =>
+      readPackageThemes("acme", {
+        dir: tmp.extra.mod,
+        pkg: tmp.extra.file,
+        json,
+      }),
+    ).toThrow("outside plugin directory")
+  })
+
+  test("retries failed file plugins once after wait and keeps order", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const a = path.join(dir, "a")
+        const b = path.join(dir, "b")
+        const aSpec = pathToFileURL(a).href
+        const bSpec = pathToFileURL(b).href
+        await fs.mkdir(a, { recursive: true })
+        await fs.mkdir(b, { recursive: true })
+        return { a, b, aSpec, bSpec }
+      },
+    })
+
+    let wait = 0
+    const calls: Array<[string, boolean]> = []
+
+    const loaded = await PluginLoader.loadExternal({
+      items: [tmp.extra.aSpec, tmp.extra.bSpec].map((spec) => ({
+        spec,
+        scope: "local" as const,
+        source: tmp.path,
+      })),
+      kind: "tui",
+      wait: async () => {
+        wait += 1
+        await Bun.write(path.join(tmp.extra.a, "index.ts"), "export default {}\n")
+        await Bun.write(path.join(tmp.extra.b, "index.ts"), "export default {}\n")
+      },
+      report: {
+        start(candidate, retry) {
+          calls.push([candidate.plan.spec, retry])
+        },
+      },
+    })
+
+    expect(wait).toBe(1)
+    expect(calls).toEqual([
+      [tmp.extra.aSpec, false],
+      [tmp.extra.bSpec, false],
+      [tmp.extra.aSpec, true],
+      [tmp.extra.bSpec, true],
+    ])
+    expect(loaded.map((item) => item.spec)).toEqual([tmp.extra.aSpec, tmp.extra.bSpec])
+  })
+
+  test("retries file plugins when finish returns undefined", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        const spec = pathToFileURL(file).href
+        await Bun.write(file, "export default {}\n")
+        return { spec }
+      },
+    })
+
+    let wait = 0
+    let count = 0
+
+    const loaded = await PluginLoader.loadExternal({
+      items: [
+        {
+          spec: tmp.extra.spec,
+          scope: "local" as const,
+          source: tmp.path,
+        },
+      ],
+      kind: "tui",
+      wait: async () => {
+        wait += 1
+      },
+      finish: async (load, _item, retry) => {
+        count += 1
+        if (!retry) return
+        return {
+          retry,
+          spec: load.spec,
+        }
+      },
+    })
+
+    expect(wait).toBe(1)
+    expect(count).toBe(2)
+    expect(loaded).toEqual([{ retry: true, spec: tmp.extra.spec }])
+  })
+
+  test("does not wait or retry npm plugin failures", async () => {
+    const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
+    let wait = 0
+    const errors: Array<[string, boolean]> = []
+
+    try {
+      const loaded = await PluginLoader.loadExternal({
+        items: [
+          {
+            spec: "acme-plugin@1.0.0",
+            scope: "local" as const,
+            source: "test",
+          },
+        ],
+        kind: "tui",
+        wait: async () => {
+          wait += 1
+        },
+        report: {
+          error(_candidate, retry, stage) {
+            errors.push([stage, retry])
+          },
+        },
+      })
+
+      expect(loaded).toEqual([])
+      expect(wait).toBe(0)
+      expect(errors).toEqual([["install", false]])
+    } finally {
+      install.mockRestore()
     }
   })
 })

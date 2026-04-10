@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconZai } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -45,14 +45,16 @@ function LimitsGraph(props: { href: string }) {
 
   const free = 200
   const models = [
-    { id: "glm", name: "GLM-5", req: 1150, d: "120ms" },
+    { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
+    { id: "glm-5", name: "GLM-5", req: 1150, d: "120ms" },
+    { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
     { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 14000, d: "330ms" },
     { id: "minimax-m2.5", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
 
   const w = 720
-  const h = 220
+  const h = 270
   const left = 40
   const right = 60
   const top = 18
@@ -297,6 +299,9 @@ export default function Home() {
                 </div>
                 <div>
                   <IconZai width="24" height="24" />
+                </div>
+                <div>
+                  <IconMiMo width="24" height="24" />
                 </div>
                 {/*
                 <div>

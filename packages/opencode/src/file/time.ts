@@ -4,6 +4,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
+import { Filesystem } from "@/util/filesystem"
 import { Log } from "../util/log"
 
 export namespace FileTime {
@@ -45,7 +46,7 @@ export namespace FileTime {
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
 
       const stamp = Effect.fnUntraced(function* (file: string) {
-        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.void))
         return {
           read: yield* DateTime.nowAsDate,
           mtime: info ? Option.getOrUndefined(info.mtime)?.getTime() : undefined,
@@ -62,6 +63,7 @@ export namespace FileTime {
       )
 
       const getLock = Effect.fn("FileTime.lock")(function* (filepath: string) {
+        filepath = Filesystem.normalizePath(filepath)
         const locks = (yield* InstanceState.get(state)).locks
         const lock = locks.get(filepath)
         if (lock) return lock
@@ -72,18 +74,21 @@ export namespace FileTime {
       })
 
       const read = Effect.fn("FileTime.read")(function* (sessionID: SessionID, file: string) {
+        file = Filesystem.normalizePath(file)
         const reads = (yield* InstanceState.get(state)).reads
         log.info("read", { sessionID, file })
         session(reads, sessionID).set(file, yield* stamp(file))
       })
 
       const get = Effect.fn("FileTime.get")(function* (sessionID: SessionID, file: string) {
+        file = Filesystem.normalizePath(file)
         const reads = (yield* InstanceState.get(state)).reads
         return reads.get(sessionID)?.get(file)?.read
       })
 
       const assert = Effect.fn("FileTime.assert")(function* (sessionID: SessionID, filepath: string) {
         if (disableCheck) return
+        filepath = Filesystem.normalizePath(filepath)
 
         const reads = (yield* InstanceState.get(state)).reads
         const time = reads.get(sessionID)?.get(filepath)
