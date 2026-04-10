@@ -73,10 +73,4 @@ export namespace InstanceState {
     Effect.gen(function* () {
       return yield* ScopedCache.invalidate(self.cache, yield* directory)
     })
-
-  /**
-   * Effect finalizers run on the fiber scheduler after the original async
-   * boundary, so ALS reads like Instance.directory can be gone by then.
-   */
-  export const withALS = <T>(fn: () => T) => Effect.map(context, (ctx) => Instance.restore(ctx, fn))
 }

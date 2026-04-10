@@ -371,10 +371,6 @@ export namespace Pty {
     return runPromise((svc) => svc.get(id))
   }
 
-  export async function resize(id: PtyID, cols: number, rows: number) {
-    return runPromise((svc) => svc.resize(id, cols, rows))
-  }
-
   export async function write(id: PtyID, data: string) {
     return runPromise((svc) => svc.write(id, data))
   }
