@@ -1428,8 +1428,13 @@ export namespace Provider {
             const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
             if (combined) opts.signal = combined
 
-            // Strip openai itemId metadata following what codex does
-            if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+            // Strip responses item ids unless we are deliberately replaying stored Azure items.
+            // Azure uses a dedicated SDK package, so the check must cover both providers.
+            if (
+              (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+              opts.body &&
+              opts.method === "POST"
+            ) {
               const body = JSON.parse(opts.body as string)
               const isAzure = model.providerID.includes("azure")
               const keepIds = isAzure && body.store === true
