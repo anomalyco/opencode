@@ -64,6 +64,7 @@ export namespace SystemPrompt {
     if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
     const list = await Skill.available(agent)
+    if (list.length === 0) return
 
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",

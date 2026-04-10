@@ -120,6 +120,58 @@ description: ${description}
     }
   })
 
+  test("description excludes denied skills by pattern", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        for (const [name, description] of [
+          ["lark-doc", "Lark doc skill."],
+          ["lark-mail", "Lark mail skill."],
+          ["safe-skill", "Safe skill."],
+        ]) {
+          const skillDir = path.join(dir, ".opencode", "skill", name)
+          await Bun.write(
+            path.join(skillDir, "SKILL.md"),
+            `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`,
+          )
+        }
+      },
+    })
+
+    const home = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = tmp.path
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const desc = await ToolRegistry.tools({
+            providerID: "opencode" as any,
+            modelID: "gpt-5" as any,
+            agent: {
+              name: "build",
+              mode: "primary" as const,
+              permission: [{ permission: "skill", pattern: "lark-*", action: "deny" }],
+              options: {},
+            },
+          }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
+
+          expect(desc).toContain("**safe-skill**: Safe skill.")
+          expect(desc).not.toContain("**lark-doc**: Lark doc skill.")
+          expect(desc).not.toContain("**lark-mail**: Lark mail skill.")
+        },
+      })
+    } finally {
+      process.env.OPENCODE_TEST_HOME = home
+    }
+  })
+
   test("execute returns skill content block with files", async () => {
     await using tmp = await tmpdir({
       git: true,
