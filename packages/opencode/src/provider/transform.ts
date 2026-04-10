@@ -51,7 +51,7 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    if (model.providerID === "langdock" || model.api.url.includes("langdock")) {
+    if (model.providerID === "langdock" || model.api.url?.includes("langdock")) {
       while (msgs.at(-1)?.role === "assistant") msgs = msgs.slice(0, -1)
     }
 

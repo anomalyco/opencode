@@ -2,6 +2,7 @@ export type LangdockCatalogEntry = {
   provider: "openai" | "anthropic" | "google"
   providerModelId: string
   apiModelId?: string
+  region?: string
   displayName: string
   displayThinking: boolean
   supportsVision: boolean
@@ -471,6 +472,28 @@ const LANGDOCK_CATALOG_RAW: LangdockCatalogEntry[] = [
   },
   {
     provider: "google",
+    providerModelId: "gemini-3-1-pro-preview",
+    region: "eu",
+    displayName: "Gemini 3.1 Pro Preview",
+    displayThinking: false,
+    supportsVision: true,
+    supportsToolCalls: true,
+    supportsStreamingToolCalls: true,
+    supportsSignedImageUrls: true,
+    supportsTemperature: true,
+    contextWindowSize: 200000,
+    maxOutputTokens: 32000,
+    defaultReasoningEffort: null,
+    defaultVerbosity: null,
+    inputTokenPriceUSD: 2.5,
+    outputTokenPriceUSD: 15,
+    cacheReadPriceUSD: 0.25,
+    cacheWritePriceUSD: null,
+    maxImages: 10,
+    isActive: true,
+  },
+  {
+    provider: "google",
     providerModelId: "gemini-2.5-pro",
     displayName: "Gemini 2.5 Pro Reasoning",
     displayThinking: true,
@@ -486,6 +509,28 @@ const LANGDOCK_CATALOG_RAW: LangdockCatalogEntry[] = [
     inputTokenPriceUSD: 2.5,
     outputTokenPriceUSD: 15,
     cacheReadPriceUSD: 0.25,
+    cacheWritePriceUSD: null,
+    maxImages: 10,
+    isActive: true,
+  },
+  {
+    provider: "google",
+    providerModelId: "gemini-3-flash-preview",
+    region: "eu",
+    displayName: "Gemini 3 Flash Preview",
+    displayThinking: false,
+    supportsVision: true,
+    supportsToolCalls: true,
+    supportsStreamingToolCalls: true,
+    supportsSignedImageUrls: true,
+    supportsTemperature: true,
+    contextWindowSize: 200000,
+    maxOutputTokens: 32000,
+    defaultReasoningEffort: null,
+    defaultVerbosity: null,
+    inputTokenPriceUSD: 0.5,
+    outputTokenPriceUSD: 3,
+    cacheReadPriceUSD: 0.05,
     cacheWritePriceUSD: null,
     maxImages: 10,
     isActive: true,

@@ -344,6 +344,23 @@ export namespace Provider {
     }
   }
 
+  function langdockCatalogBaseURL(
+    entry: LangdockCatalogEntry,
+    urls: { openai: string; anthropic: string; google: string },
+  ) {
+    const region = entry.region?.trim()
+    if (entry.provider === "google" && region && region !== "eu") {
+      return `https://api.langdock.com/google/${region}/v1beta`
+    }
+    if (entry.provider === "anthropic" && region && region !== "eu") {
+      return `https://api.langdock.com/anthropic/${region}/v1`
+    }
+    if (entry.provider === "openai" && region && region !== "eu") {
+      return `https://api.langdock.com/openai/${region}/v1`
+    }
+    return entry.provider === "anthropic" ? urls.anthropic : entry.provider === "google" ? urls.google : urls.openai
+  }
+
   function langdockCatalogModels(urls: { openai: string; anthropic: string; google: string }): Record<string, Model> {
     const active = LANGDOCK_CATALOG.filter((entry) => entry.isActive)
     const hidden = new Set(
@@ -366,7 +383,7 @@ export namespace Provider {
       const preferred =
         items.find((item) => item.displayThinking || item.displayName.toLowerCase().includes("reasoning")) ?? items[0]
       const reasoning = preferred.displayThinking || preferred.defaultReasoningEffort !== null
-      const baseURL = provider === "anthropic" ? urls.anthropic : provider === "google" ? urls.google : urls.openai
+      const baseURL = langdockCatalogBaseURL(preferred, urls)
       const npm = provider === "anthropic" ? "@ai-sdk/anthropic" : provider === "google" ? "@ai-sdk/google" : "@ai-sdk/openai-compatible"
 
       result[preferred.providerModelId] = langdockCatalogModel(
