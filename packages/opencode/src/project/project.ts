@@ -159,7 +159,7 @@ export namespace Project {
         return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
           Effect.map((x) => x.trim()),
           Effect.map(ProjectID.make),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.catch(() => Effect.void),
         )
       })
 
