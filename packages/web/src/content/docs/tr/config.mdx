@@ -46,8 +46,9 @@ Yapılandırma kaynakları bu sırayla yüklenir (sonraki kaynaklar öncekileri 
 2. **Genel yapılandırma** (`~/.config/opencode/opencode.json`) - kullanıcı tercihleri
 3. **Özel yapılandırma** (`OPENCODE_CONFIG` env var) - özel geçersiz kılmalar
 4. **Proje yapılandırması** (projedeki `opencode.json`) - projeye özgü ayarlar
-5. **`.opencode` dizinleri** - agent'lar, komutlar, eklentiler
-6. **Satır içi yapılandırma** (`OPENCODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
+5. **`.opencode` yapılandırması** (projedeki `.opencode/opencode.json`) - proje yapılandırmasıyla aynı ama ayrı tutulur
+6. **`.opencode` dizinleri** - agent'lar, komutlar, eklentiler
+7. **Satır içi yapılandırma** (`OPENCODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
 
 Bu, proje yapılandırmalarının genel varsayılanları geçersiz kılabileceği ve genel yapılandırmaların uzak organizasyonel varsayılanları geçersiz kılabileceği anlamına gelir.
 

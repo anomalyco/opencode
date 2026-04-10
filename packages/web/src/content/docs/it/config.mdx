@@ -46,8 +46,9 @@ Le sorgenti di configurazione vengono caricate in questo ordine (le successive s
 2. **Config globale** (`~/.config/opencode/opencode.json`) - preferenze utente
 3. **Config personalizzata** (variabile d'ambiente `OPENCODE_CONFIG`) - sovrascritture personalizzate
 4. **Config di progetto** (`opencode.json` nel progetto) - impostazioni specifiche del progetto
-5. **Directory `.opencode`** - agenti, comandi, plugin
-6. **Config inline** (variabile d'ambiente `OPENCODE_CONFIG_CONTENT`) - sovrascritture a runtime
+5. **Config `.opencode`** (`.opencode/opencode.json` nel progetto) - come la config di progetto ma separata
+6. **Directory `.opencode`** - agenti, comandi, plugin
+7. **Config inline** (variabile d'ambiente `OPENCODE_CONFIG_CONTENT`) - sovrascritture a runtime
 
 Questo significa che la configurazione di progetto puo sovrascrivere i default globali, e la configurazione globale puo sovrascrivere i default remoti dell'organizzazione.
 

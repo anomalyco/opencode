@@ -46,8 +46,9 @@ Las fuentes de configuración se cargan en este orden (las fuentes posteriores a
 2. **Configuración global** (`~/.config/opencode/opencode.json`) - preferencias del usuario
 3. **Configuración personalizada** (`OPENCODE_CONFIG` env var): anulaciones personalizadas
 4. **Configuración del proyecto** (`opencode.json` en el proyecto): configuración específica del proyecto
-5. Directorios **`.opencode`** - agentes, comandos, complementos
-6. **Configuración en línea** (`OPENCODE_CONFIG_CONTENT` env var): anulaciones del tiempo de ejecución
+5. **Configuración `.opencode`** (`.opencode/opencode.json` en el proyecto): igual que la configuración del proyecto pero separada
+6. Directorios **`.opencode`** - agentes, comandos, complementos
+7. **Configuración en línea** (`OPENCODE_CONFIG_CONTENT` env var): anulaciones del tiempo de ejecución
 
 Esto significa que las configuraciones del proyecto pueden anular los valores predeterminados globales y las configuraciones globales pueden anular los valores predeterminados de la organización remota.
 

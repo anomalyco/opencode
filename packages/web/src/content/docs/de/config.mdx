@@ -46,8 +46,9 @@ Konfigurationsquellen werden in dieser Reihenfolge geladen (spätere Quellen üb
 2. **Globale Konfiguration** (`~/.config/opencode/opencode.json`) – Benutzereinstellungen
 3. **Benutzerdefinierte Konfiguration** (`OPENCODE_CONFIG` env var) – benutzerdefinierte Überschreibungen
 4. **Projektkonfiguration** (`opencode.json` im Projekt) – projektspezifische Einstellungen
-5. **`.opencode` Verzeichnisse** – Agenten, Befehle, Plugins
-6. **Inline-Konfiguration** (`OPENCODE_CONFIG_CONTENT` env var) – Laufzeitüberschreibungen
+5. **`.opencode`-Konfiguration** (`.opencode/opencode.json` im Projekt) – wie Projektkonfiguration, aber separat verwaltet
+6. **`.opencode` Verzeichnisse** – Agenten, Befehle, Plugins
+7. **Inline-Konfiguration** (`OPENCODE_CONFIG_CONTENT` env var) – Laufzeitüberschreibungen
 
 Dies bedeutet, dass Projektkonfigurationen globale Standardeinstellungen überschreiben können und globale Konfigurationen Remote-Organisationsstandards überschreiben können.
 

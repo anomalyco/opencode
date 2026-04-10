@@ -47,8 +47,9 @@ As fontes de configuração são carregadas nesta ordem (fontes posteriores subs
 2. **Configuração global** (`~/.config/opencode/opencode.json`) - preferências do usuário
 3. **Configuração personalizada** (`OPENCODE_CONFIG` var de ambiente) - substituições personalizadas
 4. **Configuração do projeto** (`opencode.json` no projeto) - configurações específicas do projeto
-5. **Diretórios `.opencode`** - agentes, comandos, plugins
-6. **Configuração inline** (`OPENCODE_CONFIG_CONTENT` var de ambiente) - substituições em tempo de execução
+5. **Configuração `.opencode`** (`.opencode/opencode.json` no projeto) - mesma coisa que a configuração do projeto, mas separada
+6. **Diretórios `.opencode`** - agentes, comandos, plugins
+7. **Configuração inline** (`OPENCODE_CONFIG_CONTENT` var de ambiente) - substituições em tempo de execução
 
 Isso significa que as configurações do projeto podem substituir os padrões globais, e as configurações globais podem substituir os padrões organizacionais remotos.
 
