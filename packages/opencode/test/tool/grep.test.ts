@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import { GrepTool } from "../../src/tool/grep"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+
+const runtime = ManagedRuntime.make(Layer.mergeAll(CrossSpawnSpawner.defaultLayer))
+
+function initGrep() {
+  return runtime.runPromise(GrepTool.pipe(Effect.flatMap((info) => Effect.promise(() => info.init()))))
+}
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -23,7 +31,7 @@ describe("tool.grep", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const grep = await GrepTool.init()
+        const grep = await initGrep()
         const result = await grep.execute(
           {
             pattern: "export",
@@ -47,7 +55,7 @@ describe("tool.grep", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const grep = await GrepTool.init()
+        const grep = await initGrep()
         const result = await grep.execute(
           {
             pattern: "xyznonexistentpatternxyz123",
@@ -72,7 +80,7 @@ describe("tool.grep", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const grep = await GrepTool.init()
+        const grep = await initGrep()
         const result = await grep.execute(
           {
             pattern: "line",
