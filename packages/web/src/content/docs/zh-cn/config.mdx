@@ -46,8 +46,9 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 2. **全局配置**（`~/.config/opencode/opencode.json`）- 用户偏好
 3. **自定义配置**（`OPENCODE_CONFIG` 环境变量）- 自定义覆盖
 4. **项目配置**（项目中的 `opencode.json`）- 项目特定设置
-5. **`.opencode` 目录** - 代理、命令、插件
-6. **内联配置**（`OPENCODE_CONFIG_CONTENT` 环境变量）- 运行时覆盖
+5. **`.opencode` 配置**（项目中的 `.opencode/opencode.json`）- 与项目配置相同，但单独存放
+6. **`.opencode` 目录** - 代理、命令、插件
+7. **内联配置**（`OPENCODE_CONFIG_CONTENT` 环境变量）- 运行时覆盖
 
 这意味着项目配置可以覆盖全局默认值，全局配置可以覆盖远程组织默认值。
 

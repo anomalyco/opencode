@@ -47,8 +47,9 @@ Konfigurasjonskilder lastes inn i denne rekkefølgen (senere kilder overstyrer t
 2. **Global konfigurasjon** (`~/.config/opencode/opencode.json`) - brukerinnstillinger
 3. **Egendefinert konfigurasjon** (`OPENCODE_CONFIG` env var) - egendefinerte overstyringer
 4. **Prosjektkonfigurasjon** (`opencode.json` i prosjekt) - prosjektspesifikke innstillinger
-5. **`.opencode` kataloger** - agenter, kommandoer, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - kjøretidsoverstyringer
+5. **`.opencode`-konfigurasjon** (`.opencode/opencode.json` i prosjekt) - samme som prosjektkonfigurasjon, men separat
+6. **`.opencode` kataloger** - agenter, kommandoer, plugins
+7. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - kjøretidsoverstyringer
 
 Dette betyr at prosjektkonfigurasjoner kan overstyre globale standardinnstillinger, og globale konfigurasjoner kan overstyre eksterne organisasjonsstandarder.
 

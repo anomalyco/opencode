@@ -45,8 +45,9 @@ Na przykład, jeśli konfiguracja globalna ustawi `theme: "opencode"` i `autoupd
 2. **Konfiguracja globalna** (`~/.config/opencode/opencode.json`) – preferencje użytkownika
 3. **Konfiguracja niestandardowa** (zmienna `OPENCODE_CONFIG`) — jawne nadpisanie
 4. **Konfiguracja projektu** (`opencode.json` w projekcie) - ustawienia specyficzne dla projektu
-5. **Katalogi `.opencode`** - agenci, polecenia, umiejętności
-6. **Konfiguracja wbudowana** (zmienna `OPENCODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
+5. **Konfiguracja `.opencode`** (`.opencode/opencode.json` w projekcie) - taka sama jak konfiguracja projektu, ale oddzielna
+6. **Katalogi `.opencode`** - agenci, polecenia, umiejętności
+7. **Konfiguracja wbudowana** (zmienna `OPENCODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
 
 Oznacza to, że konfiguracje projektu mogą nadpisywać konfiguracje globalne, a konfiguracje globalne mogą nadpisywać konfiguracje zdalne.
 

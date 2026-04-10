@@ -46,8 +46,9 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 2. **全域設定**（`~/.config/opencode/opencode.json`）- 使用者偏好
 3. **自訂設定**（`OPENCODE_CONFIG` 環境變數）- 自訂覆寫
 4. **專案設定**（專案中的 `opencode.json`）- 專案特定設定
-5. **`.opencode` 目錄** - 代理、指令、外掛程式
-6. **內嵌設定**（`OPENCODE_CONFIG_CONTENT` 環境變數）- 執行時覆寫
+5. **`.opencode` 設定**（專案中的 `.opencode/opencode.json`）- 與專案設定相同，但單獨存放
+6. **`.opencode` 目錄** - 代理、指令、外掛程式
+7. **內嵌設定**（`OPENCODE_CONFIG_CONTENT` 環境變數）- 執行時覆寫
 
 這意味著專案設定可以覆寫全域預設值，全域設定可以覆寫遠端組織預設值。
 

@@ -47,8 +47,9 @@ Konfigurationskilder indlæses i denne rækkefølge (senere kilder tilsidesætte
 2. **Global config** (`~/.config/opencode/opencode.json`) - brugerpræferencer
 3. **Tilpasset konfiguration** (`OPENCODE_CONFIG` env var) - tilpassede tilsidesættelser
 4. **Project config** (`opencode.json` i projekt) - projektspecifikke indstillinger
-5. **`.opencode` mapper** - agent, kommandoer, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime tilsidesættelser
+5. **`.opencode` konfiguration** (`.opencode/opencode.json` i projekt) - samme som projektconfig men separat
+6. **`.opencode` mapper** - agent, kommandoer, plugins
+7. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime tilsidesættelser
 
 Dette betyder, at projektkonfigurationer kan tilsidesætte globale standardindstillinger, og globale konfigurationer kan tilsidesætte eksterne organisatoriske standarder.
 

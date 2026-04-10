@@ -47,8 +47,9 @@ Les sources de configuration sont chargées dans cet ordre (les sources ultérie
 2. **Configuration globale** (`~/.config/opencode/opencode.json`) - préférences utilisateur
 3. **Configuration personnalisée** (`OPENCODE_CONFIG` env var) - remplacements personnalisés
 4. **Configuration du projet** (`opencode.json` dans le projet) - paramètres spécifiques au projet
-5. **Répertoires `.opencode`** - agents, commandes, plugins
-6. **Configuration en ligne** (`OPENCODE_CONFIG_CONTENT` env var) - remplacements d'exécution
+5. **Configuration `.opencode`** (`.opencode/opencode.json` dans le projet) - identique à la configuration du projet mais séparée
+6. **Répertoires `.opencode`** - agents, commandes, plugins
+7. **Configuration en ligne** (`OPENCODE_CONFIG_CONTENT` env var) - remplacements d'exécution
 
 Cela signifie que les configurations de projet peuvent remplacer les valeurs par défaut globales, et que les configurations globales peuvent remplacer les valeurs par défaut de l'organisation distante.
 

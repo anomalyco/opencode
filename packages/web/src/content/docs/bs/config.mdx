@@ -46,8 +46,9 @@ Izvori konfiguracije se učitavaju ovim redoslijedom (kasniji izvori poništavaj
 2. **Globalna konfiguracija** (`~/.config/opencode/opencode.json`) - korisničke preferencije
 3. **Prilagođena konfiguracija** (`OPENCODE_CONFIG` env var) - prilagođena preinačenja
 4. **Konfiguracija projekta** (`opencode.json` u projektu) - postavke specifične za projekat
-5. **`.opencode` direktoriji** - agenti, komande, dodaci
-6. **Inline konfiguracija** (`OPENCODE_CONFIG_CONTENT` env var) - runtime preinačenja
+5. **`.opencode` konfiguracija** (`.opencode/opencode.json` u projektu) - isto kao konfiguracija projekta ali odvojeno
+6. **`.opencode` direktoriji** - agenti, komande, dodaci
+7. **Inline konfiguracija** (`OPENCODE_CONFIG_CONTENT` env var) - runtime preinačenja
 
 To znači da konfiguracije projekta mogu nadjačati globalne zadane postavke, a globalne konfiguracije mogu nadjačati postavke udaljene organizacije.
 
