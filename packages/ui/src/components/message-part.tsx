@@ -48,6 +48,7 @@ import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { splitThinkBlocks } from "@opencode-ai/util/think"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
@@ -1451,7 +1452,9 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (part().text ?? "").trim()
+  const parsed = createMemo(() => splitThinkBlocks(part().text ?? ""))
+  const displayText = () => parsed().text.trim()
+  const thinkReasoning = () => parsed().reasoning.trim()
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1467,7 +1470,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
-    const content = text()
+    const content = displayText()
     if (!content) return
     await navigator.clipboard.writeText(content)
     setCopied(true)
@@ -1475,11 +1478,16 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   }
 
   return (
-    <Show when={text()}>
+    <Show when={displayText()}>
       <div data-component="text-part">
+        <Show when={thinkReasoning()}>
+          <div data-component="reasoning-part">
+            <Markdown text={thinkReasoning()} cacheKey={part().id + "-reasoning"} />
+          </div>
+        </Show>
         <div data-slot="text-part-body">
-          <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+          <Show when={streaming()} fallback={<Markdown text={displayText()} cacheKey={part().id} streaming={false} />}>
+            <PacedMarkdown text={displayText()} cacheKey={part().id} streaming={streaming()} />
           </Show>
         </div>
         <Show when={showCopy()}>

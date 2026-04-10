@@ -104,6 +104,66 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.temperature - GLM-5 defaults", () => {
+  test("should use temperature 1.0 for glm-5 models", () => {
+    const glm5Model = {
+      id: "zai/glm-5",
+      providerID: "zai",
+      api: {
+        id: "glm-5",
+        url: "https://api.z.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "GLM-5",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    expect(ProviderTransform.temperature(glm5Model)).toBe(1.0)
+  })
+
+  test("should use temperature 1.0 for glm-5.1 models", () => {
+    const glm51Model = {
+      id: "zai/glm-5.1",
+      providerID: "zai",
+      api: {
+        id: "glm-5.1",
+        url: "https://api.z.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "GLM-5.1",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    expect(ProviderTransform.temperature(glm51Model)).toBe(1.0)
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
