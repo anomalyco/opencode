@@ -166,35 +166,22 @@ export const WebFetchTool = Tool.define("webfetch", {
 })
 
 async function extractTextFromHTML(html: string) {
-  let text = ""
-  let skipContent = false
-
-  const rewriter = new HTMLRewriter()
-    .on("script, style, noscript, iframe, object, embed", {
-      element() {
-        skipContent = true
-      },
-      text() {
-        // Skip text content inside these elements
-      },
-    })
-    .on("*", {
-      element(element) {
-        // Reset skip flag when entering other elements
-        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
-          skipContent = false
-        }
-      },
-      text(input) {
-        if (!skipContent) {
-          text += input.text
-        }
-      },
-    })
-    .transform(new Response(html))
-
-  await rewriter.text()
-  return text.trim()
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, " ")
+    .replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, " ")
+    .replace(/<embed\b[^>]*>[\s\S]*?<\/embed>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function convertHTMLToMarkdown(html: string): string {
