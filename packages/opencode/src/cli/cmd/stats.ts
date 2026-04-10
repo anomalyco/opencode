@@ -170,6 +170,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
       const messages = await Session.messages({ sessionID: session.id })
 
       let sessionCost = 0
+      let sessionMessageCount = 0
       let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
       let sessionToolUsage: Record<string, number> = {}
       let sessionModelUsage: Record<
@@ -189,6 +190,8 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
       > = {}
 
       for (const message of messages) {
+        if (cutoffTime > 0 && message.info.time.created < cutoffTime) continue
+        sessionMessageCount++
         if (message.info.role === "assistant") {
           sessionCost += message.info.cost || 0
 
@@ -226,7 +229,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
       }
 
       return {
-        messageCount: messages.length,
+        messageCount: sessionMessageCount,
         sessionCost,
         sessionTokens,
         sessionTotalTokens:
