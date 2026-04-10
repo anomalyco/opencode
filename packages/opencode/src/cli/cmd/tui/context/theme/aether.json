@@ -1,36 +1,40 @@
 {
   "$schema": "https://opencode.ai/theme.json",
   "defs": {
-    "ivory": "#FAF9F5",
-    "linen": "#F5F0E8",
-    "parchment": "#EDE8DF",
+    "ivory": "#FCFAF6",
+    "linen": "#F8F5EF",
+    "parchment": "#F3EEE8",
     "sand": "#E5DFD4",
-    "warmGray": "#D8D4CF",
+    "sandLight": "#EDE6DE",
+    "warmGray": "#E4DCD4",
     "stone": "#9C8E7A",
+    "stoneLight": "#B4ABA2",
     "driftwood": "#6B5F4E",
+    "driftwoodLight": "#878078",
     "espresso": "#3A3630",
     "bark": "#262320",
     "charcoal": "#201D19",
     "inkBlack": "#1A1714",
-    "deepInk": "#171411",
-    "clay": "#C15F3C",
+    "deepInk": "#4A443F",
+    "clay": "#E8BCAF",
     "clayLight": "#D97757",
-    "terracotta": "#BC5215",
+    "terracotta": "#8F6D61",
     "amber": "#DA702C",
+    "amberLight": "#A28355",
     "gold": "#D0A215",
-    "goldDark": "#AD8301",
+    "goldDark": "#B07A26",
     "sage": "#879A39",
-    "sageDark": "#66800B",
+    "sageDark": "#6F8A3A",
     "teal": "#3AA99F",
-    "tealDark": "#24837B",
+    "tealDark": "#8AA19D",
     "blue": "#4385BE",
-    "blueDark": "#205EA6",
+    "blueDark": "#8F776C",
     "violet": "#8B7EC8",
-    "violetDark": "#5E409D",
+    "violetDark": "#C9B8AF",
     "rose": "#CE5D97",
-    "roseDark": "#A02F6F",
+    "roseDark": "#B37A67",
     "red": "#D14D41",
-    "redDark": "#AF3029"
+    "redDark": "#B24A37"
   },
   "theme": {
     "primary": {
@@ -67,7 +71,7 @@
     },
     "textMuted": {
       "dark": "stone",
-      "light": "driftwood"
+      "light": "driftwoodLight"
     },
     "background": {
       "dark": "inkBlack",
@@ -87,7 +91,7 @@
     },
     "borderActive": {
       "dark": "driftwood",
-      "light": "stone"
+      "light": "stoneLight"
     },
     "borderSubtle": {
       "dark": "bark",
@@ -103,7 +107,7 @@
     },
     "diffContext": {
       "dark": "stone",
-      "light": "driftwood"
+      "light": "driftwoodLight"
     },
     "diffHunkHeader": {
       "dark": "blue",
@@ -119,11 +123,11 @@
     },
     "diffAddedBg": {
       "dark": "#1D2618",
-      "light": "#E8F0DC"
+      "light": "#EFF3EA"
     },
     "diffRemovedBg": {
       "dark": "#2B1A18",
-      "light": "#F5DDD8"
+      "light": "#F5E8E4"
     },
     "diffContextBg": {
       "dark": "charcoal",
@@ -131,15 +135,15 @@
     },
     "diffLineNumber": {
       "dark": "stone",
-      "light": "driftwood"
+      "light": "driftwoodLight"
     },
     "diffAddedLineNumberBg": {
       "dark": "#182015",
-      "light": "#DAE8CC"
+      "light": "#E4EBD9"
     },
     "diffRemovedLineNumberBg": {
       "dark": "#231515",
-      "light": "#E8CCC8"
+      "light": "#ECD8D2"
     },
     "markdownText": {
       "dark": "sand",
@@ -147,7 +151,7 @@
     },
     "markdownHeading": {
       "dark": "clayLight",
-      "light": "clay"
+      "light": "#3E3732"
     },
     "markdownLink": {
       "dark": "blue",
@@ -159,19 +163,19 @@
     },
     "markdownCode": {
       "dark": "teal",
-      "light": "tealDark"
+      "light": "#916F63"
     },
     "markdownBlockQuote": {
       "dark": "stone",
-      "light": "driftwood"
+      "light": "driftwoodLight"
     },
     "markdownEmph": {
       "dark": "gold",
-      "light": "goldDark"
+      "light": "amberLight"
     },
     "markdownStrong": {
       "dark": "clayLight",
-      "light": "clay"
+      "light": "#2F2A25"
     },
     "markdownHorizontalRule": {
       "dark": "espresso",
@@ -187,7 +191,7 @@
     },
     "markdownImage": {
       "dark": "rose",
-      "light": "roseDark"
+      "light": "violetDark"
     },
     "markdownImageText": {
       "dark": "teal",
@@ -195,15 +199,15 @@
     },
     "markdownCodeBlock": {
       "dark": "sand",
-      "light": "deepInk"
+      "light": "#433D38"
     },
     "syntaxComment": {
       "dark": "driftwood",
-      "light": "stone"
+      "light": "stoneLight"
     },
     "syntaxKeyword": {
       "dark": "clayLight",
-      "light": "clay"
+      "light": "terracotta"
     },
     "syntaxFunction": {
       "dark": "amber",
@@ -211,27 +215,27 @@
     },
     "syntaxVariable": {
       "dark": "blue",
-      "light": "blueDark"
+      "light": "#4A433E"
     },
     "syntaxString": {
       "dark": "teal",
-      "light": "tealDark"
+      "light": "#A18A62"
     },
     "syntaxNumber": {
       "dark": "violet",
-      "light": "violetDark"
+      "light": "roseDark"
     },
     "syntaxType": {
       "dark": "gold",
-      "light": "goldDark"
+      "light": "amberLight"
     },
     "syntaxOperator": {
       "dark": "stone",
-      "light": "driftwood"
+      "light": "#6A625B"
     },
     "syntaxPunctuation": {
       "dark": "stone",
-      "light": "driftwood"
+      "light": "#6A625B"
     }
   }
 }
