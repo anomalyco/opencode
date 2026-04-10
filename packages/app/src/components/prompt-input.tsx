@@ -898,7 +898,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
-        atOnInput(atMatch[1])
+        const mentionQuery = atMatch[1].replace(/\\/g, "/")
+        atOnInput(mentionQuery)
         setStore("popover", "at")
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
