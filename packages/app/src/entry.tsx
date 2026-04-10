@@ -115,7 +115,7 @@ const isLocalCurrentUrl = (url: string) => {
 
 const getDefaultUrl = () => {
   const current = getCurrentUrl()
-  if (isLocalCurrentUrl(current)) return current
+  if (!import.meta.env.DEV && isLocalCurrentUrl(current)) return current
   const lsDefault = readDefaultServerUrl()
   if (lsDefault) return lsDefault
   return current
@@ -129,7 +129,13 @@ const platform: Platform = {
   forward,
   restart,
   notify,
-  getDefaultServer: async () => ServerConnection.Key.make(getDefaultUrl()),
+  getDefaultServer: async () => {
+    if (import.meta.env.DEV) {
+      const stored = readDefaultServerUrl()
+      return stored ? ServerConnection.Key.make(stored) : null
+    }
+    return ServerConnection.Key.make(getDefaultUrl())
+  },
   setDefaultServer: writeDefaultServerUrl,
 }
 
