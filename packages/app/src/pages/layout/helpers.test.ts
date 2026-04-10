@@ -15,6 +15,7 @@ import {
   hasProjectPermissions,
   latestProjectSession,
   latestRootSession,
+  latestWorkspaceSession,
   workspaceKey,
 } from "./helpers"
 import { projectSelected } from "./sidebar-project-helpers"
@@ -162,6 +163,58 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("finds the latest root session inside one workspace only", () => {
+    const result = latestWorkspaceSession(
+      {
+        path: { directory: "/workspace" },
+        session: [
+          session({
+            id: "child",
+            directory: "/workspace",
+            parentID: "root",
+            time: { created: 3, updated: 3, archived: undefined },
+          }),
+          session({
+            id: "root-old",
+            directory: "/workspace",
+            time: { created: 1, updated: 1, archived: undefined },
+          }),
+          session({
+            id: "root-new",
+            directory: "/workspace",
+            time: { created: 2, updated: 2, archived: undefined },
+          }),
+        ],
+      },
+      120_000,
+    )
+
+    expect(result?.id).toBe("root-new")
+  })
+
+  test("ignores archived remembered sessions when selecting a workspace session", () => {
+    const result = latestWorkspaceSession(
+      {
+        path: { directory: "/workspace" },
+        session: [
+          session({
+            id: "archived",
+            directory: "/workspace",
+            time: { created: 4, updated: 4, archived: 4 },
+          }),
+          session({
+            id: "root",
+            directory: "/workspace",
+            time: { created: 1, updated: 1, archived: undefined },
+          }),
+        ],
+      },
+      120_000,
+    )
+
+    expect(result?.id).toBe("root")
   })
 
   test("detects project permissions with a filter", () => {

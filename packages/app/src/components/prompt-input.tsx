@@ -18,6 +18,7 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
+import { useGlobalSync } from "@/context/global-sync"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -37,6 +38,7 @@ import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -68,6 +70,8 @@ import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
 import { working as sessionWorking } from "@/pages/session/session-working"
 import { createInputUndoEntry, createInputUndoState, recordInputUndo, stepInputUndo } from "./prompt-input/input-undo"
+import { latestWorkspaceSession, workspaceKey } from "@/pages/layout/helpers"
+import { useNavigate } from "@solidjs/router"
 
 interface PromptInputProps {
   class?: string
@@ -166,6 +170,9 @@ const OPENCLAW_SLASH = [
 const GitContext = () => {
   const sdk = useSDK()
   const sync = useSync()
+  const globalSync = useGlobalSync()
+  const layout = useLayout()
+  const navigate = useNavigate()
   const language = useLanguage()
   const platform = usePlatform()
   const [open, setOpen] = createSignal(false)
@@ -192,8 +199,12 @@ const GitContext = () => {
       branch: path === dir() ? branch() : undefined,
     }))
   })
-  const extras = createMemo(() => worktrees().filter((item) => item.path !== root()))
-  const title = createMemo(() => (extras().length > 0 ? "Workspaces" : "Workspace"))
+  const spaces = createMemo(() => {
+    const list = worktrees()
+    if (list.some((item) => workspaceKey(item.path) === workspaceKey(root()))) return list
+    return [{ path: root(), branch: local() ? branch() : undefined }, ...list]
+  })
+  const title = createMemo(() => (spaces().length > 1 ? "Workspaces" : "Workspace"))
   const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
 
   createEffect(() => {
@@ -209,6 +220,27 @@ const GitContext = () => {
       .catch(() => undefined)
   })
 
+  const openWorkspace = async (path: string) => {
+    if (workspaceKey(path) === workspaceKey(dir())) {
+      setOpen(false)
+      return
+    }
+
+    layout.projects.open(path)
+    const store = globalSync.child(path, { bootstrap: false })[0]
+    if (store.sessions !== "ready" && store.sessions !== "loading") {
+      await globalSync.project.loadSessions(path, { silent: true }).catch(() => undefined)
+    }
+    const session = latestWorkspaceSession(globalSync.child(path, { bootstrap: false })[0], Date.now())
+    if (session) {
+      navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
+      setOpen(false)
+      return
+    }
+    navigate(`/${base64Encode(path)}/session`)
+    setOpen(false)
+  }
+
   return (
     <Show when={sync.project?.vcs === "git" && branch()}>
       <Popover
@@ -222,7 +254,7 @@ const GitContext = () => {
           size: "normal",
           class: "prompt-pick min-w-0 max-w-[320px] group",
         }}
-        class="w-[420px] max-w-[calc(100vw-40px)] rounded-xl border border-white/10 bg-transparent shadow-[var(--shadow-lg-border-base)]"
+        class="w-[560px] max-w-[calc(100vw-40px)] rounded-xl border border-white/10 bg-transparent shadow-[var(--shadow-lg-border-base)]"
         style={{
           "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
           "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
@@ -271,8 +303,8 @@ const GitContext = () => {
             </Show>
           </div>
 
-          <Show when={showBranches() || extras().length > 0}>
-            <div class="grid gap-3" classList={{ "sm:grid-cols-2": showBranches() && extras().length > 0 }}>
+          <Show when={showBranches() || spaces().length > 0}>
+            <div class="flex flex-col gap-3">
               <Show when={showBranches()}>
                 <div class="min-w-0">
                   <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">Branches</div>
@@ -280,13 +312,25 @@ const GitContext = () => {
                     <For each={branches().slice(0, 8)}>
                       {(item) => (
                         <div class="flex items-center gap-2 min-w-0 text-12-regular">
-                          <Icon name="branch" size="small" class="shrink-0 text-icon-weak" />
-                          <span class="truncate text-text-base">{item}</span>
-                          <Show when={item === branch()}>
-                            <span class="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                              current
-                            </span>
-                          </Show>
+                          <Icon
+                            name="branch"
+                            size="small"
+                            class="shrink-0"
+                            classList={{
+                              "text-icon-weak": item !== branch(),
+                              "text-icon-success-base": item === branch(),
+                            }}
+                          />
+                          <span
+                            class="truncate"
+                            style={{
+                              color: item === branch() ? "var(--icon-success-active)" : undefined,
+                              "font-weight": item === branch() ? "600" : undefined,
+                            }}
+                            classList={{ "text-text-base": item !== branch() }}
+                          >
+                            {item}
+                          </span>
                         </div>
                       )}
                     </For>
@@ -294,29 +338,56 @@ const GitContext = () => {
                 </div>
               </Show>
 
-              <Show when={extras().length > 0}>
+              <Show when={spaces().length > 0}>
                 <div class="min-w-0">
                   <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">{title()}</div>
                   <div class="flex flex-col gap-1.5">
-                    <For each={extras().slice(0, 8)}>
+                    <For each={spaces().slice(0, 8)}>
                       {(item) => (
-                        <div class="flex items-start gap-2 min-w-0 text-12-regular">
-                          <Icon name="folder" size="small" class="mt-0.5 shrink-0 text-icon-weak" />
+                        <button
+                          type="button"
+                          class="group flex w-full items-start gap-2 rounded-lg border border-transparent px-2 py-1.5 min-w-0 text-left text-12-regular transition-colors hover:bg-surface-base-hover hover:border-border-weak-base focus-visible:bg-surface-base-hover focus-visible:border-border-weak-base"
+                          onClick={() => void openWorkspace(item.path)}
+                        >
+                          <Icon
+                            name="folder"
+                            size="small"
+                            class="mt-0.5 shrink-0"
+                            classList={{
+                              "text-icon-weak": item.path !== dir(),
+                              "text-icon-success-base": item.path === dir(),
+                            }}
+                          />
                           <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5 min-w-0">
-                              <span class="truncate text-text-base">{getFilename(item.path)}</span>
-                              <Show when={item.path === dir()}>
-                                <span class="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                  current
-                                </span>
-                              </Show>
+                              <span
+                                class="truncate transition-colors group-hover:text-text-strong group-focus-visible:text-text-strong"
+                                style={{
+                                  color: item.path === dir() ? "var(--icon-success-active)" : undefined,
+                                  "font-weight": item.path === dir() ? "600" : undefined,
+                                }}
+                                classList={{ "text-text-base": item.path !== dir() }}
+                              >
+                                {getFilename(item.path)}
+                              </span>
                             </div>
-                            <div class="break-all font-mono text-[12px] leading-5 text-text-weak">{item.path}</div>
+                            <div class="break-all font-mono text-[12px] leading-5 text-text-weak transition-colors group-hover:text-text-base group-focus-visible:text-text-base">
+                              {item.path}
+                            </div>
                             <Show when={item.branch}>
-                              <div class="truncate text-text-weak">{item.branch}</div>
+                              <div
+                                class="truncate transition-colors group-hover:text-text-base group-focus-visible:text-text-base"
+                                style={{
+                                  color: item.path === dir() ? "var(--icon-success-active)" : undefined,
+                                  "font-weight": item.path === dir() ? "600" : undefined,
+                                }}
+                                classList={{ "text-text-weak": item.path !== dir() }}
+                              >
+                                {item.branch}
+                              </div>
                             </Show>
                           </div>
-                        </div>
+                        </button>
                       )}
                     </For>
                   </div>
