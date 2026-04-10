@@ -17,7 +17,6 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
-  Workspace,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "@tui/context/project"
@@ -75,7 +74,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpResource
       }
       formatter: FormatterStatus[]
-      workspaceList: Workspace[]
       vcs: VcsInfo | undefined
     }>({
       provider_next: {
@@ -103,23 +101,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       mcp_resource: {},
       formatter: [],
-      workspaceList: [],
       vcs: undefined,
     })
 
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
-
-    async function syncWorkspaces() {
-      const workspace = project.workspace.current()
-      const result = await sdk.client.experimental.workspace.list().catch(() => undefined)
-      if (!result?.data) return
-      setStore("workspaceList", reconcile(result.data))
-      if (!result.data.some((item) => item.id === workspace)) {
-        project.workspace.set(undefined)
-      }
-    }
 
     event.subscribe((event) => {
       switch (event.type) {
@@ -368,7 +355,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const workspace = project.workspace.current()
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
-        .list({ start: start, workspace })
+        .list({ start: start })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
@@ -443,7 +430,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
-            syncWorkspaces(),
+            project.workspace.sync(),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -521,15 +508,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
           fullSyncedSessions.add(sessionID)
         },
-      },
-      workspace: {
-        list() {
-          return store.workspaceList
-        },
-        get(workspaceID: string) {
-          return store.workspaceList.find((item) => item.id === workspaceID)
-        },
-        sync: syncWorkspaces,
       },
       bootstrap,
     }
