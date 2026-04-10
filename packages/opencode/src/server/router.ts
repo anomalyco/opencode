@@ -9,6 +9,9 @@ import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceRoutes } from "./instance"
+import { Session } from "@/session"
+import { SessionID } from "@/session/schema"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -24,6 +27,16 @@ function local(method: string, path: string) {
     if (match) return rule.action === "local"
   }
   return false
+}
+
+async function getSessionWorkspace(url: URL) {
+  if (url.pathname === "/session/status") return null
+
+  const id = url.pathname.match(/^\/session\/([^/]+)(?:\/|$)/)?.[1]
+  if (!id) return null
+
+  const session = await Session.get(SessionID.make(id)).catch(() => undefined)
+  return session?.workspaceID
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
@@ -42,13 +55,12 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     )
 
     const url = new URL(c.req.url)
-    const workspaceParam = url.searchParams.get("workspace") || c.req.header("x-opencode-workspace")
 
-    // TODO: If session is being routed, force it to lookup the
-    // project/workspace
+    const sessionWorkspaceID = await getSessionWorkspace(url)
+    const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
 
-    // If no workspace is provided we use the "project" workspace
-    if (!workspaceParam) {
+    // If no workspace is provided we use the project
+    if (!workspaceID) {
       return Instance.provide({
         directory,
         init: InstanceBootstrap,
@@ -58,8 +70,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    const workspaceID = WorkspaceID.make(workspaceParam)
-    const workspace = await Workspace.get(workspaceID)
+    const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
     if (!workspace) {
       return new Response(`Workspace not found: ${workspaceID}`, {
         status: 500,
@@ -73,12 +84,16 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const target = await adaptor.target(workspace)
 
     if (target.type === "local") {
-      return Instance.provide({
-        directory: target.directory,
-        init: InstanceBootstrap,
-        async fn() {
-          return routes().fetch(c.req.raw, c.env)
-        },
+      return WorkspaceContext.provide({
+        workspaceID: WorkspaceID.make(workspaceID),
+        fn: () =>
+          Instance.provide({
+            directory: target.directory,
+            init: InstanceBootstrap,
+            async fn() {
+              return routes().fetch(c.req.raw, c.env)
+            },
+          }),
       })
     }
 
