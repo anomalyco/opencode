@@ -34,7 +34,7 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-const SERVE_URL = process.env["OPENCODE_SERVE_DOMAIN"] ?? ""
+const SERVE_URL = Flag.OPENCODE_SERVE_DOMAIN ?? ""
 const SERVE_WILDCARD = SERVE_URL ? `https://*.${SERVE_URL}` : ""
 
 const DEFAULT_CSP =
