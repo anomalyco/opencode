@@ -56527,6 +56527,12 @@ export const snapshot = {
       },
     },
   },
+  edenai: {
+    id: "edenai",
+    env: ["EDENAI_API_KEY"],
+    name: "Eden AI",
+    models: {},
+  },
   cerebras: {
     id: "cerebras",
     env: ["CEREBRAS_API_KEY"],
