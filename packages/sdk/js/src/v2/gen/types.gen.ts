@@ -1665,7 +1665,14 @@ export type WellKnownAuth = {
   token: string
 }
 
-export type Auth = OAuth | ApiAuth | WellKnownAuth
+export type AwsAuth = {
+  type: "aws"
+  accessKeyId: string
+  secretAccessKey: string
+  region?: string
+}
+
+export type Auth = OAuth | ApiAuth | WellKnownAuth | AwsAuth
 
 export type NotFoundError = {
   name: "NotFoundError"
@@ -1898,8 +1905,9 @@ export type SubtaskPartInput = {
 }
 
 export type ProviderAuthMethod = {
-  type: "oauth" | "api"
+  type: "oauth" | "api" | "env" | "aws"
   label: string
+  env?: Array<string>
   prompts?: Array<
     | {
         type: "text"

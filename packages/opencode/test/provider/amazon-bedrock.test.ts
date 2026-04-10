@@ -185,8 +185,9 @@ test("Bedrock: loads when IAM credentials from auth.json are present", async () 
       },
       fn: async () => {
         const providers = await Provider.list()
-        expect(providers["amazon-bedrock"]).toBeDefined()
-        expect(providers["amazon-bedrock"].options?.region).toBe("us-west-2")
+        const bedrock = providers[ProviderID.make("amazon-bedrock")]
+        expect(bedrock).toBeDefined()
+        expect(bedrock?.options?.region).toBe("us-west-2")
       },
     })
   } finally {
