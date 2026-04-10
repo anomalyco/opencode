@@ -11,6 +11,7 @@
     },
   },
   "mcp": {},
+  "plugin": ["../folderWorkspacePlugin.ts"],
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
