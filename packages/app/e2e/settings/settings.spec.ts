@@ -110,7 +110,9 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
     .find((x) => x && x !== currentTheme)
   expect(nextTheme).toBeTruthy()
 
-  await items.filter({ hasText: nextTheme! }).first().click()
+  const option = items.filter({ hasText: nextTheme! }).first()
+  await expect(option).toBeVisible()
+  await option.click({ force: true })
 
   await page.keyboard.press("Escape")
 
