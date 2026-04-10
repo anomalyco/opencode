@@ -81,25 +81,26 @@ export function SessionSidePanel(props: {
   })
 
   const [previewReady, setPreviewReady] = createSignal(false)
-  {
-    const checkServer = async () => {
-      const url = previewUrl()
-      if (!url) return setPreviewReady(false)
-      try {
-        const res = await fetch(url, { cache: "no-store", mode: "cors" })
-        setPreviewReady(res.ok)
-      } catch {
-        setPreviewReady(false)
-      }
-    }
+  createEffect(() => {
+    const url = previewUrl()
+    if (!url) return setPreviewReady(false)
 
-    void checkServer()
-    const timer = setInterval(checkServer, 10_000)
-    onCleanup(() => clearInterval(timer))
+    const ctrl = new AbortController()
+    const check = () =>
+      fetch(url, { cache: "no-store", mode: "no-cors", signal: ctrl.signal })
+        .then(() => setPreviewReady(true))
+        .catch(() => setPreviewReady(false))
 
-    const unsub = sdk.event.on("session.idle", () => void checkServer())
-    onCleanup(unsub)
-  }
+    void check()
+    const timer = setInterval(check, 10_000)
+    const unsub = sdk.event.on("session.idle", () => void check())
+
+    onCleanup(() => {
+      ctrl.abort()
+      clearInterval(timer)
+      unsub()
+    })
+  })
 
   const previewSrc = createMemo(() => (previewReady() ? previewUrl() : undefined))
 
