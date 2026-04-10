@@ -413,26 +413,35 @@ export namespace Session {
       })
 
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-        const ctx = yield* InstanceState.context
         const rows = yield* db((d) =>
           d
             .select()
             .from(SessionTable)
-            .where(and(eq(SessionTable.project_id, ctx.project.id), eq(SessionTable.parent_id, parentID)))
+            .where(and(eq(SessionTable.parent_id, parentID)))
             .all(),
         )
         return rows.map(fromRow)
       })
 
-      const remove: (sessionID: SessionID) => Effect.Effect<void> = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
         try {
           const session = yield* get(sessionID)
           const kids = yield* children(sessionID)
           for (const child of kids) {
             yield* remove(child.id)
           }
+
+          // `remove` needs to work in all cases, such as a broken
+          // sessions that run cleanup. In certain cases these will
+          // run without any instance state, so we need to turn off
+          // publishing of events in that case
+          const hasInstance = yield* InstanceState.directory.pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          )
+
           yield* Effect.sync(() => {
-            SyncEvent.run(Event.Deleted, { sessionID, info: session })
+            SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
             SyncEvent.remove(sessionID)
           })
         } catch (e) {

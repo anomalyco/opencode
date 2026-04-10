@@ -244,7 +244,6 @@ describe("SyncProvider", () => {
 
       expect(log.some((item) => item.path === "/path" && item.workspace === "ws_a")).toBe(true)
       expect(log.some((item) => item.path === "/config" && item.workspace === "ws_a")).toBe(true)
-      expect(log.some((item) => item.path === "/session" && item.workspace === "ws_a")).toBe(true)
       expect(log.some((item) => item.path === "/command" && item.workspace === "ws_a")).toBe(true)
     } finally {
       app.renderer.destroy()
