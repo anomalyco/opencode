@@ -1255,20 +1255,22 @@ export namespace Provider {
             mergeProvider(providerID, partial)
           }
 
-          const gitlab = ProviderID.make("gitlab")
-          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-            yield* Effect.promise(async () => {
-              try {
-                const discovered = await discoveryLoaders[gitlab]()
-                for (const [modelID, model] of Object.entries(discovered)) {
-                  if (!providers[gitlab].models[modelID]) {
-                    providers[gitlab].models[modelID] = model
+          for (const [id, discover] of Object.entries(discoveryLoaders)) {
+            const providerID = ProviderID.make(id)
+            if (providers[providerID] && isProviderAllowed(providerID)) {
+              yield* Effect.promise(async () => {
+                try {
+                  const discovered = await discover()
+                  for (const [modelID, model] of Object.entries(discovered)) {
+                    if (!providers[providerID].models[modelID]) {
+                      providers[providerID].models[modelID] = model
+                    }
                   }
+                } catch (e) {
+                  log.warn("state discovery error", { id, error: e })
                 }
-              } catch (e) {
-                log.warn("state discovery error", { id: "gitlab", error: e })
-              }
-            })
+              })
+            }
           }
 
           for (const hook of plugins) {
