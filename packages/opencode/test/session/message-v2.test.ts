@@ -428,7 +428,10 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "read",
-            output: { type: "text", value: "PDF read successfully" },
+            output: {
+              type: "content",
+              value: [{ type: "text", text: "PDF read successfully" }],
+            },
           },
         ],
       },
