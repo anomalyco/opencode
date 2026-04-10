@@ -1,7 +1,7 @@
 import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"

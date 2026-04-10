@@ -1,6 +1,6 @@
 import z from "zod"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 

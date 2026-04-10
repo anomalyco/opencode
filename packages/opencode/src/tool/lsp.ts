@@ -1,6 +1,6 @@
 import z from "zod"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import path from "path"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp.txt"

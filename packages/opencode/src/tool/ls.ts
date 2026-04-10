@@ -1,7 +1,7 @@
 import z from "zod"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"

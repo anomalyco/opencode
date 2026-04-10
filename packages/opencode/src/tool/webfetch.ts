@@ -1,7 +1,7 @@
 import z from "zod"
 import { Effect } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 

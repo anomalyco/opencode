@@ -1,6 +1,6 @@
 import z from "zod"
 import os from "os"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"

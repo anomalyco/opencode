@@ -1,4 +1,4 @@
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
 import { Session } from "../session"

@@ -1,6 +1,6 @@
 import z from "zod"
 import { text } from "node:stream/consumers"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { Process } from "../util/process"

@@ -1,5 +1,5 @@
 import z from "zod"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import { EditTool } from "./edit"
 import DESCRIPTION from "./multiedit.txt"
 import path from "path"

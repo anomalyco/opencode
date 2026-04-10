@@ -1,6 +1,6 @@
 import z from "zod"
 import * as path from "path"
-import { Tool } from "./tool"
+import { Tool } from "./fartmaster"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
