@@ -543,6 +543,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 rows={1}
                 disabled={sending()}
                 onKeyDown={(e) => {
+                  if (e.isComposing || e.keyCode === 229) return
                   if (e.key === "Escape") {
                     e.preventDefault()
                     setStore("editing", false)
