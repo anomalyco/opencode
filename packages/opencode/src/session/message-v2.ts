@@ -619,7 +619,9 @@ export namespace MessageV2 {
           attachments?: Array<{ mime: string; url: string }>
         }
         const attachments = (outputObject.attachments ?? []).filter((attachment) => {
-          return attachment.url.startsWith("data:") && attachment.url.includes(",")
+          if (!attachment.url.startsWith("data:") || !attachment.url.includes(",")) return false
+          if (attachment.mime === "application/pdf" && !model.capabilities.input.pdf) return false
+          return true
         })
 
         return {
