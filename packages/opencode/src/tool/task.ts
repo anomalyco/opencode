@@ -7,7 +7,6 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { Config } from "../config/config"
-import { Permission } from "@/permission"
 import { Effect } from "effect"
 import { Log } from "@/util/log"
 
@@ -176,18 +175,3 @@ export const TaskTool = Tool.defineEffect(
     }
   }),
 )
-
-export const TaskDescription: Tool.DynamicDescription = (agent) =>
-  Effect.gen(function* () {
-    const items = yield* Effect.promise(() =>
-      Agent.list().then((items) => items.filter((item) => item.mode !== "primary")),
-    )
-    const filtered = items.filter((item) => Permission.evaluate(id, item.name, agent.permission).action !== "deny")
-    const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
-    const description = list
-      .map(
-        (item) => `- ${item.name}: ${item.description ?? "This subagent should only be called manually by the user."}`,
-      )
-      .join("\n")
-    return ["Available agent types and the tools they have access to:", description].join("\n")
-  })

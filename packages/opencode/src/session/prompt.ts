@@ -1668,8 +1668,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   const defaultLayer = Layer.suspend(() =>
     layer.pipe(
-      Layer.provide(SessionRunState.layer),
-      Layer.provide(SessionStatus.layer),
+      Layer.provide(SessionRunState.defaultLayer),
+      Layer.provide(SessionStatus.defaultLayer),
       Layer.provide(SessionCompaction.defaultLayer),
       Layer.provide(SessionProcessor.defaultLayer),
       Layer.provide(Command.defaultLayer),
@@ -1678,7 +1678,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(LSP.defaultLayer),
       Layer.provide(FileTime.defaultLayer),
       Layer.provide(ToolRegistry.defaultLayer),
-      Layer.provide(Truncate.layer),
+      Layer.provide(Truncate.defaultLayer),
       Layer.provide(Provider.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),

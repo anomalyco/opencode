@@ -602,7 +602,7 @@ export namespace SessionProcessor {
       Layer.provide(LLM.defaultLayer),
       Layer.provide(Permission.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
-      Layer.provide(SessionStatus.layer.pipe(Layer.provide(Bus.layer))),
+      Layer.provide(SessionStatus.defaultLayer),
       Layer.provide(Bus.layer),
       Layer.provide(Config.defaultLayer),
     ),
