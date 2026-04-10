@@ -1,4 +1,5 @@
 import { PlanExitTool } from "./plan"
+import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
@@ -16,6 +17,7 @@ import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { Provider } from "../provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
@@ -76,6 +78,8 @@ export namespace ToolRegistry {
     | Todo.Service
     | Agent.Service
     | Skill.Service
+    | Session.Service
+    | Provider.Service
     | LSP.Service
     | FileTime.Service
     | Instruction.Service
@@ -93,6 +97,7 @@ export namespace ToolRegistry {
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
       const lsptool = yield* LspTool
+      const plan = yield* PlanExitTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -166,7 +171,7 @@ export namespace ToolRegistry {
             patch: Tool.init(ApplyPatchTool),
             question: Tool.init(question),
             lsp: Tool.init(lsptool),
-            plan: Tool.init(PlanExitTool),
+            plan: Tool.init(plan),
           })
 
           return {
@@ -298,6 +303,8 @@ export namespace ToolRegistry {
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
       Layer.provide(Agent.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(FileTime.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
