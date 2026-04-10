@@ -286,7 +286,7 @@ export function SessionSidePanel(props: {
                       <Show when={previewSrc()}>
                         <Tabs.Trigger value="preview">
                           <div class="flex items-center gap-1.5">
-                            <div>미리보기</div>
+                            <div>{language.t("session.tab.preview")}</div>
                           </div>
                         </Tabs.Trigger>
                       </Show>

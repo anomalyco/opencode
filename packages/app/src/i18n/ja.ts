@@ -446,6 +446,7 @@ export const dict = {
   "session.tab.session": "セッション",
   "session.tab.review": "レビュー",
   "session.tab.context": "コンテキスト",
+  "session.tab.preview": "プレビュー",
   "session.panel.reviewAndFiles": "レビューとファイル",
   "session.review.filesChanged": "{{count}} ファイル変更",
   "session.review.change.one": "変更",
