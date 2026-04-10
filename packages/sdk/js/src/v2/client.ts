@@ -17,19 +17,23 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
   const url = new URL(request.url)
+  const session = /\/session\/?$/.test(url.pathname)
   let changed = false
 
   for (const [name, key] of [
     ["x-opencode-directory", "directory"],
     ["x-opencode-workspace", "workspace"],
   ] as const) {
+    const has = url.searchParams.has(key)
+    if (key === "directory" && session && !has) continue
+
     const value = pick(
       request.headers.get(name),
       key === "directory" ? values.directory : values.workspace,
       key === "directory" ? encodeURIComponent : undefined,
     )
     if (!value) continue
-    if (!url.searchParams.has(key)) {
+    if (!has) {
       url.searchParams.set(key, value)
     }
     changed = true
