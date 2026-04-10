@@ -18,7 +18,6 @@ import { Command } from "../command"
 import { Flag } from "../flag/flag"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
-import { Snapshot } from "@/snapshot"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
@@ -45,9 +44,8 @@ const DEFAULT_CSP =
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()) =>
-  app
-    .onError(errorHandler(log))
+export const InstanceRoutes = (upgrade: UpgradeWebSocket) =>
+  new Hono()
     .use(WorkspaceRouterMiddleware(upgrade))
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes(upgrade))

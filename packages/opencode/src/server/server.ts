@@ -5,12 +5,10 @@ import { compress } from "hono/compress"
 import { createNodeWebSocket } from "@hono/node-ws"
 import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
-import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { ProviderID } from "../provider/schema"
-import { WorkspaceRouterMiddleware } from "./router"
 import { errors } from "./error"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
@@ -44,9 +42,9 @@ export namespace Server {
 
   export const Default = lazy(() => create({}))
 
-  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
+  export function ControlPlaneRoutes(opts?: { cors?: string[] }): Hono {
+    const app = new Hono()
     return app
-      .onError(errorHandler(log))
       .use((c, next) => {
         // Allow CORS preflight requests to succeed without auth.
         // Browser clients sending Authorization headers will preflight with OPTIONS.
@@ -235,20 +233,18 @@ export namespace Server {
           return c.json(true)
         },
       )
-      .use(WorkspaceRouterMiddleware(upgrade))
   }
 
   function create(opts: { cors?: string[] }) {
     const app = new Hono()
     const ws = createNodeWebSocket({ app })
     return {
-      app: ControlPlaneRoutes(ws.upgradeWebSocket, app, opts),
+      app: app
+        .onError(errorHandler(log))
+        .route("/", ControlPlaneRoutes(opts))
+        .route("/", InstanceRoutes(ws.upgradeWebSocket)),
       ws,
     }
-  }
-
-  export function createApp(opts: { cors?: string[] }) {
-    return create(opts).app
   }
 
   export async function openapi() {
@@ -256,8 +252,7 @@ export namespace Server {
     // hono-openapi can see describeRoute metadata (`.route()` wraps
     // handlers when the sub-app has a custom errorHandler, which
     // strips the metadata symbol).
-    const { app, ws } = create({})
-    InstanceRoutes(ws.upgradeWebSocket, app)
+    const { app } = create({})
     const result = await generateSpecs(app, {
       documentation: {
         info: {
