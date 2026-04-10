@@ -1,4 +1,5 @@
 import z from "zod"
+import { Effect } from "effect"
 import { Tool } from "./tool"
 import DESCRIPTION from "./codesearch.txt"
 import { abortAfterAny } from "../util/abort"
@@ -50,83 +51,90 @@ export const CodeSearchTool = Tool.define("codesearch", {
         "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
       ),
   }),
-  async execute(params, ctx) {
-    await ctx.ask({
-      permission: "codesearch",
-      patterns: [params.query],
-      always: ["*"],
-      metadata: {
-        query: params.query,
-        tokensNum: params.tokensNum,
-      },
-    })
+  execute: (params, ctx) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          ctx.ask({
+            permission: "codesearch",
+            patterns: [params.query],
+            always: ["*"],
+            metadata: {
+              query: params.query,
+              tokensNum: params.tokensNum,
+            },
+          }),
+        )
 
-    const codeRequest: McpCodeRequest = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: {
-        name: "get_code_context_exa",
-        arguments: {
-          query: params.query,
-          tokensNum: params.tokensNum || 5000,
-        },
-      },
-    }
+        const request: McpCodeRequest = {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "get_code_context_exa",
+            arguments: {
+              query: params.query,
+              tokensNum: params.tokensNum || 5000,
+            },
+          },
+        }
 
-    const { signal, clearTimeout } = abortAfterAny(30000, ctx.abort)
+        const { signal, clearTimeout } = abortAfterAny(30000, ctx.abort)
 
-    try {
-      const headers: Record<string, string> = {
-        accept: "application/json, text/event-stream",
-        "content-type": "application/json",
-      }
+        try {
+          const headers: Record<string, string> = {
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+          }
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CONTEXT}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(codeRequest),
-        signal,
-      })
+          const response = yield* Effect.promise(() =>
+            fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CONTEXT}`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify(request),
+              signal,
+            }),
+          )
 
-      clearTimeout()
+          clearTimeout()
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Code search error (${response.status}): ${errorText}`)
-      }
+          if (!response.ok) {
+            const err = yield* Effect.promise(() => response.text())
+            throw new Error(`Code search error (${response.status}): ${err}`)
+          }
 
-      const responseText = await response.text()
+          const text = yield* Effect.promise(() => response.text())
 
-      // Parse SSE response
-      const lines = responseText.split("\n")
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data: McpCodeResponse = JSON.parse(line.substring(6))
-          if (data.result && data.result.content && data.result.content.length > 0) {
-            return {
-              output: data.result.content[0].text,
-              title: `Code search: ${params.query}`,
-              metadata: {},
+          // Parse SSE response
+          const lines = text.split("\n")
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data: McpCodeResponse = JSON.parse(line.substring(6))
+              if (data.result && data.result.content && data.result.content.length > 0) {
+                return {
+                  output: data.result.content[0].text,
+                  title: `Code search: ${params.query}`,
+                  metadata: {},
+                }
+              }
             }
           }
+
+          return {
+            output:
+              "No code snippets or documentation found. Please try a different query, be more specific about the library or programming concept, or check the spelling of framework names.",
+            title: `Code search: ${params.query}`,
+            metadata: {},
+          }
+        } catch (error) {
+          clearTimeout()
+
+          if (error instanceof Error && error.name === "AbortError") {
+            throw new Error("Code search request timed out")
+          }
+
+          throw error
         }
-      }
-
-      return {
-        output:
-          "No code snippets or documentation found. Please try a different query, be more specific about the library or programming concept, or check the spelling of framework names.",
-        title: `Code search: ${params.query}`,
-        metadata: {},
-      }
-    } catch (error) {
-      clearTimeout()
-
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("Code search request timed out")
-      }
-
-      throw error
-    }
-  },
+      }),
+    ),
 })
