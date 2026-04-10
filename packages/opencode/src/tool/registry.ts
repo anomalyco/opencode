@@ -1,4 +1,5 @@
 import { PlanExitTool } from "./plan"
+import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
@@ -16,6 +17,7 @@ import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { Provider } from "../provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
@@ -28,6 +30,10 @@ import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Ripgrep } from "../file/ripgrep"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
@@ -76,10 +82,15 @@ export namespace ToolRegistry {
     | Todo.Service
     | Agent.Service
     | Skill.Service
+    | Session.Service
+    | Provider.Service
     | LSP.Service
     | FileTime.Service
     | Instruction.Service
     | AppFileSystem.Service
+    | HttpClient.HttpClient
+    | ChildProcessSpawner
+    | Ripgrep.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -92,6 +103,15 @@ export namespace ToolRegistry {
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
+      const lsptool = yield* LspTool
+      const plan = yield* PlanExitTool
+      const webfetch = yield* WebFetchTool
+      const websearch = yield* WebSearchTool
+      const bash = yield* BashTool
+      const codesearch = yield* CodeSearchTool
+      const globtool = yield* GlobTool
+      const writetool = yield* WriteTool
+      const edit = yield* EditTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -150,22 +170,22 @@ export namespace ToolRegistry {
 
           const tool = yield* Effect.all({
             invalid: Tool.init(InvalidTool),
-            bash: Tool.init(BashTool),
+            bash: Tool.init(bash),
             read: Tool.init(read),
-            glob: Tool.init(GlobTool),
+            glob: Tool.init(globtool),
             grep: Tool.init(GrepTool),
-            edit: Tool.init(EditTool),
-            write: Tool.init(WriteTool),
+            edit: Tool.init(edit),
+            write: Tool.init(writetool),
             task: Tool.init(task),
-            fetch: Tool.init(WebFetchTool),
+            fetch: Tool.init(webfetch),
             todo: Tool.init(todo),
-            search: Tool.init(WebSearchTool),
-            code: Tool.init(CodeSearchTool),
+            search: Tool.init(websearch),
+            code: Tool.init(codesearch),
             skill: Tool.init(SkillTool),
             patch: Tool.init(ApplyPatchTool),
             question: Tool.init(question),
-            lsp: Tool.init(LspTool),
-            plan: Tool.init(PlanExitTool),
+            lsp: Tool.init(lsptool),
+            plan: Tool.init(plan),
           })
 
           return {
@@ -297,10 +317,15 @@ export namespace ToolRegistry {
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
       Layer.provide(Agent.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(FileTime.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
     ),
   )
 
