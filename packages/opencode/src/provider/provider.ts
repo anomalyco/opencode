@@ -525,6 +525,105 @@ export namespace Provider {
           },
         }
       }),
+      edenai: Effect.fnUntraced(function* (input: Info) {
+        const auth = yield* dep.auth(input.id)
+        const apiKey = yield* Effect.sync(() => {
+          if (auth?.type === "api") return auth.key
+          return Env.get("EDENAI_API_KEY")
+        })
+
+        if (!apiKey) {
+          return { autoload: false }
+        }
+
+        const options = {
+          baseURL: "https://api.edenai.run/v3/llm",
+          apiKey,
+        }
+
+        return {
+          autoload: true,
+          options,
+          async discoverModels(): Promise<Record<string, Model>> {
+            log.info("edenai model discovery starting")
+            try {
+              const res = await fetch("https://api.edenai.run/v3/llm/models", {
+                headers: { Authorization: `Bearer ${apiKey}` },
+                signal: AbortSignal.timeout(10000),
+              })
+              if (!res.ok) throw new Error(`HTTP ${res.status}`)
+              const json = await res.json()
+              const models: Record<string, Model> = {}
+
+              for (const m of json.data || []) {
+                const caps = m.capabilities || {}
+                if (!caps.supports_function_calling) continue
+
+                const p = m.pricing || {}
+                const cost = {
+                  input: (p.input_cost_per_token || 0) * 1000000,
+                  output: (p.output_cost_per_token || 0) * 1000000,
+                  cache: {
+                    read: (p.cache_read_input_token_cost || 0) * 1000000,
+                    write: (p.cache_creation_input_token_cost || 0) * 1000000,
+                  },
+                }
+
+                models[m.id] = {
+                  id: ModelID.make(m.id),
+                  providerID: ProviderID.make("edenai"),
+                  name: m.model_name || m.id,
+                  family: "",
+                  api: {
+                    id: m.id,
+                    url: "https://api.edenai.run/v3/llm",
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  status: "active",
+                  headers: {},
+                  options: {},
+                  cost,
+                  limit: {
+                    context: m.context_length || 128000,
+                    output: 4096,
+                  },
+                  capabilities: {
+                    temperature: true,
+                    reasoning: !!caps.supports_reasoning,
+                    attachment: false,
+                    toolcall: true,
+                    input: {
+                      text: (caps.input_modalities || []).includes("text"),
+                      audio: (caps.input_modalities || []).includes("audio"),
+                      image: (caps.input_modalities || []).includes("image"),
+                      video: (caps.input_modalities || []).includes("video"),
+                      pdf: false,
+                    },
+                    output: {
+                      text: (caps.output_modalities || []).includes("text"),
+                      audio: (caps.output_modalities || []).includes("audio"),
+                      image: (caps.output_modalities || []).includes("image"),
+                      video: (caps.output_modalities || []).includes("video"),
+                      pdf: false,
+                    },
+                    interleaved: false,
+                  },
+                  release_date: m.created ? new Date(m.created * 1000).toISOString() : "",
+                  variants: {},
+                }
+              }
+
+              log.info("edenai model discovery complete", {
+                count: Object.keys(models).length,
+              })
+              return models
+            } catch (e) {
+              log.warn("edenai model discovery failed", { error: e })
+              return {}
+            }
+          },
+        }
+      }),
       zenmux: () =>
         Effect.succeed({
           autoload: false,
@@ -1040,6 +1139,17 @@ export namespace Provider {
           const cfg = yield* config.get()
           const modelsDev = yield* Effect.promise(() => ModelsDev.get())
           const database = mapValues(modelsDev, fromModelsDevProvider)
+
+          if (!database["edenai"]) {
+            database["edenai"] = {
+              id: ProviderID.make("edenai"),
+              name: "Eden AI",
+              source: "custom",
+              env: ["EDENAI_API_KEY"],
+              options: { baseURL: "https://api.edenai.run/v3/llm" },
+              models: {},
+            }
+          }
 
           const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
           const languages = new Map<string, LanguageModelV3>()
