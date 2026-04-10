@@ -2,6 +2,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect } from "effect"
+import * as Stream from "effect/Stream"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
@@ -13,95 +14,88 @@ const Parameters = z.object({
 export const SkillTool = Tool.defineEffect(
   "skill",
   Effect.gen(function* () {
-    const list = yield* Effect.promise(() => Skill.available())
+    const skill = yield* Skill.Service
+    const rg = yield* Ripgrep.Service
 
-    const description =
-      list.length === 0
-        ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
-        : [
-            "Load a specialized skill that provides domain-specific instructions and workflows.",
-            "",
-            "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
-            "",
-            "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
-            "",
-            'Tool output includes a `<skill_content name="...">` block with the loaded content.',
-            "",
-            "The following skills provide specialized sets of instructions for particular tasks",
-            "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
-            "",
-            Skill.fmt(list, { verbose: false }),
-          ].join("\n")
+    return async () => {
+      const list = await Effect.runPromise(skill.available())
 
-    return {
-      description,
-      parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
-        Effect.gen(function* () {
-          const skill = yield* Effect.promise(() => Skill.get(params.name))
+      const description =
+        list.length === 0
+          ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
+          : [
+              "Load a specialized skill that provides domain-specific instructions and workflows.",
+              "",
+              "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
+              "",
+              "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
+              "",
+              'Tool output includes a `<skill_content name="...">` block with the loaded content.',
+              "",
+              "The following skills provide specialized sets of instructions for particular tasks",
+              "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+              "",
+              Skill.fmt(list, { verbose: false }),
+            ].join("\n")
 
-          if (!skill) {
-            const available = yield* Effect.promise(() =>
-              Skill.all().then((x) => x.map((skill) => skill.name).join(", ")),
-            )
-            throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
-          }
+      return {
+        description,
+        parameters: Parameters,
+        execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+          Effect.gen(function* () {
+            const info = yield* skill.get(params.name)
 
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "skill",
-              patterns: [params.name],
-              always: [params.name],
-              metadata: {},
-            }),
-          )
-
-          const dir = path.dirname(skill.location)
-          const base = pathToFileURL(dir).href
-
-          const limit = 10
-          const files = yield* Effect.promise(async () => {
-            const arr = []
-            for await (const file of Ripgrep.files({
-              cwd: dir,
-              follow: false,
-              hidden: true,
-              signal: ctx.abort,
-            })) {
-              if (file.includes("SKILL.md")) {
-                continue
-              }
-              arr.push(path.resolve(dir, file))
-              if (arr.length >= limit) {
-                break
-              }
+            if (!info) {
+              const all = yield* skill.all()
+              const available = all.map((s) => s.name).join(", ")
+              throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
             }
-            return arr
-          }).pipe(Effect.map((f) => f.map((file) => `<file>${file}</file>`).join("\n")))
 
-          return {
-            title: `Loaded skill: ${skill.name}`,
-            output: [
-              `<skill_content name="${skill.name}">`,
-              `# Skill: ${skill.name}`,
-              "",
-              skill.content.trim(),
-              "",
-              `Base directory for this skill: ${base}`,
-              "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
-              "Note: file list is sampled.",
-              "",
-              "<skill_files>",
-              files,
-              "</skill_files>",
-              "</skill_content>",
-            ].join("\n"),
-            metadata: {
-              name: skill.name,
-              dir,
-            },
-          }
-        }).pipe(Effect.orDie, Effect.runPromise),
+            yield* Effect.promise(() =>
+              ctx.ask({
+                permission: "skill",
+                patterns: [params.name],
+                always: [params.name],
+                metadata: {},
+              }),
+            )
+
+            const dir = path.dirname(info.location)
+            const base = pathToFileURL(dir).href
+
+            const limit = 10
+            const files = yield* rg.files({ cwd: dir, follow: false, hidden: true }).pipe(
+              Stream.filter((file) => !file.includes("SKILL.md")),
+              Stream.map((file) => path.resolve(dir, file)),
+              Stream.take(limit),
+              Stream.runCollect,
+              Effect.map((chunk) => [...chunk].map((file) => `<file>${file}</file>`).join("\n")),
+            )
+
+            return {
+              title: `Loaded skill: ${info.name}`,
+              output: [
+                `<skill_content name="${info.name}">`,
+                `# Skill: ${info.name}`,
+                "",
+                info.content.trim(),
+                "",
+                `Base directory for this skill: ${base}`,
+                "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+                "Note: file list is sampled.",
+                "",
+                "<skill_files>",
+                files,
+                "</skill_files>",
+                "</skill_content>",
+              ].join("\n"),
+              metadata: {
+                name: info.name,
+                dir,
+              },
+            }
+          }).pipe(Effect.orDie, Effect.runPromise),
+      }
     }
   }),
 )
