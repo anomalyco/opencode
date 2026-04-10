@@ -125,15 +125,6 @@ export namespace Provider {
     languageModel(modelId: string): LanguageModelV3
   }
 
-  // @llmgateway/ai-sdk-provider's return type doesn't currently satisfy BundledSDK,
-  // so we wrap it with an adapter that delegates to the underlying provider.
-  const createLLMGatewayAdapter: (options: any) => BundledSDK = (options) => {
-    const llmgw: any = createLLMGateway(options)
-    return {
-      languageModel: (modelId: string) => llmgw.languageModel(modelId),
-    }
-  }
-
   const BUNDLED_PROVIDERS: Record<string, (options: any) => BundledSDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -144,7 +135,7 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
-    "@llmgateway/ai-sdk-provider": createLLMGatewayAdapter,
+    "@llmgateway/ai-sdk-provider": createLLMGateway,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
     "@ai-sdk/groq": createGroq,
