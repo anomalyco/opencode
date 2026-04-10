@@ -87,8 +87,8 @@ export function SessionSidePanel(props: {
 
     const ctrl = new AbortController()
     const check = () =>
-      fetch(url, { cache: "no-store", mode: "no-cors", signal: ctrl.signal })
-        .then(() => setPreviewReady(true))
+      fetch(url, { cache: "no-store", mode: "cors", signal: ctrl.signal })
+        .then((res) => setPreviewReady(res.ok))
         .catch(() => setPreviewReady(false))
 
     void check()
