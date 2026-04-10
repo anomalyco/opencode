@@ -1233,7 +1233,8 @@ export namespace Provider {
               continue
             }
             const result = yield* fn(data)
-            if (result && (result.autoload || providers[providerID])) {
+            const configured = data.source === "config" && data.options?.apiKey
+            if (result && (result.autoload || providers[providerID] || configured)) {
               if (result.getModel) modelLoaders[providerID] = result.getModel
               if (result.vars) varsLoaders[providerID] = result.vars
               if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
