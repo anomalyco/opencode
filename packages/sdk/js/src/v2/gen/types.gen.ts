@@ -1011,6 +1011,8 @@ export type Event =
 
 export type GlobalEvent = {
   directory: string
+  project?: string
+  workspace?: string
   payload: Event
 }
 
