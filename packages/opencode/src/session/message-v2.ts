@@ -112,6 +112,7 @@ export namespace MessageV2 {
     text: z.string(),
     synthetic: z.boolean().optional(),
     ignored: z.boolean().optional(),
+    transcriptOnly: z.boolean().optional(),
     time: z
       .object({
         start: z.number(),
@@ -127,6 +128,7 @@ export namespace MessageV2 {
   export const ReasoningPart = PartBase.extend({
     type: z.literal("reasoning"),
     text: z.string(),
+    transcriptOnly: z.boolean().optional(),
     metadata: z.record(z.string(), z.any()).optional(),
     time: z.object({
       start: z.number(),
@@ -343,6 +345,7 @@ export namespace MessageV2 {
     callID: z.string(),
     tool: z.string(),
     state: ToolState,
+    transcriptOnly: z.boolean().optional(),
     metadata: z.record(z.string(), z.any()).optional(),
   }).meta({
     ref: "ToolPart",
@@ -644,6 +647,9 @@ export namespace MessageV2 {
     for (const msg of input) {
       if (msg.parts.length === 0) continue
 
+      // Strip transcript-only parts before converting to model messages
+      const activeParts = msg.parts.filter((part) => !("transcriptOnly" in part && part.transcriptOnly))
+
       if (msg.info.role === "user") {
         const userMessage: UIMessage = {
           id: msg.info.id,
@@ -651,7 +657,7 @@ export namespace MessageV2 {
           parts: [],
         }
         result.push(userMessage)
-        for (const part of msg.parts) {
+        for (const part of activeParts) {
           if (part.type === "text" && !part.ignored)
             userMessage.parts.push({
               type: "text",
@@ -707,7 +713,7 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
-        for (const part of msg.parts) {
+        for (const part of activeParts) {
           if (part.type === "text")
             assistantMessage.parts.push({
               type: "text",

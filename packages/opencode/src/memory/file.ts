@@ -34,28 +34,62 @@ function parseFrontmatter(raw: string): { frontmatter: Memory.Frontmatter; conte
     if (idx === -1) continue
     fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
   }
-  if (!fm.topic || !fm.type) return undefined
+
+  // Support both new format (name/description/type/scope) and legacy (topic/type)
+  const name = fm.name || fm.topic
+  if (!name) return undefined
+
+  let type: Memory.Type
+  const rawType = fm.type
+  if (!rawType) return undefined
+
   const validTypes: readonly string[] = Memory.TYPES
-  if (!validTypes.includes(fm.type)) return undefined
+  if (validTypes.includes(rawType)) {
+    type = rawType as Memory.Type
+  } else {
+    // Map legacy types to new types
+    const legacyTypes: readonly string[] = Memory.LEGACY_TYPES
+    if (legacyTypes.includes(rawType)) {
+      type = Memory.LEGACY_TYPE_MAP[rawType as Memory.LegacyType]
+    } else {
+      return undefined
+    }
+  }
+
+  const validScopes: readonly string[] = Memory.SCOPES
+  const scope = fm.scope && validScopes.includes(fm.scope)
+    ? (fm.scope as Memory.Scope)
+    : undefined
+
   return {
     frontmatter: {
-      topic: fm.topic,
-      type: fm.type as Memory.Type,
+      name,
+      description: fm.description || undefined,
+      type,
+      scope,
+      agent: fm.agent || undefined,
     },
     content: match[2].trim(),
   }
 }
 
 function formatFrontmatter(entry: Memory.FileEntry): string {
-  return [
+  const lines = [
     "---",
-    `topic: ${entry.frontmatter.topic}`,
-    `type: ${entry.frontmatter.type}`,
-    "---",
-    "",
-    entry.content,
-    "",
-  ].join("\n")
+    `name: ${entry.frontmatter.name}`,
+  ]
+  if (entry.frontmatter.description) {
+    lines.push(`description: ${entry.frontmatter.description}`)
+  }
+  lines.push(`type: ${entry.frontmatter.type}`)
+  if (entry.frontmatter.scope) {
+    lines.push(`scope: ${entry.frontmatter.scope}`)
+  }
+  if (entry.frontmatter.agent) {
+    lines.push(`agent: ${entry.frontmatter.agent}`)
+  }
+  lines.push("---", "", entry.content, "")
+  return lines.join("\n")
 }
 
 export namespace MemoryFile {
@@ -112,6 +146,10 @@ export namespace MemoryFile {
       if (entry) entries.push(entry)
     }
     return entries
+  }
+
+  export function agentMemoryDir(agent: string) {
+    return path.join(Instance.directory, MEMORY_DIR, "agents", agent)
   }
 
   export function getMemoryDir() {

@@ -48,17 +48,18 @@ export namespace MemoryExtractor {
     return state
   }
 
-  export function trackCommand(sessionID: string, command: string) {
+  export function trackCommand(sessionID: string, command: string, agent?: string) {
     const state = getState(sessionID)
     const count = (state.commands.get(command) ?? 0) + 1
     state.commands.set(command, count)
     if (count === COMMAND_THRESHOLD) {
       state.pending.push({
         projectPath: Instance.directory,
-        topic: `Frequently used command: ${command}`,
-        type: "build-command",
+        name: `Frequently used command: ${command}`,
+        type: "project",
         content: `Command \`${command}\` has been used ${count}+ times in this session.`,
         sessionID,
+        agent,
       })
       maybeFlush(sessionID)
     }
@@ -69,44 +70,61 @@ export namespace MemoryExtractor {
     state.errors.push(error)
   }
 
-  export function trackFix(sessionID: string, fix: string) {
+  export function trackFix(sessionID: string, fix: string, agent?: string) {
     const state = getState(sessionID)
     state.fixes.push(fix)
     if (state.errors.length > 0) {
       const lastError = state.errors[state.errors.length - 1]
       state.pending.push({
         projectPath: Instance.directory,
-        topic: `Error pattern and fix: ${lastError.slice(0, 50)}`,
-        type: "error-solution",
+        name: `Error pattern and fix: ${lastError.slice(0, 50)}`,
+        type: "feedback",
         content: `**Error:** ${lastError}\n**Fix:** ${fix}`,
         sessionID,
+        agent,
       })
       state.errors = []
       maybeFlush(sessionID)
     }
   }
 
-  export function trackPreference(sessionID: string, preference: string) {
+  export function trackPreference(sessionID: string, preference: string, agent?: string) {
     const state = getState(sessionID)
     state.pending.push({
       projectPath: Instance.directory,
-      topic: `User preference: ${preference.slice(0, 50)}`,
-      type: "preference",
+      name: `User preference: ${preference.slice(0, 50)}`,
+      type: "user",
+      scope: "personal",
       content: preference,
       sessionID,
+      agent,
     })
     maybeFlush(sessionID)
   }
 
-  export function trackConfigChange(sessionID: string, file: string, change: string) {
+  export function trackConfigChange(sessionID: string, file: string, change: string, agent?: string) {
     const state = getState(sessionID)
     state.configChanges.push(`${file}: ${change}`)
     state.pending.push({
       projectPath: Instance.directory,
-      topic: `Config file modification: ${file}`,
-      type: "config-pattern",
+      name: `Config file modification: ${file}`,
+      type: "project",
       content: `Config file \`${file}\` was modified: ${change}`,
       sessionID,
+      agent,
+    })
+    maybeFlush(sessionID)
+  }
+
+  export function trackDecision(sessionID: string, decision: string, reasoning: string, agent?: string) {
+    const state = getState(sessionID)
+    state.pending.push({
+      projectPath: Instance.directory,
+      name: `Decision: ${decision.slice(0, 50)}`,
+      type: "reference",
+      content: `**Decision:** ${decision}\n**Reasoning:** ${reasoning}`,
+      sessionID,
+      agent,
     })
     maybeFlush(sessionID)
   }
@@ -137,16 +155,20 @@ export namespace MemoryExtractor {
     for (const entry of batch) {
       try {
         await MemoryStore.runPromise((svc) => svc.create(entry))
-        // Sync to filesystem so MemoryInjector picks up extracted entries
         await MemoryFile.writeEntry({
-          filename: slugify(entry.topic) + ".md",
-          frontmatter: { topic: entry.topic, type: entry.type },
+          filename: slugify(entry.name) + ".md",
+          frontmatter: {
+            name: entry.name,
+            type: entry.type,
+            scope: entry.scope,
+            agent: entry.agent,
+          },
           content: entry.content,
         }).catch((err) => {
-          log.warn("failed to sync memory to file", { error: err, topic: entry.topic })
+          log.warn("failed to sync memory to file", { error: err, name: entry.name })
         })
       } catch (err) {
-        log.warn("failed to flush memory entry", { error: err, topic: entry.topic })
+        log.warn("failed to flush memory entry", { error: err, name: entry.name })
         failed.push(entry)
       }
     }
@@ -168,11 +190,54 @@ export namespace MemoryExtractor {
     if (entries.length === 0) return
     const lines = [
       "# Memory Index",
+      `<!-- Auto-generated. Last updated: ${new Date().toISOString().split("T")[0]} -->`,
+      `<!-- Entries: ${entries.length} -->`,
       "",
-      ...entries.map((e) => `- [${e.frontmatter.topic}](${e.filename}) — ${e.frontmatter.type}`),
+      ...entries.map((e) => {
+        const scope = e.frontmatter.scope ? ` (${e.frontmatter.scope})` : ""
+        return `- [${e.frontmatter.name}](${e.filename}) -- ${e.frontmatter.type}${scope}`
+      }),
       "",
     ]
     await MemoryFile.writeIndex(lines.join("\n"))
+  }
+
+  /**
+   * Run background consolidation at session start.
+   * Merges duplicate entries and updates the index. Non-blocking.
+   */
+  export async function consolidateOnSessionStart(projectPath: string): Promise<void> {
+    try {
+      const entries = await MemoryStore.runPromise((svc) => svc.list(projectPath))
+      if (entries.length === 0) return
+
+      // Group by similar name (exact match, case-insensitive)
+      const byName = new Map<string, typeof entries>()
+      for (const entry of entries) {
+        const key = entry.name.toLowerCase().trim()
+        const group = byName.get(key) ?? []
+        group.push(entry)
+        byName.set(key, group)
+      }
+
+      let merged = 0
+      for (const [, group] of byName) {
+        if (group.length <= 1) continue
+        // Keep highest accessCount entry
+        group.sort((a, b) => b.accessCount - a.accessCount)
+        for (let i = 1; i < group.length; i++) {
+          await MemoryStore.runPromise((svc) => svc.remove(group[i].id))
+          merged++
+        }
+      }
+
+      if (merged > 0) {
+        await updateIndex()
+        log.info("session-start consolidation", { projectPath, merged })
+      }
+    } catch (err) {
+      log.warn("consolidation failed", { error: err, projectPath })
+    }
   }
 
   export async function cleanup(sessionID: string) {

@@ -186,13 +186,11 @@ export namespace Instruction {
             ? []
             : yield* Effect.promise(() => filterSymlinkEscapes(rawProjectRuleFiles, projectRulesDir))
 
-          // Project rules override global by filename
-          const projectFilenames = new Set(projectRuleFiles.map((p) => path.basename(p)))
+          // Include all global rules (even if same filename exists in project)
           for (const rule of globalRuleFiles) {
-            if (!projectFilenames.has(path.basename(rule))) {
-              paths.add(path.resolve(rule))
-            }
+            paths.add(path.resolve(rule))
           }
+          // Include all project rules
           for (const rule of projectRuleFiles) {
             paths.add(path.resolve(rule))
           }

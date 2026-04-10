@@ -12,17 +12,17 @@ describe("memory.file", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const entry = {
+        const entry: Memory.FileEntry = {
           filename: "test-entry.md",
-          frontmatter: { topic: "test topic", type: "general" as const },
+          frontmatter: { name: "test topic", type: "project" },
           content: "Some test content here.",
         }
         await MemoryFile.writeEntry(entry)
         const read = await MemoryFile.readEntry("test-entry.md")
         expect(read).toBeDefined()
         expect(read!.filename).toBe("test-entry.md")
-        expect(read!.frontmatter.topic).toBe("test topic")
-        expect(read!.frontmatter.type).toBe("general")
+        expect(read!.frontmatter.name).toBe("test topic")
+        expect(read!.frontmatter.type).toBe("project")
         expect(read!.content).toBe("Some test content here.")
       },
     })
@@ -89,7 +89,7 @@ describe("memory.file", () => {
         expect(() =>
           MemoryFile.writeEntry({
             filename: "../../../etc/evil.md",
-            frontmatter: { topic: "evil", type: "general" },
+            frontmatter: { name: "evil", type: "project" },
             content: "bad",
           }),
         ).toThrow("path traversal detected")
@@ -113,9 +113,9 @@ describe("memory.file", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const entry = {
+        const entry: Memory.FileEntry = {
           filename: "removable.md",
-          frontmatter: { topic: "removable", type: "general" as const },
+          frontmatter: { name: "removable", type: "project" },
           content: "to be removed",
         }
         await MemoryFile.writeEntry(entry)
@@ -136,20 +136,20 @@ describe("memory.file", () => {
       fn: async () => {
         await MemoryFile.writeEntry({
           filename: "entry-a.md",
-          frontmatter: { topic: "A", type: "general" },
+          frontmatter: { name: "A", type: "project" },
           content: "content a",
         })
         await MemoryFile.writeEntry({
           filename: "entry-b.md",
-          frontmatter: { topic: "B", type: "preference" },
+          frontmatter: { name: "B", type: "user" },
           content: "content b",
         })
         await MemoryFile.writeIndex("# Index")
 
         const entries = await MemoryFile.listEntries()
         expect(entries.length).toBe(2)
-        const topics = entries.map((e) => e.frontmatter.topic).sort()
-        expect(topics).toEqual(["A", "B"])
+        const names = entries.map((e) => e.frontmatter.name).sort()
+        expect(names).toEqual(["A", "B"])
       },
     })
   })
@@ -168,7 +168,7 @@ describe("memory.file", () => {
 
         await MemoryFile.writeEntry({
           filename: "first.md",
-          frontmatter: { topic: "first", type: "general" },
+          frontmatter: { name: "first", type: "project" },
           content: "first entry",
         })
 
@@ -195,20 +195,45 @@ describe("memory.file", () => {
     })
   })
 
-  test.each(Memory.TYPES.map((t) => [t]))("readEntry parses valid type: %s", async (validType) => {
+  test.each(Memory.TYPES.map((t) => [t]))("readEntry parses valid new type: %s", async (validType) => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const dir = MemoryFile.getMemoryDir()
         await fs.mkdir(dir, { recursive: true })
-        const raw = `---\ntopic: test\ntype: ${validType}\n---\nsome content`
+        const raw = `---\nname: test\ntype: ${validType}\n---\nsome content`
         await Bun.write(path.join(dir, "valid-type.md"), raw)
         const read = await MemoryFile.readEntry("valid-type.md")
         expect(read).toBeDefined()
         expect(read!.frontmatter.type).toBe(validType)
-        expect(read!.frontmatter.topic).toBe("test")
+        expect(read!.frontmatter.name).toBe("test")
         expect(read!.content).toBe("some content")
+      },
+    })
+  })
+
+  test.each([
+    ["error-solution", "project"],
+    ["build-command", "project"],
+    ["preference", "user"],
+    ["decision", "feedback"],
+    ["config-pattern", "project"],
+    ["general", "project"],
+  ] as const)("readEntry maps legacy type %s to %s", async (legacyType, expectedType) => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const dir = MemoryFile.getMemoryDir()
+        await fs.mkdir(dir, { recursive: true })
+        const raw = `---\ntopic: legacy test\ntype: ${legacyType}\n---\nlegacy content`
+        await Bun.write(path.join(dir, "legacy.md"), raw)
+        const read = await MemoryFile.readEntry("legacy.md")
+        expect(read).toBeDefined()
+        expect(read!.frontmatter.type).toBe(expectedType)
+        expect(read!.frontmatter.name).toBe("legacy test")
+        expect(read!.content).toBe("legacy content")
       },
     })
   })
@@ -220,7 +245,7 @@ describe("memory.file", () => {
       fn: async () => {
         const dir = MemoryFile.getMemoryDir()
         await fs.mkdir(dir, { recursive: true })
-        const raw = "---\ntopic: test\ntype: invalid-type\n---\nsome content"
+        const raw = "---\nname: test\ntype: invalid-type\n---\nsome content"
         await Bun.write(path.join(dir, "invalid-type.md"), raw)
         const read = await MemoryFile.readEntry("invalid-type.md")
         expect(read).toBeUndefined()
@@ -235,10 +260,57 @@ describe("memory.file", () => {
       fn: async () => {
         const dir = MemoryFile.getMemoryDir()
         await fs.mkdir(dir, { recursive: true })
-        const raw = "---\ntopic: test\n---\nsome content"
+        const raw = "---\nname: test\n---\nsome content"
         await Bun.write(path.join(dir, "no-type.md"), raw)
         const read = await MemoryFile.readEntry("no-type.md")
         expect(read).toBeUndefined()
+      },
+    })
+  })
+
+  test("readEntry parses scope and agent from frontmatter", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const dir = MemoryFile.getMemoryDir()
+        await fs.mkdir(dir, { recursive: true })
+        const raw = "---\nname: scoped entry\ndescription: A test description\ntype: user\nscope: personal\nagent: build\n---\nscoped content"
+        await Bun.write(path.join(dir, "scoped.md"), raw)
+        const read = await MemoryFile.readEntry("scoped.md")
+        expect(read).toBeDefined()
+        expect(read!.frontmatter.name).toBe("scoped entry")
+        expect(read!.frontmatter.description).toBe("A test description")
+        expect(read!.frontmatter.type).toBe("user")
+        expect(read!.frontmatter.scope).toBe("personal")
+        expect(read!.frontmatter.agent).toBe("build")
+      },
+    })
+  })
+
+  test("writeEntry outputs new frontmatter format with scope and description", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const entry: Memory.FileEntry = {
+          filename: "full-entry.md",
+          frontmatter: {
+            name: "Full entry",
+            description: "A complete entry with all fields",
+            type: "feedback",
+            scope: "project",
+            agent: "review",
+          },
+          content: "Full content here.",
+        }
+        await MemoryFile.writeEntry(entry)
+        const raw = await Bun.file(path.join(MemoryFile.getMemoryDir(), "full-entry.md")).text()
+        expect(raw).toContain("name: Full entry")
+        expect(raw).toContain("description: A complete entry with all fields")
+        expect(raw).toContain("type: feedback")
+        expect(raw).toContain("scope: project")
+        expect(raw).toContain("agent: review")
       },
     })
   })

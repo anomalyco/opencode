@@ -6,4 +6,5 @@ export {
   HookEntry as HookEntrySchema,
   HookConfig as HookConfigSchema,
 } from "./schema"
-export { runHooks, runHook, matchesTool, safeToolInput, type HookResult, type HookEnv } from "./execute"
+export { runHooks, runHook, matchesTool, safeToolInput, clearHookCache, type HookResult, type HookEnv } from "./execute"
+export { verifyHookDeployment, type VerifyResult } from "./verify"

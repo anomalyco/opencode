@@ -56,7 +56,7 @@ describe("Instruction.systemPaths rules loading", () => {
     }
   })
 
-  test("project rule with same filename overrides global", async () => {
+  test("both global and project rules with same filename are loaded", async () => {
     await using homeTmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, ".opencode", "rules", "style.md"), "# Global Style")
@@ -79,8 +79,8 @@ describe("Instruction.systemPaths rules loading", () => {
           const paths = await Instruction.systemPaths()
           // Project style.md should be present
           expect(paths.has(path.join(projectTmp.path, ".opencode", "rules", "style.md"))).toBe(true)
-          // Global style.md should NOT be present (overridden)
-          expect(paths.has(path.join(homeTmp.path, ".opencode", "rules", "style.md"))).toBe(false)
+          // Global style.md should also be present (both are loaded)
+          expect(paths.has(path.join(homeTmp.path, ".opencode", "rules", "style.md"))).toBe(true)
           // Global unique-global.md should still be present
           expect(paths.has(path.join(homeTmp.path, ".opencode", "rules", "unique-global.md"))).toBe(true)
         },

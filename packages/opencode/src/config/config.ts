@@ -1079,7 +1079,10 @@ export namespace Config {
         .object({
           enabled: z.boolean().optional().describe("Enable or disable memory system"),
           auto_extract: z.boolean().optional().describe("Enable automatic memory extraction from sessions"),
-          max_memory_lines: z.number().optional().describe("Maximum number of lines to load from MEMORY.md"),
+          max_memory_lines: z.number().optional().describe("Maximum number of lines to load from MEMORY.md (fallback)"),
+          max_memory_tokens: z.number().optional().describe("Token cap for injected memory context (default: 5000)"),
+          consolidation: z.boolean().optional().describe("Enable background memory consolidation on session start"),
+          scope: z.enum(["personal", "project", "global"]).optional().describe("Default scope for new memories"),
         })
         .optional(),
       experimental: z
