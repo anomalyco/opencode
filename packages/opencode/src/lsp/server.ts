@@ -2001,7 +2001,7 @@ export namespace LSPServer {
                 })
               if (!ok) return
             } else {
-              await $`gunzip -f ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
+              await run(["gunzip", "-f", tempPath], { cwd: Global.Path.bin })
             }
 
             await fs.rm(tempPath, { force: true }).catch(() => {})
@@ -2012,7 +2012,7 @@ export namespace LSPServer {
             }
 
             if (platform !== "win32") {
-              await $`chmod +x ${cs}`.quiet().nothrow()
+              await fs.chmod(cs, 0o755).catch(() => {})
             }
 
             log.info("installed coursier", { bin: cs })
