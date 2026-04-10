@@ -9926,6 +9926,12 @@
           "directory": {
             "type": "string"
           },
+          "project": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          },
           "payload": {
             "$ref": "#/components/schemas/Event"
           }

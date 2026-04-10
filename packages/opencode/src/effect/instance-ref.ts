@@ -4,3 +4,7 @@ import type { InstanceContext } from "@/project/instance"
 export const InstanceRef = ServiceMap.Reference<InstanceContext | undefined>("~opencode/InstanceRef", {
   defaultValue: () => undefined,
 })
+
+export const WorkspaceRef = ServiceMap.Reference<string | undefined>("~opencode/WorkspaceRef", {
+  defaultValue: () => undefined,
+})

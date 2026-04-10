@@ -247,6 +247,7 @@ export namespace Worktree {
 
       const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
         const ctx = yield* InstanceState.context
+        const workspaceID = yield* InstanceState.workspaceID
         const projectID = ctx.project.id
         const extra = startCommand?.trim()
 
@@ -256,6 +257,8 @@ export namespace Worktree {
           log.error("worktree checkout failed", { directory: info.directory, message })
           GlobalBus.emit("event", {
             directory: info.directory,
+            project: ctx.project.id,
+            workspace: workspaceID,
             payload: { type: Event.Failed.type, properties: { message } },
           })
           return
@@ -273,6 +276,8 @@ export namespace Worktree {
               log.error("worktree bootstrap failed", { directory: info.directory, message })
               GlobalBus.emit("event", {
                 directory: info.directory,
+                project: ctx.project.id,
+                workspace: workspaceID,
                 payload: { type: Event.Failed.type, properties: { message } },
               })
               return false
@@ -282,6 +287,8 @@ export namespace Worktree {
 
         GlobalBus.emit("event", {
           directory: info.directory,
+          project: ctx.project.id,
+          workspace: workspaceID,
           payload: {
             type: Event.Ready.type,
             properties: { name: info.name, branch: info.branch },

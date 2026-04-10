@@ -1,5 +1,6 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { useProject } from "@tui/context/project"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
@@ -14,7 +15,7 @@ function scoped(sdk: ReturnType<typeof useSDK>, sync: ReturnType<typeof useSync>
   return createOpencodeClient({
     baseUrl: sdk.url,
     fetch: sdk.fetch,
-    directory: sync.data.path.directory || sdk.directory,
+    directory: sync.path.directory || sdk.directory,
     experimental_workspaceID: workspaceID,
   })
 }
@@ -149,6 +150,7 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
 
 export function DialogWorkspaceList() {
   const dialog = useDialog()
+  const project = useProject()
   const route = useRoute()
   const sync = useSync()
   const sdk = useSDK()
@@ -168,8 +170,9 @@ export function DialogWorkspaceList() {
       forceCreate,
     })
 
-  async function selectWorkspace(workspaceID: string) {
-    if (workspaceID === "__local__") {
+  async function selectWorkspace(workspaceID: string | null) {
+    if (workspaceID == null) {
+      project.workspace.set(undefined)
       if (localCount() > 0) {
         dialog.replace(() => <DialogSessionList localOnly={true} />)
         return
@@ -199,12 +202,7 @@ export function DialogWorkspaceList() {
     await open(workspaceID)
   }
 
-  const currentWorkspaceID = createMemo(() => {
-    if (route.data.type === "session") {
-      return sync.session.get(route.data.sessionID)?.workspaceID ?? "__local__"
-    }
-    return "__local__"
-  })
+  const currentWorkspaceID = createMemo(() => project.workspace.current())
 
   const localCount = createMemo(
     () => sync.data.session.filter((session) => !session.workspaceID && !session.parentID).length,
@@ -234,7 +232,7 @@ export function DialogWorkspaceList() {
   const options = createMemo(() => [
     {
       title: "Local",
-      value: "__local__",
+      value: null,
       category: "Workspace",
       description: "Use the local machine",
       footer: `${localCount()} session${localCount() === 1 ? "" : "s"}`,
@@ -292,7 +290,7 @@ export function DialogWorkspaceList() {
           keybind: keybind.all.session_delete?.[0],
           title: "delete",
           onTrigger: async (option) => {
-            if (option.value === "__create__" || option.value === "__local__") return
+            if (option.value === "__create__" || option.value === null) return
             if (toDelete() !== option.value) {
               setToDelete(option.value)
               return
@@ -307,6 +305,7 @@ export function DialogWorkspaceList() {
               return
             }
             if (currentWorkspaceID() === option.value) {
+              project.workspace.set(undefined)
               route.navigate({
                 type: "home",
               })

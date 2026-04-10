@@ -1,6 +1,7 @@
 import type { ParsedKey } from "@opentui/core"
 import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@opencode-ai/plugin/tui"
 import type { useCommandDialog } from "@tui/component/dialog-command"
+import type { useEvent } from "@tui/context/event"
 import type { useKeybind } from "@tui/context/keybind"
 import type { useRoute } from "@tui/context/route"
 import type { useSDK } from "@tui/context/sdk"
@@ -36,6 +37,7 @@ type Input = {
   route: ReturnType<typeof useRoute>
   routes: RouteMap
   bump: () => void
+  event: ReturnType<typeof useEvent>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   theme: ReturnType<typeof useTheme>
@@ -136,7 +138,7 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       return sync.data.provider
     },
     get path() {
-      return sync.data.path
+      return sync.path
     },
     get vcs() {
       if (!sync.data.vcs) return
@@ -342,7 +344,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
     get client() {
       return input.sdk.client
     },
-    event: input.sdk.event,
+    event: input.event,
     renderer: input.renderer,
     slots: {
       register() {

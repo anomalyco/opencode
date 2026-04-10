@@ -6,13 +6,10 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
-import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
-import { setTimeout as sleep } from "node:timers/promises"
 import { writeHeapSnapshot } from "node:v8"
-import { WorkspaceID } from "@/control-plane/schema"
 import { Heap } from "@/cli/heap"
 
 await Log.init({
@@ -44,87 +41,6 @@ GlobalBus.on("event", (event) => {
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
-
-const eventStreams = new Map<string, AbortController>()
-
-function startEventStream(directory: string) {
-  const id = crypto.randomUUID()
-
-  const abort = new AbortController()
-  const signal = abort.signal
-
-  eventStreams.set(id, abort)
-
-  async function run() {
-    while (!signal.aborted) {
-      const shouldReconnect = await Instance.provide({
-        directory,
-        init: InstanceBootstrap,
-        fn: () =>
-          new Promise<boolean>((resolve) => {
-            Rpc.emit("event", {
-              type: "server.connected",
-              properties: {},
-            } satisfies Event)
-
-            let settled = false
-            const settle = (value: boolean) => {
-              if (settled) return
-              settled = true
-              signal.removeEventListener("abort", onAbort)
-              unsub()
-              resolve(value)
-            }
-
-            const unsub = Bus.subscribeAll((event) => {
-              Rpc.emit("event", {
-                id,
-                event: event as Event,
-              })
-              if (event.type === Bus.InstanceDisposed.type) {
-                settle(true)
-              }
-            })
-
-            const onAbort = () => {
-              settle(false)
-            }
-
-            signal.addEventListener("abort", onAbort, { once: true })
-          }),
-      }).catch((error) => {
-        Log.Default.error("event stream subscribe error", {
-          error: error instanceof Error ? error.message : error,
-        })
-        return false
-      })
-
-      if (!shouldReconnect || signal.aborted) {
-        break
-      }
-
-      if (!signal.aborted) {
-        await sleep(250)
-      }
-    }
-  }
-
-  run().catch((error) => {
-    Log.Default.error("event stream error", {
-      error: error instanceof Error ? error.message : error,
-    })
-  })
-
-  return id
-}
-
-function stopEventStream(id: string) {
-  const abortController = eventStreams.get(id)
-  if (!abortController) return
-
-  abortController.abort()
-  eventStreams.delete(id)
-}
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
@@ -167,18 +83,8 @@ export const rpc = {
   async reload() {
     await Config.invalidate(true)
   },
-  async subscribe(input: { directory: string | undefined }) {
-    return startEventStream(input.directory || process.cwd())
-  },
-  async unsubscribe(input: { id: string }) {
-    stopEventStream(input.id)
-  },
   async shutdown() {
     Log.Default.info("worker shutting down")
-
-    for (const id of [...eventStreams.keys()]) {
-      stopEventStream(id)
-    }
 
     await Instance.disposeAll()
     if (server) await server.stop(true)

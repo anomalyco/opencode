@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -22,6 +24,14 @@ async function withFetch(fetch: (req: Request) => Response | Promise<Response>, 
   await fn(server.url)
 }
 
+function initTool() {
+  return WebFetchTool.pipe(
+    Effect.flatMap((info) => Effect.promise(() => info.init())),
+    Effect.provide(FetchHttpClient.layer),
+    Effect.runPromise,
+  )
+}
+
 describe("tool.webfetch", () => {
   test("returns image responses as file attachments", async () => {
     const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
@@ -31,7 +41,7 @@ describe("tool.webfetch", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
+            const webfetch = await initTool()
             const result = await webfetch.execute(
               { url: new URL("/image.png", url).toString(), format: "markdown" },
               ctx,
@@ -63,7 +73,7 @@ describe("tool.webfetch", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
+            const webfetch = await initTool()
             const result = await webfetch.execute({ url: new URL("/image.svg", url).toString(), format: "html" }, ctx)
             expect(result.output).toContain("<svg")
             expect(result.attachments).toBeUndefined()
@@ -84,7 +94,7 @@ describe("tool.webfetch", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
+            const webfetch = await initTool()
             const result = await webfetch.execute({ url: new URL("/file.txt", url).toString(), format: "text" }, ctx)
             expect(result.output).toBe("hello from webfetch")
             expect(result.attachments).toBeUndefined()
