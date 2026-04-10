@@ -37,6 +37,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
     if (this.config.redirectUri) {
       return this.config.redirectUri
     }
+    if (this._redirectUrl) {
+      return this._redirectUrl
+    }
     return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
   }
 
