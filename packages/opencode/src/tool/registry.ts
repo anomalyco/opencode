@@ -92,6 +92,7 @@ export namespace ToolRegistry {
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
+      const lsptool = yield* LspTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -164,7 +165,7 @@ export namespace ToolRegistry {
             skill: Tool.init(SkillTool),
             patch: Tool.init(ApplyPatchTool),
             question: Tool.init(question),
-            lsp: Tool.init(LspTool),
+            lsp: Tool.init(lsptool),
             plan: Tool.init(PlanExitTool),
           })
 
