@@ -5,10 +5,16 @@ import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
-import { SessionPrompt } from "../session/prompt"
+import type { SessionPrompt } from "../session/prompt"
 import { Config } from "../config/config"
 import { Effect } from "effect"
 import { Log } from "@/util/log"
+
+export interface TaskPromptOps {
+  cancel(sessionID: SessionID): void
+  resolvePromptParts(template: string): Promise<SessionPrompt.PromptInput["parts"]>
+  prompt(input: SessionPrompt.PromptInput): Promise<MessageV2.WithParts>
+}
 
 const id = "task"
 
@@ -113,10 +119,13 @@ export const TaskTool = Tool.defineEffect(
         },
       })
 
+      const ops = ctx.extra?.promptOps as TaskPromptOps
+      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+
       const messageID = MessageID.ascending()
 
       function cancel() {
-        SessionPrompt.cancel(nextSession.id)
+        ops.cancel(nextSession.id)
       }
 
       return yield* Effect.acquireUseRelease(
@@ -125,9 +134,9 @@ export const TaskTool = Tool.defineEffect(
         }),
         () =>
           Effect.gen(function* () {
-            const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(params.prompt))
+            const parts = yield* Effect.promise(() => ops.resolvePromptParts(params.prompt))
             const result = yield* Effect.promise(() =>
-              SessionPrompt.prompt({
+              ops.prompt({
                 messageID,
                 sessionID: nextSession.id,
                 model: {

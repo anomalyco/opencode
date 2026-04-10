@@ -46,7 +46,7 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { TaskTool } from "@/tool/task"
+import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 
 // @ts-ignore
@@ -356,7 +356,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           abort: options.abortSignal!,
           messageID: input.processor.message.id,
           callID: options.toolCallId,
-          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
@@ -586,7 +586,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               abort: signal,
               callID: part.callID,
-              extra: { bypassAgentCheck: true },
+              extra: { bypassAgentCheck: true, promptOps },
               messages: msgs,
               metadata(val: { title?: string; metadata?: Record<string, any> }) {
                 return Effect.runPromise(
@@ -1654,6 +1654,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
         return result
       })
+
+      const promptOps: TaskPromptOps = {
+        cancel: (sessionID) => Effect.runFork(cancel(sessionID)),
+        resolvePromptParts: (template) => Effect.runPromise(resolvePromptParts(template)),
+        prompt: (input) => Effect.runPromise(prompt(input)),
+      }
 
       return Service.of({
         cancel,
