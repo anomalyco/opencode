@@ -3,7 +3,7 @@ title: Narzędzia specjalistyczne
 description: Twórz narzędzi, które LLM mogą być uruchamiane w otwartym kodzie.
 ---
 
-Narzędzia stosowane do funkcji, z których LLM może korzystać podczas rozmów. Współpracują z [wbudowanymi narzędziami] (./tools) opencode, wtyczka jak `read`, `write` i `bash`.
+Narzędzia specjalistyczne to funkcje, które tworzysz i które LLM może wywoływać podczas rozmów. Współpracują one z [wbudowanymi narzędziami](/docs/tools) opencode, takimi jak `read`, `write` i `bash`.
 
 ---
 
@@ -75,7 +75,33 @@ export const multiply = tool({
 })
 ```
 
-Tworzy do dwóch narzędzi: `math_add` i `math_multiply`.
+Tworzy to dwa narzędzia: `math_add` i `math_multiply`.
+
+---
+
+#### Kolizje nazw z wbudowanymi narzędziami
+
+Niestandardowe narzędzia są identyfikowane według nazwy narzędzia. Jeśli niestandardowe narzędzie używa tej samej nazwy co wbudowane narzędzie, niestandardowe narzędzie ma pierwszeństwo.
+
+Na przykład ten plik zastępuje wbudowane narzędzie `bash`:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Preferuj unikalne nazwy, chyba że celowo chcesz zastąpić wbudowane narzędzie. Jeśli chcesz wyłączyć wbudowane narzędzie, ale go nie nadpisywać, użyj [uprawnień](/docs/permissions).
+:::
 
 ---
 
@@ -135,9 +161,9 @@ export default tool({
 
 ### Napisz narzędzie w Pythonie
 
-Napisz swoje narzędzie w języku angielskim. Oto przykład dodania dwóch liczb przy użyciu języka Python.
+Możesz pisać swoje narzędzia w dowolnym języku. Oto przykład dodania dwóch liczb przy użyciu języka Python.
 
-Fragment utworu jako skrypt w języku Python:
+Najpierw utwórz narzędzie jako skrypt w języku Python:
 
 ```python title=".opencode/tools/add.py"
 import sys
@@ -147,7 +173,7 @@ b = int(sys.argv[2])
 print(a + b)
 ```
 
-Utwór instrumentalny, który jest ukryty:
+Następnie utwórz definicję narzędzia, która go wywołuje:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
@@ -167,4 +193,4 @@ export default tool({
 })
 ```
 
-Tutaj istnieje narzędzie [`Bun.$`](https://bun.com/docs/runtime/shell) uruchamiające skryptu w języku Python.
+Tutaj używamy narzędzia [`Bun.$`](https://bun.com/docs/runtime/shell) do uruchomienia skryptu w języku Python.

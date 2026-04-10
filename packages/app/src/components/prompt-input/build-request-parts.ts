@@ -4,6 +4,7 @@ import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
+import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -38,20 +39,18 @@ const absolute = (directory: string, path: string) => {
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
 
+const mention = /(^|[\s([{"'])@(\S+)/g
+
+const parseCommentMentions = (comment: string) => {
+  return Array.from(comment.matchAll(mention)).flatMap((match) => {
+    const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
+    if (!path) return []
+    return [path]
+  })
+}
+
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
-
-const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
-  const start = selection ? Math.min(selection.startLine, selection.endLine) : undefined
-  const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
-  const range =
-    start === undefined || end === undefined
-      ? "this file"
-      : start === end
-        ? `line ${start}`
-        : `lines ${start} through ${end}`
-  return `The user made the following comment regarding ${range} of ${path}: ${comment}`
-}
 
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
   if (part.type === "text") {
@@ -149,14 +148,37 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
     if (!comment) return [filePart]
 
+    const mentions = parseCommentMentions(comment).flatMap((path) => {
+      const url = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+      if (used.has(url)) return []
+      used.add(url)
+      return [
+        {
+          id: Identifier.ascending("part"),
+          type: "file",
+          mime: "text/plain",
+          url,
+          filename: getFilename(path),
+        } satisfies PromptRequestPart,
+      ]
+    })
+
     return [
       {
         id: Identifier.ascending("part"),
         type: "text",
-        text: commentNote(item.path, item.selection, comment),
+        text: formatCommentNote({ path: item.path, selection: item.selection, comment }),
         synthetic: true,
+        metadata: createCommentMetadata({
+          path: item.path,
+          selection: item.selection,
+          comment,
+          preview: item.preview,
+          origin: item.commentOrigin,
+        }),
       } satisfies PromptRequestPart,
       filePart,
+      ...mentions,
     ]
   })
 

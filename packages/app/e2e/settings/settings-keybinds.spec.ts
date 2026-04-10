@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openSettings, closeDialog, withSession } from "../actions"
+import { openSettings, closeDialog, waitTerminalFocusIdle, withSession } from "../actions"
 import { keybindButtonSelector, terminalSelector } from "../selectors"
 import { modKey } from "../utils"
 
@@ -32,22 +32,19 @@ test("changing sidebar toggle keybind works", async ({ page, gotoSession }) => {
 
   await closeDialog(page, dialog)
 
-  const main = page.locator("main")
-  const initialClasses = (await main.getAttribute("class")) ?? ""
-  const initiallyClosed = initialClasses.includes("xl:border-l")
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const initiallyClosed = (await button.getAttribute("aria-expanded")) !== "true"
 
   await page.keyboard.press(`${modKey}+Shift+H`)
-  await page.waitForTimeout(100)
+  await expect(button).toHaveAttribute("aria-expanded", initiallyClosed ? "true" : "false")
 
-  const afterToggleClasses = (await main.getAttribute("class")) ?? ""
-  const afterToggleClosed = afterToggleClasses.includes("xl:border-l")
+  const afterToggleClosed = (await button.getAttribute("aria-expanded")) !== "true"
   expect(afterToggleClosed).toBe(!initiallyClosed)
 
   await page.keyboard.press(`${modKey}+Shift+H`)
-  await page.waitForTimeout(100)
+  await expect(button).toHaveAttribute("aria-expanded", initiallyClosed ? "false" : "true")
 
-  const finalClasses = (await main.getAttribute("class")) ?? ""
-  const finalClosed = finalClasses.includes("xl:border-l")
+  const finalClosed = (await button.getAttribute("aria-expanded")) !== "true"
   expect(finalClosed).toBe(initiallyClosed)
 })
 
@@ -244,7 +241,7 @@ test("changing file open keybind works", async ({ page, gotoSession }) => {
   await expect(keybindButton).toBeVisible()
 
   const initialKeybind = await keybindButton.textContent()
-  expect(initialKeybind).toContain("P")
+  expect(initialKeybind).toContain("K")
 
   await keybindButton.click()
   await expect(keybindButton).toHaveText(/press/i)
@@ -305,7 +302,7 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
   await expect(terminal).not.toBeVisible()
 
   await page.keyboard.press(`${modKey}+Y`)
-  await expect(terminal).toBeVisible()
+  await waitTerminalFocusIdle(page, { term: terminal })
 
   await page.keyboard.press(`${modKey}+Y`)
   await expect(terminal).not.toBeVisible()

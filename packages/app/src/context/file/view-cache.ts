@@ -9,7 +9,7 @@ const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
 
 function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
-  if (range.start <= range.end) return range
+  if (range.start <= range.end) return { ...range }
 
   const startSide = range.side
   const endSide = range.endSide ?? startSide
