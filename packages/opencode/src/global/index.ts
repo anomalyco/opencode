@@ -6,10 +6,10 @@ import { Filesystem } from "../util/filesystem"
 
 const app = "opencode"
 
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const data = Filesystem.resolve(path.join(xdgData!, app))
+const cache = Filesystem.resolve(path.join(xdgCache!, app))
+const config = Filesystem.resolve(path.join(xdgConfig!, app))
+const state = Filesystem.resolve(path.join(xdgState!, app))
 
 export namespace Global {
   export const Path = {

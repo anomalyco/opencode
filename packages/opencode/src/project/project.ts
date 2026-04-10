@@ -316,7 +316,7 @@ export namespace Project {
             d
               .update(SessionTable)
               .set({ project_id: data.id })
-              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, Filesystem.posixPath(data.worktree))))
               .run(),
           )
         }

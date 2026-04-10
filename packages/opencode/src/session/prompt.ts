@@ -48,6 +48,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { TaskTool } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { Filesystem } from "../util/filesystem"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -531,7 +532,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           mode: task.agent,
           agent: task.agent,
           variant: lastUser.model.variant,
-          path: { cwd: ctx.directory, root: ctx.worktree },
+          path: { cwd: Filesystem.posixPath(ctx.directory), root: Filesystem.posixPath(ctx.worktree) },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           modelID: taskModel.id,
@@ -746,7 +747,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           mode: input.agent,
           agent: input.agent,
           cost: 0,
-          path: { cwd: ctx.directory, root: ctx.worktree },
+          path: { cwd: Filesystem.posixPath(ctx.directory), root: Filesystem.posixPath(ctx.worktree) },
           time: { created: Date.now() },
           role: "assistant",
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -1405,7 +1406,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               mode: agent.name,
               agent: agent.name,
               variant: lastUser.model.variant,
-              path: { cwd: ctx.directory, root: ctx.worktree },
+              path: { cwd: Filesystem.posixPath(ctx.directory), root: Filesystem.posixPath(ctx.worktree) },
               cost: 0,
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
               modelID: model.id,
