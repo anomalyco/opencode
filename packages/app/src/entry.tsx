@@ -104,10 +104,21 @@ const getCurrentUrl = () => {
   return location.origin
 }
 
+const isLocalCurrentUrl = (url: string) => {
+  try {
+    const next = new URL(url)
+    return next.hostname === "localhost" || next.hostname === "127.0.0.1" || next.hostname === "::1"
+  } catch {
+    return false
+  }
+}
+
 const getDefaultUrl = () => {
+  const current = getCurrentUrl()
+  if (isLocalCurrentUrl(current)) return current
   const lsDefault = readDefaultServerUrl()
   if (lsDefault) return lsDefault
-  return getCurrentUrl()
+  return current
 }
 
 const platform: Platform = {
@@ -118,10 +129,7 @@ const platform: Platform = {
   forward,
   restart,
   notify,
-  getDefaultServer: async () => {
-    const stored = readDefaultServerUrl()
-    return stored ? ServerConnection.Key.make(stored) : null
-  },
+  getDefaultServer: async () => ServerConnection.Key.make(getDefaultUrl()),
   setDefaultServer: writeDefaultServerUrl,
 }
 
