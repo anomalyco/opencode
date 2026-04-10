@@ -1943,21 +1943,19 @@ export namespace LSPServer {
     extensions: [".scala", ".sbt", ".sc"],
     root: NearestRoot(["build.sbt", "build.sc", ".scala-build", "project/build.properties"]),
     async spawn(root) {
-      let bin = Bun.which("metals", {
-        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
-      })
+      let bin = which("metals")
 
       if (!bin) {
-        const java = Bun.which("java")
+        const java = which("java")
         if (!java) {
           log.info("Java 11+ is required for Metals LSP")
           return
         }
 
-        let cs = Bun.which("cs") || Bun.which("coursier")
+        let cs = which("cs") || which("coursier")
         if (!cs) {
           cs = path.join(Global.Path.bin, "cs" + (process.platform === "win32" ? ".exe" : ""))
-          if (!(await Bun.file(cs).exists())) {
+          if (!(await Filesystem.exists(cs))) {
             if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
             log.info("downloading coursier")
 
@@ -1990,7 +1988,7 @@ export namespace LSPServer {
 
             const ext = platform === "win32" ? "zip" : "gz"
             const tempPath = path.join(Global.Path.bin, `cs.${ext}`)
-            await Bun.file(tempPath).write(response)
+            if (response.body) await Filesystem.writeStream(tempPath, response.body)
 
             if (ext === "zip") {
               const ok = await Archive.extractZip(tempPath, Global.Path.bin)
@@ -2006,7 +2004,7 @@ export namespace LSPServer {
 
             await fs.rm(tempPath, { force: true }).catch(() => {})
 
-            if (!(await Bun.file(cs).exists())) {
+            if (!(await Filesystem.exists(cs))) {
               log.error("Failed to extract coursier binary")
               return
             }
@@ -2023,8 +2021,7 @@ export namespace LSPServer {
         log.info("installing metals via coursier")
 
         const installDir = Global.Path.bin
-        const proc = Bun.spawn({
-          cmd: [cs, "install", "metals", "--install-dir", installDir],
+        const proc = Process.spawn([cs, "install", "metals", "--install-dir", installDir], {
           stdout: "pipe",
           stderr: "pipe",
           stdin: "pipe",
@@ -2036,7 +2033,7 @@ export namespace LSPServer {
         }
 
         bin = path.join(installDir, "metals" + (process.platform === "win32" ? ".bat" : ""))
-        if (!(await Bun.file(bin).exists())) {
+        if (!(await Filesystem.exists(bin))) {
           log.error("Failed to install metals binary")
           return
         }
