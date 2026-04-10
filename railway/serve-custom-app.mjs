@@ -46,12 +46,36 @@ async function backendHealthy() {
 	}
 }
 
-proxy.on("proxyReq", (proxyReq) => {
+function backendBasicAuthHeader() {
+	if (!backendPassword) return null;
+	return `Basic ${Buffer.from(`${backendUsername}:${backendPassword}`).toString("base64")}`;
+}
+
+/** Public URL still has `/api/`; after strip, forwarded path is `/univer-sdk-relay/...`. */
+function isUniverSdkRelayPath(url) {
+	const pathOnly = (url || "").split("?")[0];
+	return pathOnly.startsWith("/api/univer-sdk-relay") || pathOnly.startsWith("/univer-sdk-relay");
+}
+
+/** Browser WebSockets cannot send Authorization; inject OpenCode Basic from env for this path only. */
+proxy.on("proxyReq", (proxyReq, req) => {
+	const pathOnly = (req.url || "").split("?")[0];
+	if (pathOnly.startsWith("/univer-sdk-relay")) {
+		const h = backendBasicAuthHeader();
+		if (h) proxyReq.setHeader("authorization", h);
+		return;
+	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
 });
 
-proxy.on("proxyReqWs", (proxyReq) => {
+proxy.on("proxyReqWs", (proxyReq, req) => {
+	const pathOnly = (req.url || "").split("?")[0];
+	if (pathOnly.startsWith("/univer-sdk-relay")) {
+		const h = backendBasicAuthHeader();
+		if (h) proxyReq.setHeader("authorization", h);
+		return;
+	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
 });
@@ -99,7 +123,8 @@ const server = createServer(async (req, res) => {
 		return;
 	}
 
-	if (!isAuthorized(req)) {
+	// SDK relay WS: browsers do not attach Basic auth to the upgrade; we inject it when proxying.
+	if (!isUniverSdkRelayPath(url) && !isAuthorized(req)) {
 		writeUnauthorized(res);
 		return;
 	}
@@ -128,7 +153,7 @@ server.on("upgrade", (req, socket, head) => {
 		socket.destroy();
 		return;
 	}
-	if (!isAuthorized(req)) {
+	if (!isUniverSdkRelayPath(req.url || "") && !isAuthorized(req)) {
 		socket.write("HTTP/1.1 401 Unauthorized\r\n");
 		socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`);
 		socket.write("Connection: close\r\n\r\n");
