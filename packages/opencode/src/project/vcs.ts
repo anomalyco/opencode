@@ -226,7 +226,7 @@ export namespace Vcs {
     }),
   )
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(Git.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),

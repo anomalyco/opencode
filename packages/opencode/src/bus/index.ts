@@ -169,6 +169,8 @@ export namespace Bus {
     }),
   )
 
+  export const defaultLayer = layer
+
   const { runPromise, runSync } = makeRuntime(Service, layer)
 
   // runSync is safe here because the subscribe chain (InstanceState.get, PubSub.subscribe,

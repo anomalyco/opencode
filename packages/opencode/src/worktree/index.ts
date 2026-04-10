@@ -590,7 +590,7 @@ export namespace Worktree {
     }),
   )
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(Git.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Project.defaultLayer),
