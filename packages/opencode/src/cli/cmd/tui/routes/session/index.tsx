@@ -220,9 +220,26 @@ export function Session() {
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
+  const [draft, setDraft] = createSignal<PromptInfo>()
   const bind = (r: PromptRef | undefined) => {
+    if (!r) {
+      const item = prompt?.current
+      if (item?.input) setDraft(item)
+      prompt = undefined
+      promptRef.set(undefined)
+      return
+    }
+
     prompt = r
     promptRef.set(r)
+
+    const item = draft()
+    if (item) {
+      setDraft(undefined)
+      r.set(item)
+      return
+    }
+
     if (seeded || !route.initialPrompt || !r) return
     seeded = true
     r.set(route.initialPrompt)

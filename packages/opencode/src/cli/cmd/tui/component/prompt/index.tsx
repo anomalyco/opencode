@@ -402,7 +402,10 @@ export function Prompt(props: PromptProps) {
       return input.focused
     },
     get current() {
-      return store.prompt
+      return {
+        ...store.prompt,
+        mode: store.mode,
+      }
     },
     focus() {
       input.focus()
@@ -412,7 +415,11 @@ export function Prompt(props: PromptProps) {
     },
     set(prompt) {
       input.setText(prompt.input)
-      setStore("prompt", prompt)
+      setStore("prompt", {
+        input: prompt.input,
+        parts: prompt.parts,
+      })
+      if (prompt.mode) setStore("mode", prompt.mode)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
     },
