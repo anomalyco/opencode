@@ -1656,7 +1656,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const promptOps: TaskPromptOps = {
-        cancel: (sessionID) => Effect.runPromise(cancel(sessionID)),
+        cancel: (sessionID) => Effect.runFork(cancel(sessionID)),
         resolvePromptParts: (template) => Effect.runPromise(resolvePromptParts(template)),
         prompt: (input) => Effect.runPromise(prompt(input)),
       }

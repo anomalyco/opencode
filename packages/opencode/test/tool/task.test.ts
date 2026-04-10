@@ -62,6 +62,17 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
+function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
+  return {
+    cancel() {},
+    resolvePromptParts: async (template) => [{ type: "text", text: template }],
+    prompt: async (input) => {
+      opts?.onPrompt?.(input)
+      return reply(input, opts?.text ?? "done")
+    },
+  }
+}
+
 function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string): MessageV2.WithParts {
   const id = MessageID.ascending()
   return {
@@ -181,15 +192,7 @@ describe("tool.task", () => {
         const tool = yield* TaskTool
         const def = yield* Effect.promise(() => tool.init())
         let seen: SessionPrompt.PromptInput | undefined
-
-        const promptOps: TaskPromptOps = {
-          cancel() {},
-          resolvePromptParts: async (template) => [{ type: "text", text: template }],
-          prompt: async (input) => {
-            seen = input
-            return reply(input, "resumed")
-          },
-        }
+        const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
 
         const result = yield* Effect.promise(() =>
           def.execute(
@@ -229,12 +232,7 @@ describe("tool.task", () => {
         const tool = yield* TaskTool
         const def = yield* Effect.promise(() => tool.init())
         const calls: unknown[] = []
-
-        const promptOps: TaskPromptOps = {
-          cancel() {},
-          resolvePromptParts: async (template) => [{ type: "text", text: template }],
-          prompt: async (input) => reply(input, "done"),
-        }
+        const promptOps = stubOps()
 
         const exec = (extra?: Record<string, any>) =>
           Effect.promise(() =>
@@ -284,15 +282,7 @@ describe("tool.task", () => {
         const tool = yield* TaskTool
         const def = yield* Effect.promise(() => tool.init())
         let seen: SessionPrompt.PromptInput | undefined
-
-        const promptOps: TaskPromptOps = {
-          cancel() {},
-          resolvePromptParts: async (template) => [{ type: "text", text: template }],
-          prompt: async (input) => {
-            seen = input
-            return reply(input, "created")
-          },
-        }
+        const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
         const result = yield* Effect.promise(() =>
           def.execute(
@@ -334,15 +324,7 @@ describe("tool.task", () => {
           const tool = yield* TaskTool
           const def = yield* Effect.promise(() => tool.init())
           let seen: SessionPrompt.PromptInput | undefined
-
-          const promptOps: TaskPromptOps = {
-            cancel() {},
-            resolvePromptParts: async (template) => [{ type: "text", text: template }],
-            prompt: async (input) => {
-              seen = input
-              return reply(input, "done")
-            },
-          }
+          const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
           const result = yield* Effect.promise(() =>
             def.execute(
