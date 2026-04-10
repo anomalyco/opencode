@@ -18,7 +18,6 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
-import { useGlobalSync } from "@/context/global-sync"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -70,8 +69,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
 import { working as sessionWorking } from "@/pages/session/session-working"
 import { createInputUndoEntry, createInputUndoState, recordInputUndo, stepInputUndo } from "./prompt-input/input-undo"
-import { latestWorkspaceSession, workspaceKey } from "@/pages/layout/helpers"
-import { useNavigate } from "@solidjs/router"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 interface PromptInputProps {
   class?: string
@@ -170,41 +168,42 @@ const OPENCLAW_SLASH = [
 const GitContext = () => {
   const sdk = useSDK()
   const sync = useSync()
-  const globalSync = useGlobalSync()
-  const layout = useLayout()
-  const navigate = useNavigate()
   const language = useLanguage()
   const platform = usePlatform()
+  const { params } = useSessionLayout()
   const [open, setOpen] = createSignal(false)
   const [snap, setSnap] = createSignal(sync.data.vcs)
 
-  const branch = createMemo(() => sync.data.vcs?.branch?.trim())
-  const root = createMemo(() => sync.project?.worktree || sync.data.path.worktree || sdk.directory)
-  const dir = createMemo(() => sync.data.path.directory || sdk.directory)
+  const rawBranch = createMemo(() => sync.data.vcs?.branch?.trim())
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const dir = createMemo(() => info()?.directory || sync.data.path.directory || sdk.directory)
+  const listed = createMemo(() => {
+    const items = snap()?.worktrees ?? sync.data.vcs?.worktrees ?? []
+    const fallback = sync.data.path.worktree || sync.project?.worktree || sdk.directory
+    if (items.some((item) => workspaceKey(item.path) === workspaceKey(fallback))) return items
+    return [{ path: fallback, branch: rawBranch() }, ...items]
+  })
+  const current = createMemo(() => {
+    const key = workspaceKey(dir())
+    return listed()
+      .filter((item) => key === workspaceKey(item.path) || key.startsWith(`${workspaceKey(item.path)}/`))
+      .toSorted((a, b) => b.path.length - a.path.length)[0]
+  })
+  const root = createMemo(() => current()?.path || sync.data.path.worktree || sync.project?.worktree || sdk.directory)
   const repo = createMemo(() => sync.project?.name || getFilename(root()))
-  const local = createMemo(() => dir() === root())
+  const local = createMemo(() => workspaceKey(dir()) === workspaceKey(root()))
   const kind = createMemo(() => (local() ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")))
+  const worktrees = createMemo(() => {
+    if (listed().some((item) => workspaceKey(item.path) === workspaceKey(root()))) return listed()
+    return [{ path: root(), branch: current()?.branch || rawBranch() }, ...listed()]
+  })
+  const branch = createMemo(() => worktrees().find((item) => item.path === root())?.branch?.trim() || rawBranch())
   const branches = createMemo(() => {
     const items = (snap()?.branches ?? sync.data.vcs?.branches ?? []).filter(Boolean)
     if (items.length) return items
     return branch() ? [branch()!] : []
   })
   const showBranches = createMemo(() => branches().length > 1)
-  const worktrees = createMemo(() => {
-    const items = snap()?.worktrees ?? sync.data.vcs?.worktrees ?? []
-    if (items.length) return items
-    const sandboxes = sync.project?.sandboxes ?? []
-    return [root(), ...sandboxes].filter(Boolean).map((path) => ({
-      path,
-      branch: path === dir() ? branch() : undefined,
-    }))
-  })
-  const spaces = createMemo(() => {
-    const list = worktrees()
-    if (list.some((item) => workspaceKey(item.path) === workspaceKey(root()))) return list
-    return [{ path: root(), branch: local() ? branch() : undefined }, ...list]
-  })
-  const title = createMemo(() => (spaces().length > 1 ? "Workspaces" : "Workspace"))
   const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
 
   createEffect(() => {
@@ -219,27 +218,6 @@ const GitContext = () => {
       .then((data) => data && setSnap(data))
       .catch(() => undefined)
   })
-
-  const openWorkspace = async (path: string) => {
-    if (workspaceKey(path) === workspaceKey(dir())) {
-      setOpen(false)
-      return
-    }
-
-    layout.projects.open(path)
-    const store = globalSync.child(path, { bootstrap: false })[0]
-    if (store.sessions !== "ready" && store.sessions !== "loading") {
-      await globalSync.project.loadSessions(path, { silent: true }).catch(() => undefined)
-    }
-    const session = latestWorkspaceSession(globalSync.child(path, { bootstrap: false })[0], Date.now())
-    if (session) {
-      navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
-      setOpen(false)
-      return
-    }
-    navigate(`/${base64Encode(path)}/session`)
-    setOpen(false)
-  }
 
   return (
     <Show when={sync.project?.vcs === "git" && branch()}>
@@ -282,117 +260,81 @@ const GitContext = () => {
             </div>
           </div>
 
-          <div class="flex flex-col gap-2">
-            <Show
-              when={!local()}
-              fallback={
-                <div class="flex flex-col gap-1">
-                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Workspace</div>
-                  <div class="break-all font-mono text-[12px] leading-5 text-text-base">{root()}</div>
-                </div>
-              }
-            >
-              <div class="flex flex-col gap-1">
-                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Current directory</div>
-                <div class="break-all font-mono text-[12px] leading-5 text-text-base">{dir()}</div>
-              </div>
-              <div class="flex flex-col gap-1">
-                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Workspace root</div>
-                <div class="break-all font-mono text-[12px] leading-5 text-text-base">{root()}</div>
-              </div>
-            </Show>
-          </div>
-
-          <Show when={showBranches() || spaces().length > 0}>
-            <div class="flex flex-col gap-3">
-              <Show when={showBranches()}>
-                <div class="min-w-0">
-                  <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">Branches</div>
-                  <div class="flex flex-col gap-1.5">
-                    <For each={branches().slice(0, 8)}>
-                      {(item) => (
-                        <div class="flex items-center gap-2 min-w-0 text-12-regular">
-                          <Icon
-                            name="branch"
-                            size="small"
-                            class="shrink-0"
-                            classList={{
-                              "text-icon-weak": item !== branch(),
-                              "text-icon-success-base": item === branch(),
-                            }}
-                          />
-                          <span
+          <Show when={worktrees().length > 0}>
+            <div class="min-w-0">
+              <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">Worktrees</div>
+              <div class="flex flex-col gap-1.5">
+                <For each={worktrees().slice(0, 8)}>
+                  {(item) => {
+                    const active = () => item.path === root()
+                    return (
+                      <div class="flex items-start gap-2 min-w-0 text-12-regular">
+                        <Icon
+                          name="folder"
+                          size="small"
+                          class="mt-0.5 shrink-0"
+                          classList={{
+                            "text-icon-weak": !active(),
+                            "text-icon-success-base": active(),
+                          }}
+                        />
+                        <div class="min-w-0 flex-1">
+                          <div
                             class="truncate"
                             style={{
-                              color: item === branch() ? "var(--icon-success-active)" : undefined,
-                              "font-weight": item === branch() ? "600" : undefined,
+                              color: active() ? "var(--icon-success-active)" : undefined,
+                              "font-weight": active() ? "600" : undefined,
                             }}
-                            classList={{ "text-text-base": item !== branch() }}
+                            classList={{ "text-text-base": !active() }}
                           >
-                            {item}
-                          </span>
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-
-              <Show when={spaces().length > 0}>
-                <div class="min-w-0">
-                  <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">{title()}</div>
-                  <div class="flex flex-col gap-1.5">
-                    <For each={spaces().slice(0, 8)}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          class="group flex w-full items-start gap-2 rounded-lg border border-transparent px-2 py-1.5 min-w-0 text-left text-12-regular transition-colors hover:bg-surface-base-hover hover:border-border-weak-base focus-visible:bg-surface-base-hover focus-visible:border-border-weak-base"
-                          onClick={() => void openWorkspace(item.path)}
-                        >
-                          <Icon
-                            name="folder"
-                            size="small"
-                            class="mt-0.5 shrink-0"
-                            classList={{
-                              "text-icon-weak": item.path !== dir(),
-                              "text-icon-success-base": item.path === dir(),
-                            }}
-                          />
-                          <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                              <span
-                                class="truncate transition-colors group-hover:text-text-strong group-focus-visible:text-text-strong"
-                                style={{
-                                  color: item.path === dir() ? "var(--icon-success-active)" : undefined,
-                                  "font-weight": item.path === dir() ? "600" : undefined,
-                                }}
-                                classList={{ "text-text-base": item.path !== dir() }}
-                              >
-                                {getFilename(item.path)}
-                              </span>
-                            </div>
-                            <div class="break-all font-mono text-[12px] leading-5 text-text-weak transition-colors group-hover:text-text-base group-focus-visible:text-text-base">
-                              {item.path}
-                            </div>
-                            <Show when={item.branch}>
-                              <div
-                                class="truncate transition-colors group-hover:text-text-base group-focus-visible:text-text-base"
-                                style={{
-                                  color: item.path === dir() ? "var(--icon-success-active)" : undefined,
-                                  "font-weight": item.path === dir() ? "600" : undefined,
-                                }}
-                                classList={{ "text-text-weak": item.path !== dir() }}
-                              >
-                                {item.branch}
-                              </div>
-                            </Show>
+                            {getFilename(item.path)}
                           </div>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
+                          <div
+                            class="break-all font-mono text-[12px] leading-5"
+                            style={{ color: active() ? "var(--icon-success-active)" : undefined }}
+                            classList={{ "text-text-weak": !active() }}
+                          >
+                            {item.path}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
+
+          <Show when={showBranches()}>
+            <div class="min-w-0">
+              <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">Branches</div>
+              <div class="flex flex-col gap-1.5">
+                <For each={branches().slice(0, 8)}>
+                  {(item) => (
+                    <div class="flex items-center gap-2 min-w-0 text-12-regular">
+                      <Icon
+                        name="branch"
+                        size="small"
+                        class="shrink-0"
+                        classList={{
+                          "text-icon-weak": item !== branch(),
+                          "text-icon-success-base": item === branch(),
+                        }}
+                      />
+                      <span
+                        class="truncate"
+                        style={{
+                          color: item === branch() ? "var(--icon-success-active)" : undefined,
+                          "font-weight": item === branch() ? "600" : undefined,
+                        }}
+                        classList={{ "text-text-base": item !== branch() }}
+                      >
+                        {item}
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </div>
             </div>
           </Show>
         </div>

@@ -4,6 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
@@ -15,7 +16,7 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { working } from "../session/session-working"
-import { hasProjectPermissions } from "./helpers"
+import { hasProjectPermissions, workspaceKey } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -80,6 +81,7 @@ export type SessionItemProps = {
   list: Session[]
   navList?: Accessor<Session[]>
   slug: string
+  root?: string
   mobile?: boolean
   dense?: boolean
   reduced?: boolean
@@ -90,7 +92,6 @@ export type SessionItemProps = {
 
 const SessionRow = (props: {
   session: Session
-  slug: string
   mobile?: boolean
   dense?: boolean
   active?: boolean
@@ -104,10 +105,11 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
+  detail?: Accessor<boolean | undefined>
   reduced?: boolean
 }): JSX.Element => (
   <A
-    href={`/${props.slug}/session/${props.session.id}`}
+    href={`/${base64Encode(props.session.directory)}/session/${props.session.id}`}
     class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onFocus={props.warmFocus}
@@ -175,6 +177,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return working(status, sessionStore.message[props.session.id])
   })
   const isActive = createMemo(() => props.session.id === params.id)
+  const detail = createMemo(() => {
+    if (!props.root) return
+    return workspaceKey(props.session.directory) !== workspaceKey(props.root)
+  })
 
   const tint = createMemo(() => {
     return messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent)
@@ -225,7 +231,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const item = (
     <SessionRow
       session={props.session}
-      slug={props.slug}
       mobile={props.mobile}
       dense={props.dense}
       active={isActive()}
@@ -239,6 +244,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
       cancelHoverPrefetch={cancelHoverPrefetch}
+      detail={detail}
       reduced={props.reduced}
     />
   )
@@ -266,46 +272,54 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         </Show>
       </div>
 
-      <div
-        class="shrink-0 overflow-hidden"
-        classList={{
-          "transition-[width,opacity]": !props.reduced,
-          "w-6 opacity-100 pointer-events-auto": !!props.mobile,
-          "w-0 opacity-0 pointer-events-none": !props.mobile || !!props.reduced,
-          "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": !props.reduced,
-          "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto":
-            !props.reduced,
-        }}
-      >
-        <Show
-          when={!props.reduced}
-          fallback={
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              class="size-6 rounded-md"
-              aria-label={language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.archiveSession(props.session)
-              }}
-            />
-          }
+      <div class="shrink-0 flex items-center gap-1">
+        <div
+          class="overflow-hidden"
+          classList={{
+            "transition-[width,opacity]": !props.reduced,
+            "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+            "w-0 opacity-0 pointer-events-none": !props.mobile || !!props.reduced,
+            "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto":
+              !props.reduced,
+            "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto":
+              !props.reduced,
+          }}
         >
-          <Tooltip value={language.t("common.archive")} placement="top">
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              class="size-6 rounded-md"
-              aria-label={language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.archiveSession(props.session)
-              }}
-            />
-          </Tooltip>
+          <Show
+            when={!props.reduced}
+            fallback={
+              <IconButton
+                icon="archive"
+                variant="ghost"
+                class="size-6 rounded-md"
+                aria-label={language.t("common.archive")}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void props.archiveSession(props.session)
+                }}
+              />
+            }
+          >
+            <Tooltip value={language.t("common.archive")} placement="top">
+              <IconButton
+                icon="archive"
+                variant="ghost"
+                class="size-6 rounded-md"
+                aria-label={language.t("common.archive")}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void props.archiveSession(props.session)
+                }}
+              />
+            </Tooltip>
+          </Show>
+        </div>
+        <Show when={detail()}>
+          <div class="shrink-0 size-6 flex items-center justify-center">
+            <Icon name="branch" size="normal" class="text-icon-success-base" />
+          </div>
         </Show>
       </div>
     </div>

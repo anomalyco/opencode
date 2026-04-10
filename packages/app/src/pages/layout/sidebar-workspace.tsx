@@ -17,7 +17,7 @@ import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionGroupHeader, SessionSearchBar } from "./sidebar-items"
-import { sessionGroupBoundaries, sortedRootSessions, type SessionGroupKey, workspaceKey } from "./helpers"
+import { sessionGroupBoundaries, sortedProjectSessions, sortedRootSessions, type SessionGroupKey, workspaceKey } from "./helpers"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -238,6 +238,7 @@ const GROUP_LABEL_KEYS: Record<SessionGroupKey, string> = {
 
 const WorkspaceSessionList = (props: {
   slug: Accessor<string>
+  root?: string
   mobile?: boolean
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
@@ -289,6 +290,7 @@ const WorkspaceSessionList = (props: {
                 list={props.sessions()}
                 navList={props.ctx.navList}
                 slug={props.slug()}
+                root={props.root}
                 mobile={props.mobile}
                 reduced={props.ctx.sidebarReduced()}
                 sidebarExpanded={props.ctx.sidebarExpanded}
@@ -487,27 +489,31 @@ export const LocalWorkspace = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const [searchQuery, setSearchQuery] = createSignal("")
-  const workspace = createMemo(() => {
-    const [store, setStore] = globalSync.child(props.project.worktree)
-    return { store, setStore }
-  })
+  const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
+  const stores = createMemo(() => dirs().map((directory) => globalSync.child(directory)))
   const slug = createMemo(() => base64Encode(props.project.worktree))
-  const allSessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
+  const allSessions = createMemo(() => sortedProjectSessions(stores().map((item) => item[0]), props.sortNow()))
   const sessions = createMemo(() => {
     const query = searchQuery().toLowerCase().trim()
     if (!query) return allSessions()
     return allSessions().filter((s) => s.title?.toLowerCase().includes(query))
   })
-  const loading = createMemo(() => workspace().store.sessions === "loading" && allSessions().length === 0)
-  const hasMore = createMemo(() => !searchQuery() && workspace().store.sessionTotal > allSessions().length)
+  const loading = createMemo(() => stores().some((item) => item[0].sessions === "loading") && allSessions().length === 0)
+  const hasMore = createMemo(
+    () => !searchQuery() && stores().reduce((sum, item) => sum + item[0].sessionTotal, 0) > allSessions().length,
+  )
+  const issue = createMemo(() => stores().map((item) => item[0].session_error).find(Boolean))
   const loadMore = async () => {
-    workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
-    await globalSync.project.loadSessions(props.project.worktree)
+    stores().forEach((item) => item[1]("limit", (limit) => (limit ?? 0) + 5))
+    await Promise.all(dirs().map((directory) => globalSync.project.loadSessions(directory)))
   }
 
   createEffect(() => {
-    if (workspace().store.sessions === "ready" || workspace().store.sessions === "loading") return
-    void globalSync.project.loadSessions(props.project.worktree, { silent: true })
+    for (const directory of dirs()) {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+      if (store.sessions === "ready" || store.sessions === "loading") continue
+      void globalSync.project.loadSessions(directory, { silent: true })
+    }
   })
 
   return (
@@ -525,11 +531,12 @@ export const LocalWorkspace = (props: {
       </Show>
       <WorkspaceSessionList
         slug={slug}
+        root={props.project.worktree}
         mobile={props.mobile}
         ctx={props.ctx}
         showNew={() => false}
         loading={loading}
-        issue={() => workspace().store.session_error}
+        issue={issue}
         sessions={sessions}
         hasMore={hasMore}
         loadMore={loadMore}
