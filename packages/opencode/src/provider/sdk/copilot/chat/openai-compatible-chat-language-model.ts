@@ -383,7 +383,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
             controller.enqueue({ type: "stream-start", warnings })
           },
 
-          // TODO we lost type safety on Chunk, most likely due to the error schema. MUST FIX
           transform(chunk, controller) {
             // Emit raw chunk if requested (before anything else)
             if (options.includeRawChunks) {
@@ -399,19 +398,20 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               controller.enqueue({ type: "error", error: chunk.error })
               return
             }
-            const value = chunk.value
 
             metadataExtractor?.processChunk(chunk.rawValue)
 
             // handle error chunks:
-            if ("error" in value) {
+            if ("error" in chunk.value) {
               finishReason = {
                 unified: "error",
                 raw: undefined,
               }
-              controller.enqueue({ type: "error", error: value.error.message })
+              controller.enqueue({ type: "error", error: chunk.value.error.message })
               return
             }
+
+            const value = chunk.value as z.infer<typeof chunkBaseSchema>
 
             if (isFirstChunk) {
               isFirstChunk = false
@@ -777,39 +777,38 @@ const OpenAICompatibleChatResponseSchema = z.object({
 
 // limited version of the schema, focussed on what is needed for the implementation
 // this approach limits breakages when the API changes and increases efficiency
-const createOpenAICompatibleChatChunkSchema = <ERROR_SCHEMA extends z.core.$ZodType>(errorSchema: ERROR_SCHEMA) =>
-  z.union([
+const chunkBaseSchema = z.object({
+  id: z.string().nullish(),
+  created: z.number().nullish(),
+  model: z.string().nullish(),
+  choices: z.array(
     z.object({
-      id: z.string().nullish(),
-      created: z.number().nullish(),
-      model: z.string().nullish(),
-      choices: z.array(
-        z.object({
-          delta: z
-            .object({
-              role: z.enum(["assistant"]).nullish(),
-              content: z.string().nullish(),
-              // Copilot-specific reasoning fields
-              reasoning_text: z.string().nullish(),
-              reasoning_opaque: z.string().nullish(),
-              tool_calls: z
-                .array(
-                  z.object({
-                    index: z.number(),
-                    id: z.string().nullish(),
-                    function: z.object({
-                      name: z.string().nullish(),
-                      arguments: z.string().nullish(),
-                    }),
-                  }),
-                )
-                .nullish(),
-            })
+      delta: z
+        .object({
+          role: z.enum(["assistant"]).nullish(),
+          content: z.string().nullish(),
+          // Copilot-specific reasoning fields
+          reasoning_text: z.string().nullish(),
+          reasoning_opaque: z.string().nullish(),
+          tool_calls: z
+            .array(
+              z.object({
+                index: z.number(),
+                id: z.string().nullish(),
+                function: z.object({
+                  name: z.string().nullish(),
+                  arguments: z.string().nullish(),
+                }),
+              }),
+            )
             .nullish(),
-          finish_reason: z.string().nullish(),
-        }),
-      ),
-      usage: openaiCompatibleTokenUsageSchema,
+        })
+        .nullish(),
+      finish_reason: z.string().nullish(),
     }),
-    errorSchema,
-  ])
+  ),
+  usage: openaiCompatibleTokenUsageSchema,
+})
+
+const createOpenAICompatibleChatChunkSchema = <ERROR_SCHEMA extends z.core.$ZodType>(errorSchema: ERROR_SCHEMA) =>
+  z.union([chunkBaseSchema, errorSchema])
