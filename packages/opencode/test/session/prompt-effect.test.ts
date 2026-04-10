@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
 import path from "path"
 import z from "zod"
 import { Agent as AgentSvc } from "../../src/agent/agent"
