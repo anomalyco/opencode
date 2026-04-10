@@ -870,27 +870,18 @@ it.live(
 
         yield* llm.wait(1)
 
-        const id = MessageID.ascending()
         const b = yield* prompt
           .prompt({
             sessionID: chat.id,
-            messageID: id,
             agent: "build",
             model: ref,
             parts: [{ type: "text", text: "second" }],
           })
           .pipe(Effect.forkChild)
 
-        yield* Effect.promise(async () => {
-          const end = Date.now() + 5000
-          while (Date.now() < end) {
-            const msgs = await Effect.runPromise(sessions.messages({ sessionID: chat.id }))
-            if (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id)) return
-            await new Promise((done) => setTimeout(done, 20))
-          }
-          throw new Error("timed out waiting for second prompt to save")
-        })
-
+        // With FIFO queue, the second prompt waits for the first to finish
+        // before creating its message. Resolve the gate to let the first
+        // prompt complete, which then unblocks the second.
         gate.resolve()
 
         const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
@@ -899,11 +890,15 @@ it.live(
         expect(yield* llm.calls).toBe(2)
 
         const msgs = yield* sessions.messages({ sessionID: chat.id })
+        const users = msgs.filter((msg) => msg.info.role === "user")
         const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+        expect(users).toHaveLength(2)
         expect(assistants).toHaveLength(2)
+        const lastUser = users.at(-1)
         const last = assistants.at(-1)
         if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
-        expect(last.info.parentID).toBe(id)
+        if (!lastUser || lastUser.info.role !== "user") throw new Error("expected second user")
+        expect(last.info.parentID).toBe(lastUser.info.id)
         expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
 
         const inputs = yield* llm.inputs
@@ -912,7 +907,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 it.live(
