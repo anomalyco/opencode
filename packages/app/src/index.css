@@ -12,8 +12,12 @@
   }
 
   html[data-theme="aether"] [data-component="sidebar-session"] {
-    --sidebar-session-active-bg-top: rgb(65, 65, 65);
-    --sidebar-session-active-bg-bottom: rgb(65, 65, 65);
+    --sidebar-session-hover-bg: light-dark(#E8E2D8, #2c2924);
+    --sidebar-session-hover-border: light-dark(rgba(201, 138, 109, 0.1), rgba(201, 138, 109, 0.14));
+    --sidebar-session-active-bg-top: light-dark(#E3DDD2, rgb(65, 65, 65));
+    --sidebar-session-active-bg-bottom: light-dark(#E0D9CD, rgb(65, 65, 65));
+    --sidebar-session-active-border: light-dark(rgba(193, 95, 60, 0.15), rgba(201, 138, 109, 0.2));
+    --sidebar-session-active-shadow: light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.34));
   }
 
   [data-component="sidebar-session"]:hover,
@@ -33,13 +37,13 @@
 
   [data-component="sidebar-session"][data-active="true"]:hover,
   [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
-    background: linear-gradient(180deg, #34302b, #2c2824);
-    border-color: rgba(201, 138, 109, 0.28);
+    background: light-dark(linear-gradient(180deg, #DDD6C8, #D8D0C2), linear-gradient(180deg, #34302b, #2c2824));
+    border-color: light-dark(rgba(193, 95, 60, 0.2), rgba(201, 138, 109, 0.28));
   }
 
   html[data-theme="aether"] [data-component="sidebar-session"][data-active="true"]:hover,
   html[data-theme="aether"] [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
-    background: rgb(65, 65, 65);
+    background: light-dark(#DDD6C8, rgb(65, 65, 65));
   }
 
   [data-component="sidebar-session-loading"] {

@@ -17,7 +17,7 @@ html[data-theme="aether"]::after {
 /* Light mode: subtle paper grain */
 @media (prefers-color-scheme: light) {
   html[data-theme="aether"]::after {
-    opacity: 0.028;
+    opacity: 0.02;
     mix-blend-mode: multiply;
   }
 }
@@ -34,32 +34,67 @@ html[data-theme="aether"]::after {
 html[data-theme="aether"] {
   /* Light mode: clay-tinted shadows for warm depth */
   --shadow-xs:
-    0 1px 2px -0.5px light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.2)),
-    0 0.5px 1.5px 0 light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.15)),
-    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.18));
+    0 1px 2px -0.5px light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.2)),
+    0 0.5px 1.5px 0 light-dark(rgba(193, 95, 60, 0.04), rgba(0, 0, 0, 0.15)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.18));
   --shadow-md:
-    0 6px 16px -2px light-dark(rgba(193, 95, 60, 0.12), rgba(0, 0, 0, 0.25)),
-    0 4px 8px -2px light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.22)),
-    0 1px 2px light-dark(rgba(193, 95, 60, 0.14), rgba(0, 0, 0, 0.2));
+    0 6px 16px -2px light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.25)),
+    0 4px 8px -2px light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.22)),
+    0 1px 2px light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.2));
   --shadow-lg:
-    0 20px 56px -8px light-dark(rgba(193, 95, 60, 0.14), rgba(0, 0, 0, 0.35)),
-    0 8px 16px -4px light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.2)),
-    0 2px 4px light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.15));
+    0 20px 56px -8px light-dark(rgba(193, 95, 60, 0.12), rgba(0, 0, 0, 0.35)),
+    0 8px 16px -4px light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.2)),
+    0 2px 4px light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.15));
   --shadow-xs-border:
-    0 0 0 1px light-dark(rgba(107, 95, 78, 0.18), rgba(107, 95, 78, 0.12)),
-    0 1px 2px -1px light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.12)),
-    0 1px 2px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.15)),
-    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.18));
+    0 0 0 1px light-dark(rgba(107, 95, 78, 0.14), rgba(107, 95, 78, 0.12)),
+    0 1px 2px -1px light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.12)),
+    0 1px 2px 0 light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.15)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.18));
   --shadow-xs-border-base:
-    0 0 0 1px light-dark(rgba(107, 95, 78, 0.12), rgba(107, 95, 78, 0.08)),
-    0 1px 2px -1px light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.1)),
-    0 1px 2px 0 light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.12)),
-    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.09), rgba(0, 0, 0, 0.15));
+    0 0 0 1px light-dark(rgba(107, 95, 78, 0.1), rgba(107, 95, 78, 0.08)),
+    0 1px 2px -1px light-dark(rgba(193, 95, 60, 0.04), rgba(0, 0, 0, 0.1)),
+    0 1px 2px 0 light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.12)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.15));
   --shadow-lg-border-base:
-    0 0 0 1px light-dark(rgba(107, 95, 78, 0.1), rgba(107, 95, 78, 0.06)),
-    0 36px 80px 0 light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.12)),
-    0 14px 30px 0 light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.1)),
-    0 6px 14px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.09)),
-    0 3px 7px 0 light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.08)),
-    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.12), rgba(0, 0, 0, 0.12));
+    0 0 0 1px light-dark(rgba(107, 95, 78, 0.08), rgba(107, 95, 78, 0.06)),
+    0 36px 80px 0 light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.12)),
+    0 14px 30px 0 light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.1)),
+    0 6px 14px 0 light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.09)),
+    0 3px 7px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.08)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.12));
+}
+
+/* ─── Aether Light Mode: Dock Surface Refinements ─── */
+@media (prefers-color-scheme: light) {
+  /* Prompt shell: white card with fine warm border, no dark glassmorphism */
+  html[data-theme="aether"] [data-dock-surface="shell"] {
+    background-color: #FFFFFF;
+    border: 1px solid #DDD6C8;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow:
+      0 0 0 0.5px rgba(193, 95, 60, 0.06),
+      0 2px 8px -2px rgba(193, 95, 60, 0.08),
+      0 4px 16px -4px rgba(193, 95, 60, 0.06);
+    border-radius: 16px;
+  }
+
+  /* Tray: matching warm border and cream background */
+  html[data-theme="aether"] [data-dock-surface="tray"] {
+    background-color: #FAF9F5;
+    border: 1px solid #E8E2D8;
+    border-radius: 16px;
+  }
+
+  html[data-theme="aether"] [data-dock-surface="tray"][data-dock-attach="top"] {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  /* Tool call cards: neutral light gray instead of warm-tinted inset */
+  html[data-theme="aether"] [data-component="collapsible"].tool-collapsible {
+    background-color: #F7F6F4;
+    border: 1px solid #E8E5E0;
+    border-radius: 10px;
+  }
 }
