@@ -1187,6 +1187,26 @@ export namespace Provider {
                 key: provider.key,
               })
             }
+            // OAuth providers are also considered connected (credentials are loaded separately)
+            if (provider.type === "oauth") {
+              mergeProvider(providerID, {
+                source: "api",
+              })
+            }
+          }
+
+          // Also check multi-account OAuth records to mark providers as connected
+          const oauthCheckResults = yield* Effect.all(
+            Object.keys(database).map((id) =>
+              Effect.promise(() => Auth.getOAuthRecords(id)).pipe(Effect.map((records) => ({ id, records }))),
+            ),
+          )
+          for (const { id, records } of oauthCheckResults) {
+            if (records.length > 0 && !disabled.has(ProviderID.make(id))) {
+              mergeProvider(ProviderID.make(id), {
+                source: "api",
+              })
+            }
           }
 
           // plugin auth loader - database now has entries for config providers
