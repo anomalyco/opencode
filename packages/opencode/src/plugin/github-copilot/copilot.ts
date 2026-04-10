@@ -342,7 +342,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
       }
 
-      const parts = await sdk.session
+      const msg = await sdk.session
         .message({
           path: {
             id: incoming.message.sessionID,
@@ -355,7 +355,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         })
         .catch(() => undefined)
 
-      if (parts?.data.parts?.some((part) => part.type === "compaction")) {
+      if (
+        msg?.data?.parts?.some(
+          (p) =>
+            p.type === "compaction" ||
+            (p.type === "text" && p.text === "[auto-compaction-followup]" && p.synthetic && p.ignored),
+        )
+      ) {
         output.headers["x-initiator"] = "agent"
         return
       }
@@ -368,11 +374,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           query: {
             directory: input.directory,
           },
-          throwOnError: true,
         })
         .catch(() => undefined)
-      if (!session || !session.data.parentID) return
-      // mark subagent sessions as agent initiated matching standard that other copilot tools have
+      if (!session?.data?.parentID) return
+      const perms = (session.data as typeof session.data & { permission?: Array<{ permission: string }> }).permission
+      if (perms?.some((r) => r.permission === "user_slash_command")) return
       output.headers["x-initiator"] = "agent"
     },
   }

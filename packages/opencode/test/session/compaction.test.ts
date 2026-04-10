@@ -223,6 +223,10 @@ function defer() {
   return { promise, resolve }
 }
 
+function text(msg: MessageV2.WithParts | undefined, val: string) {
+  return msg?.parts.find((part) => part.type === "text" && part.text.includes(val))
+}
+
 function plugin(ready: ReturnType<typeof defer>) {
   return Layer.mock(Plugin.Service)({
     trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
@@ -647,13 +651,16 @@ describe("session.compaction.process", () => {
 
           expect(result).toBe("continue")
           expect(last?.info.role).toBe("user")
-          expect(last?.parts[0]).toMatchObject({
+          expect(
+            last?.parts.some(
+              (part) =>
+                part.type === "text" && part.synthetic && part.ignored && part.text === "[auto-compaction-followup]",
+            ),
+          ).toBe(true)
+          expect(text(last, "Continue if you have next steps")).toMatchObject({
             type: "text",
             synthetic: true,
           })
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("Continue if you have next steps")
-          }
         } finally {
           await rt.dispose()
         }
@@ -737,9 +744,10 @@ describe("session.compaction.process", () => {
 
           expect(result).toBe("continue")
           expect(last?.info.role).toBe("user")
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
-          }
+          expect(text(last, "previous request exceeded the provider's size limit")).toMatchObject({
+            type: "text",
+            synthetic: true,
+          })
         } finally {
           await rt.dispose()
         }

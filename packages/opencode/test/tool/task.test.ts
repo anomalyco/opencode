@@ -384,4 +384,41 @@ describe("tool.task", () => {
       },
     ),
   )
+
+  it.live("execute adds user slash command permission when command is provided", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const promptOps = stubOps()
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            command: "/review",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            messages: [],
+            extra: { promptOps },
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const child = yield* sessions.get(result.metadata.sessionId)
+        expect(child.permission).toContainEqual({
+          permission: "user_slash_command",
+          pattern: "/review",
+          action: "allow",
+        })
+      }),
+    ),
+  )
 })

@@ -318,6 +318,15 @@ When constructing the summary, try to stick to this template:
               agent: userMessage.agent,
               model: userMessage.model,
             })
+            yield* session.updatePart({
+              id: PartID.ascending(),
+              messageID: continueMsg.id,
+              sessionID: input.sessionID,
+              type: "text",
+              synthetic: true,
+              ignored: true,
+              text: "[auto-compaction-followup]",
+            })
             const text =
               (input.overflow
                 ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
