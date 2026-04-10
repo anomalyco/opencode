@@ -223,7 +223,6 @@ export namespace LSPServer {
     async spawn(root) {
       const ext = process.platform === "win32" ? ".cmd" : ""
 
-      const serverTarget = path.join("node_modules", ".bin", "oxc_language_server" + ext)
       const lintTarget = path.join("node_modules", ".bin", "oxlint" + ext)
 
       const resolveBin = async (target: string) => {
@@ -249,10 +248,9 @@ export namespace LSPServer {
       }
 
       if (lintBin) {
-        const proc = spawn(lintBin, ["--help"])
-        await proc.exited
+        const proc = Process.spawn([lintBin, "--help"], { stdout: "pipe" })
         if (proc.stdout) {
-          const help = await text(proc.stdout)
+          const [, help] = await Promise.all([proc.exited, text(proc.stdout)])
           if (help.includes("--lsp")) {
             return {
               process: spawn(lintBin, ["--lsp"], {
@@ -260,19 +258,8 @@ export namespace LSPServer {
               }),
             }
           }
-        }
-      }
-
-      let serverBin = await resolveBin(serverTarget)
-      if (!serverBin) {
-        const found = which("oxc_language_server")
-        if (found) serverBin = found
-      }
-      if (serverBin) {
-        return {
-          process: spawn(serverBin, [], {
-            cwd: root,
-          }),
+        } else {
+          await proc.exited
         }
       }
 
