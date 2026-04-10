@@ -5,13 +5,3 @@ button#decorum-tb-close,
 div[data-tauri-decorum-tb] {
   height: calc(var(--spacing) * 10) !important;
 }
-
-@keyframes pulse-splash {
-  0%,
-  100% {
-    opacity: 0.1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}

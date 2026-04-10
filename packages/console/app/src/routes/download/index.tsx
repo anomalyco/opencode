@@ -1,18 +1,18 @@
 import "./index.css"
-import { Title, Meta } from "@solidjs/meta"
-import { A, createAsync, query } from "@solidjs/router"
-import { Header } from "~/component/header"
-import { Footer } from "~/component/footer"
-import { IconCopy, IconCheck } from "~/component/icon"
+import { Meta, Title } from "@solidjs/meta"
+import { A } from "@solidjs/router"
+import { createSignal, type JSX, onMount, Show } from "solid-js"
 import { Faq } from "~/component/faq"
-import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
+import { Footer } from "~/component/footer"
+import { Header } from "~/component/header"
+import { IconCheck, IconCopy } from "~/component/icon"
 import { Legal } from "~/component/legal"
+import { LocaleLinks } from "~/component/locale-links"
 import { config } from "~/config"
-import { createSignal, onMount, Show, JSX } from "solid-js"
-import { DownloadPlatform } from "./types"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { LocaleLinks } from "~/component/locale-links"
+import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
+import type { DownloadPlatform } from "./types"
 
 type OS = "macOS" | "Windows" | "Linux" | null
 
@@ -40,8 +40,8 @@ function getDownloadPlatform(os: OS): DownloadPlatform {
   }
 }
 
-function getDownloadHref(platform: DownloadPlatform) {
-  return `/download/${platform}`
+function getDownloadHref(platform: DownloadPlatform, channel: "stable" | "beta" = "stable") {
+  return `/download/${channel}/${platform}`
 }
 
 function IconDownload(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
@@ -294,7 +294,7 @@ export default function Download() {
                   </span>
                   <span>VS Code</span>
                 </div>
-                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
+                <a href={language.route("/docs/ide/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -318,7 +318,7 @@ export default function Download() {
                   </span>
                   <span>Cursor</span>
                 </div>
-                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
+                <a href={language.route("/docs/ide/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -335,7 +335,7 @@ export default function Download() {
                   </span>
                   <span>Zed</span>
                 </div>
-                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
+                <a href={language.route("/docs/ide/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -352,7 +352,7 @@ export default function Download() {
                   </span>
                   <span>Windsurf</span>
                 </div>
-                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
+                <a href={language.route("/docs/ide/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -369,7 +369,7 @@ export default function Download() {
                   </span>
                   <span>VSCodium</span>
                 </div>
-                <a href="https://opencode.ai/docs/ide/" data-component="action-button">
+                <a href={language.route("/docs/ide/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -393,7 +393,7 @@ export default function Download() {
                   </span>
                   <span>GitHub</span>
                 </div>
-                <a href="https://opencode.ai/docs/github/" data-component="action-button">
+                <a href={language.route("/docs/github/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>
@@ -410,7 +410,7 @@ export default function Download() {
                   </span>
                   <span>GitLab</span>
                 </div>
-                <a href="https://opencode.ai/docs/gitlab/" data-component="action-button">
+                <a href={language.route("/docs/gitlab/")} data-component="action-button">
                   {i18n.t("download.action.install")}
                 </a>
               </div>

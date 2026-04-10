@@ -1,13 +1,16 @@
 import { describe, test, expect } from "bun:test"
 import path from "path"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 
 const ctx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: new AbortController().signal,
@@ -29,7 +32,11 @@ describe("memory: abort controller leak", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const tool = await WebFetchTool.init()
+        const tool = await WebFetchTool.pipe(
+          Effect.flatMap((info) => Effect.promise(() => info.init())),
+          Effect.provide(FetchHttpClient.layer),
+          Effect.runPromise,
+        )
 
         // Warm up
         await tool.execute({ url: "https://example.com", format: "text" }, ctx).catch(() => {})

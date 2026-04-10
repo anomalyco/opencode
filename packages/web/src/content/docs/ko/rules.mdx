@@ -1,0 +1,179 @@
+---
+title: 규칙
+description: OpenCode에 대한 사용자 정의 지침 설정.
+---
+
+`AGENTS.md` 파일을 만들 수 있도록 opencode에 사용자 정의 지침을 제공 할 수 있습니다. Cursor의 규칙과 유사합니다. LLM의 컨텍스트에 포함된 지침을 통해 특정 프로젝트에 대한 행동을 사용자 정의합니다.
+
+---
+
+## 초기화
+
+새로운 `AGENTS.md` 파일을 만들려면 `/init` 명령을 opencode에서 실행할 수 있습니다.
+
+:::tip
+프로젝트의 `AGENTS.md` 파일을 Git에 투입해야 합니다.
+:::
+
+프로젝트가 무엇인지 이해하고 `AGENTS.md` 파일을 생성합니다. 이 도움말 opencode는 프로젝트를 더 잘 탐색합니다.
+
+기존 `AGENTS.md` 파일이있는 경우이 추가하려고합니다.
+
+---
+
+## 예
+
+이 파일을 수동으로 만들 수도 있습니다. 다음은 `AGENTS.md` 파일에 넣을 수있는 것들의 예입니다.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+우리는 여기에 프로젝트 별 지침을 추가하고 이것은 팀을 통해 공유됩니다.
+
+---
+
+## 유형
+
+opencode는 또한 다수 위치에서 `AGENTS.md` 파일을 읽습니다. 그리고 이것은 다른 목적을 봉사합니다.
+
+## 프로젝트
+
+프로젝트 별 규칙에 대한 프로젝트 루트에 `AGENTS.md`를 배치합니다. 이 디렉토리 또는 하위 디렉토리에서 작업 할 때만 적용됩니다.
+
+## 전역
+
+또한 `~/.config/opencode/AGENTS.md` 파일에서 글로벌 규칙을 가질 수 있습니다. 이 모든 opencode 세션에서 적용됩니다.
+
+이것은 Git에 전념하지 않거나 팀과 공유하지 않기 때문에 LLM이 따르는 모든 개인 규칙을 지정하는 것이 좋습니다.
+
+### Claude 코드 호환성
+
+Claude Code에서 마이그레이션하는 경우, opencode는 Claude Code의 파일 컨벤션을 fallbacks로 지원합니다.
+
+- ** 규칙 ** : 프로젝트 디렉토리에 `CLAUDE.md` (`AGENTS.md`가 존재하지 않는 경우 사용)
+- ** 글로벌 규칙**: `~/.claude/CLAUDE.md` (`~/.config/opencode/AGENTS.md`가 존재하지 않는 경우 사용) -**Skills**: `~/.claude/skills/` — [Agent Skills](/docs/skills/)를 참조하십시오.
+
+Claude Code 호환성을 비활성화하려면 이러한 환경 변수 중 하나를 설정하십시오.
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## 우선순위
+
+opencode가 시작될 때, 이 순서에 있는 규칙 파일을 찾습니다:
+
+1. **Local 파일 ** 현재 디렉토리에서 추적 (`AGENTS.md`, `CLAUDE.md`)
+2. ** 글로벌 파일 ** `~/.config/opencode/AGENTS.md`
+3. **Claude 코드 파일 ** `~/.claude/CLAUDE.md`에서 (무효한)
+
+첫 번째 일치 파일은 각 범주에서 승리합니다. 예를 들어, `AGENTS.md`와 `CLAUDE.md` 모두가있는 경우 `AGENTS.md` 만 사용됩니다. 유사하게, `~/.config/opencode/AGENTS.md`는 `~/.claude/CLAUDE.md`에 전진합니다.
+
+---
+
+## 사용자 정의 지침
+
+`opencode.json` 또는 글로벌 `~/.config/opencode/opencode.json`에서 사용자 지정 명령 파일을 지정할 수 있습니다. AGENTS.md에 복제하지 않고 기존 규칙을 재사용 할 수 있습니다.
+
+예:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+웹에서 지침을로드하는 원격 URL도 사용할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+원격 지침은 5 초 타임 아웃으로 fetched.
+
+모든 명령 파일은 `AGENTS.md` 파일과 결합됩니다.
+
+---
+
+## 외부 파일 참조
+
+opencode가 `AGENTS.md`에 있는 자동적으로 파스 파일 참조를 하지 않는 동안, 당신은 두 가지 방법으로 유사한 기능을 달성할 수 있습니다:
+
+## opencode.json 사용
+
+`instructions`의 `opencode.json` 필드를 사용하는 것이 좋습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### AGENTS.md의 수동 지침
+
+`AGENTS.md`에 명시된 지침을 제공함으로써 외부 파일을 읽을 수 있습니다. 여기에 실용적인 예:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+이 접근법은 다음과 같습니다:
+
+- 모듈, 재사용 가능한 규칙 파일 생성
+- symlinks 또는 git submodules를 통해 프로젝트 전반에 걸쳐 규칙 공유
+- 상세한 가이드를 참조하면서 AGENTS.md concise 유지
+- 특정 작업에 필요한 경우에만 opencode 로드 파일 유지
+
+:::tip
+공유 표준을 가진 monorepos 또는 프로젝트를 위해, glob 본을 가진 `opencode.json`를 사용하여 (`packages/*/AGENTS.md` 같이)는 수동 지시 보다는 더 유지가능합니다.
+:::

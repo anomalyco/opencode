@@ -1,0 +1,360 @@
+---
+title: บทนำ
+description: เริ่มต้นใช้งาน OpenCode
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**OpenCode**](/) คือเอเจนต์การเข้ารหัส AI แบบโอเพ่นซอร์ส มีให้บริการในรูปแบบอินเทอร์เฟซบน terminal แอปเดสก์ท็อป หรือส่วนขยาย IDE
+
+![OpenCode TUI พร้อม opencode theme](../../../assets/lander/screenshot.png)
+
+มาเริ่มกันเลย
+
+---
+
+#### ข้อกำหนดเบื้องต้น
+
+หากต้องการใช้ OpenCode ใน terminal คุณจะต้องมี:
+
+1. terminal อีมูเลเตอร์ที่ทันสมัยเช่น:
+   - [WezTerm](https://wezterm.org) ข้ามแพลตฟอร์ม
+   - [Alacritty](https://alacritty.org) ข้ามแพลตฟอร์ม
+   - [Ghostty](https://ghostty.org), Linux และ macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux และ macOS
+
+2. API Key สำหรับผู้ให้บริการ LLM ที่คุณต้องการใช้
+
+---
+
+## ติดตั้ง
+
+วิธีที่ง่ายที่สุดในการติดตั้ง OpenCode คือการใช้สคริปต์การติดตั้ง
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+คุณยังสามารถติดตั้งได้ด้วยคำสั่งต่อไปนี้:
+
+- **ใช้ Node.js**
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- **ใช้ Homebrew บน macOS และ Linux**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+  > เราขอแนะนำให้ใช้ OpenCode tap เพื่อเผยแพร่ข้อมูลล่าสุด สูตร `brew install opencode` อย่างเป็นทางการได้รับการดูแลโดยทีมงาน Homebrew และมีการอัปเดตไม่บ่อยนัก
+
+- **ใช้ Paru บน Arch Linux**
+
+  ```bash
+  sudo pacman -S opencode           # Arch Linux (Stable)
+  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  ```
+
+#### Windows
+
+:::tip[แนะนำ: ใช้ WSL]
+เพื่อประสบการณ์ที่ดีที่สุดบน Windows เราขอแนะนำให้ใช้ [ระบบย่อย Windows สำหรับ Linux (WSL)](/docs/windows-wsl) ให้ประสิทธิภาพที่ดีขึ้นและความเข้ากันได้เต็มรูปแบบกับคุณสมบัติของ OpenCode
+:::
+
+- **ใช้ Chocolatey**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **ใช้ Scoop**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **การใช้ NPM**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **ใช้ Mise**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **ใช้ Docker**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+ขณะนี้การสนับสนุนสำหรับการติดตั้ง OpenCode บน Windows โดยใช้ Bun อยู่ระหว่างดำเนินการ
+
+คุณยังสามารถคว้าไบนารี่ได้จาก [เผยแพร่](https://github.com/anomalyco/opencode/releases)
+
+---
+
+## กำหนดค่า
+
+ด้วย OpenCode คุณสามารถใช้ผู้ให้บริการ LLM ใดก็ได้โดยกำหนดค่าคีย์ API
+
+หากคุณยังใหม่ต่อการใช้ผู้ให้บริการ LLM เราขอแนะนำให้ใช้ [OpenCode Zen](/docs/zen)
+เป็นรายการโมเดลที่ได้รับการดูแลจัดการซึ่งได้รับการทดสอบและตรวจสอบโดย OpenCode
+ทีม.
+
+1. เรียกใช้คำสั่ง `/connect` ใน TUI เลือก opencode และไปที่ [opencode.ai/auth](https://opencode.ai/auth)
+
+   ```txt
+   /connect
+   ```
+
+2. ลงชื่อเข้าใช้ เพิ่มรายละเอียดการเรียกเก็บเงินของคุณ และคัดลอกรหัส API ของคุณ
+
+3. วางคีย์ API ของคุณ
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+หรือคุณสามารถเลือกหนึ่งในผู้ให้บริการรายอื่นได้ [เรียนรู้เพิ่มเติม](/docs/providers#ไดเรกทอรี)
+
+---
+
+## เริ่มต้น
+
+เมื่อคุณได้กำหนดค่าผู้ให้บริการแล้ว คุณสามารถนำทางไปยังโปรเจ็กต์นั้นได้
+คุณอยากทำงานต่อ
+
+```bash
+cd /path/to/project
+```
+
+และเรียกใช้ OpenCode
+
+```bash
+opencode
+```
+
+จากนั้น เริ่มต้น OpenCode สำหรับโปรเจ็กต์โดยการรันคำสั่งต่อไปนี้
+
+```bash frame="none"
+/init
+```
+
+นี่จะได้รับ OpenCode เพื่อวิเคราะห์โครงการของคุณและสร้างไฟล์ `AGENTS.md`
+รากของโครงการ
+
+:::tip
+คุณควรคอมมิตไฟล์ `AGENTS.md` ของโปรเจ็กต์ของคุณไปที่ Git
+:::
+
+ซึ่งจะช่วยให้ OpenCode เข้าใจโครงสร้างโปรเจ็กต์และรูปแบบการเขียนโค้ด
+ใช้แล้ว.
+
+---
+
+## การใช้งาน
+
+ตอนนี้คุณพร้อมที่จะใช้ OpenCode เพื่อทำงานในโครงการของคุณแล้ว อย่าลังเลที่จะถามมัน
+อะไรก็ตาม!
+
+หากคุณยังใหม่ต่อการใช้เอเจนต์การเข้ารหัส AI ต่อไปนี้คือตัวอย่างบางส่วนที่อาจเป็นไปได้
+ช่วย.
+
+---
+
+### ถามคำถาม
+
+คุณสามารถขอให้ OpenCode อธิบาย codebase ให้คุณได้
+
+:::tip
+ใช้ปุ่ม `@` เพื่อค้นหาไฟล์ในโครงการอย่างคลุมเครือ
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+สิ่งนี้มีประโยชน์หากมีส่วนหนึ่งของโค้ดเบสที่คุณไม่ได้ดำเนินการ
+
+---
+
+### เพิ่มคุณสมบัติ
+
+คุณสามารถขอให้ OpenCode เพิ่มคุณสมบัติใหม่ให้กับโครงการของคุณได้ แม้ว่าเราจะแนะนำให้ขอให้สร้างแผนก่อนก็ตาม
+
+1. **สร้างแผน**
+
+   OpenCode มีโหมด _Plan_ ที่ปิดการใช้งานความสามารถในการเปลี่ยนแปลงและ
+   แนะนำ _how_ ว่าจะใช้งานฟีเจอร์นี้แทน
+
+   เปลี่ยนไปใช้ปุ่ม **Tab** คุณจะเห็นตัวบ่งชี้นี้ที่มุมขวาล่าง
+
+   ```bash frame="none" title="Switch to Plan mode"
+   <TAB>
+   ```
+
+   ตอนนี้เรามาอธิบายสิ่งที่เราต้องการให้ทำ
+
+   ```txt frame="none"
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
+   ```
+
+   คุณต้องการให้รายละเอียด OpenCode เพียงพอเพื่อทำความเข้าใจสิ่งที่คุณต้องการ มันช่วยได้
+   เพื่อพูดคุยเหมือนคุณกำลังพูดคุยกับนักพัฒนารุ่นน้องในทีมของคุณ
+
+   :::tip
+   ให้บริบทและตัวอย่างมากมายแก่ OpenCode เพื่อช่วยให้เข้าใจสิ่งที่คุณ
+   ต้องการ.
+   :::
+
+2. **ทบทวนแผน**
+
+   เมื่อมีแผนแล้ว คุณสามารถให้ข้อเสนอแนะหรือเพิ่มรายละเอียดเพิ่มเติมได้
+
+   ```txt frame="none"
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
+   ```
+
+   :::tip
+   ลากและวางรูปภาพลงใน terminal เพื่อเพิ่มลงในพรอมต์
+   :::
+
+   OpenCode สามารถสแกนรูปภาพที่คุณให้มาและเพิ่มลงในข้อความแจ้งได้ คุณสามารถ
+   ทำได้โดยลากและวางรูปภาพลงใน terminal
+
+3. **สร้างฟีเจอร์**
+
+   เมื่อคุณรู้สึกพอใจกับแผนแล้ว ให้เปลี่ยนกลับเป็น _Build mode_ ภายใน
+   กดปุ่ม **Tab** อีกครั้ง
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+   และขอให้ทำการเปลี่ยนแปลง
+
+   ```bash frame="none"
+   Sounds good! Go ahead and make the changes.
+   ```
+
+---
+
+### ทำการเปลี่ยนแปลง
+
+หากต้องการการเปลี่ยนแปลงที่ตรงไปตรงมามากขึ้น คุณสามารถขอให้ OpenCode สร้างมันโดยตรงได้
+โดยไม่ต้องทบทวนแผนก่อน
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+คุณต้องการให้แน่ใจว่าคุณให้รายละเอียดในปริมาณที่เหมาะสมเพื่อให้ OpenCode ดำเนินการได้ถูกต้อง
+การเปลี่ยนแปลง
+
+---
+
+### เลิกทำการเปลี่ยนแปลง
+
+สมมติว่าคุณขอให้ OpenCode ทำการเปลี่ยนแปลงบางอย่าง
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+แต่คุณก็รู้ว่ามันไม่ใช่สิ่งที่คุณต้องการ คุณ **สามารถยกเลิก** การเปลี่ยนแปลงได้
+โดยใช้คำสั่ง `/undo`
+
+```bash frame="none"
+/undo
+```
+
+OpenCode จะคืนค่าการเปลี่ยนแปลงที่คุณทำและแสดงข้อความต้นฉบับของคุณ
+อีกครั้ง.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+จากที่นี่ คุณสามารถปรับแต่งข้อความแจ้งและขอให้ OpenCode ลองอีกครั้ง
+
+:::tip
+คุณสามารถเรียกใช้ `/undo` ได้หลายครั้งเพื่อเลิกทำการเปลี่ยนแปลงหลายรายการ
+:::
+
+หรือคุณสามารถ **สามารถทำซ้ำ** การเปลี่ยนแปลงโดยใช้คำสั่ง `/redo`
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## แบ่งปัน
+
+การสนทนาที่คุณมีกับ OpenCode สามารถ [แชร์กับคุณได้
+ทีมงาน](/docs/share)
+
+```bash frame="none"
+/share
+```
+
+การดำเนินการนี้จะสร้างลิงก์ไปยังการสนทนาปัจจุบันและคัดลอกไปยังคลิปบอร์ดของคุณ
+
+:::note
+การสนทนาจะไม่ถูกแชร์โดยค่าเริ่มต้น
+:::
+
+นี่คือ [ตัวอย่างการสนทนา](https://opencode.ai/s/4XP1fce5) กับ OpenCode
+
+---
+
+## ปรับแต่ง
+
+แค่นั้นแหละ! ตอนนี้คุณเป็นมืออาชีพในการใช้ OpenCode แล้ว
+
+หากต้องการทำให้เป็นของคุณเอง เราขอแนะนำให้ [เลือกธีม](/docs/themes), [ปรับแต่งปุ่มลัด](/docs/keybinds), [กำหนดค่าตัวจัดรูปแบบโค้ด](/docs/formatters), [สร้างคำสั่งที่กำหนดเอง](/docs/commands) หรือลองใช้ [การกำหนดค่า OpenCode](/docs/config)

@@ -1,27 +1,32 @@
 import { lstat, mkdir, readdir, rm, symlink } from "fs/promises"
 import { join, relative } from "path"
 
-type SemverLike = {
-  valid: (value: string) => string | null
-  rcompare: (left: string, right: string) => number
-}
-
 type Entry = {
   dir: string
   version: string
-  label: string
 }
+
+async function isDirectory(path: string) {
+  try {
+    const info = await lstat(path)
+    return info.isDirectory()
+  } catch {
+    return false
+  }
+}
+
+const isValidSemver = (v: string) => Bun.semver.satisfies(v, "x.x.x")
 
 const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
 const linkRoot = join(bunRoot, "node_modules")
 const directories = (await readdir(bunRoot)).sort()
+
 const versions = new Map<string, Entry[]>()
 
 for (const entry of directories) {
   const full = join(bunRoot, entry)
-  const info = await lstat(full)
-  if (!info.isDirectory()) {
+  if (!(await isDirectory(full))) {
     continue
   }
   const parsed = parseEntry(entry)
@@ -29,37 +34,23 @@ for (const entry of directories) {
     continue
   }
   const list = versions.get(parsed.name) ?? []
-  list.push({ dir: full, version: parsed.version, label: entry })
+  list.push({ dir: full, version: parsed.version })
   versions.set(parsed.name, list)
 }
 
-const semverModule = (await import(join(bunRoot, "node_modules/semver"))) as
-  | SemverLike
-  | {
-      default: SemverLike
-    }
-const semver = "default" in semverModule ? semverModule.default : semverModule
 const selections = new Map<string, Entry>()
 
 for (const [slug, list] of versions) {
   list.sort((a, b) => {
-    const left = semver.valid(a.version)
-    const right = semver.valid(b.version)
-    if (left && right) {
-      const delta = semver.rcompare(left, right)
-      if (delta !== 0) {
-        return delta
-      }
-    }
-    if (left && !right) {
-      return -1
-    }
-    if (!left && right) {
-      return 1
-    }
+    const aValid = isValidSemver(a.version)
+    const bValid = isValidSemver(b.version)
+    if (aValid && bValid) return -Bun.semver.order(a.version, b.version)
+    if (aValid) return -1
+    if (bValid) return 1
     return b.version.localeCompare(a.version)
   })
-  selections.set(slug, list[0])
+  const first = list[0]
+  if (first) selections.set(slug, first)
 }
 
 await rm(linkRoot, { recursive: true, force: true })
@@ -77,10 +68,7 @@ for (const [slug, entry] of Array.from(selections.entries()).sort((a, b) => a[0]
   await mkdir(parent, { recursive: true })
   const linkPath = join(parent, leaf)
   const desired = join(entry.dir, "node_modules", slug)
-  const exists = await lstat(desired)
-    .then((info) => info.isDirectory())
-    .catch(() => false)
-  if (!exists) {
+  if (!(await isDirectory(desired))) {
     continue
   }
   const relativeTarget = relative(parent, desired)

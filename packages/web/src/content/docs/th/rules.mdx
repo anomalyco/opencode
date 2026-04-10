@@ -1,0 +1,180 @@
+---
+title: กฎ
+description: ตั้งค่าคำแนะนำที่กำหนดเองสำหรับ opencode
+---
+
+คุณสามารถให้คำแนะนำที่กำหนดเองแก่ opencode ได้โดยการสร้างไฟล์ `AGENTS.md` ซึ่งคล้ายกับกฎของเคอร์เซอร์ ประกอบด้วยคำแนะนำที่จะรวมอยู่ในบริบทของ LLM เพื่อปรับแต่งลักษณะการทำงานสำหรับโครงการเฉพาะของคุณ
+
+---
+
+## เริ่มต้น
+
+หากต้องการสร้างไฟล์ `AGENTS.md` ใหม่ คุณสามารถเรียกใช้คำสั่ง `/init` ใน opencode
+
+:::tip
+คุณควรคอมมิตไฟล์ `AGENTS.md` ของโปรเจ็กต์ของคุณไปที่ Git
+:::
+
+การดำเนินการนี้จะสแกนโปรเจ็กต์ของคุณและเนื้อหาทั้งหมดเพื่อทำความเข้าใจว่าโปรเจ็กต์เกี่ยวกับอะไร และสร้างไฟล์ `AGENTS.md` ด้วย สิ่งนี้ช่วยให้ opencode นำทางโครงการได้ดีขึ้น
+
+หากคุณมีไฟล์ `AGENTS.md` อยู่แล้ว ระบบจะพยายามเพิ่มไฟล์ดังกล่าว
+
+---
+
+## ตัวอย่าง
+
+คุณสามารถสร้างไฟล์นี้ด้วยตนเองได้ นี่คือตัวอย่างบางสิ่งที่คุณสามารถใส่ลงในไฟล์ `AGENTS.md`
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+เรากำลังเพิ่มคำแนะนำเฉพาะโครงการที่นี่ และจะมีการแชร์กับทีมของคุณ
+
+---
+
+## ประเภท
+
+opencode ยังรองรับการอ่านไฟล์ `AGENTS.md` จากหลาย ๆ ที่ และสิ่งนี้มีจุดประสงค์ที่แตกต่างกัน
+
+### โครงการ
+
+วาง `AGENTS.md` ในรูทโปรเจ็กต์ของคุณสำหรับกฎเฉพาะโปรเจ็กต์ สิ่งเหล่านี้ใช้เฉพาะเมื่อคุณทำงานในไดเร็กทอรีนี้หรือไดเร็กทอรีย่อยเท่านั้น
+
+### ทั่วโลก
+
+คุณยังสามารถมีกฎสากลในไฟล์ `~/.config/opencode/AGENTS.md` สิ่งนี้จะนำไปใช้กับเซสชัน opencode ทั้งหมด
+
+เนื่องจากสิ่งนี้ไม่ได้ผูกมัดกับ Git หรือแชร์กับทีมของคุณ เราขอแนะนำให้ใช้สิ่งนี้เพื่อระบุกฎส่วนบุคคลที่ LLM ควรปฏิบัติตาม
+
+### ความเข้ากันได้กับ Claude Code
+
+สำหรับผู้ใช้ที่ย้ายจาก Claude Code นั้น OpenCode รองรับรูปแบบไฟล์ของ Claude Code เป็นทางเลือก:
+
+- **กฎของโครงการ**: `CLAUDE.md` ในไดเรกทอรีโครงการของคุณ (ใช้หากไม่มี `AGENTS.md`)
+- **กฎสากล**: `~/.claude/CLAUDE.md` (ใช้หากไม่มี `~/.config/opencode/AGENTS.md`)
+- **ทักษะ**: `~/.claude/skills/` — ดูรายละเอียด [ทักษะตัวแทน](/docs/skills/)
+
+หากต้องการปิดใช้งานความเข้ากันได้ของ Claude Code ให้ตั้งค่าหนึ่งในตัวแปรสภาพแวดล้อมเหล่านี้:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## ลำดับความสำคัญ
+
+เมื่อ opencode เริ่มต้นขึ้น มันจะค้นหาไฟล์กฎตามลำดับนี้:
+
+1. **ไฟล์ในเครื่อง** โดยการสำรวจจากไดเรกทอรีปัจจุบัน (`AGENTS.md`, `CLAUDE.md`)
+2. **ไฟล์ทั่วโลก** ที่ `~/.config/opencode/AGENTS.md`
+3. **Claude Code files** ที่ `~/.claude/CLAUDE.md` (ยกเว้นปิดการใช้งาน)
+
+ไฟล์ที่ตรงกันไฟล์แรกจะชนะในแต่ละหมวดหมู่ ตัวอย่างเช่น หากคุณมีทั้ง `AGENTS.md` และ `CLAUDE.md` ระบบจะใช้เฉพาะ `AGENTS.md` ในทำนองเดียวกัน `~/.config/opencode/AGENTS.md` จะมีความสำคัญมากกว่า `~/.claude/CLAUDE.md`
+
+---
+
+## คำแนะนำที่กำหนดเอง
+
+คุณสามารถระบุไฟล์คำแนะนำที่กำหนดเองได้ใน `opencode.json` หรือ `~/.config/opencode/opencode.json` ทั่วโลก สิ่งนี้ช่วยให้คุณและทีมของคุณสามารถนำกฎที่มีอยู่กลับมาใช้ใหม่ได้ แทนที่จะต้องทำซ้ำกฎเหล่านั้นกับ AGENTS.md
+
+ตัวอย่าง:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+คุณยังสามารถใช้ URL ระยะไกลเพื่อโหลดคำแนะนำจากเว็บได้
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+คำแนะนำระยะไกลจะถูกดึงออกมาโดยหมดเวลา 5 วินาที
+
+ไฟล์คำสั่งทั้งหมดจะรวมกับไฟล์ `AGENTS.md` ของคุณ
+
+---
+
+## การอ้างอิงไฟล์ภายนอก
+
+แม้ว่า opencode จะไม่แยกวิเคราะห์การอ้างอิงไฟล์ใน `AGENTS.md` โดยอัตโนมัติ แต่คุณสามารถใช้ฟังก์ชันที่คล้ายกันได้สองวิธี:
+
+### ใช้ opencode.json
+
+แนวทางที่แนะนำคือการใช้ฟิลด์ `instructions` ใน `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### คำแนะนำแบบแมนนวลใน AGENTS.md
+
+คุณสามารถสอนให้ opencode อ่านไฟล์ภายนอกได้โดยการให้คำแนะนำที่ชัดเจนใน `AGENTS.md` ของคุณ นี่เป็นตัวอย่างที่เป็นประโยชน์:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+แนวทางนี้ช่วยให้คุณ:
+
+- สร้างไฟล์กฎแบบโมดูลาร์ที่สามารถนำมาใช้ซ้ำได้
+- แชร์กฎระหว่างโปรเจ็กต์ผ่าน symlink หรือโมดูลย่อย git
+- เขียน AGENTS.md ให้กระชับโดยอ้างอิงหลักเกณฑ์โดยละเอียด
+- ตรวจสอบให้แน่ใจว่า opencode จะโหลดไฟล์เมื่อจำเป็นสำหรับงานเฉพาะเท่านั้น
+
+:::tip
+สำหรับ monorepos หรือโปรเจ็กต์ที่มีมาตรฐานร่วมกัน การใช้ `opencode.json` ที่มีรูปแบบ glob (เช่น `packages/*/AGENTS.md`) จะสามารถบำรุงรักษาได้ดีกว่าคำสั่งแบบแมนนวล
+:::

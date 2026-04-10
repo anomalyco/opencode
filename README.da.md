@@ -27,11 +27,16 @@
   <a href="README.ja.md">日本語</a> |
   <a href="README.pl.md">Polski</a> |
   <a href="README.ru.md">Русский</a> |
+  <a href="README.bs.md">Bosanski</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.no.md">Norsk</a> |
   <a href="README.br.md">Português (Brasil)</a> |
   <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.uk.md">Українська</a> |
+  <a href="README.bn.md">বাংলা</a> |
+  <a href="README.gr.md">Ελληνικά</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
@@ -50,7 +55,8 @@ scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS og Linux (anbefalet, altid up to date)
 brew install opencode              # macOS og Linux (officiel brew formula, opdateres sjældnere)
-paru -S opencode-bin               # Arch Linux
+sudo pacman -S opencode            # Arch Linux (Stable)
+paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # alle OS
 nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste dev-branch
 ```

@@ -4,24 +4,33 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
-import { type LanguageModelUsage, type ProviderMetadata } from "ai"
-import { Config } from "../config/config"
+import { type ProviderMetadata } from "ai"
 import { Flag } from "../flag/flag"
-import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
-import { Storage } from "../storage/storage"
+import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { SyncEvent } from "../sync"
+import type { SQL } from "../storage/db"
+import { PartTable, SessionTable } from "./session.sql"
+import { ProjectTable } from "../project/project.sql"
+import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
+import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
-import { SessionPrompt } from "./prompt"
+import { InstanceState } from "@/effect/instance-state"
 import { fn } from "@/util/fn"
-import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { ProjectID } from "../project/schema"
+import { WorkspaceID } from "../control-plane/schema"
+import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { PermissionNext } from "@/permission/next"
+import { Permission } from "@/permission"
 import { Global } from "@/global"
+import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import { Effect, Layer, ServiceMap } from "effect"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -39,6 +48,66 @@ export namespace Session {
     ).test(title)
   }
 
+  type SessionRow = typeof SessionTable.$inferSelect
+
+  export function fromRow(row: SessionRow): Info {
+    const summary =
+      row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
+        ? {
+            additions: row.summary_additions ?? 0,
+            deletions: row.summary_deletions ?? 0,
+            files: row.summary_files ?? 0,
+            diffs: row.summary_diffs ?? undefined,
+          }
+        : undefined
+    const share = row.share_url ? { url: row.share_url } : undefined
+    const revert = row.revert ?? undefined
+    return {
+      id: row.id,
+      slug: row.slug,
+      projectID: row.project_id,
+      workspaceID: row.workspace_id ?? undefined,
+      directory: row.directory,
+      parentID: row.parent_id ?? undefined,
+      title: row.title,
+      version: row.version,
+      summary,
+      share,
+      revert,
+      permission: row.permission ?? undefined,
+      time: {
+        created: row.time_created,
+        updated: row.time_updated,
+        compacting: row.time_compacting ?? undefined,
+        archived: row.time_archived ?? undefined,
+      },
+    }
+  }
+
+  export function toRow(info: Info) {
+    return {
+      id: info.id,
+      project_id: info.projectID,
+      workspace_id: info.workspaceID,
+      parent_id: info.parentID,
+      slug: info.slug,
+      directory: info.directory,
+      title: info.title,
+      version: info.version,
+      share_url: info.share?.url,
+      summary_additions: info.summary?.additions,
+      summary_deletions: info.summary?.deletions,
+      summary_files: info.summary?.files,
+      summary_diffs: info.summary?.diffs,
+      revert: info.revert ?? null,
+      permission: info.permission,
+      time_created: info.time.created,
+      time_updated: info.time.updated,
+      time_compacting: info.time.compacting,
+      time_archived: info.time.archived,
+    }
+  }
+
   function getForkedTitle(title: string): string {
     const match = title.match(/^(.+) \(fork #(\d+)\)$/)
     if (match) {
@@ -51,11 +120,12 @@ export namespace Session {
 
   export const Info = z
     .object({
-      id: Identifier.schema("session"),
+      id: SessionID.zod,
       slug: z.string(),
-      projectID: z.string(),
+      projectID: ProjectID.zod,
+      workspaceID: WorkspaceID.zod.optional(),
       directory: z.string(),
-      parentID: Identifier.schema("session").optional(),
+      parentID: SessionID.zod.optional(),
       summary: z
         .object({
           additions: z.number(),
@@ -77,11 +147,11 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
-      permission: PermissionNext.Ruleset.optional(),
+      permission: Permission.Ruleset.optional(),
       revert: z
         .object({
-          messageID: z.string(),
-          partID: z.string().optional(),
+          messageID: MessageID.zod,
+          partID: PartID.zod.optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
         })
@@ -92,158 +162,73 @@ export namespace Session {
     })
   export type Info = z.output<typeof Info>
 
-  export const ShareInfo = z
+  export const ProjectInfo = z
     .object({
-      secret: z.string(),
-      url: z.string(),
+      id: ProjectID.zod,
+      name: z.string().optional(),
+      worktree: z.string(),
     })
     .meta({
-      ref: "SessionShare",
+      ref: "ProjectSummary",
     })
-  export type ShareInfo = z.output<typeof ShareInfo>
+  export type ProjectInfo = z.output<typeof ProjectInfo>
+
+  export const GlobalInfo = Info.extend({
+    project: ProjectInfo.nullable(),
+  }).meta({
+    ref: "GlobalSession",
+  })
+  export type GlobalInfo = z.output<typeof GlobalInfo>
 
   export const Event = {
-    Created: BusEvent.define(
-      "session.created",
-      z.object({
+    Created: SyncEvent.define({
+      type: "session.created",
+      version: 1,
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: SessionID.zod,
         info: Info,
       }),
-    ),
-    Updated: BusEvent.define(
-      "session.updated",
-      z.object({
+    }),
+    Updated: SyncEvent.define({
+      type: "session.updated",
+      version: 1,
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: SessionID.zod,
+        info: updateSchema(Info).extend({
+          share: updateSchema(Info.shape.share.unwrap()).optional(),
+          time: updateSchema(Info.shape.time).optional(),
+        }),
+      }),
+      busSchema: z.object({
+        sessionID: SessionID.zod,
         info: Info,
       }),
-    ),
-    Deleted: BusEvent.define(
-      "session.deleted",
-      z.object({
+    }),
+    Deleted: SyncEvent.define({
+      type: "session.deleted",
+      version: 1,
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: SessionID.zod,
         info: Info,
       }),
-    ),
+    }),
     Diff: BusEvent.define(
       "session.diff",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         diff: Snapshot.FileDiff.array(),
       }),
     ),
     Error: BusEvent.define(
       "session.error",
       z.object({
-        sessionID: z.string().optional(),
+        sessionID: SessionID.zod.optional(),
         error: MessageV2.Assistant.shape.error,
       }),
     ),
-  }
-
-  export const create = fn(
-    z
-      .object({
-        parentID: Identifier.schema("session").optional(),
-        title: z.string().optional(),
-        permission: Info.shape.permission,
-      })
-      .optional(),
-    async (input) => {
-      return createNext({
-        parentID: input?.parentID,
-        directory: Instance.directory,
-        title: input?.title,
-        permission: input?.permission,
-      })
-    },
-  )
-
-  export const fork = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message").optional(),
-    }),
-    async (input) => {
-      const original = await get(input.sessionID)
-      if (!original) throw new Error("session not found")
-      const title = getForkedTitle(original.title)
-      const session = await createNext({
-        directory: Instance.directory,
-        title,
-      })
-      const msgs = await messages({ sessionID: input.sessionID })
-      const idMap = new Map<string, string>()
-
-      for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
-        const newID = Identifier.ascending("message")
-        idMap.set(msg.info.id, newID)
-
-        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
-        const cloned = await updateMessage({
-          ...msg.info,
-          sessionID: session.id,
-          id: newID,
-          ...(parentID && { parentID }),
-        })
-
-        for (const part of msg.parts) {
-          await updatePart({
-            ...part,
-            id: Identifier.ascending("part"),
-            messageID: cloned.id,
-            sessionID: session.id,
-          })
-        }
-      }
-      return session
-    },
-  )
-
-  export const touch = fn(Identifier.schema("session"), async (sessionID) => {
-    await update(sessionID, (draft) => {
-      draft.time.updated = Date.now()
-    })
-  })
-
-  export async function createNext(input: {
-    id?: string
-    title?: string
-    parentID?: string
-    directory: string
-    permission?: PermissionNext.Ruleset
-  }) {
-    const result: Info = {
-      id: Identifier.descending("session", input.id),
-      slug: Slug.create(),
-      version: Installation.VERSION,
-      projectID: Instance.project.id,
-      directory: input.directory,
-      parentID: input.parentID,
-      title: input.title ?? createDefaultTitle(!!input.parentID),
-      permission: input.permission,
-      time: {
-        created: Date.now(),
-        updated: Date.now(),
-      },
-    }
-    log.info("created", result)
-    await Storage.write(["session", Instance.project.id, result.id], result)
-    Bus.publish(Event.Created, {
-      info: result,
-    })
-    const cfg = await Config.get()
-    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-      share(result.id)
-        .then((share) => {
-          update(result.id, (draft) => {
-            draft.share = share
-          })
-        })
-        .catch(() => {
-          // Silently ignore sharing errors during session creation
-        })
-    Bus.publish(Event.Updated, {
-      info: result,
-    })
-    return result
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
@@ -253,243 +238,69 @@ export namespace Session {
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
-  export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read as Info
-  })
-
-  export const getShare = fn(Identifier.schema("session"), async (id) => {
-    return Storage.read<ShareInfo>(["share", id])
-  })
-
-  export const share = fn(Identifier.schema("session"), async (id) => {
-    const cfg = await Config.get()
-    if (cfg.share === "disabled") {
-      throw new Error("Sharing is disabled in configuration")
+  export const getUsage = (input: {
+    model: Provider.Model
+    usage: LanguageModelV2Usage
+    metadata?: ProviderMetadata
+  }) => {
+    const safe = (value: number) => {
+      if (!Number.isFinite(value)) return 0
+      return value
     }
-    const { ShareNext } = await import("@/share/share-next")
-    const share = await ShareNext.create(id)
-    await update(
-      id,
-      (draft) => {
-        draft.share = {
-          url: share.url,
-        }
-      },
-      { touch: false },
-    )
-    return share
-  })
+    const inputTokens = safe(input.usage.inputTokens ?? 0)
+    const outputTokens = safe(input.usage.outputTokens ?? 0)
+    const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-  export const unshare = fn(Identifier.schema("session"), async (id) => {
-    // Use ShareNext to remove the share (same as share function uses ShareNext to create)
-    const { ShareNext } = await import("@/share/share-next")
-    await ShareNext.remove(id)
-    await update(
-      id,
-      (draft) => {
-        draft.share = undefined
-      },
-      { touch: false },
-    )
-  })
-
-  export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
-    const project = Instance.project
-    const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
-      editor(draft)
-      if (options?.touch !== false) {
-        draft.time.updated = Date.now()
-      }
-    })
-    Bus.publish(Event.Updated, {
-      info: result,
-    })
-    return result
-  }
-
-  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
-    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
-    return diffs ?? []
-  })
-
-  export const messages = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      limit: z.number().optional(),
-    }),
-    async (input) => {
-      const result = [] as MessageV2.WithParts[]
-      for await (const msg of MessageV2.stream(input.sessionID)) {
-        if (input.limit && result.length >= input.limit) break
-        result.push(msg)
-      }
-      result.reverse()
-      return result
-    },
-  )
-
-  export async function* list() {
-    const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item).catch(() => undefined)
-      if (!session) continue
-      yield session
-    }
-  }
-
-  export const children = fn(Identifier.schema("session"), async (parentID) => {
-    const project = Instance.project
-    const result = [] as Session.Info[]
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item).catch(() => undefined)
-      if (!session) continue
-      if (session.parentID !== parentID) continue
-      result.push(session)
-    }
-    return result
-  })
-
-  export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    const project = Instance.project
-    try {
-      const session = await get(sessionID)
-      for (const child of await children(sessionID)) {
-        await remove(child.id)
-      }
-      await unshare(sessionID).catch(() => {})
-      for (const msg of await Storage.list(["message", sessionID])) {
-        for (const part of await Storage.list(["part", msg.at(-1)!])) {
-          await Storage.remove(part)
-        }
-        await Storage.remove(msg)
-      }
-      await Storage.remove(["session", project.id, sessionID])
-      Bus.publish(Event.Deleted, {
-        info: session,
-      })
-    } catch (e) {
-      log.error(e)
-    }
-  })
-
-  export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    await Storage.write(["message", msg.sessionID, msg.id], msg)
-    Bus.publish(MessageV2.Event.Updated, {
-      info: msg,
-    })
-    return msg
-  })
-
-  export const removeMessage = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message"),
-    }),
-    async (input) => {
-      await Storage.remove(["message", input.sessionID, input.messageID])
-      Bus.publish(MessageV2.Event.Removed, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-      })
-      return input.messageID
-    },
-  )
-
-  export const removePart = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message"),
-      partID: Identifier.schema("part"),
-    }),
-    async (input) => {
-      await Storage.remove(["part", input.messageID, input.partID])
-      Bus.publish(MessageV2.Event.PartRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        partID: input.partID,
-      })
-      return input.partID
-    },
-  )
-
-  const UpdatePartInput = z.union([
-    MessageV2.Part,
-    z.object({
-      part: MessageV2.TextPart,
-      delta: z.string(),
-    }),
-    z.object({
-      part: MessageV2.ReasoningPart,
-      delta: z.string(),
-    }),
-  ])
-
-  export const updatePart = fn(UpdatePartInput, async (input) => {
-    const part = "delta" in input ? input.part : input
-    const delta = "delta" in input ? input.delta : undefined
-    await Storage.write(["part", part.messageID, part.id], part)
-    Bus.publish(MessageV2.Event.PartUpdated, {
-      part,
-      delta,
-    })
-    return part
-  })
-
-  export const getUsage = fn(
-    z.object({
-      model: z.custom<Provider.Model>(),
-      usage: z.custom<LanguageModelUsage>(),
-      metadata: z.custom<ProviderMetadata>().optional(),
-    }),
-    (input) => {
-      const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
-      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+    const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+    const cacheWriteInputTokens = safe(
+      (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // google-vertex-anthropic returns metadata under "vertex" key
+        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-        0) as number
+        0) as number,
+    )
 
-      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
-      const adjustedInputTokens = excludesCachedTokens
-        ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
-      const safe = (value: number) => {
-        if (!Number.isFinite(value)) return 0
-        return value
-      }
+    // AI SDK v6 normalized inputTokens to include cached tokens across all providers
+    // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
+    // tokens to get the non-cached input count for separate cost calculation.
+    const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
 
-      const tokens = {
-        input: safe(adjustedInputTokens),
-        output: safe(input.usage.outputTokens ?? 0),
-        reasoning: safe(input.usage?.reasoningTokens ?? 0),
-        cache: {
-          write: safe(cacheWriteInputTokens),
-          read: safe(cacheReadInputTokens),
-        },
-      }
+    const total = input.usage.totalTokens
 
-      const costInfo =
-        input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
-          ? input.model.cost.experimentalOver200K
-          : input.model.cost
-      return {
-        cost: safe(
-          new Decimal(0)
-            .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-            // TODO: update models.dev to have better pricing model, for now:
-            // charge reasoning tokens at the same rate as output tokens
-            .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
-            .toNumber(),
-        ),
-        tokens,
-      }
-    },
-  )
+    const tokens = {
+      total,
+      input: adjustedInputTokens,
+      output: outputTokens - reasoningTokens,
+      reasoning: reasoningTokens,
+      cache: {
+        write: cacheWriteInputTokens,
+        read: cacheReadInputTokens,
+      },
+    }
+
+    const costInfo =
+      input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
+        ? input.model.cost.experimentalOver200K
+        : input.model.cost
+    return {
+      cost: safe(
+        new Decimal(0)
+          .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
+          // TODO: update models.dev to have better pricing model, for now:
+          // charge reasoning tokens at the same rate as output tokens
+          .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
+          .toNumber(),
+      ),
+      tokens,
+    }
+  }
 
   export class BusyError extends Error {
     constructor(public readonly sessionID: string) {
@@ -497,21 +308,539 @@ export namespace Session {
     }
   }
 
-  export const initialize = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      modelID: z.string(),
-      providerID: z.string(),
-      messageID: Identifier.schema("message"),
-    }),
-    async (input) => {
-      await SessionPrompt.command({
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        model: input.providerID + "/" + input.modelID,
-        command: Command.Default.INIT,
-        arguments: "",
+  export interface Interface {
+    readonly create: (input?: {
+      parentID?: SessionID
+      title?: string
+      permission?: Permission.Ruleset
+      workspaceID?: WorkspaceID
+    }) => Effect.Effect<Info>
+    readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
+    readonly touch: (sessionID: SessionID) => Effect.Effect<void>
+    readonly get: (id: SessionID) => Effect.Effect<Info>
+    readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
+    readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
+    readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
+    readonly setRevert: (input: {
+      sessionID: SessionID
+      revert: Info["revert"]
+      summary: Info["summary"]
+    }) => Effect.Effect<void>
+    readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
+    readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
+    readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
+    readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
+    readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
+    readonly remove: (sessionID: SessionID) => Effect.Effect<void>
+    readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
+    readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
+    readonly removePart: (input: {
+      sessionID: SessionID
+      messageID: MessageID
+      partID: PartID
+    }) => Effect.Effect<PartID>
+    readonly getPart: (input: {
+      sessionID: SessionID
+      messageID: MessageID
+      partID: PartID
+    }) => Effect.Effect<MessageV2.Part | undefined>
+    readonly updatePart: <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
+    readonly updatePartDelta: (input: {
+      sessionID: SessionID
+      messageID: MessageID
+      partID: PartID
+      field: string
+      delta: string
+    }) => Effect.Effect<void>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Session") {}
+
+  type Patch = z.infer<typeof Event.Updated.schema>["info"]
+
+  const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
+    Effect.sync(() => Database.use(fn))
+
+  export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+
+      const createNext = Effect.fn("Session.createNext")(function* (input: {
+        id?: SessionID
+        title?: string
+        parentID?: SessionID
+        workspaceID?: WorkspaceID
+        directory: string
+        permission?: Permission.Ruleset
+      }) {
+        const ctx = yield* InstanceState.context
+        const result: Info = {
+          id: SessionID.descending(input.id),
+          slug: Slug.create(),
+          version: Installation.VERSION,
+          projectID: ctx.project.id,
+          directory: input.directory,
+          workspaceID: input.workspaceID,
+          parentID: input.parentID,
+          title: input.title ?? createDefaultTitle(!!input.parentID),
+          permission: input.permission,
+          time: {
+            created: Date.now(),
+            updated: Date.now(),
+          },
+        }
+        log.info("created", result)
+
+        yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
+
+        if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+          // This only exist for backwards compatibility. We should not be
+          // manually publishing this event; it is a sync event now
+          yield* bus.publish(Event.Updated, {
+            sessionID: result.id,
+            info: result,
+          })
+        }
+
+        return result
       })
-    },
+
+      const get = Effect.fn("Session.get")(function* (id: SessionID) {
+        const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+        if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+        return fromRow(row)
+      })
+
+      const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
+        const rows = yield* db((d) =>
+          d
+            .select()
+            .from(SessionTable)
+            .where(and(eq(SessionTable.parent_id, parentID)))
+            .all(),
+        )
+        return rows.map(fromRow)
+      })
+
+      const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+        try {
+          const session = yield* get(sessionID)
+          const kids = yield* children(sessionID)
+          for (const child of kids) {
+            yield* remove(child.id)
+          }
+
+          // `remove` needs to work in all cases, such as a broken
+          // sessions that run cleanup. In certain cases these will
+          // run without any instance state, so we need to turn off
+          // publishing of events in that case
+          const hasInstance = yield* InstanceState.directory.pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          )
+
+          yield* Effect.sync(() => {
+            SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
+            SyncEvent.remove(sessionID)
+          })
+        } catch (e) {
+          log.error(e)
+        }
+      })
+
+      const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => SyncEvent.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg }))
+          return msg
+        }).pipe(Effect.withSpan("Session.updateMessage"))
+
+      const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() =>
+            SyncEvent.run(MessageV2.Event.PartUpdated, {
+              sessionID: part.sessionID,
+              part: structuredClone(part),
+              time: Date.now(),
+            }),
+          )
+          return part
+        }).pipe(Effect.withSpan("Session.updatePart"))
+
+      const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
+        const row = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(
+              and(
+                eq(PartTable.session_id, input.sessionID),
+                eq(PartTable.message_id, input.messageID),
+                eq(PartTable.id, input.partID),
+              ),
+            )
+            .get(),
+        )
+        if (!row) return
+        return {
+          ...row.data,
+          id: row.id,
+          sessionID: row.session_id,
+          messageID: row.message_id,
+        } as MessageV2.Part
+      })
+
+      const create = Effect.fn("Session.create")(function* (input?: {
+        parentID?: SessionID
+        title?: string
+        permission?: Permission.Ruleset
+        workspaceID?: WorkspaceID
+      }) {
+        const directory = yield* InstanceState.directory
+        return yield* createNext({
+          parentID: input?.parentID,
+          directory,
+          title: input?.title,
+          permission: input?.permission,
+          workspaceID: input?.workspaceID,
+        })
+      })
+
+      const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+        const directory = yield* InstanceState.directory
+        const original = yield* get(input.sessionID)
+        const title = getForkedTitle(original.title)
+        const session = yield* createNext({
+          directory,
+          workspaceID: original.workspaceID,
+          title,
+        })
+        const msgs = yield* messages({ sessionID: input.sessionID })
+        const idMap = new Map<string, MessageID>()
+
+        for (const msg of msgs) {
+          if (input.messageID && msg.info.id >= input.messageID) break
+          const newID = MessageID.ascending()
+          idMap.set(msg.info.id, newID)
+
+          const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
+          const cloned = yield* updateMessage({
+            ...msg.info,
+            sessionID: session.id,
+            id: newID,
+            ...(parentID && { parentID }),
+          })
+
+          for (const part of msg.parts) {
+            yield* updatePart({
+              ...part,
+              id: PartID.ascending(),
+              messageID: cloned.id,
+              sessionID: session.id,
+            })
+          }
+        }
+        return session
+      })
+
+      const patch = (sessionID: SessionID, info: Patch) =>
+        Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID, info }))
+
+      const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
+        yield* patch(sessionID, { time: { updated: Date.now() } })
+      })
+
+      const setTitle = Effect.fn("Session.setTitle")(function* (input: { sessionID: SessionID; title: string }) {
+        yield* patch(input.sessionID, { title: input.title })
+      })
+
+      const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
+        yield* patch(input.sessionID, { time: { archived: input.time } })
+      })
+
+      const setPermission = Effect.fn("Session.setPermission")(function* (input: {
+        sessionID: SessionID
+        permission: Permission.Ruleset
+      }) {
+        yield* patch(input.sessionID, { permission: input.permission, time: { updated: Date.now() } })
+      })
+
+      const setRevert = Effect.fn("Session.setRevert")(function* (input: {
+        sessionID: SessionID
+        revert: Info["revert"]
+        summary: Info["summary"]
+      }) {
+        yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert })
+      })
+
+      const clearRevert = Effect.fn("Session.clearRevert")(function* (sessionID: SessionID) {
+        yield* patch(sessionID, { time: { updated: Date.now() }, revert: null })
+      })
+
+      const setSummary = Effect.fn("Session.setSummary")(function* (input: {
+        sessionID: SessionID
+        summary: Info["summary"]
+      }) {
+        yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
+      })
+
+      const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
+        return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
+          Effect.orElseSucceed((): Snapshot.FileDiff[] => []),
+        )
+      })
+
+      const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
+        if (input.limit) {
+          return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
+        }
+        return Array.from(MessageV2.stream(input.sessionID)).reverse()
+      })
+
+      const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+      }) {
+        yield* Effect.sync(() =>
+          SyncEvent.run(MessageV2.Event.Removed, {
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+          }),
+        )
+        return input.messageID
+      })
+
+      const removePart = Effect.fn("Session.removePart")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+        partID: PartID
+      }) {
+        yield* Effect.sync(() =>
+          SyncEvent.run(MessageV2.Event.PartRemoved, {
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            partID: input.partID,
+          }),
+        )
+        return input.partID
+      })
+
+      const updatePartDelta = Effect.fn("Session.updatePartDelta")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+        partID: PartID
+        field: string
+        delta: string
+      }) {
+        yield* bus.publish(MessageV2.Event.PartDelta, input)
+      })
+
+      return Service.of({
+        create,
+        fork,
+        touch,
+        get,
+        setTitle,
+        setArchived,
+        setPermission,
+        setRevert,
+        clearRevert,
+        setSummary,
+        diff,
+        messages,
+        children,
+        remove,
+        updateMessage,
+        removeMessage,
+        removePart,
+        updatePart,
+        getPart,
+        updatePartDelta,
+      })
+    }),
+  )
+
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export const create = fn(
+    z
+      .object({
+        parentID: SessionID.zod.optional(),
+        title: z.string().optional(),
+        permission: Info.shape.permission,
+        workspaceID: WorkspaceID.zod.optional(),
+      })
+      .optional(),
+    (input) => runPromise((svc) => svc.create(input)),
+  )
+
+  export const fork = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod.optional() }), (input) =>
+    runPromise((svc) => svc.fork(input)),
+  )
+
+  export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
+
+  export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
+    runPromise((svc) => svc.setTitle(input)),
+  )
+
+  export const setArchived = fn(z.object({ sessionID: SessionID.zod, time: z.number().optional() }), (input) =>
+    runPromise((svc) => svc.setArchived(input)),
+  )
+
+  export const setRevert = fn(
+    z.object({ sessionID: SessionID.zod, revert: Info.shape.revert, summary: Info.shape.summary }),
+    (input) =>
+      runPromise((svc) => svc.setRevert({ sessionID: input.sessionID, revert: input.revert, summary: input.summary })),
+  )
+
+  export const messages = fn(z.object({ sessionID: SessionID.zod, limit: z.number().optional() }), (input) =>
+    runPromise((svc) => svc.messages(input)),
+  )
+
+  export function* list(input?: {
+    directory?: string
+    workspaceID?: WorkspaceID
+    roots?: boolean
+    start?: number
+    search?: string
+    limit?: number
+  }) {
+    const project = Instance.project
+    const conditions = [eq(SessionTable.project_id, project.id)]
+
+    if (input?.workspaceID) {
+      conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
+    }
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
+    if (input?.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
+    }
+    if (input?.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input?.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+
+    const limit = input?.limit ?? 100
+
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(and(...conditions))
+        .orderBy(desc(SessionTable.time_updated))
+        .limit(limit)
+        .all(),
+    )
+    for (const row of rows) {
+      yield fromRow(row)
+    }
+  }
+
+  export function* listGlobal(input?: {
+    directory?: string
+    roots?: boolean
+    start?: number
+    cursor?: number
+    search?: string
+    limit?: number
+    archived?: boolean
+  }) {
+    const conditions: SQL[] = []
+
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
+    if (input?.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
+    }
+    if (input?.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input?.cursor) {
+      conditions.push(lt(SessionTable.time_updated, input.cursor))
+    }
+    if (input?.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+    if (!input?.archived) {
+      conditions.push(isNull(SessionTable.time_archived))
+    }
+
+    const limit = input?.limit ?? 100
+
+    const rows = Database.use((db) => {
+      const query =
+        conditions.length > 0
+          ? db
+              .select()
+              .from(SessionTable)
+              .where(and(...conditions))
+          : db.select().from(SessionTable)
+      return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+    })
+
+    const ids = [...new Set(rows.map((row) => row.project_id))]
+    const projects = new Map<string, ProjectInfo>()
+
+    if (ids.length > 0) {
+      const items = Database.use((db) =>
+        db
+          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+          .from(ProjectTable)
+          .where(inArray(ProjectTable.id, ids))
+          .all(),
+      )
+      for (const item of items) {
+        projects.set(item.id, {
+          id: item.id,
+          name: item.name ?? undefined,
+          worktree: item.worktree,
+        })
+      }
+    }
+
+    for (const row of rows) {
+      const project = projects.get(row.project_id) ?? null
+      yield { ...fromRow(row), project }
+    }
+  }
+
+  export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
+  export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
+  export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
+    MessageV2.Info.parse(msg)
+    return runPromise((svc) => svc.updateMessage(msg))
+  }
+
+  export const removeMessage = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod }), (input) =>
+    runPromise((svc) => svc.removeMessage(input)),
+  )
+
+  export const removePart = fn(
+    z.object({ sessionID: SessionID.zod, messageID: MessageID.zod, partID: PartID.zod }),
+    (input) => runPromise((svc) => svc.removePart(input)),
+  )
+
+  export async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
+    MessageV2.Part.parse(part)
+    return runPromise((svc) => svc.updatePart(part))
+  }
+
+  export const updatePartDelta = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
+      partID: PartID.zod,
+      field: z.string(),
+      delta: z.string(),
+    }),
+    (input) => runPromise((svc) => svc.updatePartDelta(input)),
   )
 }

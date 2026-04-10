@@ -1,0 +1,222 @@
+---
+title: "Ajan becerileri"
+description: "SKILL.md ile tekrar kullanilabilir davranis tanimlayin"
+---
+
+Ajan becerileri, opencode'un deponuzdan veya ev dizininizden tekrar kullanilabilir talimatlari kesfetmesini saglar.
+Beceriler, yerel `skill` araci uzerinden ihtiyac aninda yuklenir; ajanlar mevcut becerileri gorur ve gerektiginde tam icerigi yukler.
+
+---
+
+## Dosyalari yerlestirin
+
+Her beceri adi icin bir klasor olusturun ve icine bir `SKILL.md` koyun.
+opencode su konumlari tarar:
+
+- Proje konfigurasyonu: `.opencode/skills/<name>/SKILL.md`
+- Genel konfigurasyon: `~/.config/opencode/skills/<name>/SKILL.md`
+- Proje Claude uyumlu: `.claude/skills/<name>/SKILL.md`
+- Genel Claude uyumlu: `~/.claude/skills/<name>/SKILL.md`
+- Proje agent uyumlu: `.agents/skills/<name>/SKILL.md`
+- Genel agent uyumlu: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## Kesfi anlayin
+
+Proje yerel yollarinda opencode, mevcut calisma dizininizden baslayip git worktree kokune kadar yukari cikar.
+Bu sirada `skills/*/SKILL.md` altindaki eslesen `.opencode/` dosyalarini ve `.claude/skills/*/SKILL.md` ya da `.agents/skills/*/SKILL.md` dosyalarini yukler.
+
+Genel tanimlar da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` ve `~/.agents/skills/*/SKILL.md` yollarindan yuklenir.
+
+---
+
+## Frontmatter yazin
+
+Her `SKILL.md`, YAML frontmatter ile baslamalidir.
+Sadece su alanlar taninir:
+
+- `name` (zorunlu)
+- `description` (zorunlu)
+- `license` (istege bagli)
+- `compatibility` (istege bagli)
+- `metadata` (istege bagli, string-to-string map)
+
+Bilinmeyen frontmatter alanlari yok sayilir.
+
+---
+
+## Adlari dogrulayin
+
+`name` su kurallari saglamalidir:
+
+- 1-64 karakter olmali
+- Kucuk harf alfanumerik ve tekli tire ayirici kullanmali
+- `-` ile baslamamali veya bitmemeli
+- Ardisik `--` icermemeli
+- `SKILL.md` dosyasini barindiran klasor adi ile ayni olmali
+
+Esdeger regex:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## Uzunluk kurallarina uyun
+
+`description` 1-1024 karakter arasinda olmali.
+Ajanin dogru secim yapmasi icin yeterince acik yazin.
+
+---
+
+## Ornek kullanin
+
+`.opencode/skills/git-release/SKILL.md` dosyasini soyle olusturun:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## Arac aciklamasini taniyin
+
+opencode, `skill` araci aciklamasinda mevcut becerileri listeler.
+Her kayitta beceri adi ve aciklamasi yer alir:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+Ajan, araci cagirarak beceri yukler:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## Izinleri yapilandirin
+
+`opencode.json` icinde pattern tabanli izinlerle ajanlarin hangi becerilere erisecegini kontrol edin:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| Permission | Behavior                                   |
+| ---------- | ------------------------------------------ |
+| `allow`    | Beceri hemen yuklenir                      |
+| `deny`     | Beceri ajandan gizlenir, erisim reddedilir |
+| `ask`      | Yukleme oncesi kullanicidan onay istenir   |
+
+Pattern'lar wildcard destekler: `internal-*`, `internal-docs`, `internal-tools` vb. adlarla eslesir.
+
+---
+
+## Ajan bazinda gecersiz kilin
+
+Belirli ajanlara genel varsayimlardan farkli izinler verebilirsiniz.
+
+**Ozel ajanlar icin** (agent frontmatter icinde):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**Yerlesik ajanlar icin** (`opencode.json` icinde):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Skill aracini kapatin
+
+Beceri kullanmamasi gereken ajanlar icin skill aracini tamamen kapatabilirsiniz:
+
+**Ozel ajanlar icin**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**Yerlesik ajanlar icin**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+Devre disi oldugunda `<available_skills>` bolumu tamamen kaldirilir.
+
+---
+
+## Yukleme sorunlarini giderin
+
+Bir beceri listede gorunmuyorsa:
+
+1. `SKILL.md` adinin tamamen buyuk harfle yazildigini dogrulayin
+2. Frontmatter icinde `name` ve `description` oldugunu kontrol edin
+3. Tum konumlarda beceri adlarinin benzersiz oldugundan emin olun
+4. Izinleri kontrol edin - `deny` olan beceriler ajanlardan gizlenir

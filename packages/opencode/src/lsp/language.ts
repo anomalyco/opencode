@@ -44,6 +44,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".htm": "html",
   ".ini": "ini",
   ".java": "java",
+  ".jl": "julia",
   ".js": "javascript",
   ".kt": "kotlin",
   ".kts": "kotlin",

@@ -8,7 +8,7 @@ type PackageManifest = {
 
 const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
-const bunEntries = (await safeReadDir(bunRoot)).sort()
+const bunEntries = (await readdir(bunRoot)).sort()
 let rewritten = 0
 
 for (const entry of bunEntries) {
@@ -45,11 +45,11 @@ for (const entry of bunEntries) {
   }
 }
 
-console.log(`[normalize-bun-binaries] rewrote ${rewritten} links`)
+console.log(`[normalize-bun-binaries] rebuilt ${rewritten} links`)
 
 async function collectPackages(modulesRoot: string) {
   const found: string[] = []
-  const topLevel = (await safeReadDir(modulesRoot)).sort()
+  const topLevel = (await readdir(modulesRoot)).sort()
   for (const name of topLevel) {
     if (name === ".bin" || name === ".bun") {
       continue
@@ -59,7 +59,7 @@ async function collectPackages(modulesRoot: string) {
       continue
     }
     if (name.startsWith("@")) {
-      const scoped = (await safeReadDir(full)).sort()
+      const scoped = (await readdir(full)).sort()
       for (const child of scoped) {
         const scopedDir = join(full, child)
         if (await isDirectory(scopedDir)) {
@@ -118,14 +118,6 @@ async function isDirectory(path: string) {
     return info.isDirectory()
   } catch {
     return false
-  }
-}
-
-async function safeReadDir(path: string) {
-  try {
-    return await readdir(path)
-  } catch {
-    return []
   }
 }
 

@@ -1,0 +1,287 @@
+---
+title: 서버
+description: HTTP를 통해 OpenCode 서버와 상호 작용합니다.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+`opencode serve` 명령은 opencode 클라이언트가 사용할 수 있는 OpenAPI 엔드포인트를 노출하는 headless HTTP 서버를 실행합니다.
+
+---
+
+### 사용법
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### 옵션
+
+| 플래그          | 설명                                  | 기본값           |
+| --------------- | ------------------------------------- | ---------------- |
+| `--port`        | 수신 대기할 포트                      | `4096`           |
+| `--hostname`    | 수신 대기할 호스트명                  | `127.0.0.1`      |
+| `--mdns`        | mDNS 탐지 활성화                      | `false`          |
+| `--mdns-domain` | mDNS 서비스의 사용자 지정 도메인 이름 | `opencode.local` |
+| `--cors`        | 허용할 추가 브라우저 origin           | `[]`             |
+
+`--cors`는 다수 시간을 통과될 수 있습니다:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### 인증
+
+`OPENCODE_SERVER_PASSWORD`를 설정하여 서버를 HTTP Basic auth로 보호합니다. `opencode` 또는 `OPENCODE_SERVER_USERNAME`를 오버라이드로 설정하는 사용자의 기본값. 이것은 `opencode serve`와 `opencode web` 둘 다에 적용합니다.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### 작동 방식
+
+`opencode`를 실행하면 TUI와 서버를 시작합니다. TUI는 어디에 있습니까?
+서버와 대화하는 클라이언트. 서버는 OpenAPI 3.1 spec을 노출
+끝점. 이 엔드포인트는 [SDK](/docs/sdk)을 생성하는 데도 사용됩니다.
+
+:::tip
+opencode 서버를 사용하여 opencode programmatically와 상호 작용합니다.
+:::
+
+이 아키텍처는 opencode 지원 여러 클라이언트를 허용하고 opencode programmatically와 상호 작용 할 수 있습니다.
+
+독립 서버를 시작하려면 `opencode serve`를 실행할 수 있습니다. 당신이 있는 경우에
+opencode TUI 실행, `opencode serve` 새로운 서버를 시작합니다.
+
+---
+
+#### 기존 서버에 연결
+
+TUI를 시작하면 무작위로 포트와 호스트 이름을 할당합니다. 대신 `--hostname`와 `--port` [flags](/docs/cli)에서 전달할 수 있습니다. 그런 다음 서버에 연결하십시오.
+
+[`/tui`](#tui) 엔드포인트는 서버를 통해 TUI를 구동하는 데 사용될 수 있습니다. 예를 들어 미리 작성하거나 프롬프트를 실행할 수 있습니다. 이 설정은 opencode [IDE](/docs/ide) 플러그인에 의해 사용됩니다.
+
+---
+
+## 사양
+
+서버는 OpenAPI 3.1 spec을 게시합니다.
+
+```
+http://<hostname>:<port>/doc
+```
+
+예를 들어, `http://localhost:4096/doc`. 클라이언트를 생성하거나 요청 및 응답 유형을 검사하는 spec를 사용하십시오. 또는 Swagger 탐험가에서 볼 수 있습니다.
+
+---
+
+## API
+
+opencode 서버는 다음과 같은 API를 노출합니다.
+
+---
+
+## 글로벌
+
+| 방법  | 경로             | 설명                      | 응답                                 |
+| ----- | ---------------- | ------------------------- | ------------------------------------ |
+| `GET` | `/global/health` | 서버 건강 및 버전         | `{ healthy: true, version: string }` |
+| `GET` | `/global/event`  | 글로벌 이벤트(SSE 스트림) | 이벤트 스트림                        |
+
+---
+
+## 프로젝트
+
+| 방법  | 경로               | 설명                    | 응답                                          |
+| ----- | ------------------ | ----------------------- | --------------------------------------------- |
+| `GET` | `/project`         | 모든 프로젝트 보기      | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET` | `/project/current` | 현재 프로젝트 가져 오기 | <a href={typesUrl}><code>프로젝트</code></a>  |
+
+---
+
+### 경로 & VCS
+
+| 방법  | 경로    | 설명                          | 응답                                        |
+| ----- | ------- | ----------------------------- | ------------------------------------------- |
+| `GET` | `/path` | 현재 경로 받기                | <a href={typesUrl}><code>Path</code></a>    |
+| `GET` | `/vcs`  | 현재 프로젝트의 VCS 정보 받기 | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### 인스턴스
+
+| 방법   | 경로                | 설명                 | 응답      |
+| ------ | ------------------- | -------------------- | --------- |
+| `POST` | `/instance/dispose` | 현재 인스턴스를 해제 | `boolean` |
+
+---
+
+### 구성
+
+| 방법    | 경로                | 설명                       | 응답                                                                                     |
+| ------- | ------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | 구성정보                   | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | 업데이트 구성              | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | 목록 제공업체 및 기본 모델 | `{ providers: `<a href={typesUrl}> 사이트 맵</a>`, default: { [key: string]: string } }` |
+
+---
+
+## 공급자
+
+| 방법   | 경로                             | 설명                        | 응답                                                                                |
+| ------ | -------------------------------- | --------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | 모든 공급자 목록            | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | 공급자 인증 메서드 가져오기 | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | OAuth를 사용한 공급자 허가  | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | 공급자를 위한 OAuth 콜백    | `boolean`                                                                           |
+
+---
+
+## 세션
+
+| 메서드   | 경로                                     | 설명                               | 비고                                                                          |
+| -------- | ---------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | 모든 세션 일람표                   | 반환 <a href={typesUrl}><code>Session[]</code></a>                            |
+| `POST`   | `/session`                               | 새 세션 만들기                     | 몸: `{ parentID?, title? }`, 반환 <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | 모든 세션의 세션 상태를 가져옵니다 | `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`             |
+| `GET`    | `/session/:id`                           | 세션 상세보기                      | 반품 <a href={typesUrl}><code>Session</code></a>                              |
+| `DELETE` | `/session/:id`                           | 세션 삭제 및 모든 데이터           | `boolean`                                                                     |
+| `PATCH`  | `/session/:id`                           | 업데이트 세션 속성                 | 본체: `{ title? }`, 반환 <a href={typesUrl}><code>Session</code></a>          |
+| `GET`    | `/session/:id/children`                  | 세션의 하위 세션                   | 리턴 <a href={typesUrl}><code>Session[]</code></a>                            |
+| `GET`    | `/session/:id/todo`                      | 세션의 할 일(Todo) 목록 받기       | <a href={typesUrl}><code>Todo[]</code></a>                                    |
+| `POST`   | `/session/:id/init`                      | 앱 초기화 및 `AGENTS.md` 분석      | 몸: `{ messageID, providerID, modelID }`, 반환 `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | 메시지의 기존 세션                 | 몸: `{ messageID? }`, 반환 <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | 운영 중인 세션                     | 반품 `boolean`                                                                |
+| `POST`   | `/session/:id/share`                     | 세션 공유                          | <a href={typesUrl}><code>Session</code></a>                                   |
+| `DELETE` | `/session/:id/share`                     | 세션 공유                          | <a href={typesUrl}><code>Session</code></a>                                   |
+| `GET`    | `/session/:id/diff`                      | `/session/:id/diff`                | `messageID?`, 반환 <a href={typesUrl}><code>FileDiff[]</code></a>             |
+| `POST`   | `/session/:id/summarize`                 | 세션을 요약                        | 본체: `{ providerID, modelID }`, `boolean` 반환                               |
+| `POST`   | `/session/:id/revert`                    | 메시지 재생                        | 몸: `{ messageID, partID? }`, 반환 `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | 메시지 되돌리기 취소               | 반품 `boolean`                                                                |
+| `POST`   | `/session/:id/permissions/:permissionID` | 허가 요청 대응                     | 본체: `{ response, remember? }`, `boolean`                                    |
+
+---
+
+## 메시지
+
+| 방법   | 경로                              | 설명                                   | 주                                                                                                                                                               |
+| ------ | --------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`            | 세션의 목록 메시지                     | 쿼리: `limit?`, `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                            |
+| `POST` | `/session/:id/message`            | 응답을 위해 메시지를 보내고 기다립니다 | 몸: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | 메시지 보내기                          | `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                              |
+| `POST` | `/session/:id/prompt_async`       | 비동기적으로 메시지 보내기             | 몸: `/session/:id/message`와 동일, `204 No Content`를 반환                                                                                                       |
+| `POST` | `/session/:id/command`            | 슬래시 명령어 실행                     | 본체: `{ messageID?, agent?, model?, command, arguments }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`             |
+| `POST` | `/session/:id/shell`              | shell 명령 실행                        | 체: `{ agent, model?, command }`, 반환 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+## 명령
+
+| 방법  | 경로       | 설명      | 응답                                          |
+| ----- | ---------- | --------- | --------------------------------------------- |
+| `GET` | `/command` | 모든 명령 | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+## 파일
+
+| 방법  | 경로                     | 설명                         | 응답                                                                                    |
+| ----- | ------------------------ | ---------------------------- | --------------------------------------------------------------------------------------- |
+| `GET` | `/find?pattern=<pat>`    | 파일에서 텍스트 검색         | `path`, `lines`, `line_number`, `absolute_offset`, `submatches`가 포함된 일치 객체 배열 |
+| `GET` | `/find/file?query=<q>`   | 이름으로 파일/디렉터리 찾기  | `string[]` (경로)                                                                       |
+| `GET` | `/find/symbol?query=<q>` | 워크스페이스 심볼 찾기       | <a href={typesUrl}><code>Symbol[]</code></a>                                            |
+| `GET` | `/file?path=<path>`      | 파일 및 디렉터리 목록        | <a href={typesUrl}><code>FileNode[]</code></a>                                          |
+| `GET` | `/file/content?path=<p>` | 파일 읽기                    | <a href={typesUrl}><code>FileContent</code></a>                                         |
+| `GET` | `/file/status`           | 추적 중인 파일 상태 가져오기 | <a href={typesUrl}><code>File[]</code></a>                                              |
+
+#### `/find/file` 쿼리 매개 변수
+
+- `query` (required) - 검색 문자열 (fuzzy 일치)
+- `type` (선택 사항) - `"file"` 또는 `"directory"`에 제한 결과
+- `directory` (선택 사항) - 검색에 대한 프로젝트 루트를 무시
+- (선택) `limit` - 최대 결과 (1-200)
+- `dirs` (옵션) - 레거시 플래그 (`"false"`는 파일만 반환)
+
+---
+
+## 도구 (실험적)
+
+| 방법  | 경로                                        | 설명                    | 응답                                          |
+| ----- | ------------------------------------------- | ----------------------- | --------------------------------------------- |
+| `GET` | `/experimental/tool/ids`                    | 모든 도구 ID            | <a href={typesUrl}><code>도구</code></a>      |
+| `GET` | `/experimental/tool?provider=<p>&model=<m>` | 모델용 JSON 스키마 목록 | <a href={typesUrl}><code>도구 목록</code></a> |
+
+---
+
+### LSP, 포매터 & MCP
+
+| 방법   | 경로         | 설명                   | 응답                                                     |
+| ------ | ------------ | ---------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | LSP 서버 상태          | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | 형식의 상태를 확인     | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | MCP 서버 상태를 얻는다 | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | MCP 서버가 동적        | 본체: `{ name, config }`, MCP 상태 객체를 반환           |
+
+---
+
+## 에이전트
+
+| 방법  | 경로     | 설명                      | 응답                                            |
+| ----- | -------- | ------------------------- | ----------------------------------------------- |
+| `GET` | `/agent` | 이용 가능한 모든 에이전트 | <a href={typesUrl}><code> 에이전트[]</code></a> |
+
+---
+
+### 로깅
+
+| 방법   | 경로   | 설명                                                  | 응답      |
+| ------ | ------ | ----------------------------------------------------- | --------- |
+| `POST` | `/log` | 로그 입력 바디: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| 방법   | 경로                    | 설명                                      | 응답           |
+| ------ | ----------------------- | ----------------------------------------- | -------------- |
+| `POST` | `/tui/append-prompt`    | 프롬프트에 텍스트를 부여                  | `boolean`      |
+| `POST` | `/tui/open-help`        | 도움말 대화 열기                          | `boolean`      |
+| `POST` | `/tui/open-sessions`    | 세션 선택 안내                            | `boolean`      |
+| `POST` | `/tui/open-themes`      | 테마 선택 안내                            | `boolean`      |
+| `POST` | `/tui/open-models`      | 모델 선택 안내                            | `boolean`      |
+| `POST` | `/tui/submit-prompt`    | 현재 프롬프트 제출                        | `boolean`      |
+| `POST` | `/tui/clear-prompt`     | 시프트 클리어                             | `boolean`      |
+| `POST` | `/tui/execute-command`  | 명령어 실행(`{ command }`)                | `boolean`      |
+| `POST` | `/tui/show-toast`       | 쇼 토스트(`{ title?, message, variant }`) | `boolean`      |
+| `GET`  | `/tui/control/next`     | 다음 컨트롤 요청 시 기다리고              | 제어 요청 개체 |
+| `POST` | `/tui/control/response` | 통제 요청(`{ body }`) 대응                | `boolean`      |
+
+---
+
+### 인증
+
+| 방법  | 경로        | 설명                                                | 응답      |
+| ----- | ----------- | --------------------------------------------------- | --------- |
+| `PUT` | `/auth/:id` | 인증 자격 증명 몸은 공급자 스키마를 일치해야 합니다 | `boolean` |
+
+---
+
+## 이벤트
+
+| 방법  | 경로     | 설명                                                                            | 응답                     |
+| ----- | -------- | ------------------------------------------------------------------------------- | ------------------------ |
+| `GET` | `/event` | 서버 전송 이벤트 스트림. 첫 번째 이벤트는 `server.connected`, 그 후 버스 이벤트 | Server-sent event stream |
+
+---
+
+### 문서
+
+| 방법  | 경로   | 설명             | 응답                     |
+| ----- | ------ | ---------------- | ------------------------ |
+| `GET` | `/doc` | OpenAPI 3.1 사양 | HTML 페이지 OpenAPI 사양 |

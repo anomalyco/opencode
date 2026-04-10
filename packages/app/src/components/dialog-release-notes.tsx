@@ -1,7 +1,8 @@
-import { createSignal, createEffect, onMount, onCleanup } from "solid-js"
+import { createSignal } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 
 export type Highlight = {
@@ -16,6 +17,7 @@ export type Highlight = {
 
 export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
   const dialog = useDialog()
+  const language = useLanguage()
   const settings = useSettings()
   const [index, setIndex] = createSignal(0)
 
@@ -40,8 +42,6 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
     handleClose()
   }
 
-  let focusTrap: HTMLDivElement | undefined
-
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault()
@@ -60,27 +60,13 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
     }
   }
 
-  onMount(() => {
-    focusTrap?.focus()
-    document.addEventListener("keydown", handleKeyDown)
-    onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
-  })
-
-  // Refocus the trap when index changes to ensure escape always works
-  createEffect(() => {
-    index() // track index
-    focusTrap?.focus()
-  })
-
   return (
     <Dialog
       size="large"
       fit
       class="w-[min(calc(100vw-40px),720px)] h-[min(calc(100vh-40px),400px)] -mt-20 min-h-0 overflow-hidden"
     >
-      {/* Hidden element to capture initial focus and handle escape */}
-      <div ref={focusTrap} tabindex="0" class="absolute opacity-0 pointer-events-none" />
-      <div class="flex flex-1 min-w-0 min-h-0">
+      <div class="flex flex-1 min-w-0 min-h-0" tabIndex={0} autofocus onKeyDown={handleKeyDown}>
         {/* Left side - Text content */}
         <div class="flex flex-col flex-1 min-w-0 p-8">
           {/* Top section - feature content (fixed position from top) */}
@@ -99,16 +85,16 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
             <div class="flex flex-col items-start gap-3">
               {isLast() ? (
                 <Button variant="primary" size="large" onClick={handleClose}>
-                  Get started
+                  {language.t("dialog.releaseNotes.action.getStarted")}
                 </Button>
               ) : (
                 <Button variant="secondary" size="large" onClick={handleNext}>
-                  Next
+                  {language.t("dialog.releaseNotes.action.next")}
                 </Button>
               )}
 
               <Button variant="ghost" size="small" onClick={handleDisable}>
-                Don't show these in the future
+                {language.t("dialog.releaseNotes.action.hideFuture")}
               </Button>
             </div>
 
@@ -144,7 +130,7 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
             {feature()!.media!.type === "image" ? (
               <img
                 src={feature()!.media!.src}
-                alt={feature()!.media!.alt ?? feature()?.title ?? "Release preview"}
+                alt={feature()!.media!.alt ?? feature()?.title ?? language.t("dialog.releaseNotes.media.alt")}
                 class="w-full h-full object-cover"
               />
             ) : (

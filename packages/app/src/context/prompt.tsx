@@ -1,10 +1,10 @@
-import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { checksum } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
+import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
+import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
-import { checksum } from "@opencode-ai/util/encode"
 
 interface PartBase {
   content: string
@@ -60,27 +60,23 @@ function isSelectionEqual(a?: FileSelection, b?: FileSelection) {
   )
 }
 
+function isPartEqual(partA: ContentPart, partB: ContentPart) {
+  switch (partA.type) {
+    case "text":
+      return partB.type === "text" && partA.content === partB.content
+    case "file":
+      return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
+    case "agent":
+      return partB.type === "agent" && partA.name === partB.name
+    case "image":
+      return partB.type === "image" && partA.id === partB.id
+  }
+}
+
 export function isPromptEqual(promptA: Prompt, promptB: Prompt): boolean {
   if (promptA.length !== promptB.length) return false
   for (let i = 0; i < promptA.length; i++) {
-    const partA = promptA[i]
-    const partB = promptB[i]
-    if (partA.type !== partB.type) return false
-    if (partA.type === "text" && partA.content !== (partB as TextPart).content) {
-      return false
-    }
-    if (partA.type === "file") {
-      const fileA = partA as FileAttachmentPart
-      const fileB = partB as FileAttachmentPart
-      if (fileA.path !== fileB.path) return false
-      if (!isSelectionEqual(fileA.selection, fileB.selection)) return false
-    }
-    if (partA.type === "agent" && partA.name !== (partB as AgentPart).name) {
-      return false
-    }
-    if (partA.type === "image" && partA.id !== (partB as ImageAttachmentPart).id) {
-      return false
-    }
+    if (!isPartEqual(promptA[i], promptB[i])) return false
   }
   return true
 }
@@ -104,10 +100,61 @@ function clonePrompt(prompt: Prompt): Prompt {
   return prompt.map(clonePart)
 }
 
+function contextItemKey(item: ContextItem) {
+  if (item.type !== "file") return item.type
+  const start = item.selection?.startLine
+  const end = item.selection?.endLine
+  const key = `${item.type}:${item.path}:${start}:${end}`
+
+  if (item.commentID) {
+    return `${key}:c=${item.commentID}`
+  }
+
+  const comment = item.comment?.trim()
+  if (!comment) return key
+  const digest = checksum(comment) ?? comment
+  return `${key}:c=${digest.slice(0, 8)}`
+}
+
+function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
+  return item.type === "file" && !!item.comment?.trim()
+}
+
+function createPromptActions(
+  setStore: SetStoreFunction<{
+    prompt: Prompt
+    cursor?: number
+    context: {
+      items: (ContextItem & { key: string })[]
+    }
+  }>,
+) {
+  return {
+    set(prompt: Prompt, cursorPosition?: number) {
+      const next = clonePrompt(prompt)
+      batch(() => {
+        setStore("prompt", next)
+        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
+      })
+    },
+    reset() {
+      batch(() => {
+        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
+        setStore("cursor", 0)
+      })
+    },
+  }
+}
+
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
+
+type Scope = {
+  dir: string
+  id?: string
+}
 
 type PromptCacheEntry = {
   value: PromptSession
@@ -134,21 +181,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     }),
   )
 
-  function keyForItem(item: ContextItem) {
-    if (item.type !== "file") return item.type
-    const start = item.selection?.startLine
-    const end = item.selection?.endLine
-    const key = `${item.type}:${item.path}:${start}:${end}`
-
-    if (item.commentID) {
-      return `${key}:c=${item.commentID}`
-    }
-
-    const comment = item.comment?.trim()
-    if (!comment) return key
-    const digest = checksum(comment) ?? comment
-    return `${key}:c=${digest.slice(0, 8)}`
-  }
+  const actions = createPromptActions(setStore)
 
   return {
     ready,
@@ -158,27 +191,36 @@ function createPromptSession(dir: string, id: string | undefined) {
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {
-        const key = keyForItem(item)
+        const key = contextItemKey(item)
         if (store.context.items.find((x) => x.key === key)) return
         setStore("context", "items", (items) => [...items, { key, ...item }])
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
+      removeComment(path: string, commentID: string) {
+        setStore("context", "items", (items) =>
+          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
+        )
+      },
+      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
+            const value = { ...item, ...next }
+            return { ...value, key: contextItemKey(value) }
+          }),
+        )
+      },
+      replaceComments(items: FileContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isCommentItem(item)),
+          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
+      },
     },
-    set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
-      batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-      })
-    },
-    reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-      })
-    },
+    set: actions.set,
+    reset: actions.reset,
   }
 }
 
@@ -208,6 +250,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       }
     }
 
+    const owner = getOwner()
     const load = (dir: string, id: string | undefined) => {
       const key = `${dir}:${id ?? WORKSPACE_KEY}`
       const existing = cache.get(key)
@@ -217,10 +260,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         return existing.value
       }
 
-      const entry = createRoot((dispose) => ({
-        value: createPromptSession(dir, id),
-        dispose,
-      }))
+      const entry = createRoot(
+        (dispose) => ({
+          value: createPromptSession(dir, id),
+          dispose,
+        }),
+        owner,
+      )
 
       cache.set(key, entry)
       prune()
@@ -228,6 +274,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const session = createMemo(() => load(params.dir!, params.id))
+    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
 
     return {
       ready: () => session().ready(),
@@ -238,9 +285,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         items: () => session().context.items(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
+        removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
+        updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
+          session().context.updateComment(path, commentID, next),
+        replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
-      set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
-      reset: () => session().reset(),
+      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
+      reset: (scope?: Scope) => pick(scope).reset(),
     }
   },
 })

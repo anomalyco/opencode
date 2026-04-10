@@ -77,6 +77,7 @@ function detectLocale(): Locale {
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
   for (const language of languages) {
     if (!language) continue
+    if (language.toLowerCase().startsWith("en")) return "en"
     if (language.toLowerCase().startsWith("zh")) {
       if (language.toLowerCase().includes("hant")) return "zht"
       return "zh"
@@ -114,6 +115,15 @@ function parseRecord(value: unknown) {
   if (!value || typeof value !== "object") return null
   if (Array.isArray(value)) return null
   return value as Record<string, unknown>
+}
+
+function parseStored(value: unknown) {
+  if (typeof value !== "string") return value
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return value
+  }
 }
 
 function pickLocale(value: unknown): Locale | null {
@@ -169,7 +179,7 @@ export function initI18n(): Promise<Locale> {
     if (!store) return state.locale
 
     const raw = await store.get("language").catch(() => null)
-    const value = typeof raw === "string" ? JSON.parse(raw) : raw
+    const value = parseStored(raw)
     const next = pickLocale(value) ?? state.locale
 
     state.locale = next

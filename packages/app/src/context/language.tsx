@@ -1,40 +1,10 @@
 import * as i18n from "@solid-primitives/i18n"
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
-import { dict as zh } from "@/i18n/zh"
-import { dict as zht } from "@/i18n/zht"
-import { dict as ko } from "@/i18n/ko"
-import { dict as de } from "@/i18n/de"
-import { dict as es } from "@/i18n/es"
-import { dict as fr } from "@/i18n/fr"
-import { dict as da } from "@/i18n/da"
-import { dict as ja } from "@/i18n/ja"
-import { dict as pl } from "@/i18n/pl"
-import { dict as ru } from "@/i18n/ru"
-import { dict as ar } from "@/i18n/ar"
-import { dict as no } from "@/i18n/no"
-import { dict as br } from "@/i18n/br"
-import { dict as th } from "@/i18n/th"
-import { dict as bs } from "@/i18n/bs"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
-import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
-import { dict as uiZht } from "@opencode-ai/ui/i18n/zht"
-import { dict as uiKo } from "@opencode-ai/ui/i18n/ko"
-import { dict as uiDe } from "@opencode-ai/ui/i18n/de"
-import { dict as uiEs } from "@opencode-ai/ui/i18n/es"
-import { dict as uiFr } from "@opencode-ai/ui/i18n/fr"
-import { dict as uiDa } from "@opencode-ai/ui/i18n/da"
-import { dict as uiJa } from "@opencode-ai/ui/i18n/ja"
-import { dict as uiPl } from "@opencode-ai/ui/i18n/pl"
-import { dict as uiRu } from "@opencode-ai/ui/i18n/ru"
-import { dict as uiAr } from "@opencode-ai/ui/i18n/ar"
-import { dict as uiNo } from "@opencode-ai/ui/i18n/no"
-import { dict as uiBr } from "@opencode-ai/ui/i18n/br"
-import { dict as uiTh } from "@opencode-ai/ui/i18n/th"
-import { dict as uiBs } from "@opencode-ai/ui/i18n/bs"
 
 export type Locale =
   | "en"
@@ -53,9 +23,15 @@ export type Locale =
   | "br"
   | "th"
   | "bs"
+  | "tr"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
+type Source = { dict: Record<string, string> }
+
+function cookie(locale: Locale) {
+  return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
+}
 
 const LOCALES: readonly Locale[] = [
   "en",
@@ -74,27 +50,111 @@ const LOCALES: readonly Locale[] = [
   "no",
   "br",
   "th",
+  "tr",
 ]
 
-type ParityKey = "command.session.previous.unseen" | "command.session.next.unseen"
-const PARITY_CHECK: Record<Exclude<Locale, "en">, Record<ParityKey, string>> = {
-  zh,
-  zht,
-  ko,
-  de,
-  es,
-  fr,
-  da,
-  ja,
-  pl,
-  ru,
-  ar,
-  no,
-  br,
-  th,
-  bs,
+const INTL: Record<Locale, string> = {
+  en: "en",
+  zh: "zh-Hans",
+  zht: "zh-Hant",
+  ko: "ko",
+  de: "de",
+  es: "es",
+  fr: "fr",
+  da: "da",
+  ja: "ja",
+  pl: "pl",
+  ru: "ru",
+  ar: "ar",
+  no: "nb-NO",
+  br: "pt-BR",
+  th: "th",
+  bs: "bs",
+  tr: "tr",
 }
-void PARITY_CHECK
+
+const LABEL_KEY: Record<Locale, keyof Dictionary> = {
+  en: "language.en",
+  zh: "language.zh",
+  zht: "language.zht",
+  ko: "language.ko",
+  de: "language.de",
+  es: "language.es",
+  fr: "language.fr",
+  da: "language.da",
+  ja: "language.ja",
+  pl: "language.pl",
+  ru: "language.ru",
+  ar: "language.ar",
+  no: "language.no",
+  br: "language.br",
+  th: "language.th",
+  bs: "language.bs",
+  tr: "language.tr",
+}
+
+const base = i18n.flatten({ ...en, ...uiEn })
+const dicts = new Map<Locale, Dictionary>([["en", base]])
+
+const merge = (app: Promise<Source>, ui: Promise<Source>) =>
+  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
+
+const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
+  zh: () => merge(import("@/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
+  zht: () => merge(import("@/i18n/zht"), import("@opencode-ai/ui/i18n/zht")),
+  ko: () => merge(import("@/i18n/ko"), import("@opencode-ai/ui/i18n/ko")),
+  de: () => merge(import("@/i18n/de"), import("@opencode-ai/ui/i18n/de")),
+  es: () => merge(import("@/i18n/es"), import("@opencode-ai/ui/i18n/es")),
+  fr: () => merge(import("@/i18n/fr"), import("@opencode-ai/ui/i18n/fr")),
+  da: () => merge(import("@/i18n/da"), import("@opencode-ai/ui/i18n/da")),
+  ja: () => merge(import("@/i18n/ja"), import("@opencode-ai/ui/i18n/ja")),
+  pl: () => merge(import("@/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
+  ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
+  ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
+  no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
+  br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
+  th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
+  bs: () => merge(import("@/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
+  tr: () => merge(import("@/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),
+}
+
+function loadDict(locale: Locale) {
+  const hit = dicts.get(locale)
+  if (hit) return Promise.resolve(hit)
+  if (locale === "en") return Promise.resolve(base)
+  const load = loaders[locale]
+  return load().then((next: Dictionary) => {
+    dicts.set(locale, next)
+    return next
+  })
+}
+
+export function loadLocaleDict(locale: Locale) {
+  return loadDict(locale).then(() => undefined)
+}
+
+const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
+  { locale: "en", match: (language) => language.startsWith("en") },
+  { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
+  { locale: "zh", match: (language) => language.startsWith("zh") },
+  { locale: "ko", match: (language) => language.startsWith("ko") },
+  { locale: "de", match: (language) => language.startsWith("de") },
+  { locale: "es", match: (language) => language.startsWith("es") },
+  { locale: "fr", match: (language) => language.startsWith("fr") },
+  { locale: "da", match: (language) => language.startsWith("da") },
+  { locale: "ja", match: (language) => language.startsWith("ja") },
+  { locale: "pl", match: (language) => language.startsWith("pl") },
+  { locale: "ru", match: (language) => language.startsWith("ru") },
+  { locale: "ar", match: (language) => language.startsWith("ar") },
+  {
+    locale: "no",
+    match: (language) => language.startsWith("no") || language.startsWith("nb") || language.startsWith("nn"),
+  },
+  { locale: "br", match: (language) => language.startsWith("pt") },
+  { locale: "th", match: (language) => language.startsWith("th") },
+  { locale: "bs", match: (language) => language.startsWith("bs") },
+  { locale: "tr", match: (language) => language.startsWith("tr") },
+]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -102,124 +162,74 @@ function detectLocale(): Locale {
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
   for (const language of languages) {
     if (!language) continue
-    if (language.toLowerCase().startsWith("zh")) {
-      if (language.toLowerCase().includes("hant")) return "zht"
-      return "zh"
-    }
-    if (language.toLowerCase().startsWith("ko")) return "ko"
-    if (language.toLowerCase().startsWith("de")) return "de"
-    if (language.toLowerCase().startsWith("es")) return "es"
-    if (language.toLowerCase().startsWith("fr")) return "fr"
-    if (language.toLowerCase().startsWith("da")) return "da"
-    if (language.toLowerCase().startsWith("ja")) return "ja"
-    if (language.toLowerCase().startsWith("pl")) return "pl"
-    if (language.toLowerCase().startsWith("ru")) return "ru"
-    if (language.toLowerCase().startsWith("ar")) return "ar"
-    if (
-      language.toLowerCase().startsWith("no") ||
-      language.toLowerCase().startsWith("nb") ||
-      language.toLowerCase().startsWith("nn")
-    )
-      return "no"
-    if (language.toLowerCase().startsWith("pt")) return "br"
-    if (language.toLowerCase().startsWith("th")) return "th"
-    if (language.toLowerCase().startsWith("bs")) return "bs"
+    const normalized = language.toLowerCase()
+    const match = localeMatchers.find((entry) => entry.match(normalized))
+    if (match) return match.locale
   }
 
   return "en"
 }
 
+export function normalizeLocale(value: string): Locale {
+  return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
+}
+
+function readStoredLocale() {
+  if (typeof localStorage !== "object") return
+  try {
+    const raw = localStorage.getItem("opencode.global.dat:language")
+    if (!raw) return
+    const next = JSON.parse(raw) as { locale?: string }
+    if (typeof next?.locale !== "string") return
+    return normalizeLocale(next.locale)
+  } catch {
+    return
+  }
+}
+
+const warm = readStoredLocale() ?? detectLocale()
+if (warm !== "en") void loadDict(warm)
+
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
   name: "Language",
-  init: () => {
+  init: (props: { locale?: Locale }) => {
+    const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(
       Persist.global("language", ["language.v1"]),
       createStore({
-        locale: detectLocale() as Locale,
+        locale: initial,
       }),
     )
 
-    const locale = createMemo<Locale>(() => {
-      if (store.locale === "zh") return "zh"
-      if (store.locale === "zht") return "zht"
-      if (store.locale === "ko") return "ko"
-      if (store.locale === "de") return "de"
-      if (store.locale === "es") return "es"
-      if (store.locale === "fr") return "fr"
-      if (store.locale === "da") return "da"
-      if (store.locale === "ja") return "ja"
-      if (store.locale === "pl") return "pl"
-      if (store.locale === "ru") return "ru"
-      if (store.locale === "ar") return "ar"
-      if (store.locale === "no") return "no"
-      if (store.locale === "br") return "br"
-      if (store.locale === "th") return "th"
-      if (store.locale === "bs") return "bs"
-      return "en"
+    const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
+    const intl = createMemo(() => INTL[locale()])
+
+    const [dict] = createResource(locale, loadDict, {
+      initialValue: dicts.get(initial) ?? base,
     })
 
-    createEffect(() => {
-      const current = locale()
-      if (store.locale === current) return
-      setStore("locale", current)
-    })
+    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as (
+      key: keyof Dictionary,
+      params?: Record<string, string | number | boolean>,
+    ) => string
 
-    const base = i18n.flatten({ ...en, ...uiEn })
-    const dict = createMemo<Dictionary>(() => {
-      if (locale() === "en") return base
-      if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
-      if (locale() === "zht") return { ...base, ...i18n.flatten({ ...zht, ...uiZht }) }
-      if (locale() === "de") return { ...base, ...i18n.flatten({ ...de, ...uiDe }) }
-      if (locale() === "es") return { ...base, ...i18n.flatten({ ...es, ...uiEs }) }
-      if (locale() === "fr") return { ...base, ...i18n.flatten({ ...fr, ...uiFr }) }
-      if (locale() === "da") return { ...base, ...i18n.flatten({ ...da, ...uiDa }) }
-      if (locale() === "ja") return { ...base, ...i18n.flatten({ ...ja, ...uiJa }) }
-      if (locale() === "pl") return { ...base, ...i18n.flatten({ ...pl, ...uiPl }) }
-      if (locale() === "ru") return { ...base, ...i18n.flatten({ ...ru, ...uiRu }) }
-      if (locale() === "ar") return { ...base, ...i18n.flatten({ ...ar, ...uiAr }) }
-      if (locale() === "no") return { ...base, ...i18n.flatten({ ...no, ...uiNo }) }
-      if (locale() === "br") return { ...base, ...i18n.flatten({ ...br, ...uiBr }) }
-      if (locale() === "th") return { ...base, ...i18n.flatten({ ...th, ...uiTh }) }
-      if (locale() === "bs") return { ...base, ...i18n.flatten({ ...bs, ...uiBs }) }
-      return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
-    })
-
-    const t = i18n.translator(dict, i18n.resolveTemplate)
-
-    const labelKey: Record<Locale, keyof Dictionary> = {
-      en: "language.en",
-      zh: "language.zh",
-      zht: "language.zht",
-      ko: "language.ko",
-      de: "language.de",
-      es: "language.es",
-      fr: "language.fr",
-      da: "language.da",
-      ja: "language.ja",
-      pl: "language.pl",
-      ru: "language.ru",
-      ar: "language.ar",
-      no: "language.no",
-      br: "language.br",
-      th: "language.th",
-      bs: "language.bs",
-    }
-
-    const label = (value: Locale) => t(labelKey[value])
+    const label = (value: Locale) => t(LABEL_KEY[value])
 
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      document.cookie = cookie(locale())
     })
 
     return {
       ready,
       locale,
+      intl,
       locales: LOCALES,
       label,
       t,
       setLocale(next: Locale) {
-        setStore("locale", next)
+        setStore("locale", normalizeLocale(next))
       },
     }
   },

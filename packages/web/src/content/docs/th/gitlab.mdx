@@ -1,0 +1,195 @@
+---
+title: GitLab
+description: ใช้ OpenCode ในปัญหา GitLab และรวมคำขอ
+---
+
+OpenCode ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณผ่านไปป์ไลน์ GitLab CI/CD หรือกับ GitLab Duo
+
+ในทั้งสองกรณี OpenCode จะทำงานบน GitLab runners ของคุณ
+
+---
+
+## GitLab CI
+
+OpenCode ทำงานในไปป์ไลน์ GitLab ปกติ คุณสามารถสร้างมันลงในไปป์ไลน์เป็น [องค์ประกอบ CI](https://docs.gitlab.com/ee/ci/components/)
+
+ที่นี่เรากำลังใช้คอมโพเนนต์ CI/CD ที่สร้างโดยชุมชนสำหรับ OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)
+
+---
+
+### คุณสมบัติ
+
+- **ใช้การกำหนดค่าแบบกำหนดเองต่องาน**: กำหนดค่า OpenCode ด้วยไดเร็กทอรีการกำหนดค่าแบบกำหนดเอง เช่น `./config/#custom-directory` เพื่อเปิดหรือปิดฟังก์ชันการทำงานต่อการเรียกใช้ OpenCode
+- **การตั้งค่าขั้นต่ำ**: องค์ประกอบ CI จะตั้งค่า OpenCode ในเบื้องหลัง คุณเพียงแค่ต้องสร้างการกำหนดค่า OpenCode และข้อความแจ้งเริ่มต้นเท่านั้น
+- **ยืดหยุ่น**: ส่วนประกอบ CI รองรับอินพุตหลายอินพุตเพื่อปรับแต่งลักษณะการทำงาน
+
+---
+
+### ตั้งค่า
+
+1. จัดเก็บการรับรองความถูกต้อง OpenCode ของคุณ JSON เป็นประเภทไฟล์ CI ตัวแปรสภาพแวดล้อมภายใต้ **การตั้งค่า** > **CI/CD** > **ตัวแปร** ตรวจสอบให้แน่ใจว่าได้ทำเครื่องหมายว่าเป็น "ปิดบังและซ่อนไว้"
+2. เพิ่มสิ่งต่อไปนี้ในไฟล์ `.gitlab-ci.yml` ของคุณ
+
+   ```yaml title=".gitlab-ci.yml"
+   include:
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+       inputs:
+         config_dir: ${CI_PROJECT_DIR}/opencode-config
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         command: optional-custom-command
+         message: "Your prompt here"
+   ```
+
+หากต้องการข้อมูลเพิ่มเติมและกรณีการใช้งาน [ตรวจสอบเอกสาร](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) สำหรับส่วนประกอบนี้
+
+---
+
+## GitLab Duo
+
+OpenCode ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณ
+พูดถึง `@opencode` ในความคิดเห็น แล้ว OpenCode จะดำเนินการงานภายในไปป์ไลน์ GitLab CI ของคุณ
+
+---
+
+### คุณสมบัติ
+
+- **Issue Triage**: ขอให้ OpenCode ตรวจสอบปัญหาและอธิบายให้คุณทราบ
+- **แก้ไขและนำไปใช้**: ขอให้ OpenCode แก้ไขปัญหาหรือใช้ฟีเจอร์
+  มันจะสร้างสาขาใหม่และขอรวมการเปลี่ยนแปลง
+- **ปลอดภัย**: OpenCode ทำงานบนนักวิ่ง GitLab ของคุณ
+
+---
+
+### ตั้งค่า
+
+OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของคุณ นี่คือสิ่งที่คุณจะต้องตั้งค่า:
+
+:::tip
+ตรวจสอบ [**เอกสาร GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) เพื่อดูคำแนะนำล่าสุด
+:::
+
+1.  กำหนดค่าสภาพแวดล้อม GitLab ของคุณ
+2.  ตั้งค่า CI/CD
+3.  รับผู้ให้บริการโมเดล AI API คีย์
+4.  สร้างบัญชีบริการ
+5.  กำหนดค่าตัวแปร CI/CD
+6.  สร้างไฟล์กำหนดค่าโฟลว์ ต่อไปนี้เป็นตัวอย่าง:
+
+        <details>
+
+    <summary>Flow configuration</summary>
+
+    ```yaml
+    image: node:22-slim
+    commands:
+      - echo "Installing opencode"
+      - npm install --global opencode-ai
+      - echo "Installing glab"
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
+      - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
+      - apt-get install --yes glab
+      - echo "Configuring glab"
+      - echo $GITLAB_HOST
+      - echo "Creating OpenCode auth configuration"
+      - mkdir --parents ~/.local/share/opencode
+      - |
+        cat > ~/.local/share/opencode/auth.json << EOF
+        {
+          "anthropic": {
+            "type": "api",
+            "key": "$ANTHROPIC_API_KEY"
+          }
+        }
+        EOF
+      - echo "Configuring git"
+      - git config --global user.email "opencode@gitlab.com"
+      - git config --global user.name "OpenCode"
+      - echo "Testing glab"
+      - glab issue list
+      - echo "Running OpenCode"
+      - |
+        opencode run "
+        You are an AI assistant helping with GitLab operations.
+
+        Context: $AI_FLOW_CONTEXT
+        Task: $AI_FLOW_INPUT
+        Event: $AI_FLOW_EVENT
+
+        Please execute the requested task using the available GitLab tools.
+        Be thorough in your analysis and provide clear explanations.
+
+        <important>
+        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
+
+        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
+        You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
+        </important>
+        "
+      - git checkout --branch $CI_WORKLOAD_REF origin/$CI_WORKLOAD_REF
+      - echo "Checking for git changes and pushing if any exist"
+      - |
+        if ! git diff --quiet || ! git diff --cached --quiet || [ --not --zero "$(git ls-files --others --exclude-standard)" ]; then
+          echo "Git changes detected, adding and pushing..."
+          git add .
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit"
+          else
+            echo "Committing changes to branch: $CI_WORKLOAD_REF"
+            git commit --message "Codex changes"
+            echo "Pushing changes up to $CI_WORKLOAD_REF"
+            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            echo "Changes successfully pushed"
+          fi
+        else
+          echo "No git changes detected, skipping push"
+        fi
+    variables:
+      - ANTHROPIC_API_KEY
+      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_HOST
+    ```
+
+        </details>
+
+คุณสามารถดูคำแนะนำโดยละเอียดได้ที่ [GitLab CLI agent docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)
+
+---
+
+### ตัวอย่าง
+
+นี่คือตัวอย่างบางส่วนของวิธีที่คุณสามารถใช้ OpenCode ใน GitLab
+
+:::tip
+คุณสามารถกำหนดค่าให้ใช้วลีทริกเกอร์ที่แตกต่างจาก `@opencode`
+:::
+
+- **อธิบายปัญหา**
+
+  เพิ่มความคิดเห็นนี้ในปัญหา GitLab
+
+  ```
+  @opencode explain this issue
+  ```
+
+  OpenCode จะอ่านปัญหาและตอบกลับพร้อมคำอธิบายที่ชัดเจน
+
+- **แก้ไขปัญหา**
+
+  ในปัญหา GitLab ให้พูดว่า:
+
+  ```
+  @opencode fix this
+  ```
+
+  OpenCode จะสร้างสาขาใหม่ ดำเนินการเปลี่ยนแปลง และเปิดคำขอรวมที่มีการเปลี่ยนแปลง
+
+- **ตรวจสอบคำขอรวม**
+
+  แสดงความคิดเห็นต่อไปนี้ในคำขอรวม GitLab
+
+  ```
+  @opencode review this merge request
+  ```
+
+  OpenCode จะตรวจสอบคำขอรวมและให้ข้อเสนอแนะ

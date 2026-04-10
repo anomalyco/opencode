@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createEffect, createMemo, JSX, onCleanup, Show, ValidComponent } from "solid-js"
+import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -10,24 +10,28 @@ import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { DialogSelectProvider } from "./dialog-select-provider"
-import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+
+const isFree = (provider: string, cost: { input: number } | undefined) =>
+  provider === "opencode" && (!cost || cost.input === 0)
+
+type ModelState = ReturnType<typeof useLocal>["model"]
 
 const ModelList: Component<{
   provider?: string
   class?: string
   onSelect: () => void
   action?: JSX.Element
+  model?: ModelState
 }> = (props) => {
-  const local = useLocal()
+  const model = props.model ?? useLocal().model
   const language = useLanguage()
 
   const models = createMemo(() =>
-    local.model
+    model
       .list()
-      .filter((m) => local.model.visible({ modelID: m.id, providerID: m.provider.id }))
+      .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 
@@ -38,7 +42,7 @@ const ModelList: Component<{
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
-      current={local.model.current()}
+      current={model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
       groupBy={(x) => x.provider.name}
@@ -54,19 +58,13 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
-          value={
-            <ModelTooltip
-              model={item}
-              latest={item.latest}
-              free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
-            />
-          }
+          value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
         >
           {node}
         </Tooltip>
       )}
       onSelect={(x) => {
-        local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+        model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
         })
         props.onSelect()
@@ -75,7 +73,7 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
-          <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+          <Show when={isFree(i.provider.id, i.cost)}>
             <Tag>{language.t("model.tag.free")}</Tag>
           </Show>
           <Show when={i.latest}>
@@ -88,84 +86,44 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
+type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 
 export function ModelSelectorPopover(props: {
   provider?: string
+  model?: ModelState
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
+  onClose?: (cause: "escape" | "select") => void
 }) {
   const [store, setStore] = createStore<{
     open: boolean
-    dismiss: "escape" | "outside" | null
-    trigger?: HTMLElement
-    content?: HTMLElement
+    dismiss: Dismiss | null
   }>({
     open: false,
     dismiss: null,
-    trigger: undefined,
-    content: undefined,
   })
   const dialog = useDialog()
 
-  const handleManage = () => {
+  const close = (dismiss: Dismiss) => {
+    setStore("dismiss", dismiss)
     setStore("open", false)
-    dialog.show(() => <DialogManageModels />)
+  }
+
+  const handleManage = () => {
+    close("manage")
+    void import("./dialog-manage-models").then((x) => {
+      dialog.show(() => <x.DialogManageModels />)
+    })
   }
 
   const handleConnectProvider = () => {
-    setStore("open", false)
-    dialog.show(() => <DialogSelectProvider />)
+    close("provider")
+    void import("./dialog-select-provider").then((x) => {
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
   }
   const language = useLanguage()
-
-  createEffect(() => {
-    if (!store.open) return
-
-    const inside = (node: Node | null | undefined) => {
-      if (!node) return false
-      const el = store.content
-      if (el && el.contains(node)) return true
-      const anchor = store.trigger
-      if (anchor && anchor.contains(node)) return true
-      return false
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      setStore("dismiss", "escape")
-      setStore("open", false)
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (inside(target)) return
-      setStore("dismiss", "outside")
-      setStore("open", false)
-    }
-
-    const onFocusIn = (event: FocusEvent) => {
-      if (!store.content) return
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (inside(target)) return
-      setStore("dismiss", "outside")
-      setStore("open", false)
-    }
-
-    window.addEventListener("keydown", onKeyDown, true)
-    window.addEventListener("pointerdown", onPointerDown, true)
-    window.addEventListener("focusin", onFocusIn, true)
-
-    onCleanup(() => {
-      window.removeEventListener("keydown", onKeyDown, true)
-      window.removeEventListener("pointerdown", onPointerDown, true)
-      window.removeEventListener("focusin", onFocusIn, true)
-    })
-  })
 
   return (
     <Kobalte
@@ -176,38 +134,36 @@ export function ModelSelectorPopover(props: {
       }}
       modal={false}
       placement="top-start"
-      gutter={8}
+      gutter={4}
     >
-      <Kobalte.Trigger ref={(el) => setStore("trigger", el)} as={props.triggerAs ?? "div"} {...props.triggerProps}>
+      <Kobalte.Trigger as={props.triggerAs ?? "div"} {...props.triggerProps}>
         {props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
-          ref={(el) => setStore("content", el)}
           class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
-            setStore("dismiss", "escape")
-            setStore("open", false)
+            close("escape")
             event.preventDefault()
             event.stopPropagation()
           }}
-          onPointerDownOutside={() => {
-            setStore("dismiss", "outside")
-            setStore("open", false)
-          }}
-          onFocusOutside={() => {
-            setStore("dismiss", "outside")
-            setStore("open", false)
-          }}
+          onPointerDownOutside={() => close("outside")}
+          onFocusOutside={() => close("outside")}
           onCloseAutoFocus={(event) => {
-            if (store.dismiss === "outside") event.preventDefault()
+            const dismiss = store.dismiss
+            if (dismiss === "outside") event.preventDefault()
+            if (dismiss === "escape" || dismiss === "select") {
+              event.preventDefault()
+              props.onClose?.(dismiss)
+            }
             setStore("dismiss", null)
           }}
         >
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
           <ModelList
             provider={props.provider}
-            onSelect={() => setStore("open", false)}
+            model={props.model}
+            onSelect={() => close("select")}
             class="p-1"
             action={
               <div class="flex items-center gap-1">
@@ -240,30 +196,33 @@ export function ModelSelectorPopover(props: {
   )
 }
 
-export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
+export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+
+  const provider = () => {
+    void import("./dialog-select-provider").then((x) => {
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
+  }
+
+  const manage = () => {
+    void import("./dialog-manage-models").then((x) => {
+      dialog.show(() => <x.DialogManageModels />)
+    })
+  }
 
   return (
     <Dialog
       title={language.t("dialog.model.select.title")}
       action={
-        <Button
-          class="h-7 -my-1 text-14-medium"
-          icon="plus-small"
-          tabIndex={-1}
-          onClick={() => dialog.show(() => <DialogSelectProvider />)}
-        >
+        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
           {language.t("command.provider.connect")}
         </Button>
       }
     >
-      <ModelList provider={props.provider} onSelect={() => dialog.close()} />
-      <Button
-        variant="ghost"
-        class="ml-3 mt-5 mb-6 text-text-base self-start"
-        onClick={() => dialog.show(() => <DialogManageModels />)}
-      >
+      <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
+      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
         {language.t("dialog.model.manage")}
       </Button>
     </Dialog>
