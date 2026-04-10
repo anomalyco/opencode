@@ -61,6 +61,13 @@ export namespace Npm {
     return semver.lt(cachedVersion, latestVersion)
   }
 
+  // Bun's node:http polyfill reads agent.proxy and passes it to native fetch.
+  // @npmcli/agent returns { url: URL_object } which triggers
+  // "fetch() proxy.url must be a non-empty string" because Bun expects a string.
+  // Passing agent:false bypasses @npmcli/agent entirely, and Bun's native fetch
+  // falls back to reading HTTP_PROXY/HTTPS_PROXY from process.env directly.
+  const arboristOpts = typeof Bun !== "undefined" ? { agent: false } : {}
+
   export async function add(pkg: string) {
     const dir = directory(pkg)
     await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
@@ -74,6 +81,7 @@ export namespace Npm {
       progress: false,
       savePrefix: "",
       ignoreScripts: true,
+      ...arboristOpts,
     })
     const tree = await arborist.loadVirtual().catch(() => {})
     if (tree) {
@@ -114,6 +122,7 @@ export namespace Npm {
         progress: false,
         savePrefix: "",
         ignoreScripts: true,
+        ...arboristOpts,
       })
       await arb.reify().catch(() => {})
     }
