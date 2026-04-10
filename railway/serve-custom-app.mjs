@@ -10,6 +10,7 @@ const distDir = resolve(process.env.OPENCODE_APP_DIST_DIR || join(process.cwd(),
 const indexFile = join(distDir, "index.html");
 const backendUsername = process.env.OPENCODE_SERVER_USERNAME || "opencode";
 const backendPassword = process.env.OPENCODE_SERVER_PASSWORD || "";
+const wsDebug = process.env.VERITLY_WS_DEBUG === "1";
 
 const contentTypes = {
 	".html": "text/html; charset=utf-8",
@@ -51,36 +52,38 @@ function backendBasicAuthHeader() {
 	return `Basic ${Buffer.from(`${backendUsername}:${backendPassword}`).toString("base64")}`;
 }
 
+function dbg(message, meta) {
+	if (!wsDebug) return;
+	console.log(`[serve-custom-app] ${message}`, meta ?? {});
+}
+
 /** Public URL still has `/api/`; after strip, forwarded path is `/univer-sdk-relay/...`. */
 function isUniverSdkRelayPath(url) {
 	const pathOnly = (url || "").split("?")[0];
 	return pathOnly.startsWith("/api/univer-sdk-relay") || pathOnly.startsWith("/univer-sdk-relay");
 }
 
-/** Browser WebSockets cannot send Authorization; inject OpenCode Basic from env for this path only. */
+/** Browser WebSockets cannot send Authorization; inject OpenCode Basic for relay path only. */
 proxy.on("proxyReq", (proxyReq, req) => {
-	const pathOnly = (req.url || "").split("?")[0];
-	if (pathOnly.startsWith("/univer-sdk-relay")) {
-		const h = backendBasicAuthHeader();
-		if (h) proxyReq.setHeader("authorization", h);
-		return;
-	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
+	const p = (req?.url || "").split("?")[0];
+	if (p.startsWith("/univer-sdk-relay")) {
+		dbg("proxyReq relay http", { path: p, hasAuthorization: Boolean(proxyReq.getHeader("authorization")) });
+	}
 });
 
 proxy.on("proxyReqWs", (proxyReq, req) => {
-	const pathOnly = (req.url || "").split("?")[0];
-	if (pathOnly.startsWith("/univer-sdk-relay")) {
-		const h = backendBasicAuthHeader();
-		if (h) proxyReq.setHeader("authorization", h);
-		return;
-	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
+	const p = (req?.url || "").split("?")[0];
+	if (p.startsWith("/univer-sdk-relay")) {
+		dbg("proxyReq relay ws", { path: p, hasAuthorization: Boolean(proxyReq.getHeader("authorization")) });
+	}
 });
 
 proxy.on("error", async (_err, req, res) => {
+	dbg("proxy error", { url: req?.url || "", method: req?.method || "unknown" });
 	if (!res || ("headersSent" in res && res.headersSent)) return;
 	res.writeHead(502, { "content-type": "application/json; charset=utf-8" });
 	res.end(JSON.stringify({ message: `Proxy failed for ${req.url ?? "unknown request"}` }));
@@ -130,8 +133,16 @@ const server = createServer(async (req, res) => {
 	}
 
 	if (url.startsWith("/api/")) {
+		const relay = isUniverSdkRelayPath(url);
+		const authHeader = relay ? backendBasicAuthHeader() : null;
+		dbg("forward /api request", {
+			url,
+			relay,
+			injectedBasicAuth: Boolean(authHeader),
+			hadClientAuth: isAuthorized(req),
+		});
 		req.url = url.slice(4) || "/";
-		proxy.web(req, res);
+		proxy.web(req, res, authHeader ? { headers: { authorization: authHeader } } : undefined);
 		return;
 	}
 
@@ -160,8 +171,16 @@ server.on("upgrade", (req, socket, head) => {
 		socket.destroy();
 		return;
 	}
+	const relay = isUniverSdkRelayPath(req.url || "");
+	const authHeader = relay ? backendBasicAuthHeader() : null;
+	dbg("ws upgrade accepted", {
+		url: req.url || "",
+		relay,
+		injectedBasicAuth: Boolean(authHeader),
+		hadClientAuth: isAuthorized(req),
+	});
 	req.url = req.url.slice(4) || "/";
-	proxy.ws(req, socket, head);
+	proxy.ws(req, socket, head, authHeader ? { headers: { authorization: authHeader } } : undefined);
 });
 
 server.listen(port, "0.0.0.0", () => {
