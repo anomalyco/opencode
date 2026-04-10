@@ -32,35 +32,37 @@ describe("tui markdown link wrap", () => {
       stdin: new Readable({ read() {} }) as NodeJS.ReadStream,
     })
 
-    renderer.root.add(
-      new TextRenderable(renderer, {
-        width: "100%",
-        content: new StyledText(chunks),
-      }),
-    )
+    try {
+      renderer.root.add(
+        new TextRenderable(renderer, {
+          width: "100%",
+          content: new StyledText(chunks),
+        }),
+      )
 
-    await renderOnce()
+      await renderOnce()
 
-    const lines = captureCharFrame()
-      .split("\n")
-      .map((line) => line.trimEnd())
-      .filter(Boolean)
+      const lines = captureCharFrame()
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter(Boolean)
 
-    expect(lines.length).toBeGreaterThan(1)
-    expect(lines.join("")).toBe(url)
+      expect(lines.length).toBeGreaterThan(1)
+      expect(lines.join("")).toBe(url)
 
-    const attrs = renderer.currentRenderBuffer.buffers.attributes
-    const all = lines.map((line, row) => ids(attrs, renderer.currentRenderBuffer.width, row, line.length))
+      const attrs = renderer.currentRenderBuffer.buffers.attributes
+      const all = lines.map((line, row) => ids(attrs, renderer.currentRenderBuffer.width, row, line.length))
 
-    expect(all[0]!.size).toBe(1)
-    expect(all[1]!.size).toBe(1)
-    expect([...all[0]!][0]).toBeGreaterThan(0)
+      expect(all[0]!.size).toBe(1)
+      expect(all[1]!.size).toBe(1)
+      expect([...all[0]!][0]).toBeGreaterThan(0)
 
-    for (const row of all) {
-      expect(row.size).toBe(1)
-      expect(row).toEqual(all[0])
+      for (const row of all) {
+        expect(row.size).toBe(1)
+        expect(row).toEqual(all[0])
+      }
+    } finally {
+      renderer.destroy()
     }
-
-    renderer.destroy()
   })
 })

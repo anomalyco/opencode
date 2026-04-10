@@ -1428,6 +1428,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
       >
         <code
           filetype="markdown"
+          onChunks={detectLinks}
           drawUnstyledText={false}
           streaming={true}
           syntaxStyle={subtleSyntax()}
