@@ -823,7 +823,7 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-      if (!input.model.api.id.includes("gpt-5-pro")) {
+      if (!input.model.api.id.includes("gpt-5-pro") && input.model.providerID !== "azure") {
         result["reasoningEffort"] = "medium"
         result["reasoningSummary"] = "auto"
       }

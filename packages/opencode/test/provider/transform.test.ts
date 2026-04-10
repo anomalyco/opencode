@@ -173,14 +173,14 @@ describe("ProviderTransform.options - google thinkingConfig gating", () => {
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   const sessionID = "test-session-123"
 
-  const createGpt5Model = (apiId: string) =>
+  const createGpt5Model = (apiId: string, providerID = "openai", npm = "@ai-sdk/openai") =>
     ({
-      id: `openai/${apiId}`,
-      providerID: "openai",
+      id: `${providerID}/${apiId}`,
+      providerID,
       api: {
         id: apiId,
         url: "https://api.openai.com",
-        npm: "@ai-sdk/openai",
+        npm,
       },
       name: apiId,
       capabilities: {
@@ -202,7 +202,15 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   test("gpt-5.2 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.2")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningSummary).toBe("auto")
     expect(result.textVerbosity).toBe("low")
+  })
+
+  test("azure gpt-5.2 should NOT have reasoningSummary or textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5.2", "azure", "@ai-sdk/azure")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
   })
 
   test("gpt-5.1 should have textVerbosity set to low", () => {
