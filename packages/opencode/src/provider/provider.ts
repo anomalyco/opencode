@@ -926,6 +926,28 @@ export namespace Provider {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Provider") {}
 
+  function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
+    const result: Model["cost"] = {
+      input: c?.input ?? 0,
+      output: c?.output ?? 0,
+      cache: {
+        read: c?.cache_read ?? 0,
+        write: c?.cache_write ?? 0,
+      },
+    }
+    if (c?.context_over_200k) {
+      result.experimentalOver200K = {
+        cache: {
+          read: c.context_over_200k.cache_read ?? 0,
+          write: c.context_over_200k.cache_write ?? 0,
+        },
+        input: c.context_over_200k.input,
+        output: c.context_over_200k.output,
+      }
+    }
+    return result
+  }
+
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
       id: ModelID.make(model.id),
@@ -940,24 +962,7 @@ export namespace Provider {
       status: model.status ?? "active",
       headers: {},
       options: {},
-      cost: {
-        input: model.cost?.input ?? 0,
-        output: model.cost?.output ?? 0,
-        cache: {
-          read: model.cost?.cache_read ?? 0,
-          write: model.cost?.cache_write ?? 0,
-        },
-        experimentalOver200K: model.cost?.context_over_200k
-          ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
-          : undefined,
-      },
+      cost: cost(model.cost),
       limit: {
         context: model.limit.context,
         input: model.limit.input,
@@ -994,13 +999,31 @@ export namespace Provider {
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const models: Record<string, Model> = {}
+    for (const [key, model] of Object.entries(provider.models)) {
+      models[key] = fromModelsDevModel(provider, model)
+      for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
+        const id = `${model.id}-${mode}`
+        const m = fromModelsDevModel(provider, model)
+        m.id = ModelID.make(id)
+        m.name = `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`
+        if (opts.cost) m.cost = mergeDeep(m.cost, cost(opts.cost))
+        // convert body params to camelCase for ai sdk compatibility
+        if (opts.provider?.body)
+          m.options = Object.fromEntries(
+            Object.entries(opts.provider.body).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]),
+          )
+        if (opts.provider?.headers) m.headers = opts.provider.headers
+        models[id] = m
+      }
+    }
     return {
       id: ProviderID.make(provider.id),
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
       options: {},
-      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+      models,
     }
   }
 

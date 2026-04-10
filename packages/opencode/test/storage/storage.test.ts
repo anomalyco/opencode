@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { AppFileSystem } from "../../src/filesystem"
+import { Git } from "../../src/git"
 import { Global } from "../../src/global"
 import { Storage } from "../../src/storage/storage"
 import { tmpdir } from "../fixture/fixture"
@@ -47,7 +48,7 @@ async function withStorage<T>(
   root: string,
   fn: (run: <A, E>(body: Effect.Effect<A, E, Storage.Service>) => Promise<A>) => Promise<T>,
 ) {
-  const rt = ManagedRuntime.make(Storage.layer.pipe(Layer.provide(layer(root))))
+  const rt = ManagedRuntime.make(Storage.layer.pipe(Layer.provide(layer(root)), Layer.provide(Git.defaultLayer)))
   try {
     return await fn((body) => rt.runPromise(body))
   } finally {

@@ -171,7 +171,7 @@ export namespace Worktree {
   export const layer: Layer.Layer<
     Service,
     never,
-    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Project.Service
+    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Git.Service | Project.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -179,6 +179,7 @@ export namespace Worktree {
       const fs = yield* AppFileSystem.Service
       const pathSvc = yield* Path.Path
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const gitSvc = yield* Git.Service
       const project = yield* Project.Service
 
       const git = Effect.fnUntraced(
@@ -516,7 +517,7 @@ export namespace Worktree {
 
         const worktreePath = entry.path
 
-        const base = yield* Effect.promise(() => Git.defaultBranch(Instance.worktree))
+        const base = yield* gitSvc.defaultBranch(Instance.worktree)
         if (!base) {
           throw new ResetFailedError({ message: "Default branch not found" })
         }
@@ -583,6 +584,7 @@ export namespace Worktree {
   )
 
   const defaultLayer = layer.pipe(
+    Layer.provide(Git.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Project.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
