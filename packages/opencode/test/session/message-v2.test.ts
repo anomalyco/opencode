@@ -981,6 +981,37 @@ describe("session.message-v2.fromError", () => {
     expect(MessageV2.APIError.isInstance(result)).toBe(true)
   })
 
+  test("classifies OpenAI responses missing_scope as ProviderAuthError", () => {
+    const result = MessageV2.fromError(
+      new APICallError({
+        message:
+          "You have insufficient permissions for this operation. Missing scopes: api.responses.write. Check that you have the correct role in your organization and project.",
+        url: "https://api.openai.com/v1/responses",
+        requestBodyValues: {},
+        statusCode: 401,
+        responseHeaders: { "content-type": "application/json" },
+        responseBody: JSON.stringify({
+          error: {
+            code: "missing_scope",
+            message:
+              "You have insufficient permissions for this operation. Missing scopes: api.responses.write. Check that you have the correct role in your organization and project.",
+          },
+        }),
+        isRetryable: false,
+      }),
+      { providerID: ProviderID.make("openai") },
+    )
+
+    expect(result).toStrictEqual({
+      name: "ProviderAuthError",
+      data: {
+        providerID: "openai",
+        message:
+          "This OpenAI credential cannot create Responses API runs. Enable 'Responses API → Write' for the key, verify your org/project role, or use a key with broader access.",
+      },
+    })
+  })
+
   test("serializes unknown inputs", () => {
     const result = MessageV2.fromError(123, { providerID })
 

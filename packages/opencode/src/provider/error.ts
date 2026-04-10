@@ -161,6 +161,10 @@ export namespace ProviderError {
         responseBody?: string
       }
     | {
+        type: "auth_error"
+        message: string
+      }
+    | {
         type: "api_error"
         message: string
         statusCode?: number
@@ -178,6 +182,21 @@ export namespace ProviderError {
         type: "context_overflow",
         message: m,
         responseBody: input.error.responseBody,
+      }
+    }
+
+    if (input.error.statusCode === 401 && /missing scopes?:/i.test(m)) {
+      if (input.providerID === "openai" && m.includes("api.responses.write")) {
+        return {
+          type: "auth_error",
+          message:
+            "This OpenAI credential cannot create Responses API runs. Enable 'Responses API → Write' for the key, verify your org/project role, or use a key with broader access.",
+        }
+      }
+
+      return {
+        type: "auth_error",
+        message: m,
       }
     }
 

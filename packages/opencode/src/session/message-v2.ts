@@ -1000,6 +1000,15 @@ export namespace MessageV2 {
           providerID: ctx.providerID,
           error: e,
         })
+        if (parsed.type === "auth_error") {
+          return new MessageV2.AuthError(
+            {
+              providerID: ctx.providerID,
+              message: parsed.message,
+            },
+            { cause: e },
+          ).toObject()
+        }
         if (parsed.type === "context_overflow") {
           return new MessageV2.ContextOverflowError(
             {
