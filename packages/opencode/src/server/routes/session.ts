@@ -9,6 +9,7 @@ import { SessionPrompt } from "../../session/prompt"
 import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
+import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
@@ -206,10 +207,10 @@ export const SessionRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", Session.create.schema.optional()),
+      validator("json", Session.create.schema),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        const session = await SessionShare.create(body)
         return c.json(session)
       },
     )
@@ -426,7 +427,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.share(sessionID)
+        await SessionShare.share(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
       },
@@ -491,12 +492,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.unshare.schema,
+          sessionID: SessionID.zod,
         }),
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.unshare(sessionID)
+        await SessionShare.unshare(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
       },

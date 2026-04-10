@@ -594,19 +594,17 @@ export namespace SessionProcessor {
     }),
   )
 
-  export const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
-        Layer.provide(Session.defaultLayer),
-        Layer.provide(Snapshot.defaultLayer),
-        Layer.provide(Agent.defaultLayer),
-        Layer.provide(LLM.defaultLayer),
-        Layer.provide(Permission.defaultLayer),
-        Layer.provide(Plugin.defaultLayer),
-        Layer.provide(SessionStatus.layer.pipe(Layer.provide(Bus.layer))),
-        Layer.provide(Bus.layer),
-        Layer.provide(Config.defaultLayer),
-      ),
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Snapshot.defaultLayer),
+      Layer.provide(Agent.defaultLayer),
+      Layer.provide(LLM.defaultLayer),
+      Layer.provide(Permission.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(SessionStatus.defaultLayer),
+      Layer.provide(Bus.layer),
+      Layer.provide(Config.defaultLayer),
     ),
   )
 }

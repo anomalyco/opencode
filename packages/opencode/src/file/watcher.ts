@@ -71,6 +71,7 @@ export namespace FileWatcher {
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
+      const git = yield* Git.Service
 
       const state = yield* InstanceState.make(
         Effect.fn("FileWatcher.state")(
@@ -131,11 +132,9 @@ export namespace FileWatcher {
             }
 
             if (Instance.project.vcs === "git") {
-              const result = yield* Effect.promise(() =>
-                Git.run(["rev-parse", "--git-dir"], {
-                  cwd: Instance.project.worktree,
-                }),
-              )
+              const result = yield* git.run(["rev-parse", "--git-dir"], {
+                cwd: Instance.project.worktree,
+              })
               const vcsDir =
                 result.exitCode === 0 ? path.resolve(Instance.project.worktree, result.text().trim()) : undefined
               if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
@@ -161,7 +160,7 @@ export namespace FileWatcher {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

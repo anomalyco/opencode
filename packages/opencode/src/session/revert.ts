@@ -150,17 +150,14 @@ export namespace SessionRevert {
     }),
   )
 
-  export const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
-        Layer.provide(SessionRunState.layer),
-        Layer.provide(SessionStatus.layer),
-        Layer.provide(Session.defaultLayer),
-        Layer.provide(Snapshot.defaultLayer),
-        Layer.provide(Storage.defaultLayer),
-        Layer.provide(Bus.layer),
-        Layer.provide(SessionSummary.defaultLayer),
-      ),
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(SessionRunState.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Snapshot.defaultLayer),
+      Layer.provide(Storage.defaultLayer),
+      Layer.provide(Bus.layer),
+      Layer.provide(SessionSummary.defaultLayer),
     ),
   )
 
