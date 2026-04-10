@@ -5,14 +5,13 @@ import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type ProviderMetadata } from "ai"
-import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
-import { SessionTable } from "./session.sql"
+import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -20,20 +19,17 @@ import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
-import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
-import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
-import { Effect, Layer, Scope, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
@@ -322,8 +318,6 @@ export namespace Session {
     readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
     readonly touch: (sessionID: SessionID) => Effect.Effect<void>
     readonly get: (id: SessionID) => Effect.Effect<Info>
-    readonly share: (id: SessionID) => Effect.Effect<{ url: string }>
-    readonly unshare: (id: SessionID) => Effect.Effect<void>
     readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
     readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
     readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
@@ -345,6 +339,11 @@ export namespace Session {
       messageID: MessageID
       partID: PartID
     }) => Effect.Effect<PartID>
+    readonly getPart: (input: {
+      sessionID: SessionID
+      messageID: MessageID
+      partID: PartID
+    }) => Effect.Effect<MessageV2.Part | undefined>
     readonly updatePart: <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
     readonly updatePartDelta: (input: {
       sessionID: SessionID
@@ -352,12 +351,6 @@ export namespace Session {
       partID: PartID
       field: string
       delta: string
-    }) => Effect.Effect<void>
-    readonly initialize: (input: {
-      sessionID: SessionID
-      modelID: ModelID
-      providerID: ProviderID
-      messageID: MessageID
     }) => Effect.Effect<void>
   }
 
@@ -368,12 +361,10 @@ export namespace Session {
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))
 
-  export const layer: Layer.Layer<Service, never, Bus.Service | Config.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      const config = yield* Config.Service
-      const scope = yield* Scope.Scope
 
       const createNext = Effect.fn("Session.createNext")(function* (input: {
         id?: SessionID
@@ -403,11 +394,6 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
-        const cfg = yield* config.get()
-        if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
-          yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
-        }
-
         if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // This only exist for backwards compatibility. We should not be
           // manually publishing this event; it is a sync event now
@@ -424,25 +410,6 @@ export namespace Session {
         const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
         if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
         return fromRow(row)
-      })
-
-      const share = Effect.fn("Session.share")(function* (id: SessionID) {
-        const cfg = yield* config.get()
-        if (cfg.share === "disabled") throw new Error("Sharing is disabled in configuration")
-        const result = yield* Effect.promise(async () => {
-          const { ShareNext } = await import("@/share/share-next")
-          return ShareNext.create(id)
-        })
-        yield* Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: result.url } } }))
-        return result
-      })
-
-      const unshare = Effect.fn("Session.unshare")(function* (id: SessionID) {
-        yield* Effect.promise(async () => {
-          const { ShareNext } = await import("@/share/share-next")
-          await ShareNext.remove(id)
-        })
-        yield* Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null } } }))
       })
 
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -464,7 +431,6 @@ export namespace Session {
           for (const child of kids) {
             yield* remove(child.id)
           }
-          yield* unshare(sessionID).pipe(Effect.ignore)
           yield* Effect.sync(() => {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
@@ -491,6 +457,29 @@ export namespace Session {
           )
           return part
         }).pipe(Effect.withSpan("Session.updatePart"))
+
+      const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
+        const row = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(
+              and(
+                eq(PartTable.session_id, input.sessionID),
+                eq(PartTable.message_id, input.messageID),
+                eq(PartTable.id, input.partID),
+              ),
+            )
+            .get(),
+        )
+        if (!row) return
+        return {
+          ...row.data,
+          id: row.id,
+          sessionID: row.session_id,
+          messageID: row.message_id,
+        } as MessageV2.Part
+      })
 
       const create = Effect.fn("Session.create")(function* (input?: {
         parentID?: SessionID
@@ -588,7 +577,7 @@ export namespace Session {
 
       const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
         return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
-          Effect.orElseSucceed(() => [] as Snapshot.FileDiff[]),
+          Effect.orElseSucceed((): Snapshot.FileDiff[] => []),
         )
       })
 
@@ -637,30 +626,11 @@ export namespace Session {
         yield* bus.publish(MessageV2.Event.PartDelta, input)
       })
 
-      const initialize = Effect.fn("Session.initialize")(function* (input: {
-        sessionID: SessionID
-        modelID: ModelID
-        providerID: ProviderID
-        messageID: MessageID
-      }) {
-        yield* Effect.promise(() =>
-          SessionPrompt.command({
-            sessionID: input.sessionID,
-            messageID: input.messageID,
-            model: input.providerID + "/" + input.modelID,
-            command: Command.Default.INIT,
-            arguments: "",
-          }),
-        )
-      })
-
       return Service.of({
         create,
         fork,
         touch,
         get,
-        share,
-        unshare,
         setTitle,
         setArchived,
         setPermission,
@@ -675,13 +645,13 @@ export namespace Session {
         removeMessage,
         removePart,
         updatePart,
+        getPart,
         updatePartDelta,
-        initialize,
       })
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -701,10 +671,7 @@ export namespace Session {
     runPromise((svc) => svc.fork(input)),
   )
 
-  export const touch = fn(SessionID.zod, (id) => runPromise((svc) => svc.touch(id)))
   export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
-  export const share = fn(SessionID.zod, (id) => runPromise((svc) => svc.share(id)))
-  export const unshare = fn(SessionID.zod, (id) => runPromise((svc) => svc.unshare(id)))
 
   export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
     runPromise((svc) => svc.setTitle(input)),
@@ -714,23 +681,11 @@ export namespace Session {
     runPromise((svc) => svc.setArchived(input)),
   )
 
-  export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset }), (input) =>
-    runPromise((svc) => svc.setPermission(input)),
-  )
-
   export const setRevert = fn(
     z.object({ sessionID: SessionID.zod, revert: Info.shape.revert, summary: Info.shape.summary }),
     (input) =>
       runPromise((svc) => svc.setRevert({ sessionID: input.sessionID, revert: input.revert, summary: input.summary })),
   )
-
-  export const clearRevert = fn(SessionID.zod, (id) => runPromise((svc) => svc.clearRevert(id)))
-
-  export const setSummary = fn(z.object({ sessionID: SessionID.zod, summary: Info.shape.summary }), (input) =>
-    runPromise((svc) => svc.setSummary({ sessionID: input.sessionID, summary: input.summary })),
-  )
-
-  export const diff = fn(SessionID.zod, (id) => runPromise((svc) => svc.diff(id)))
 
   export const messages = fn(z.object({ sessionID: SessionID.zod, limit: z.number().optional() }), (input) =>
     runPromise((svc) => svc.messages(input)),
@@ -878,10 +833,5 @@ export namespace Session {
       delta: z.string(),
     }),
     (input) => runPromise((svc) => svc.updatePartDelta(input)),
-  )
-
-  export const initialize = fn(
-    z.object({ sessionID: SessionID.zod, modelID: ModelID.zod, providerID: ProviderID.zod, messageID: MessageID.zod }),
-    (input) => runPromise((svc) => svc.initialize(input)),
   )
 }
