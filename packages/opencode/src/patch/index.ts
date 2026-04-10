@@ -317,7 +317,10 @@ export namespace Patch {
       throw new Error(`Failed to read file ${filePath}: ${error}`)
     }
 
-    let originalLines = originalContent.split("\n")
+    const eol = originalContent.includes("\r\n") ? "\r\n" : "\n"
+
+    const normalized = originalContent.replaceAll("\r\n", "\n")
+    let originalLines = normalized.split("\n")
 
     // Drop trailing empty element for consistent line counting
     if (originalLines.length > 0 && originalLines[originalLines.length - 1] === "") {
@@ -332,7 +335,7 @@ export namespace Patch {
       newLines.push("")
     }
 
-    const newContent = newLines.join("\n")
+    const newContent = newLines.join(eol)
 
     // Generate unified diff
     const unifiedDiff = generateUnifiedDiff(originalContent, newContent)

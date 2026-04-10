@@ -11,7 +11,7 @@ import { Format } from "../format"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
-import { trimDiff } from "./edit"
+import { trimDiff, detectLineEnding, normalizeLineEndings, convertToLineEnding } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
@@ -31,7 +31,18 @@ export const WriteTool = Tool.define("write", {
     const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+    let contentToWrite = params.content
+    if (exists && contentOld.length > 0) {
+      const ending = detectLineEnding(contentOld)
+      contentToWrite = convertToLineEnding(normalizeLineEndings(contentToWrite), ending)
+
+      const hasBOM = contentOld.charCodeAt(0) === 0xFEFF
+      if (hasBOM && contentToWrite.charCodeAt(0) !== 0xFEFF) {
+        contentToWrite = "\uFEFF" + contentToWrite
+      }
+    }
+
+    const diff = trimDiff(createTwoFilesPatch(filepath, filepath, normalizeLineEndings(contentOld), normalizeLineEndings(contentToWrite)))
     await ctx.ask({
       permission: "edit",
       patterns: [path.relative(Instance.worktree, filepath)],
@@ -42,7 +53,7 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Filesystem.write(filepath, params.content)
+    await Filesystem.write(filepath, contentToWrite)
     await Format.file(filepath)
     Bus.publish(File.Event.Edited, { file: filepath })
     await Bus.publish(FileWatcher.Event.Updated, {
