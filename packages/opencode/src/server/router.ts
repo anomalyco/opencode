@@ -29,13 +29,20 @@ function local(method: string, path: string) {
   return false
 }
 
-async function getSessionWorkspace(url: URL) {
+function getSessionID(url: URL) {
   if (url.pathname === "/session/status") return null
 
   const id = url.pathname.match(/^\/session\/([^/]+)(?:\/|$)/)?.[1]
   if (!id) return null
 
-  const session = await Session.get(SessionID.make(id)).catch(() => undefined)
+  return SessionID.make(id)
+}
+
+async function getSessionWorkspace(url: URL) {
+  const id = getSessionID(url)
+  if (!id) return null
+
+  const session = await Session.get(id).catch(() => undefined)
   return session?.workspaceID
 }
 
@@ -71,7 +78,18 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     }
 
     const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
+
     if (!workspace) {
+      // Special-case deleting a session in case user's data in a
+      // weird state. Allow them to forcefully delete a synced session
+      // even if the remote workspace is not in their data.
+      //
+      // The lets the `DELETE /session/:id` endpoint through and we've
+      // made sure that it will run without an instance
+      if (url.pathname.match(/\/session\/[^/]+$/) && c.req.method === "DELETE") {
+        return routes().fetch(c.req.raw, c.env)
+      }
+
       return new Response(`Workspace not found: ${workspaceID}`, {
         status: 500,
         headers: {

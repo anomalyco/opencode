@@ -8,7 +8,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 export const memoMap = Layer.makeMemoMapUnsafe()
 
-function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
   try {
     const ctx = Instance.current
     const workspaceID = WorkspaceContext.workspaceID

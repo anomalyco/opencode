@@ -31,6 +31,9 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Ripgrep } from "../file/ripgrep"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
@@ -86,6 +89,8 @@ export namespace ToolRegistry {
     | Instruction.Service
     | AppFileSystem.Service
     | HttpClient.HttpClient
+    | ChildProcessSpawner
+    | Ripgrep.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -102,7 +107,11 @@ export namespace ToolRegistry {
       const plan = yield* PlanExitTool
       const webfetch = yield* WebFetchTool
       const websearch = yield* WebSearchTool
+      const bash = yield* BashTool
       const codesearch = yield* CodeSearchTool
+      const globtool = yield* GlobTool
+      const writetool = yield* WriteTool
+      const edit = yield* EditTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -161,12 +170,12 @@ export namespace ToolRegistry {
 
           const tool = yield* Effect.all({
             invalid: Tool.init(InvalidTool),
-            bash: Tool.init(BashTool),
+            bash: Tool.init(bash),
             read: Tool.init(read),
-            glob: Tool.init(GlobTool),
+            glob: Tool.init(globtool),
             grep: Tool.init(GrepTool),
-            edit: Tool.init(EditTool),
-            write: Tool.init(WriteTool),
+            edit: Tool.init(edit),
+            write: Tool.init(writetool),
             task: Tool.init(task),
             fetch: Tool.init(webfetch),
             todo: Tool.init(todo),
@@ -315,6 +324,8 @@ export namespace ToolRegistry {
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
     ),
   )
 
