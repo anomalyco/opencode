@@ -66,7 +66,7 @@ export namespace Npm {
   // "fetch() proxy.url must be a non-empty string" because Bun expects a string.
   // Passing agent:false bypasses @npmcli/agent entirely, and Bun's native fetch
   // falls back to reading HTTP_PROXY/HTTPS_PROXY from process.env directly.
-  const arboristOpts = typeof Bun !== "undefined" ? { agent: false } : {}
+  const arboristOpts = typeof Bun !== "undefined" ? ({ agent: false } as any) : {}
 
   export async function add(pkg: string) {
     const dir = directory(pkg)
