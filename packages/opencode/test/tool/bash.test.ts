@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import os from "os"
 import path from "path"
 import { Shell } from "../../src/shell/shell"
@@ -9,6 +10,19 @@ import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { AppFileSystem } from "../../src/filesystem"
+import { Plugin } from "../../src/plugin"
+
+const runtime = ManagedRuntime.make(
+  Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer, Plugin.defaultLayer),
+)
+
+function initBash() {
+  return runtime.runPromise(
+    BashTool.pipe(Effect.flatMap((info) => Effect.promise(() => info.init()))),
+  )
+}
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -118,7 +132,7 @@ describe("tool.bash", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const result = await bash.execute(
           {
             command: "echo test",
@@ -139,7 +153,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute(
           {
@@ -160,7 +174,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute(
           {
@@ -184,7 +198,7 @@ describe("tool.bash permissions", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const bash = await BashTool.init()
+            const bash = await initBash()
             const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
             await bash.execute(
               {
@@ -208,7 +222,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const err = new Error("stop after permission")
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const file = process.platform === "win32" ? `${process.env.WINDIR!.replaceAll("\\", "/")}/*` : "/etc/*"
@@ -242,7 +256,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const file = path.join(outerTmp.path, "outside.txt").replaceAll("\\", "/")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await bash.execute(
@@ -273,7 +287,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -301,7 +315,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               const file = `${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`
               await bash.execute(
@@ -331,7 +345,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: tmp.path,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -359,7 +373,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -388,7 +402,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: tmp.path,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -416,7 +430,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -448,7 +462,7 @@ describe("tool.bash permissions", () => {
             await Instance.provide({
               directory: projectRoot,
               fn: async () => {
-                const bash = await BashTool.init()
+                const bash = await initBash()
                 const err = new Error("stop after permission")
                 const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
                 const root = path.parse(process.env.WINDIR!).root.replace(/[\\/]+$/, "")
@@ -481,7 +495,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await bash.execute(
                 {
@@ -508,7 +522,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -538,7 +552,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await expect(
@@ -568,7 +582,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await bash.execute(
                 {
@@ -597,7 +611,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               await bash.execute(
                 {
@@ -622,7 +636,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const err = new Error("stop after permission")
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await expect(
@@ -645,7 +659,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const err = new Error("stop after permission")
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await expect(
@@ -673,7 +687,7 @@ describe("tool.bash permissions", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const bash = await BashTool.init()
+          const bash = await initBash()
           const want = Filesystem.normalizePathPattern(path.join(outerTmp.path, "*"))
 
           for (const dir of forms(outerTmp.path)) {
@@ -707,7 +721,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               const want = glob(path.join(os.tmpdir(), "*"))
@@ -737,7 +751,7 @@ describe("tool.bash permissions", () => {
           await Instance.provide({
             directory: projectRoot,
             fn: async () => {
-              const bash = await BashTool.init()
+              const bash = await initBash()
               const err = new Error("stop after permission")
               const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
               const want = glob(path.join(os.tmpdir(), "*"))
@@ -772,7 +786,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const err = new Error("stop after permission")
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const filepath = path.join(outerTmp.path, "outside.txt")
@@ -803,7 +817,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute(
           {
@@ -823,7 +837,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute(
           {
@@ -844,7 +858,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute(
           {
@@ -864,7 +878,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const err = new Error("stop after permission")
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await expect(
@@ -885,7 +899,7 @@ describe("tool.bash permissions", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         await bash.execute({ command: "ls -la", description: "List" }, capture(requests))
         const bashReq = requests.find((r) => r.permission === "bash")
@@ -901,7 +915,7 @@ describe("tool.bash abort", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const controller = new AbortController()
         const collected: string[] = []
         const result = bash.execute(
@@ -933,7 +947,7 @@ describe("tool.bash abort", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const result = await bash.execute(
           {
             command: `echo started && sleep 60`,
@@ -952,7 +966,7 @@ describe("tool.bash abort", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const result = await bash.execute(
           {
             command: `echo stdout_msg && echo stderr_msg >&2`,
@@ -971,7 +985,7 @@ describe("tool.bash abort", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const result = await bash.execute(
           {
             command: `exit 42`,
@@ -988,7 +1002,7 @@ describe("tool.bash abort", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const updates: string[] = []
         const result = await bash.execute(
           {
@@ -1016,7 +1030,7 @@ describe("tool.bash truncation", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const lineCount = Truncate.MAX_LINES + 500
         const result = await bash.execute(
           {
@@ -1036,7 +1050,7 @@ describe("tool.bash truncation", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = await bash.execute(
           {
@@ -1056,7 +1070,7 @@ describe("tool.bash truncation", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const result = await bash.execute(
           {
             command: "echo hello",
@@ -1074,7 +1088,7 @@ describe("tool.bash truncation", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
+        const bash = await initBash()
         const lineCount = Truncate.MAX_LINES + 100
         const result = await bash.execute(
           {
