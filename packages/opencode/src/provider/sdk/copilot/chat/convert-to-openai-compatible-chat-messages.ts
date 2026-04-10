@@ -1,16 +1,16 @@
 import {
-  type LanguageModelV2Prompt,
-  type SharedV2ProviderMetadata,
+  type LanguageModelV3Prompt,
+  type SharedV3ProviderOptions,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
 import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
 
-function getOpenAIMetadata(message: { providerOptions?: SharedV2ProviderMetadata }) {
+function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderOptions }) {
   return message?.providerOptions?.copilot ?? {}
 }
 
-export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Prompt): OpenAICompatibleChatPrompt {
+export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Prompt): OpenAICompatibleChatPrompt {
   const messages: OpenAICompatibleChatPrompt = []
 
   const systemPrompt: string[] = []
@@ -21,7 +21,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
   }
 
   const hasSystem = systemPrompt.length > 0
-  const hasOthers = prompt.some((m: LanguageModelV2Prompt[number]) => m.role !== "system")
+  const hasOthers = prompt.some((m: LanguageModelV3Prompt[number]) => m.role !== "system")
 
   if (hasSystem) {
     if (hasOthers) {
@@ -150,6 +150,9 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
 
       case "tool": {
         for (const toolResponse of content) {
+          if (toolResponse.type === "tool-approval-response") {
+            continue
+          }
           const output = toolResponse.output
 
           let contentValue: string
@@ -157,6 +160,9 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
             case "text":
             case "error-text":
               contentValue = output.value
+              break
+            case "execution-denied":
+              contentValue = output.reason ?? "Tool execution denied."
               break
             case "content":
             case "json":
