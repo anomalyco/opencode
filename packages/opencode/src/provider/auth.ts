@@ -75,7 +75,12 @@ export namespace ProviderAuth {
     z.object({ providerID: ProviderID.zod }),
   )
 
-  export const OauthCallbackFailed = NamedError.create("ProviderAuthOauthCallbackFailed", z.object({}))
+  export const OauthCallbackFailed = NamedError.create(
+    "ProviderAuthOauthCallbackFailed",
+    z.object({
+      error: z.string().optional(),
+    }),
+  )
 
   export const ValidationFailed = NamedError.create(
     "ProviderAuthValidationFailed",
@@ -204,7 +209,13 @@ export namespace ProviderAuth {
         const result = yield* Effect.promise(() =>
           match.method === "code" ? match.callback(input.code!) : match.callback(),
         )
-        if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
+        if (!result || result.type !== "success") {
+          return yield* Effect.fail(
+            new OauthCallbackFailed({
+              error: undefined,
+            }),
+          )
+        }
 
         if ("key" in result) {
           yield* auth.set(input.providerID, {
@@ -215,13 +226,14 @@ export namespace ProviderAuth {
 
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extra } = result
-          yield* auth.set(input.providerID, {
-            type: "oauth",
-            access,
-            refresh,
-            expires,
-            ...extra,
-          })
+          yield* Effect.promise(() =>
+            Auth.addOAuth(input.providerID, {
+              access,
+              refresh,
+              expires,
+              ...(extra as { accountId?: string; email?: string; enterpriseUrl?: string }),
+            }),
+          ).pipe(Effect.mapError((cause) => new Auth.AuthError({ message: "Failed to write auth data", cause })))
         }
       })
 

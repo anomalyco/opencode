@@ -836,6 +836,14 @@ export namespace Config {
       experimental: z.boolean().optional(),
       status: z.enum(["alpha", "beta", "deprecated"]).optional(),
       provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
+      runtime: z
+        .object({
+          system_prompt: z.enum(["anthropic", "beast", "codex", "gemini", "groq", "qwen", "trinity"]).optional(),
+          disable_local_tools: z.boolean().optional(),
+          max_active_tools: z.number().int().positive().optional(),
+          tool_priority: z.array(z.string()).optional(),
+        })
+        .optional(),
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()).optional(),
       variants: z

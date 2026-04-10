@@ -7,6 +7,7 @@ import PROMPT_DEFAULT from "./prompt/default.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_GPT from "./prompt/gpt.txt"
+import PROMPT_GROQ from "./prompt/groq.txt"
 import PROMPT_KIMI from "./prompt/kimi.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
@@ -17,8 +18,20 @@ import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
 export namespace SystemPrompt {
+  const prompts = {
+    anthropic: PROMPT_ANTHROPIC,
+    beast: PROMPT_BEAST,
+    codex: PROMPT_CODEX,
+    gemini: PROMPT_GEMINI,
+    groq: PROMPT_GROQ,
+    qwen: PROMPT_ANTHROPIC,
+    trinity: PROMPT_TRINITY,
+  } as const
+
   export function provider(model: Provider.Model) {
-    if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
+    if (model.runtime?.systemPrompt) return [prompts[model.runtime.systemPrompt]]
+    if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX]
+    if (model.api.id.includes("gpt-") || model.api.id.includes("o1") || model.api.id.includes("o3"))
       return [PROMPT_BEAST]
     if (model.api.id.includes("gpt")) {
       if (model.api.id.includes("codex")) {

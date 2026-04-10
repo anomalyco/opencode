@@ -61,6 +61,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
+import { ProviderQuotaSection } from "@/components/session/session-context-tab"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -2290,6 +2291,16 @@ export default function Layout(props: ParentProps) {
               </Show>
             </div>
           </>
+        </Show>
+
+        <Show when={providers.paid().length > 0}>
+          <div class="shrink-0 px-3 pb-3">
+            <div class="rounded-xl bg-background-base shadow-xs-border-base">
+              <div class="p-3 flex flex-col gap-2">
+                <ProviderQuotaSection />
+              </div>
+            </div>
+          </div>
         </Show>
 
         <div

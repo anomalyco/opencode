@@ -5,6 +5,7 @@ import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
+import { Auth } from "../../auth"
 import { ProviderID } from "../../provider/schema"
 import { mapValues } from "remeda"
 import { errors } from "../error"
@@ -166,6 +167,140 @@ export const ProviderRoutes = lazy(() =>
           code,
         })
         return c.json(true)
+      },
+    )
+    .get(
+      "/auth/usage",
+      describeRoute({
+        summary: "Get auth usage",
+        description: "Get rate limit and usage information for authenticated providers.",
+        operationId: "auth.usage",
+        responses: {
+          200: {
+            description: "Usage information per provider and account",
+            content: {
+              "application/json": {
+                schema: resolver(z.any().meta({ ref: "AuthUsage" })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      async (c) => {
+        return c.json(await Auth.usage())
+      },
+    )
+    .post(
+      "/auth/active",
+      describeRoute({
+        summary: "Set active OAuth account",
+        description: "Switch the active OAuth account for a provider. Returns updated usage data.",
+        operationId: "auth.setActive",
+        responses: {
+          200: {
+            description: "Active account switched with updated usage",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                    anthropicUsage: z.any().optional(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          providerID: z.string(),
+          recordID: z.string(),
+          namespace: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const { providerID, recordID, namespace } = c.req.valid("json")
+        const ns = namespace ?? "default"
+        const success = await Auth.OAuthPool.setActive(providerID, ns, recordID)
+        const anthropicUsage = success ? await Auth.OAuthPool.fetchAnthropicUsage(providerID, ns, recordID) : null
+        return c.json({ success, anthropicUsage: anthropicUsage ?? undefined })
+      },
+    )
+    .delete(
+      "/auth/account",
+      describeRoute({
+        summary: "Delete OAuth account",
+        description: "Remove an OAuth account from a provider.",
+        operationId: "auth.deleteAccount",
+        responses: {
+          200: {
+            description: "Account deleted",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                    remaining: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          providerID: z.string(),
+          recordID: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { providerID, recordID } = c.req.valid("json")
+        const result = await Auth.OAuthPool.removeRecord(providerID, recordID)
+        return c.json({ success: result.removed, remaining: result.remaining })
+      },
+    )
+    .patch(
+      "/auth/account",
+      describeRoute({
+        summary: "Update OAuth account",
+        description: "Update an OAuth account's label/name.",
+        operationId: "auth.updateAccount",
+        responses: {
+          200: {
+            description: "Account updated",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          providerID: z.string(),
+          recordID: z.string(),
+          namespace: z.string().optional(),
+          label: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const { providerID, recordID, namespace, label } = c.req.valid("json")
+        const success = await Auth.OAuthPool.updateRecord(providerID, recordID, namespace ?? "default", { label })
+        return c.json({ success })
       },
     ),
 )

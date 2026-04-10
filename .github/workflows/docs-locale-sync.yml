@@ -67,7 +67,7 @@ jobs:
               }
             }
         run: |
-          opencode run --agent docs --model opencode/gpt-5.3-codex <<'EOF'
+          opencode run --agent docs --model opencode/gpt-5.4 <<'EOF'
             Update localized docs to match the latest English docs changes.
 
             Changed English doc files:

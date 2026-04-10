@@ -462,6 +462,109 @@ test("provider with baseURL from config", async () => {
   })
 })
 
+test("bundled provider overrides can deprecate snapshot models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GROQ_API_KEY", "test-groq-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const groq = providers[ProviderID.make("groq")]
+      expect(groq).toBeDefined()
+      expect(groq.models["llama-3.3-70b-versatile"]).toBeUndefined()
+    },
+  })
+})
+
+test("config runtime overrides merge with provider and model runtime policy", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            groq: {
+              models: {
+                compound: {
+                  name: "Compound",
+                  limit: { context: 128000, output: 4096 },
+                  runtime: {
+                    max_active_tools: 2,
+                    tool_priority: ["read", "bash"],
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GROQ_API_KEY", "test-groq-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers[ProviderID.make("groq")].models["compound"]
+      expect(model).toBeDefined()
+      expect(model.capabilities.toolcall).toBe(false)
+      expect(model.runtime?.systemPrompt).toBe("groq")
+      expect(model.runtime?.disableLocalTools).toBe(true)
+      expect(model.runtime?.maxActiveTools).toBe(2)
+      expect(model.runtime?.toolPriority).toEqual(["read", "bash"])
+    },
+  })
+})
+
+test("getModel falls back to fully qualified model keys", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            openrouter: {
+              models: {
+                "openrouter/custom-model": {
+                  name: "Custom Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "test-openrouter-key")
+    },
+    fn: async () => {
+      const model = await Provider.getModel(ProviderID.openrouter, ModelID.make("custom-model"))
+      expect(String(model.id)).toBe("openrouter/custom-model")
+      expect(model.api.id).toBe("openrouter/custom-model")
+    },
+  })
+})
+
 test("model cost defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

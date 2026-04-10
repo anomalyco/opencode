@@ -88,12 +88,24 @@ export function extractAccountId(tokens: TokenResponse): string | undefined {
   return undefined
 }
 
+function extractEmail(tokens: TokenResponse): string | undefined {
+  if (tokens.id_token) {
+    const claims = parseJwtClaims(tokens.id_token)
+    if (claims?.email) return claims.email
+  }
+  if (tokens.access_token) {
+    const claims = parseJwtClaims(tokens.access_token)
+    return claims?.email
+  }
+  return undefined
+}
+
 function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: CLIENT_ID,
     redirect_uri: redirectUri,
-    scope: "openid profile email offline_access",
+    scope: "openid profile email offline_access api.responses.write",
     code_challenge: pkce.challenge,
     code_challenge_method: "S256",
     id_token_add_organizations: "true",
@@ -410,24 +422,36 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             const currentAuth = await getAuth()
             if (currentAuth.type !== "oauth") return fetch(requestInput, init)
 
-            // Cast to include accountId field
-            const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
+            const chosen = await Auth.OAuthPool.pick("openai")
+            const recordID = chosen?.id
+            const authWithAccount = {
+              ...currentAuth,
+              accountId: chosen?.accountId ?? (currentAuth as typeof currentAuth & { accountId?: string }).accountId,
+            }
 
             // Check if token needs refresh
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               log.info("refreshing codex access token")
               const tokens = await refreshAccessToken(currentAuth.refresh)
               const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
-              await input.client.auth.set({
-                path: { id: "openai" },
-                body: {
-                  type: "oauth",
+              if (recordID) {
+                await Auth.OAuthPool.updateRecord("openai", recordID, "default", {
                   refresh: tokens.refresh_token,
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  ...(newAccountId && { accountId: newAccountId }),
-                },
-              })
+                })
+              } else {
+                await input.client.auth.set({
+                  path: { id: "openai" },
+                  body: {
+                    type: "oauth",
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    ...(newAccountId && { accountId: newAccountId }),
+                  },
+                })
+              }
               currentAuth.access = tokens.access_token
               authWithAccount.accountId = newAccountId
             }
@@ -499,6 +523,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   accountId,
+                  email: extractEmail(tokens),
                 }
               },
             }
@@ -574,6 +599,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                       access: tokens.access_token,
                       expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                       accountId: extractAccountId(tokens),
+                      email: extractEmail(tokens),
                     }
                   }
 

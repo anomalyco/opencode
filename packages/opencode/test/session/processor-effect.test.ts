@@ -75,6 +75,43 @@ function providerCfg(url: string) {
   }
 }
 
+function runtimeCfg(url: string) {
+  return {
+    provider: {
+      test: {
+        name: "Test",
+        id: "test",
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        models: {
+          "test-model": {
+            id: "test-model",
+            name: "Test Model",
+            attachment: false,
+            reasoning: true,
+            temperature: false,
+            tool_call: true,
+            interleaved: { field: "reasoning_content" },
+            release_date: "2025-01-01",
+            limit: { context: 100000, output: 10000 },
+            cost: { input: 0, output: 0 },
+            runtime: {
+              disable_local_tools: true,
+              max_active_tools: 1,
+              tool_priority: ["read"],
+            },
+            options: {},
+          },
+        },
+        options: {
+          apiKey: "test-key",
+          baseURL: url,
+        },
+      },
+    },
+  } satisfies Partial<Config.Info>
+}
+
 function agent(): Agent.Info {
   return {
     name: "build",
@@ -396,6 +433,58 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         expect(text?.text).toBe("done")
       }),
     { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests keep reasoning with runtime-configured models", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(reply().reason("think").text("done").stop())
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const reasoning = parts.find((part): part is MessageV2.ReasoningPart => part.type === "reasoning")
+        const text = parts.find((part): part is MessageV2.TextPart => part.type === "text")
+
+        expect(mdl.capabilities.reasoning).toBe(true)
+        expect(mdl.runtime?.disableLocalTools).toBe(true)
+        expect(mdl.runtime?.maxActiveTools).toBe(1)
+        expect(mdl.runtime?.toolPriority).toEqual(["read"])
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(1)
+        expect(reasoning?.text).toBe("think")
+        expect(text?.text).toBe("done")
+      }),
+    { git: true, config: (url) => runtimeCfg(url) },
   ),
 )
 

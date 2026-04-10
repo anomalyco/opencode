@@ -9,6 +9,18 @@ const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
 const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
 const DEFAULT_NETWORK_RETRY_ATTEMPTS = 1
 
+// OAuth token refresh endpoints for supported providers
+const OAUTH_TOKEN_ENDPOINTS: Record<string, string> = {
+  openai: "https://auth.openai.com/oauth/token",
+  anthropic: "https://auth.anthropic.com/oauth/token",
+  google: "https://oauth2.googleapis.com/token",
+}
+
+// OAuth client IDs (needed for some providers)
+const OAUTH_CLIENT_IDS: Record<string, string> = {
+  openai: "app_EMoamEEZ73f0CkXaXp7hrann",
+}
+
 type OAuthProviderRecord = {
   id: string
   namespace: string
@@ -141,6 +153,57 @@ function getCooldownMs(statusCode: number, retryAfterMs: number | undefined, def
   return defaultCooldown
 }
 
+interface RefreshTokenResult {
+  access: string
+  refresh: string
+  expires: number
+}
+
+async function refreshOAuthToken(providerID: string, record: OAuthProviderRecord): Promise<RefreshTokenResult | null> {
+  const tokenEndpoint = OAUTH_TOKEN_ENDPOINTS[providerID]
+  if (!tokenEndpoint) {
+    log.debug("no token refresh endpoint for provider", { providerID })
+    return null
+  }
+
+  log.info("refreshing OAuth token", { providerID, recordID: record.id })
+
+  try {
+    const body: Record<string, string> = {
+      grant_type: "refresh_token",
+      refresh_token: record.refresh,
+    }
+
+    // Some providers require client_id
+    const clientId = OAUTH_CLIENT_IDS[providerID]
+    if (clientId) {
+      body.client_id = clientId
+    }
+
+    const response = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body).toString(),
+    })
+
+    if (!response.ok) {
+      log.warn("token refresh failed", { providerID, recordID: record.id, status: response.status })
+      return null
+    }
+
+    const tokens = (await response.json()) as { access_token: string; refresh_token?: string; expires_in: number }
+
+    return {
+      access: tokens.access_token,
+      refresh: tokens.refresh_token ?? record.refresh,
+      expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+    }
+  } catch (error) {
+    log.warn("token refresh error", { providerID, recordID: record.id, error })
+    return null
+  }
+}
+
 export async function rotatingFetch(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
@@ -217,11 +280,53 @@ export async function rotatingFetch(
       return response
     }
 
+    // On 401 (auth failure), try token refresh first before failover
+    if (response.status === 401) {
+      const refreshed = await refreshOAuthToken(providerID, record)
+      if (refreshed) {
+        log.info("token refresh succeeded, updating record and retrying", { providerID, recordID })
+        await Auth.refreshOAuthRecord(providerID, recordID, refreshed)
+        // Retry with new token
+        response = await withOAuthRecord(providerID, recordID, () => fetch(input, init))
+        if (response.ok) {
+          await Auth.updateOAuthRecordHealth(providerID, recordID, {
+            lastStatusCode: response.status,
+            lastErrorAt: undefined,
+            cooldownUntil: undefined,
+            successCount: record.health.successCount + 1,
+          })
+          await Auth.setActiveOAuthRecord(providerID, recordID)
+          return response
+        }
+      }
+      // Refresh failed or not available, fall through to failover
+    }
+
     const retryAfterMs = parseRetryAfterMs(response)
     const isRetriable =
       response.status === 429 || response.status === 403 || response.status === 401 || response.status >= 500
 
     if (!isRetriable || !bodyReplayable) {
+      // If retriable error but body not replayable, we can still failover to next credential
+      // with a fresh request body
+      if (isRetriable && !bodyReplayable) {
+        await Auth.updateOAuthRecordHealth(providerID, recordID, {
+          lastStatusCode: response.status,
+          lastErrorAt: Date.now(),
+          cooldownUntil:
+            Date.now() +
+            getCooldownMs(
+              response.status,
+              parseRetryAfterMs(response),
+              response.status === 429 ? cooldownMs : authFailureCooldownMs,
+            ),
+          failureCount: record.health.failureCount + 1,
+        })
+        if (recordQueue.indexOf(record) < recordQueue.length - 1) {
+          await drainResponse(response)
+          continue
+        }
+      }
       if (bodyReplayable) await drainResponse(response)
       return response
     }
@@ -248,6 +353,7 @@ export async function rotatingFetch(
 
     if (recordQueue.indexOf(record) < recordQueue.length - 1) {
       await drainResponse(response)
+      continue
     }
   }
 
