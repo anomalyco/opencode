@@ -214,8 +214,9 @@ export default function FileTree(props: {
   const draggable = () => props.draggable ?? true
 
   const key = (p: string) =>
-    file
+    (file
       .normalize(p)
+      ?? "")
       .replace(/[\\/]+$/, "")
       .replaceAll("\\", "/")
   const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
