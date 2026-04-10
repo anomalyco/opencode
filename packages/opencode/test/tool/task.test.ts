@@ -9,7 +9,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { TaskDescription, TaskTool } from "../../src/tool/task"
+import { TaskTool } from "../../src/tool/task"
+import { ToolRegistry } from "../../src/tool/registry"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -23,7 +24,13 @@ const ref = {
 }
 
 const it = testEffect(
-  Layer.mergeAll(Agent.defaultLayer, Config.defaultLayer, CrossSpawnSpawner.defaultLayer, Session.defaultLayer),
+  Layer.mergeAll(
+    Agent.defaultLayer,
+    Config.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Session.defaultLayer,
+    ToolRegistry.defaultLayer,
+  ),
 )
 
 const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
@@ -92,8 +99,13 @@ describe("tool.task", () => {
         Effect.gen(function* () {
           const agent = yield* Agent.Service
           const build = yield* agent.get("build")
-          const first = yield* TaskDescription(build)
-          const second = yield* TaskDescription(build)
+          const registry = yield* ToolRegistry.Service
+          const get = Effect.fnUntraced(function* () {
+            const tools = yield* registry.tools({ ...ref, agent: build })
+            return tools.find((tool) => tool.id === TaskTool.id)?.description ?? ""
+          })
+          const first = yield* get()
+          const second = yield* get()
 
           expect(first).toBe(second)
 
@@ -130,7 +142,9 @@ describe("tool.task", () => {
         Effect.gen(function* () {
           const agent = yield* Agent.Service
           const build = yield* agent.get("build")
-          const description = yield* TaskDescription(build)
+          const registry = yield* ToolRegistry.Service
+          const description =
+            (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
 
           expect(description).toContain("- alpha: Alpha agent")
           expect(description).not.toContain("- zebra: Zebra agent")
