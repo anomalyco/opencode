@@ -58,6 +58,7 @@ import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
+import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
@@ -430,7 +431,7 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
   const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasSessionReview = createMemo(() => sessionCount() > 0)
   const canReview = createMemo(() => !!sync.project)
@@ -611,7 +612,7 @@ export default function Page() {
       .diff({ mode })
       .then((result) => {
         if (vcsRun.get(mode) !== run) return
-        setVcs("diff", mode, result.data ?? [])
+        setVcs("diff", mode, list(result.data))
         setVcs("ready", mode, true)
       })
       .catch((error) => {
@@ -649,7 +650,7 @@ export default function Page() {
     return open
   }, desktopReviewOpen())
 
-  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
@@ -669,15 +670,11 @@ export default function Page() {
     if (store.changes === "git" || store.changes === "branch") return store.changes
   })
   const reviewDiffs = createMemo(() => {
-    if (store.changes === "git") return vcs.diff.git
-    if (store.changes === "branch") return vcs.diff.branch
+    if (store.changes === "git") return list(vcs.diff.git)
+    if (store.changes === "branch") return list(vcs.diff.branch)
     return turnDiffs()
   })
-  const reviewCount = createMemo(() => {
-    if (store.changes === "git") return vcs.diff.git.length
-    if (store.changes === "branch") return vcs.diff.branch.length
-    return turnDiffs().length
-  })
+  const reviewCount = createMemo(() => reviewDiffs().length)
   const hasReview = createMemo(() => reviewCount() > 0)
   const reviewReady = createMemo(() => {
     if (store.changes === "git") return vcs.ready.git

@@ -150,14 +150,12 @@ export namespace SessionSummary {
     }),
   )
 
-  export const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
-        Layer.provide(Session.defaultLayer),
-        Layer.provide(Snapshot.defaultLayer),
-        Layer.provide(Storage.defaultLayer),
-        Layer.provide(Bus.layer),
-      ),
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Snapshot.defaultLayer),
+      Layer.provide(Storage.defaultLayer),
+      Layer.provide(Bus.layer),
     ),
   )
 
