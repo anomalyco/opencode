@@ -57,6 +57,8 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   status?: string
+  showPendingMeta?: boolean
+  showPendingDetails?: boolean
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -116,7 +118,8 @@ export function BasicTool(props: BasicToolProps) {
   const open = () => state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
-  const hasChildren = () => (props.defer ? "children" in props : props.children)
+  const meta = () => !pending() || !!props.showPendingMeta
+  const details = () => !pending() || !!props.showPendingDetails
 
   let cancelReady: (() => void) | undefined
 
@@ -194,7 +197,7 @@ export function BasicTool(props: BasicToolProps) {
   })
 
   const handleOpenChange = (value: boolean) => {
-    if (pending()) return
+    if (pending() && !props.showPendingDetails) return
     if (props.locked && !value) return
     suppressAutoScrollResize()
     setOpen(value)
@@ -231,10 +234,8 @@ export function BasicTool(props: BasicToolProps) {
                         >
                           {title().subtitle}
                         </span>
-                      </Show>
-                      <Show when={title().args?.length}>
-                        <For each={title().args}>
-                          {(arg) => (
+                        <Show when={meta()}>
+                          <Show when={trigger().subtitle}>
                             <span
                               data-slot="basic-tool-tool-arg"
                               classList={{
@@ -246,49 +247,19 @@ export function BasicTool(props: BasicToolProps) {
                           )}
                         </For>
                       </Show>
-                    </Show>
-                  </div>
-                  <Show when={!pending() && title().action}>
-                    <span data-slot="basic-tool-tool-action">{title().action}</span>
-                  </Show>
-                </div>
-              )}
-            </Match>
-            <Match when={true}>{props.trigger as JSX.Element}</Match>
-          </Switch>
+                    </div>
+                  )}
+                </Match>
+                <Match when={true}>{props.trigger as JSX.Element}</Match>
+              </Switch>
+            </div>
+          </div>
+          <Show when={props.children && !props.hideDetails && !props.locked && details()}>
+            <Collapsible.Arrow />
+          </Show>
         </div>
-      </div>
-      <Show when={hasChildren() && !props.hideDetails && !props.locked && !pending()}>
-        <Collapsible.Arrow />
-      </Show>
-    </div>
-  )
-
-  return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
-      <Show
-        when={props.triggerHref}
-        fallback={
-          <Collapsible.Trigger
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
-          >
-            {trigger()}
-          </Collapsible.Trigger>
-        }
-      >
-        {(href) => (
-          <Collapsible.Trigger
-            as="a"
-            href={href()}
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
-          >
-            {trigger()}
-          </Collapsible.Trigger>
-        )}
-      </Show>
-      <Show when={props.animated && hasChildren() && !props.hideDetails}>
+      </Collapsible.Trigger>
+      <Show when={props.animated && props.children && !props.hideDetails && details()}>
         <div
           ref={contentRef}
           data-slot="collapsible-content"
@@ -301,7 +272,7 @@ export function BasicTool(props: BasicToolProps) {
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </div>
       </Show>
-      <Show when={!props.animated && hasChildren() && !props.hideDetails}>
+      <Show when={!props.animated && props.children && !props.hideDetails && details()}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </Collapsible.Content>
