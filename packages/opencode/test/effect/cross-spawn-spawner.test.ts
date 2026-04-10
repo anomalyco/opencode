@@ -214,6 +214,41 @@ describe("cross-spawn spawner", () => {
     )
   })
 
+  describe("background child processes", () => {
+    fx.effect(
+      "completes immediately when shell spawns background child",
+      Effect.gen(function* () {
+        const started = Date.now()
+        const handle = yield* ChildProcess.make("bash", ["-c", "sleep 10 &"])
+        const code = yield* handle.exitCode
+        const elapsed = Date.now() - started
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(elapsed).toBeLessThan(500)
+      }),
+    )
+
+    fx.effect(
+      "handles nohup background processes",
+      Effect.gen(function* () {
+        const started = Date.now()
+        const handle = yield* ChildProcess.make("bash", ["-c", "nohup sleep 10 >/dev/null 2>&1 &"])
+        const code = yield* handle.exitCode
+        const elapsed = Date.now() - started
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(elapsed).toBeLessThan(500)
+      }),
+    )
+
+    fx.effect(
+      "reports correct exit code with background children",
+      Effect.gen(function* () {
+        const handle = yield* ChildProcess.make("bash", ["-c", "exit 42"])
+        const code = yield* handle.exitCode
+        expect(code).toBe(ChildProcessSpawner.ExitCode(42))
+      }),
+    )
+  })
+
   describe("process control", () => {
     fx.effect(
       "kills a running process",
