@@ -21,6 +21,9 @@ import {
   type Role,
   type SessionInfo,
   type SetSessionModelRequest,
+  type SessionConfigOption,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
@@ -449,6 +452,19 @@ export namespace ACP {
                 return
             }
           }
+          if (part.type !== "text" && part.type !== "file") return
+          const msg = await this.sdk.session
+            .message(
+              { sessionID: part.sessionID, messageID: part.messageID, directory: session.cwd },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((err) => {
+              log.error("failed to fetch message for user chunk", { error: err })
+              return undefined
+            })
+          if (!msg || msg.info.role !== "user") return
+          await this.processMessage({ info: msg.info, parts: [part] })
           return
         }
 
@@ -484,6 +500,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_message_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -502,6 +519,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -586,6 +604,7 @@ export namespace ACP {
 
         return {
           sessionId,
+          configOptions: load.configOptions,
           models: load.models,
           modes: load.modes,
           _meta: load._meta,
@@ -645,6 +664,11 @@ export namespace ACP {
             result.modes.currentModeId = lastUser.agent
             this.sessionManager.setMode(sessionId, lastUser.agent)
           }
+          result.configOptions = buildConfigOptions({
+            currentModelId: result.models.currentModelId,
+            availableModels: result.models.availableModels,
+            modes: result.modes,
+          })
         }
 
         for (const msg of messages ?? []) {
@@ -666,7 +690,7 @@ export namespace ACP {
       }
     }
 
-    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
@@ -970,6 +994,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1001,6 +1026,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: messageChunk,
+                  messageId: message.info.id,
                   content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
                 },
               })
@@ -1022,6 +1048,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: {
                       type: "image",
                       mimeType: effectiveMime,
@@ -1050,6 +1077,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: { type: "resource", resource },
                   },
                 })
@@ -1066,6 +1094,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1246,6 +1275,11 @@ export namespace ACP {
           availableModels,
         },
         modes,
+        configOptions: buildConfigOptions({
+          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          availableModels,
+          modes,
+        }),
         _meta: buildVariantMeta({
           model,
           variant: this.sessionManager.getVariant(sessionId),
@@ -1283,6 +1317,44 @@ export namespace ACP {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
       this.sessionManager.setMode(params.sessionId, params.modeId)
+    }
+
+    async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+      const session = this.sessionManager.get(params.sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+
+      if (params.configId === "model") {
+        if (typeof params.value !== "string") throw RequestError.invalidParams("model value must be a string")
+        const selection = parseModelSelection(params.value, providers)
+        this.sessionManager.setModel(session.id, selection.model)
+        this.sessionManager.setVariant(session.id, selection.variant)
+      } else if (params.configId === "mode") {
+        if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
+        const availableModes = await this.loadAvailableModes(session.cwd)
+        if (!availableModes.some((mode) => mode.id === params.value)) {
+          throw RequestError.invalidParams(JSON.stringify({ error: `Mode not found: ${params.value}` }))
+        }
+        this.sessionManager.setMode(session.id, params.value)
+      } else {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
+      }
+
+      const updatedSession = this.sessionManager.get(session.id)
+      const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, true)
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const modeState = await this.resolveModeState(session.cwd, session.id)
+      const modes = modeState.currentModeId
+        ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
+        : undefined
+
+      return {
+        configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
+      }
     }
 
     async prompt(params: PromptRequest) {
@@ -1739,5 +1811,37 @@ export namespace ACP {
     }
 
     return { model: parsed, variant: undefined }
+  }
+
+  function buildConfigOptions(input: {
+    currentModelId: string
+    availableModels: ModelOption[]
+    modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
+  }): SessionConfigOption[] {
+    const options: SessionConfigOption[] = [
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: input.currentModelId,
+        options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
+      },
+    ]
+    if (input.modes) {
+      options.push({
+        id: "mode",
+        name: "Session Mode",
+        category: "mode",
+        type: "select",
+        currentValue: input.modes.currentModeId,
+        options: input.modes.availableModes.map((m) => ({
+          value: m.id,
+          name: m.name,
+          ...(m.description ? { description: m.description } : {}),
+        })),
+      })
+    }
+    return options
   }
 }

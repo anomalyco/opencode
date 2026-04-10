@@ -214,17 +214,17 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 - [x] `SessionProcessor` — `session/processor.ts`
 - [x] `SessionPrompt` — `session/prompt.ts`
 - [x] `SessionCompaction` — `session/compaction.ts`
+- [x] `SessionSummary` — `session/summary.ts`
+- [x] `SessionRevert` — `session/revert.ts`
+- [x] `Instruction` — `session/instruction.ts`
 - [x] `Provider` — `provider/provider.ts`
+- [x] `Storage` — `storage/storage.ts`
 
 Still open:
 
-- [ ] `SessionSummary` — `session/summary.ts`
 - [ ] `SessionTodo` — `session/todo.ts`
-- [ ] `SessionRevert` — `session/revert.ts`
-- [ ] `Instruction` — `session/instruction.ts`
 - [ ] `ShareNext` — `share/share-next.ts`
 - [ ] `SyncEvent` — `sync/index.ts`
-- [ ] `Storage` — `storage/storage.ts`
 - [ ] `Workspace` — `control-plane/workspace.ts`
 
 ## Tool interface → Effect
@@ -235,10 +235,27 @@ Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `i
 2. Update `Tool.define()` factory to work with Effects
 3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing
 
+### Tool migration details
+
+Until the tool interface itself returns `Effect`, use this transitional pattern for migrated tools:
+
+- `Tool.defineEffect(...)` should `yield*` the services the tool depends on and close over them in the returned tool definition.
+- Keep the bridge at the Promise boundary only. Prefer a single `Effect.runPromise(...)` in the temporary `async execute(...)` implementation, and move the inner logic into `Effect.fn(...)` helpers instead of scattering `runPromise` islands through the tool body.
+- If a tool starts requiring new services, wire them into `ToolRegistry.defaultLayer` so production callers resolve the same dependencies as tests.
+
+Tool tests should use the existing Effect helpers in `packages/opencode/test/lib/effect.ts`:
+
+- Use `testEffect(...)` / `it.live(...)` instead of creating fake local wrappers around effectful tools.
+- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* Effect.promise(() => info.init())`.
+- Run tests inside a real instance with `provideTmpdirInstance(...)` or `provideInstance(tmpdirScoped(...))` so instance-scoped services resolve exactly as they do in production.
+
+This keeps migrated tool tests aligned with the production service graph today, and makes the eventual `Tool.Info` → `Effect` cleanup mostly mechanical later.
+
 Individual tools, ordered by value:
 
 - [ ] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
-- [ ] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
+- [ ] `bash.ts` — HIGH: shell orchestration, quoting, timeout handling, output capture
+- [x] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
 - [ ] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
 - [ ] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
 - [ ] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events
@@ -247,40 +264,42 @@ Individual tools, ordered by value:
 - [ ] `websearch.ts` — MEDIUM: MCP over HTTP → HttpClient
 - [ ] `batch.ts` — MEDIUM: parallel execution, per-call error recovery → Effect.all
 - [ ] `task.ts` — MEDIUM: task state management
+- [ ] `ls.ts` — MEDIUM: bounded directory listing over ripgrep-backed traversal
+- [ ] `multiedit.ts` — MEDIUM: sequential edit orchestration over `edit.ts`
 - [ ] `glob.ts` — LOW: simple async generator
 - [ ] `lsp.ts` — LOW: dispatch switch over LSP operations
+- [ ] `question.ts` — LOW: prompt wrapper
 - [ ] `skill.ts` — LOW: skill tool adapter
+- [ ] `todo.ts` — LOW: todo persistence wrapper
+- [ ] `invalid.ts` — LOW: invalid-tool fallback
 - [ ] `plan.ts` — LOW: plan file operations
 
 ## Effect service adoption in already-migrated code
 
-Some services are effectified but still use raw `Filesystem.*` or `Process.spawn` instead of the Effect equivalents. These are low-hanging fruit — the layers already exist, they just need the dependency swap.
+Some already-effectified areas still use raw `Filesystem.*` or `Process.spawn` in their implementation or helper modules. These are low-hanging fruit — the layers already exist, they just need the dependency swap.
 
 ### `Filesystem.*` → `AppFileSystem.Service` (yield in layer)
 
-- [ ] `file/index.ts` — 11 calls (the File service itself)
-- [ ] `config/config.ts` — 7 calls
-- [ ] `auth/index.ts` — 3 calls
-- [ ] `skill/index.ts` — 3 calls
-- [ ] `file/time.ts` — 1 call
+- [ ] `file/index.ts` — 1 remaining `Filesystem.readText()` call in untracked diff handling
+- [ ] `config/config.ts` — 5 remaining `Filesystem.*` calls in `installDependencies()`
+- [ ] `provider/provider.ts` — 1 remaining `Filesystem.readJson()` call for recent model state
 
 ### `Process.spawn` → `ChildProcessSpawner` (yield in layer)
 
-- [ ] `format/index.ts` — 1 call
+- [ ] `format/formatter.ts` — 2 remaining `Process.spawn()` checks (`air`, `uv`)
+- [ ] `lsp/server.ts` — multiple `Process.spawn()` installs/download helpers
 
 ## Filesystem consolidation
 
-`util/filesystem.ts` (raw fs wrapper) is used by **64 files**. The effectified `AppFileSystem` service (`filesystem/index.ts`) exists but only has **8 consumers**. As services and tools are effectified, they should switch from `Filesystem.*` to yielding `AppFileSystem.Service` — this happens naturally during each migration, not as a separate effort.
+`util/filesystem.ts` (raw fs wrapper) is currently imported by **34 files**. The effectified `AppFileSystem` service (`filesystem/index.ts`) is currently imported by **15 files**. As services and tools are effectified, they should switch from `Filesystem.*` to yielding `AppFileSystem.Service` — this happens naturally during each migration, not as a separate effort.
 
-Similarly, **28 files** still import raw `fs` or `fs/promises` directly. These should migrate to `AppFileSystem` or `Filesystem.*` as they're touched.
+Similarly, **21 files** still import raw `fs` or `fs/promises` directly. These should migrate to `AppFileSystem` or `Filesystem.*` as they're touched.
 
 Current raw fs users that will convert during tool migration:
 
 - `tool/read.ts` — fs.createReadStream, readline
 - `tool/apply_patch.ts` — fs/promises
-- `tool/bash.ts` — fs/promises
 - `file/ripgrep.ts` — fs/promises
-- `storage/storage.ts` — fs/promises
 - `patch/index.ts` — fs, fs/promises
 
 ## Primitives & utilities

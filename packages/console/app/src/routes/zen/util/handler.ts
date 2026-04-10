@@ -90,7 +90,8 @@ export async function handler(
     const body = await input.request.json()
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
-    const ip = input.request.headers.get("x-real-ip") ?? ""
+    const rawIp = input.request.headers.get("x-real-ip") ?? ""
+    const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
@@ -100,6 +101,7 @@ export async function handler(
       session: sessionId,
       request: requestId,
       client: ocClient,
+      ...(model === "mimo-v2-pro-free" && JSON.stringify(body).length < 1000 ? { payload: JSON.stringify(body) } : {}),
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -401,6 +403,14 @@ export async function handler(
           model: reqModel,
           format: opts.format,
         }),
+      )
+
+    if (modelData.trialEnded)
+      throw new ModelError(
+        `${t("zen.api.error.trialEnded", {
+          model: modelData.name,
+          link: "https://opencode.ai/go",
+        })}`,
       )
 
     logger.metric({ model: modelId })
