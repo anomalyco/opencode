@@ -53,4 +53,3 @@ describe("lsp.spawn", () => {
     }
   })
 })
-})
