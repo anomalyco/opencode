@@ -93,6 +93,7 @@ export namespace ToolRegistry {
     | ChildProcessSpawner
     | Ripgrep.Service
     | Format.Service
+    | Truncate.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -100,6 +101,7 @@ export namespace ToolRegistry {
       const plugin = yield* Plugin.Service
       const agents = yield* Agent.Service
       const skill = yield* Skill.Service
+      const truncate = yield* Truncate.Service
 
       const invalid = yield* InvalidTool
       const task = yield* TaskTool
@@ -129,15 +131,16 @@ export namespace ToolRegistry {
               parameters: z.object(def.args),
               description: def.description,
               execute: (args, toolCtx) =>
-                Effect.promise(async () => {
+                Effect.gen(function* () {
                   const pluginCtx: PluginToolContext = {
                     ...toolCtx,
                     ask: (req) => Effect.runPromise(toolCtx.ask(req)),
                     directory: ctx.directory,
                     worktree: ctx.worktree,
                   }
-                  const result = await def.execute(args as any, pluginCtx)
-                  const out = await Truncate.output(result, {}, await Agent.get(toolCtx.agent))
+                  const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                  const agent = yield* Effect.promise(() => Agent.get(toolCtx.agent))
+                  const out = yield* truncate.output(result, {}, agent)
                   return {
                     title: "",
                     output: out.truncated ? out.content : result,
@@ -335,6 +338,7 @@ export namespace ToolRegistry {
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Truncate.defaultLayer),
     ),
   )
 
