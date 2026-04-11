@@ -2,6 +2,7 @@ import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util/filesystem"
 import { which } from "@/util/which"
+import { Platform } from "@/util/platform"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -61,9 +62,14 @@ export namespace Shell {
     if (powershell) return powershell
   }
 
-  function select(file: string | undefined, opts?: { acceptable?: boolean }) {
+  function select(file: string | undefined, opts?: { acceptable?: boolean; directory?: string }) {
     if (file && (!opts?.acceptable || !BLACKLIST.has(name(file)))) return full(file)
     if (process.platform === "win32") {
+      // If the project is inside WSL filesystem, use wsl.exe as shell wrapper
+      if (opts?.directory && Platform.isWslUncPath(opts.directory)) {
+        const wsl = which("wsl.exe")
+        if (wsl) return wsl
+      }
       const shell = pick()
       if (shell) return shell
     }
@@ -107,4 +113,8 @@ export namespace Shell {
   export const preferred = lazy(() => select(process.env.SHELL))
 
   export const acceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
+
+  export function forDirectory(directory: string): string {
+    return select(process.env.SHELL, { acceptable: true, directory })
+  }
 }
