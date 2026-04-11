@@ -49,54 +49,62 @@ async function user(sessionID: SessionID, text: string) {
 }
 
 describe("session action routes", () => {
-  it.live("abort route calls SessionPrompt.cancel", () =>
-    provideTmpdirInstance({ git: true })(
-      Effect.gen(function* () {
-        const session = yield* Effect.promise(() => Session.create({}))
-        const cancel = spyOn(SessionPrompt, "cancel").mockResolvedValue()
-        const app = Server.Default().app
+  it.live(
+    "abort route calls SessionPrompt.cancel",
+    () =>
+      provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const session = yield* Effect.promise(() => Session.create({}))
+            const cancel = spyOn(SessionPrompt, "cancel").mockResolvedValue()
+            const app = Server.Default().app
 
-        const res = yield* Effect.promise(() =>
-          app.request(`/session/${session.id}/abort`, { method: "POST" }),
-        )
+            const res = yield* Effect.promise(() =>
+              app.request(`/session/${session.id}/abort`, { method: "POST" }),
+            )
 
-        expect(res.status).toBe(200)
-        expect(yield* Effect.promise(() => res.json())).toBe(true)
-        expect(cancel).toHaveBeenCalledWith(session.id)
+            expect(res.status).toBe(200)
+            expect(yield* Effect.promise(() => res.json())).toBe(true)
+            expect(cancel).toHaveBeenCalledWith(session.id)
 
-        yield* Effect.promise(() => Session.remove(session.id))
-      }),
-    ),
+            yield* Effect.promise(() => Session.remove(session.id))
+          }),
+        { git: true },
+      ),
   )
 
-  it.live("delete message route returns 400 when session is busy", () =>
-    provideTmpdirInstance({ git: true })(
-      Effect.gen(function* () {
-        const session = yield* Effect.promise(() => Session.create({}))
-        const msg = yield* Effect.promise(() => user(session.id, "hello"))
+  it.live(
+    "delete message route returns 400 when session is busy",
+    () =>
+      provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const session = yield* Effect.promise(() => Session.create({}))
+            const msg = yield* Effect.promise(() => user(session.id, "hello"))
 
-        // Make session busy: fork a never-ending runner and wait for status
-        const state = yield* SessionRunState.Service
-        const status = yield* SessionStatus.Service
-        yield* Effect.fork(state.ensureRunning(session.id, Effect.never, Effect.never))
-        yield* Effect.fn("waitBusy")(function* () {
-          while ((yield* status.get(session.id)).type !== "busy") {
-            yield* Effect.sleep("5 millis")
-          }
-        })()
+            // Make session busy: fork a never-ending runner and wait for status
+            const state = yield* SessionRunState.Service
+            const status = yield* SessionStatus.Service
+            yield* Effect.fork(state.ensureRunning(session.id, Effect.never, Effect.never))
+            yield* Effect.fn("waitBusy")(function* () {
+              while ((yield* status.get(session.id)).type !== "busy") {
+                yield* Effect.sleep("5 millis")
+              }
+            })()
 
-        const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
-        const app = Server.Default().app
+            const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
+            const app = Server.Default().app
 
-        const res = yield* Effect.promise(() =>
-          app.request(`/session/${session.id}/message/${msg.id}`, { method: "DELETE" }),
-        )
+            const res = yield* Effect.promise(() =>
+              app.request(`/session/${session.id}/message/${msg.id}`, { method: "DELETE" }),
+            )
 
-        expect(res.status).toBe(400)
-        expect(remove).not.toHaveBeenCalled()
+            expect(res.status).toBe(400)
+            expect(remove).not.toHaveBeenCalled()
 
-        yield* Effect.promise(() => Session.remove(session.id))
-      }),
-    ),
+            yield* Effect.promise(() => Session.remove(session.id))
+          }),
+        { git: true },
+      ),
   )
 })
