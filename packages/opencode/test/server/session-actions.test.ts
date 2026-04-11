@@ -67,17 +67,15 @@ describe("session action routes", () => {
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
 
-        // Make session busy: fork a never-ending runner and wait for status
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const state = yield* SessionRunState.Service
-            const status = yield* SessionStatus.Service
-            yield* Effect.forkDaemon(state.ensureRunning(session.id, Effect.never, Effect.never))
-            while ((yield* status.get(session.id)).type !== "busy") {
-              yield* Effect.sleep("5 millis")
-            }
-          }),
+        // Make session busy: fire off a never-ending runner and poll until busy
+        void AppRuntime.runPromise(
+          SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, Effect.never)),
         )
+        while (true) {
+          const s = await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(session.id)))
+          if (s.type === "busy") break
+          await new Promise((r) => setTimeout(r, 10))
+        }
 
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
         const app = Server.Default().app
