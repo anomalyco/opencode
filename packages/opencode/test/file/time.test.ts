@@ -1,15 +1,38 @@
-import { describe, test, expect, afterEach } from "bun:test"
+import { afterAll, afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Effect, ManagedRuntime } from "effect"
 import { FileTime } from "../../src/file/time"
+import { attach } from "../../src/effect/run-service"
 import { Instance } from "../../src/project/instance"
 import { SessionID } from "../../src/session/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
+const runtime = ManagedRuntime.make(FileTime.defaultLayer)
+
+afterAll(async () => {
+  await runtime.dispose()
+})
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
+
+const run = <A>(effect: Effect.Effect<A, any, FileTime.Service>) =>
+  runtime.runPromise(attach(effect))
+
+const read = (sessionID: SessionID, file: string) =>
+  run(FileTime.Service.use((ft) => ft.read(sessionID, file)))
+
+const get = (sessionID: SessionID, file: string) =>
+  run(FileTime.Service.use((ft) => ft.get(sessionID, file)))
+
+const assert = (sessionID: SessionID, filepath: string) =>
+  run(FileTime.Service.use((ft) => ft.assert(sessionID, filepath)))
+
+const withLock = <T>(filepath: string, fn: () => Effect.Effect<T>) =>
+  run(FileTime.Service.use((ft) => ft.withLock(filepath, fn)))
 
 async function touch(file: string, time: number) {
   const date = new Date(time)
@@ -36,12 +59,12 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const before = await FileTime.get(sessionID, filepath)
+          const before = await get(sessionID, filepath)
           expect(before).toBeUndefined()
 
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
 
-          const after = await FileTime.get(sessionID, filepath)
+          const after = await get(sessionID, filepath)
           expect(after).toBeInstanceOf(Date)
           expect(after!.getTime()).toBeGreaterThan(0)
         },
@@ -56,11 +79,11 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(SessionID.make("ses_00000000000000000000000002"), filepath)
-          await FileTime.read(SessionID.make("ses_00000000000000000000000003"), filepath)
+          await read(SessionID.make("ses_00000000000000000000000002"), filepath)
+          await read(SessionID.make("ses_00000000000000000000000003"), filepath)
 
-          const time1 = await FileTime.get(SessionID.make("ses_00000000000000000000000002"), filepath)
-          const time2 = await FileTime.get(SessionID.make("ses_00000000000000000000000003"), filepath)
+          const time1 = await get(SessionID.make("ses_00000000000000000000000002"), filepath)
+          const time2 = await get(SessionID.make("ses_00000000000000000000000003"), filepath)
 
           expect(time1).toBeDefined()
           expect(time2).toBeDefined()
@@ -76,11 +99,11 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
-          const first = await FileTime.get(sessionID, filepath)
+          await read(sessionID, filepath)
+          const first = await get(sessionID, filepath)
 
-          await FileTime.read(sessionID, filepath)
-          const second = await FileTime.get(sessionID, filepath)
+          await read(sessionID, filepath)
+          const second = await get(sessionID, filepath)
 
           expect(second!.getTime()).toBeGreaterThanOrEqual(first!.getTime())
         },
@@ -97,14 +120,14 @@ describe("file/time", () => {
       await Instance.provide({
         directory: one.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
         },
       })
 
       await Instance.provide({
         directory: two.path,
         fn: async () => {
-          expect(await FileTime.get(sessionID, filepath)).toBeUndefined()
+          expect(await get(sessionID, filepath)).toBeUndefined()
         },
       })
     })
@@ -120,8 +143,8 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
-          await FileTime.assert(sessionID, filepath)
+          await read(sessionID, filepath)
+          await assert(sessionID, filepath)
         },
       })
     })
@@ -134,7 +157,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow("You must read file")
+          await expect(assert(sessionID, filepath)).rejects.toThrow("You must read file")
         },
       })
     })
@@ -148,10 +171,10 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
           await fs.writeFile(filepath, "modified content", "utf-8")
           await touch(filepath, 2_000)
-          await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow("modified since it was last read")
+          await expect(assert(sessionID, filepath)).rejects.toThrow("modified since it was last read")
         },
       })
     })
@@ -165,13 +188,13 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
           await fs.writeFile(filepath, "modified", "utf-8")
           await touch(filepath, 2_000)
 
           let error: Error | undefined
           try {
-            await FileTime.assert(sessionID, filepath)
+            await assert(sessionID, filepath)
           } catch (e) {
             error = e as Error
           }
@@ -192,9 +215,9 @@ describe("file/time", () => {
         directory: tmp.path,
         fn: async () => {
           let executed = false
-          await FileTime.withLock(filepath, async () => {
+          await withLock(filepath, () => {
             executed = true
-            return "result"
+            return Effect.succeed("result")
           })
           expect(executed).toBe(true)
         },
@@ -208,9 +231,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await FileTime.withLock(filepath, async () => {
-            return "success"
-          })
+          const result = await withLock(filepath, () => Effect.succeed("success"))
           expect(result).toBe("success")
         },
       })
@@ -227,19 +248,23 @@ describe("file/time", () => {
           const hold = gate()
           const ready = gate()
 
-          const op1 = FileTime.withLock(filepath, async () => {
-            order.push(1)
-            ready.open()
-            await hold.wait
-            order.push(2)
-          })
+          const op1 = withLock(filepath, () =>
+            Effect.gen(function* () {
+              order.push(1)
+              ready.open()
+              yield* Effect.promise(() => hold.wait)
+              order.push(2)
+            }),
+          )
 
           await ready.wait
 
-          const op2 = FileTime.withLock(filepath, async () => {
-            order.push(3)
-            order.push(4)
-          })
+          const op2 = withLock(filepath, () =>
+            Effect.gen(function* () {
+              order.push(3)
+              order.push(4)
+            }),
+          )
 
           hold.open()
 
@@ -262,19 +287,23 @@ describe("file/time", () => {
           const hold = gate()
           const ready = gate()
 
-          const op1 = FileTime.withLock(filepath1, async () => {
-            started1 = true
-            ready.open()
-            await hold.wait
-            expect(started2).toBe(true)
-          })
+          const op1 = withLock(filepath1, () =>
+            Effect.gen(function* () {
+              started1 = true
+              ready.open()
+              yield* Effect.promise(() => hold.wait)
+              expect(started2).toBe(true)
+            }),
+          )
 
           await ready.wait
 
-          const op2 = FileTime.withLock(filepath2, async () => {
-            started2 = true
-            hold.open()
-          })
+          const op2 = withLock(filepath2, () =>
+            Effect.gen(function* () {
+              started2 = true
+              hold.open()
+            }),
+          )
 
           await Promise.all([op1, op2])
           expect(started1).toBe(true)
@@ -291,14 +320,13 @@ describe("file/time", () => {
         directory: tmp.path,
         fn: async () => {
           await expect(
-            FileTime.withLock(filepath, async () => {
-              throw new Error("Test error")
-            }),
+            withLock(filepath, () => Effect.die(new Error("Test error"))),
           ).rejects.toThrow("Test error")
 
           let executed = false
-          await FileTime.withLock(filepath, async () => {
+          await withLock(filepath, () => {
             executed = true
+            return Effect.void
           })
           expect(executed).toBe(true)
         },
@@ -318,9 +346,9 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, forwardSlash)
+          await read(sessionID, forwardSlash)
           // assert with the native backslash path should still work
-          await FileTime.assert(sessionID, filepath)
+          await assert(sessionID, filepath)
         },
       })
     })
@@ -336,9 +364,9 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
           // assert with forward slashes should still work
-          await FileTime.assert(sessionID, forwardSlash)
+          await assert(sessionID, forwardSlash)
         },
       })
     })
@@ -353,8 +381,8 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, forwardSlash)
-          const result = await FileTime.get(sessionID, filepath)
+          await read(sessionID, forwardSlash)
+          const result = await get(sessionID, filepath)
           expect(result).toBeInstanceOf(Date)
         },
       })
@@ -373,20 +401,24 @@ describe("file/time", () => {
           const hold = gate()
           const ready = gate()
 
-          const op1 = FileTime.withLock(filepath, async () => {
-            order.push(1)
-            ready.open()
-            await hold.wait
-            order.push(2)
-          })
+          const op1 = withLock(filepath, () =>
+            Effect.gen(function* () {
+              order.push(1)
+              ready.open()
+              yield* Effect.promise(() => hold.wait)
+              order.push(2)
+            }),
+          )
 
           await ready.wait
 
           // Use forward-slash variant -- should still serialize against op1
-          const op2 = FileTime.withLock(forwardSlash, async () => {
-            order.push(3)
-            order.push(4)
-          })
+          const op2 = withLock(forwardSlash, () =>
+            Effect.gen(function* () {
+              order.push(3)
+              order.push(4)
+            }),
+          )
 
           hold.open()
 
@@ -407,13 +439,13 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
 
           const stats = Filesystem.stat(filepath)
           expect(stats?.mtime).toBeInstanceOf(Date)
           expect(stats!.mtime.getTime()).toBeGreaterThan(0)
 
-          await FileTime.assert(sessionID, filepath)
+          await assert(sessionID, filepath)
         },
       })
     })
@@ -427,7 +459,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await FileTime.read(sessionID, filepath)
+          await read(sessionID, filepath)
 
           const originalStat = Filesystem.stat(filepath)
 
@@ -437,7 +469,7 @@ describe("file/time", () => {
           const newStat = Filesystem.stat(filepath)
           expect(newStat!.mtime.getTime()).toBeGreaterThan(originalStat!.mtime.getTime())
 
-          await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow()
+          await expect(assert(sessionID, filepath)).rejects.toThrow()
         },
       })
     })
