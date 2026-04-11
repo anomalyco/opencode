@@ -95,9 +95,9 @@ function stubOps(opts?: { text?: string; fail?: Error; abort?: AbortController }
       Effect.gen(function* () {
         if (opts?.abort) {
           opts.abort.abort()
-          return yield* Effect.fail(new Error("aborted"))
+          return yield* Effect.die(new Error("aborted"))
         }
-        if (opts?.fail) return yield* Effect.fail(opts.fail)
+        if (opts?.fail) return yield* Effect.die(opts.fail)
         return reply(input, opts?.text ?? "done")
       }),
   }
