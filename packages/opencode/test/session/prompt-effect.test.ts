@@ -193,6 +193,7 @@ function makeHttp() {
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
+      Layer.provide(Skill.defaultLayer),
       Layer.provideMerge(deps),
     ),
   )

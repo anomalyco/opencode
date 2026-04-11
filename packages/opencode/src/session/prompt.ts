@@ -48,6 +48,7 @@ import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
+import { Skill } from "@/skill"
 import { SessionRunState } from "./run-state"
 
 // @ts-ignore
@@ -102,6 +103,7 @@ export namespace SessionPrompt {
       const instruction = yield* Instruction.Service
       const state = yield* SessionRunState.Service
       const revert = yield* SessionRevert.Service
+      const skill = yield* Skill.Service
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
@@ -1469,8 +1471,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
               const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                Effect.promise(() => SystemPrompt.skills(agent)),
-                Effect.promise(() => SystemPrompt.environment(model)),
+                SystemPrompt.skills(agent, skill),
+                Effect.sync(() => SystemPrompt.environment(model)),
                 instruction.system().pipe(Effect.orDie),
                 MessageV2.toModelMessagesEffect(msgs, model),
               ])
@@ -1694,9 +1696,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(SessionRevert.defaultLayer),
-      Layer.provide(Agent.defaultLayer),
-      Layer.provide(Bus.layer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Layer.mergeAll(Agent.defaultLayer, Skill.defaultLayer, Bus.layer, CrossSpawnSpawner.defaultLayer)),
     ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)

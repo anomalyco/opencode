@@ -1,4 +1,4 @@
-import { Ripgrep } from "../file/ripgrep"
+import { Context, Effect } from "effect"
 
 import { Instance } from "../project/instance"
 
@@ -33,7 +33,7 @@ export namespace SystemPrompt {
     return [PROMPT_DEFAULT]
   }
 
-  export async function environment(model: Provider.Model) {
+  export function environment(model: Provider.Model) {
     const project = Instance.project
     return [
       [
@@ -46,24 +46,17 @@ export namespace SystemPrompt {
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
-        `<directories>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 50,
-              })
-            : ""
-        }`,
-        `</directories>`,
       ].join("\n"),
     ]
   }
 
-  export async function skills(agent: Agent.Info) {
+  export const skills = Effect.fn("SystemPrompt.skills")(function* (
+    agent: Agent.Info,
+    skill: Context.Service.Shape<typeof Skill.Service>,
+  ) {
     if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
-    const list = await Skill.available(agent)
+    const list = yield* skill.available(agent)
 
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",
@@ -72,5 +65,5 @@ export namespace SystemPrompt {
       // version of them here and a less verbose version in tool description, rather than vice versa.
       Skill.fmt(list, { verbose: true }),
     ].join("\n")
-  }
+  })
 }
