@@ -11,9 +11,7 @@ import { testEffect } from "../lib/effect"
 
 const dir = path.join(Global.Path.data, "storage")
 
-const it = testEffect(
-  Layer.mergeAll(Storage.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer),
-)
+const it = testEffect(Layer.mergeAll(Storage.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 const scope = Effect.fnUntraced(function* () {
   const root = ["storage_test", crypto.randomUUID()]
@@ -293,4 +291,3 @@ describe("Storage", () => {
     }),
   )
 })
-
