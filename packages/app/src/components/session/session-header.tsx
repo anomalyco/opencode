@@ -16,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
@@ -134,6 +135,7 @@ export function SessionHeader() {
   const server = useServer()
   const platform = usePlatform()
   const language = useLanguage()
+  const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
@@ -151,6 +153,10 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
+  const search = createMemo(() => platform.platform !== "desktop" || settings.general.showSearch())
+  const tree = createMemo(() => platform.platform !== "desktop" || settings.general.showFileTree())
+  const term = createMemo(() => platform.platform !== "desktop" || settings.general.showTerminal())
+  const status = createMemo(() => platform.platform !== "desktop" || settings.general.showStatus())
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -267,35 +273,37 @@ export function SessionHeader() {
 
   return (
     <>
-      <Show when={centerMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="small"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
-              onClick={() => command.trigger("file.open")}
-              aria-label={language.t("session.header.searchFiles")}
-            >
-              <div class="flex min-w-0 flex-1 items-center overflow-visible">
-                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
-                  {language.t("session.header.search.placeholder", {
-                    project: name(),
-                  })}
-                </span>
-              </div>
+      <Show when={search()}>
+        <Show when={centerMount()}>
+          {(mount) => (
+            <Portal mount={mount()}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="small"
+                class="hidden md:flex w-[240px] max-w-full min-w-0 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
+                onClick={() => command.trigger("file.open")}
+                aria-label={language.t("session.header.searchFiles")}
+              >
+                <div class="flex min-w-0 flex-1 items-center overflow-visible">
+                  <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
+                    {language.t("session.header.search.placeholder", {
+                      project: name(),
+                    })}
+                  </span>
+                </div>
 
-              <Show when={hotkey()}>
-                {(keybind) => (
-                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0 text-text-weaker">
-                    {keybind()}
-                  </Keybind>
-                )}
-              </Show>
-            </Button>
-          </Portal>
-        )}
+                <Show when={hotkey()}>
+                  {(keybind) => (
+                    <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0 text-text-weaker">
+                      {keybind()}
+                    </Keybind>
+                  )}
+                </Show>
+              </Button>
+            </Portal>
+          )}
+        </Show>
       </Show>
       <Show when={rightMount()}>
         {(mount) => (
@@ -415,24 +423,28 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
-                <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
-                  <StatusPopover />
-                </Tooltip>
-                <TooltipKeybind
-                  title={language.t("command.terminal.toggle")}
-                  keybind={command.keybind("terminal.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                    onClick={toggleTerminal}
-                    aria-label={language.t("command.terminal.toggle")}
-                    aria-expanded={view().terminal.opened()}
-                    aria-controls="terminal-panel"
+                <Show when={status()}>
+                  <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+                    <StatusPopover />
+                  </Tooltip>
+                </Show>
+                <Show when={term()}>
+                  <TooltipKeybind
+                    title={language.t("command.terminal.toggle")}
+                    keybind={command.keybind("terminal.toggle")}
                   >
-                    <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
-                  </Button>
-                </TooltipKeybind>
+                    <Button
+                      variant="ghost"
+                      class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                      onClick={toggleTerminal}
+                      aria-label={language.t("command.terminal.toggle")}
+                      aria-expanded={view().terminal.opened()}
+                      aria-controls="terminal-panel"
+                    >
+                      <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
@@ -451,30 +463,32 @@ export function SessionHeader() {
                     </Button>
                   </TooltipKeybind>
 
-                  <TooltipKeybind
-                    title={language.t("command.fileTree.toggle")}
-                    keybind={command.keybind("fileTree.toggle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => layout.fileTree.toggle()}
-                      aria-label={language.t("command.fileTree.toggle")}
-                      aria-expanded={layout.fileTree.opened()}
-                      aria-controls="file-tree-panel"
+                  <Show when={tree()}>
+                    <TooltipKeybind
+                      title={language.t("command.fileTree.toggle")}
+                      keybind={command.keybind("fileTree.toggle")}
                     >
-                      <div class="relative flex items-center justify-center size-4">
-                        <Icon
-                          size="small"
-                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
-                          classList={{
-                            "text-icon-strong": layout.fileTree.opened(),
-                            "text-icon-weak": !layout.fileTree.opened(),
-                          }}
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
+                      <Button
+                        variant="ghost"
+                        class="titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => layout.fileTree.toggle()}
+                        aria-label={language.t("command.fileTree.toggle")}
+                        aria-expanded={layout.fileTree.opened()}
+                        aria-controls="file-tree-panel"
+                      >
+                        <div class="relative flex items-center justify-center size-4">
+                          <Icon
+                            size="small"
+                            name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                            classList={{
+                              "text-icon-strong": layout.fileTree.opened(),
+                              "text-icon-weak": !layout.fileTree.opened(),
+                            }}
+                          />
+                        </div>
+                      </Button>
+                    </TooltipKeybind>
+                  </Show>
                 </div>
               </div>
             </div>

@@ -11,6 +11,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 
 type TauriDesktopWindow = {
@@ -40,6 +41,7 @@ export function Titlebar() {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
+  const settings = useSettings()
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -78,6 +80,7 @@ export function Titlebar() {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
+  const nav = createMemo(() => platform.platform !== "desktop" || settings.general.showNavigation())
 
   const back = () => {
     const next = backPath(history)
@@ -252,7 +255,7 @@ export function Titlebar() {
                 </div>
               </div>
             </Show>
-            <Show when={hasProjects()}>
+            <Show when={hasProjects() && nav()}>
               <div
                 class="flex items-center gap-0 transition-transform"
                 classList={{
