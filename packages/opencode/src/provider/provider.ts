@@ -815,6 +815,27 @@ export namespace Provider {
             },
           },
         }),
+      litellm: Effect.fnUntraced(function* (input: Info) {
+        const providerConfig = (yield* dep.config()).provider?.["litellm"]
+        const apiKey = Env.get("LITELLM_API_KEY")
+        const baseURL = providerConfig?.options?.baseURL ?? providerConfig?.api
+
+        if (!baseURL) {
+          return { autoload: false }
+        }
+
+        const options: Record<string, any> = { baseURL }
+        if (apiKey) options.apiKey = apiKey
+        else if (providerConfig?.options?.apiKey) options.apiKey = providerConfig.options.apiKey
+
+        return {
+          autoload: true,
+          options,
+          async getModel(sdk: any, modelID: string) {
+            return sdk.languageModel(modelID)
+          },
+        }
+      }),
     }
   }
 
