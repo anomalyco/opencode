@@ -1,9 +1,10 @@
-import { DateTime, Effect, Layer, Option, Semaphore, ServiceMap } from "effect"
+import { DateTime, Effect, Layer, Option, Semaphore, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
+import { Filesystem } from "@/util/filesystem"
 import { Log } from "../util/log"
 
 export namespace FileTime {
@@ -33,10 +34,10 @@ export namespace FileTime {
     readonly read: (sessionID: SessionID, file: string) => Effect.Effect<void>
     readonly get: (sessionID: SessionID, file: string) => Effect.Effect<Date | undefined>
     readonly assert: (sessionID: SessionID, filepath: string) => Effect.Effect<void>
-    readonly withLock: <T>(filepath: string, fn: () => Promise<T>) => Effect.Effect<T>
+    readonly withLock: <T>(filepath: string, fn: () => Effect.Effect<T>) => Effect.Effect<T>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileTime") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/FileTime") {}
 
   export const layer = Layer.effect(
     Service,
@@ -45,7 +46,7 @@ export namespace FileTime {
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
 
       const stamp = Effect.fnUntraced(function* (file: string) {
-        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.void))
         return {
           read: yield* DateTime.nowAsDate,
           mtime: info ? Option.getOrUndefined(info.mtime)?.getTime() : undefined,
@@ -62,6 +63,7 @@ export namespace FileTime {
       )
 
       const getLock = Effect.fn("FileTime.lock")(function* (filepath: string) {
+        filepath = Filesystem.normalizePath(filepath)
         const locks = (yield* InstanceState.get(state)).locks
         const lock = locks.get(filepath)
         if (lock) return lock
@@ -72,18 +74,21 @@ export namespace FileTime {
       })
 
       const read = Effect.fn("FileTime.read")(function* (sessionID: SessionID, file: string) {
+        file = Filesystem.normalizePath(file)
         const reads = (yield* InstanceState.get(state)).reads
         log.info("read", { sessionID, file })
         session(reads, sessionID).set(file, yield* stamp(file))
       })
 
       const get = Effect.fn("FileTime.get")(function* (sessionID: SessionID, file: string) {
+        file = Filesystem.normalizePath(file)
         const reads = (yield* InstanceState.get(state)).reads
         return reads.get(sessionID)?.get(file)?.read
       })
 
       const assert = Effect.fn("FileTime.assert")(function* (sessionID: SessionID, filepath: string) {
         if (disableCheck) return
+        filepath = Filesystem.normalizePath(filepath)
 
         const reads = (yield* InstanceState.get(state)).reads
         const time = reads.get(sessionID)?.get(filepath)
@@ -98,8 +103,8 @@ export namespace FileTime {
         )
       })
 
-      const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Promise<T>) {
-        return yield* Effect.promise(fn).pipe((yield* getLock(filepath)).withPermits(1))
+      const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Effect.Effect<T>) {
+        return yield* fn().pipe((yield* getLock(filepath)).withPermits(1))
       })
 
       return Service.of({ read, get, assert, withLock })
@@ -123,6 +128,6 @@ export namespace FileTime {
   }
 
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromise((s) => s.withLock(filepath, fn))
+    return runPromise((s) => s.withLock(filepath, () => Effect.promise(fn)))
   }
 }

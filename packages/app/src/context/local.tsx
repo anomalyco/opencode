@@ -11,7 +11,7 @@ import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } fro
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 
-export type ModelKey = { providerID: string; modelID: string }
+export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
 type State = {
   agent?: string
@@ -373,7 +373,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           handoff.set(handoffKey(dir, session), next)
           setStore("draft", undefined)
         },
-        restore(msg: { sessionID: string; agent: string; model: ModelKey; variant?: string }) {
+        restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
@@ -383,7 +383,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            variant: msg.variant ?? null,
+            variant: msg.model.variant ?? null,
           })
         },
       },

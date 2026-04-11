@@ -2,7 +2,6 @@ import type {
   Agent,
   Command,
   Config,
-  FileDiff,
   LspStatus,
   McpStatus,
   Message,
@@ -14,6 +13,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
@@ -48,7 +48,7 @@ export type State = {
     [sessionID: string]: SessionStatus
   }
   session_diff: {
-    [sessionID: string]: FileDiff[]
+    [sessionID: string]: SnapshotFileDiff[]
   }
   todo: {
     [sessionID: string]: Todo[]

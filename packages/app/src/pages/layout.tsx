@@ -12,6 +12,7 @@ import {
   untrack,
   type Accessor,
 } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -149,7 +150,6 @@ export default function Layout(props: ParentProps) {
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
-    hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
@@ -193,7 +193,6 @@ export default function Layout(props: ParentProps) {
     onActivate: (directory) => {
       globalSync.child(directory)
       setState("hoverProject", directory)
-      setState("hoverSession", undefined)
     },
   })
 
@@ -215,18 +214,11 @@ export default function Layout(props: ParentProps) {
       if (document.visibilityState !== "hidden") return
       reset()
     }
-    window.addEventListener("pointerup", stop)
-    window.addEventListener("pointercancel", stop)
-    window.addEventListener("blur", stop)
-    window.addEventListener("blur", blur)
-    document.addEventListener("visibilitychange", hide)
-    onCleanup(() => {
-      window.removeEventListener("pointerup", stop)
-      window.removeEventListener("pointercancel", stop)
-      window.removeEventListener("blur", stop)
-      window.removeEventListener("blur", blur)
-      document.removeEventListener("visibilitychange", hide)
-    })
+    makeEventListener(window, "pointerup", stop)
+    makeEventListener(window, "pointercancel", stop)
+    makeEventListener(window, "blur", stop)
+    makeEventListener(window, "blur", blur)
+    makeEventListener(document, "visibilitychange", hide)
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
@@ -237,7 +229,6 @@ export default function Layout(props: ParentProps) {
     aim.reset()
   }
   const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
-  const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
 
   const disarm = () => {
     if (navLeave.current === undefined) return
@@ -247,7 +238,6 @@ export default function Layout(props: ParentProps) {
 
   const reset = () => {
     disarm()
-    setState("hoverSession", undefined)
     setHoverProject(undefined)
   }
 
@@ -258,7 +248,6 @@ export default function Layout(props: ParentProps) {
     navLeave.current = window.setTimeout(() => {
       navLeave.current = undefined
       setHoverProject(undefined)
-      setState("hoverSession", undefined)
     }, 300)
   }
 
@@ -1394,8 +1383,7 @@ export default function Layout(props: ParentProps) {
     }
 
     handleDeepLinks(drainPendingDeepLinks(window))
-    window.addEventListener(deepLinkEvent, handler as EventListener)
-    onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+    makeEventListener(window, deepLinkEvent, handler as EventListener)
   })
 
   async function renameProject(project: LocalProject, next: string) {
@@ -1979,9 +1967,6 @@ export default function Layout(props: ParentProps) {
     navList: currentSessions,
     sidebarExpanded,
     sidebarHovering,
-    nav: () => state.nav,
-    hoverSession: () => state.hoverSession,
-    setHoverSession,
     clearHoverProjectSoon,
     prefetchSession,
     archiveSession,
@@ -2010,7 +1995,6 @@ export default function Layout(props: ParentProps) {
     sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
     hoverProject: () => state.hoverProject,
-    nav: () => state.nav,
     onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
     onProjectMouseLeave: (worktree) => aim.leave(worktree),
     onProjectFocus: (worktree) => aim.activate(worktree),
@@ -2029,15 +2013,10 @@ export default function Layout(props: ParentProps) {
     sessionProps: {
       navList: currentSessions,
       sidebarExpanded,
-      sidebarHovering,
-      nav: () => state.nav,
-      hoverSession: () => state.hoverSession,
-      setHoverSession,
       clearHoverProjectSoon,
       prefetchSession,
       archiveSession,
     },
-    setHoverSession,
   }
 
   const SidebarPanel = (panelProps: {
@@ -2048,7 +2027,6 @@ export default function Layout(props: ParentProps) {
     const project = panelProps.project
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
     const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
-    const popover = createMemo(() => !!panelProps.mobile || panelProps.merged === false || layout.sidebar.opened())
     const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const projectName = createMemo(() => {
       const item = project()
@@ -2250,7 +2228,6 @@ export default function Layout(props: ParentProps) {
                         project={project()!}
                         sortNow={sortNow}
                         mobile={panelProps.mobile}
-                        popover={popover()}
                       />
                     </div>
                   </>
@@ -2295,7 +2272,6 @@ export default function Layout(props: ParentProps) {
                                 project={project()!}
                                 sortNow={sortNow}
                                 mobile={panelProps.mobile}
-                                popover={popover()}
                               />
                             )}
                           </For>

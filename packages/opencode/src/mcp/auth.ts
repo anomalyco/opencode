@@ -1,7 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -49,7 +49,7 @@ export namespace McpAuth {
     readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/McpAuth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/McpAuth") {}
 
   export const layer = Layer.effect(
     Service,
@@ -141,7 +141,7 @@ export namespace McpAuth {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -168,14 +168,6 @@ export namespace McpAuth {
   export const updateCodeVerifier = async (mcpName: string, codeVerifier: string) =>
     runPromise((svc) => svc.updateCodeVerifier(mcpName, codeVerifier))
 
-  export const clearCodeVerifier = async (mcpName: string) => runPromise((svc) => svc.clearCodeVerifier(mcpName))
-
   export const updateOAuthState = async (mcpName: string, oauthState: string) =>
     runPromise((svc) => svc.updateOAuthState(mcpName, oauthState))
-
-  export const getOAuthState = async (mcpName: string) => runPromise((svc) => svc.getOAuthState(mcpName))
-
-  export const clearOAuthState = async (mcpName: string) => runPromise((svc) => svc.clearOAuthState(mcpName))
-
-  export const isTokenExpired = async (mcpName: string) => runPromise((svc) => svc.isTokenExpired(mcpName))
 }

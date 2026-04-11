@@ -6,7 +6,7 @@ import { it } from "../lib/effect"
 describe("Runner", () => {
   // --- ensureRunning semantics ---
 
-  it.effect(
+  it.live(
     "ensureRunning starts work and returns result",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -18,7 +18,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "ensureRunning propagates work failures",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -29,7 +29,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "concurrent callers share the same run",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -51,7 +51,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "concurrent callers all receive same error",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -71,7 +71,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "ensureRunning can be called again after previous run completes",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -81,7 +81,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "second ensureRunning ignores new work if already running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -110,7 +110,7 @@ describe("Runner", () => {
 
   // --- cancel semantics ---
 
-  it.effect(
+  it.live(
     "cancel interrupts running work",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -128,7 +128,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel on idle is a no-op",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -138,7 +138,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel with onInterrupt resolves callers gracefully",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -154,7 +154,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel with queued callers resolves all",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -175,7 +175,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "work can be started after cancel",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -245,18 +245,18 @@ describe("Runner", () => {
 
   // --- shell semantics ---
 
-  it.effect(
+  it.live(
     "shell runs exclusively",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
-      const result = yield* runner.startShell((_signal) => Effect.succeed("shell-done"))
+      const result = yield* runner.startShell(Effect.succeed("shell-done"))
       expect(result).toBe("shell-done")
       expect(runner.busy).toBe(false)
     }),
   )
 
-  it.effect(
+  it.live(
     "shell rejects when run is active",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -264,7 +264,7 @@ describe("Runner", () => {
       const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
-      const exit = yield* runner.startShell((_s) => Effect.succeed("nope")).pipe(Effect.exit)
+      const exit = yield* runner.startShell(Effect.succeed("nope")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
 
       yield* runner.cancel
@@ -272,19 +272,17 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "shell rejects when another shell is running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
-      const sh = yield* runner
-        .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("first")))
-        .pipe(Effect.forkChild)
+      const sh = yield* runner.startShell(Deferred.await(gate).pipe(Effect.as("first"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
-      const exit = yield* runner.startShell((_s) => Effect.succeed("second")).pipe(Effect.exit)
+      const exit = yield* runner.startShell(Effect.succeed("second")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
 
       yield* Deferred.succeed(gate, undefined)
@@ -292,7 +290,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "shell rejects via busy callback and cancel still stops the first shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -302,37 +300,26 @@ describe("Runner", () => {
         },
       })
 
-      const sh = yield* runner
-        .startShell((signal) =>
-          Effect.promise(
-            () =>
-              new Promise<string>((resolve) => {
-                signal.addEventListener("abort", () => resolve("aborted"), { once: true })
-              }),
-          ),
-        )
-        .pipe(Effect.forkChild)
+      const sh = yield* runner.startShell(Effect.never.pipe(Effect.as("aborted"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
-      const exit = yield* runner.startShell((_s) => Effect.succeed("second")).pipe(Effect.exit)
+      const exit = yield* runner.startShell(Effect.succeed("second")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
 
       yield* runner.cancel
       const done = yield* Fiber.await(sh)
-      expect(Exit.isSuccess(done)).toBe(true)
+      expect(Exit.isFailure(done)).toBe(true)
     }),
   )
 
-  it.effect(
-    "cancel interrupts shell that ignores abort signal",
+  it.live(
+    "cancel interrupts shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
-      const sh = yield* runner
-        .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("ignored")))
-        .pipe(Effect.forkChild)
+      const sh = yield* runner.startShell(Deferred.await(gate).pipe(Effect.as("ignored"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
       const stop = yield* runner.cancel.pipe(Effect.forkChild)
@@ -349,16 +336,14 @@ describe("Runner", () => {
 
   // --- shell→run handoff ---
 
-  it.effect(
+  it.live(
     "ensureRunning queues behind shell then runs after",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
-      const sh = yield* runner
-        .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("shell-result")))
-        .pipe(Effect.forkChild)
+      const sh = yield* runner.startShell(Deferred.await(gate).pipe(Effect.as("shell-result"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
       expect(runner.state._tag).toBe("Shell")
 
@@ -376,7 +361,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "multiple ensureRunning callers share the queued run behind shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -384,9 +369,7 @@ describe("Runner", () => {
       const calls = yield* Ref.make(0)
       const gate = yield* Deferred.make<void>()
 
-      const sh = yield* runner
-        .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("shell")))
-        .pipe(Effect.forkChild)
+      const sh = yield* runner.startShell(Deferred.await(gate).pipe(Effect.as("shell"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
       const work = Effect.gen(function* () {
@@ -407,23 +390,14 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel during shell_then_run cancels both",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
-      const sh = yield* runner
-        .startShell((signal) =>
-          Effect.promise(
-            () =>
-              new Promise<string>((resolve) => {
-                signal.addEventListener("abort", () => resolve("aborted"), { once: true })
-              }),
-          ),
-        )
-        .pipe(Effect.forkChild)
+      const sh = yield* runner.startShell(Effect.never.pipe(Effect.as("aborted"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
       const run = yield* runner.ensureRunning(Effect.succeed("y")).pipe(Effect.forkChild)
@@ -441,7 +415,7 @@ describe("Runner", () => {
 
   // --- lifecycle callbacks ---
 
-  it.effect(
+  it.live(
     "onIdle fires when returning to idle from running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -454,7 +428,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "onIdle fires on cancel",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -470,7 +444,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "onBusy fires when shell starts",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -478,14 +452,14 @@ describe("Runner", () => {
       const runner = Runner.make<string>(s, {
         onBusy: Ref.update(count, (n) => n + 1),
       })
-      yield* runner.startShell((_signal) => Effect.succeed("done"))
+      yield* runner.startShell(Effect.succeed("done"))
       expect(yield* Ref.get(count)).toBe(1)
     }),
   )
 
   // --- busy flag ---
 
-  it.effect(
+  it.live(
     "busy is true during run",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -502,16 +476,14 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "busy is true during shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
-      const fiber = yield* runner
-        .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("ok")))
-        .pipe(Effect.forkChild)
+      const fiber = yield* runner.startShell(Deferred.await(gate).pipe(Effect.as("ok"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
       expect(runner.busy).toBe(true)
 

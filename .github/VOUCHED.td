@@ -11,6 +11,7 @@ adamdotdevin
 -agusbasari29 AI PR slop
 ariane-emory
 -atharvau AI review spamming literally every PR
+-borealbytes
 -danieljoshuanazareth
 -danieljoshuanazareth
 edemaine
@@ -27,3 +28,4 @@ rekram1-node
 -robinmordasiewicz
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
+-toastythebot

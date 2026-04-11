@@ -77,5 +77,6 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
       workspace: config?.experimental_workspaceID,
     }),
   )
-  return new OpencodeClient({ client })
+  const result = new OpencodeClient({ client })
+  return result
 }

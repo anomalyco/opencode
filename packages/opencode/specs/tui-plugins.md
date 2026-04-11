@@ -10,6 +10,7 @@ Technical reference for the current TUI plugin system.
 - Package plugins can be installed from CLI or TUI.
 - v1 plugin modules are target-exclusive: a module can export `server` or `tui`, never both.
 - Server runtime keeps v0 legacy fallback (function exports / enumerated exports) after v1 parsing.
+- npm packages can be TUI theme-only via `package.json["oc-themes"]` without a `./tui` entrypoint.
 
 ## TUI config
 
@@ -88,7 +89,8 @@ export default plugin
 - If package `exports` exists, loader only resolves `./tui` or `./server`; it never falls back to `exports["."]`.
 - For npm package specs, TUI does not use `package.json` `main` as a fallback entry.
 - `package.json` `main` is only used for server plugin entrypoint resolution.
-- If a configured plugin has no target-specific entrypoint, it is skipped with a warning (not a load failure).
+- If a configured TUI package has no `./tui` entrypoint and no valid `oc-themes`, it is skipped with a warning (not a load failure).
+- If a configured TUI package has no `./tui` entrypoint but has valid `oc-themes`, runtime creates a no-op module record and still loads it for theme sync and plugin state.
 - If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.
 - File/path plugins must export a non-empty `id`.
 - npm plugins may omit `id`; package `name` is used.
@@ -101,10 +103,18 @@ export default plugin
 
 ## Package manifest and install
 
-Install target detection is inferred from `package.json` entrypoints:
+Install target detection is inferred from `package.json` entrypoints and theme metadata:
 
 - `server` target when `exports["./server"]` exists or `main` is set.
 - `tui` target when `exports["./tui"]` exists.
+- `tui` target when `oc-themes` exists and resolves to a non-empty set of valid package-relative theme paths.
+
+`oc-themes` rules:
+
+- `oc-themes` is an array of relative paths.
+- Absolute paths and `file://` paths are rejected.
+- Resolved theme paths must stay inside the package directory.
+- Invalid `oc-themes` causes manifest read failure for install.
 
 Example:
 
@@ -184,15 +194,15 @@ That is what makes local config-scoped plugins able to import `@opencode-ai/plug
 Top-level API groups exposed to `tui(api, options, meta)`:
 
 - `api.app.version`
-- `api.command.register(cb)` / `api.command.trigger(value)`
+- `api.command.register(cb)` / `api.command.trigger(value)` / `api.command.show()`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
-- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Prompt`, `ui.toast`, `ui.dialog`
+- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Slot`, `Prompt`, `ui.toast`, `ui.dialog`
 - `api.keybind.match`, `print`, `create`
 - `api.tuiConfig`
 - `api.kv.get`, `set`, `ready`
 - `api.state`
 - `api.theme.current`, `selected`, `has`, `set`, `install`, `mode`, `ready`
-- `api.client`, `api.scopedClient(workspaceID?)`, `api.workspace.current()`, `api.workspace.set(workspaceID?)`
+- `api.client`
 - `api.event.on(type, handler)`
 - `api.renderer`
 - `api.slots.register(plugin)`
@@ -215,6 +225,7 @@ Command behavior:
 - Registrations are reactive.
 - Later registrations win for duplicate `value` and for keybind handling.
 - Hidden commands are removed from the command dialog and slash list, but still respond to keybinds and `command.trigger(value)` if `enabled !== false`.
+- `api.command.show()` opens the host command dialog directly.
 
 ### Routes
 
@@ -232,7 +243,8 @@ Command behavior:
 
 - `ui.Dialog` is the base dialog wrapper.
 - `ui.DialogAlert`, `ui.DialogConfirm`, `ui.DialogPrompt`, `ui.DialogSelect` are built-in dialog components.
-- `ui.Prompt` renders the same prompt component used by the host app.
+- `ui.Slot` renders host or plugin-defined slots by name from plugin JSX.
+- `ui.Prompt` renders the same prompt component used by the host app and accepts `sessionID`, `workspaceID`, `ref`, and `right` for the prompt meta row's right side.
 - `ui.toast(...)` shows a toast.
 - `ui.dialog` exposes the host dialog stack:
   - `replace(render, onClose?)`
@@ -258,7 +270,6 @@ Command behavior:
   - `provider`
   - `path.{state,config,worktree,directory}`
   - `vcs?.branch`
-  - `workspace.list()` / `workspace.get(workspaceID)`
   - `session.count()`
   - `session.diff(sessionID)`
   - `session.todo(sessionID)`
@@ -270,8 +281,6 @@ Command behavior:
   - `lsp()`
   - `mcp()`
 - `api.client` always reflects the current runtime client.
-- `api.scopedClient(workspaceID?)` creates or reuses a client bound to a workspace.
-- `api.workspace.set(...)` rebinds the active workspace; `api.client` follows that rebind.
 - `api.event.on(type, handler)` subscribes to the TUI event stream and returns an unsubscribe function.
 - `api.renderer` exposes the raw `CliRenderer`.
 
@@ -289,9 +298,12 @@ Theme install behavior:
 
 - Relative theme paths are resolved from the plugin root.
 - Theme name is the JSON basename.
+- `api.theme.install(...)` and `oc-themes` auto-sync share the same installer path.
+- Theme copy/write runs under cross-process lock key `tui-theme:<dest>`.
 - First install writes only when the destination file is missing.
 - If the theme name already exists, install is skipped unless plugin metadata state is `updated`.
-- On `updated`, host only rewrites themes previously tracked for that plugin and only when source `mtime`/`size` changed.
+- On `updated`, host skips rewrite when tracked `mtime`/`size` is unchanged.
+- When a theme already exists and state is not `updated`, host can still persist theme metadata when destination already exists.
 - Local plugins persist installed themes under the local `.opencode/themes` area near the plugin config source.
 - Global plugins persist installed themes under the global `themes` dir.
 - Invalid or unreadable theme files are ignored.
@@ -302,8 +314,12 @@ Current host slot names:
 
 - `app`
 - `home_logo`
-- `home_prompt` with props `{ workspace_id? }`
+- `home_prompt` with props `{ workspace_id?, ref? }`
+- `home_prompt_right` with props `{ workspace_id? }`
+- `session_prompt` with props `{ session_id, visible?, disabled?, on_submit?, ref? }`
+- `session_prompt_right` with props `{ session_id }`
 - `home_bottom`
+- `home_footer`
 - `sidebar_title` with props `{ session_id, title, share_url? }`
 - `sidebar_content` with props `{ session_id }`
 - `sidebar_footer` with props `{ session_id }`
@@ -315,8 +331,8 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo` and `home_prompt` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
-- Plugins cannot define new slot names in this branch.
+- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- Plugins can define custom slot names in `api.slots.register(...)` and render them from plugin UI with `ui.Slot`.
 
 ### Plugin control and lifecycle
 
@@ -328,6 +344,7 @@ Slot notes:
 - `api.plugins.add(spec)` treats the input as the runtime plugin spec and loads it without re-reading `tui.json`.
 - `api.plugins.add(spec)` no-ops when that resolved spec (or resolved plugin id) is already loaded.
 - `api.plugins.add(spec)` assumes enabled and always attempts initialization (it does not consult config/KV enable state).
+- `api.plugins.add(spec)` can load theme-only packages (`oc-themes` with no `./tui`) as runtime entries.
 - `api.plugins.install(spec, { global? })` runs install -> manifest read -> config patch using the same helper flow as CLI install.
 - `api.plugins.install(...)` returns either `{ ok: false, message, missing? }` or `{ ok: true, dir, tui }`.
 - `api.plugins.install(...)` does not load plugins into the current session. Call `api.plugins.add(spec)` to load after install.
@@ -357,7 +374,11 @@ Metadata is persisted by plugin id.
 - External TUI plugins load from `tuiConfig.plugin`.
 - `--pure` / `OPENCODE_PURE` skips external TUI plugins only.
 - External plugin resolution and import are parallel.
+- Packages with no `./tui` entrypoint and valid `oc-themes` are loaded as synthetic no-op TUI plugin modules.
+- Theme-only packages loaded this way appear in `api.plugins.list()` and plugin manager rows like other external plugins.
+- Packages with no `./tui` entrypoint and no valid `oc-themes` are skipped with warning.
 - External plugin activation is sequential to keep command, route, and side-effect order deterministic.
+- Theme auto-sync from `oc-themes` runs before plugin `tui(...)` execution and only on metadata state `first` or `updated`.
 - File plugins that fail initially are retried once after waiting for config dependency installation.
 - Runtime add uses the same external loader path, including the file-plugin retry after dependency wait.
 - Runtime add skips duplicates by resolved spec and returns `true` when the spec is already loaded.
@@ -400,11 +421,13 @@ The plugin manager is exposed as a command with title `Plugins` and value `plugi
 - Install is blocked until `api.state.path.directory` is available; current guard message is `Paths are still syncing. Try again in a moment.`.
 - Manager install uses `api.plugins.install(spec, { global })`.
 - If the installed package has no `tui` target (`tui=false`), manager reports that and does not expect a runtime load.
+- `tui` target detection includes `exports["./tui"]` and valid `oc-themes`.
 - If install reports `tui=true`, manager then calls `api.plugins.add(spec)`.
 - If runtime add fails, TUI shows a warning and restart remains the fallback.
 
 ## Current in-repo examples
 
 - Local smoke plugin: `.opencode/plugins/tui-smoke.tsx`
+- Local vim plugin: `.opencode/plugins/tui-vim.tsx`
 - Local smoke config: `.opencode/tui.json`
 - Local smoke theme: `.opencode/plugins/smoke-theme.json`
