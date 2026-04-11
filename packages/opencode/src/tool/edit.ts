@@ -176,7 +176,7 @@ export const EditTool = Tool.define(
             title: `${path.relative(Instance.worktree, filePath)}`,
             output,
           }
-        }).pipe(Effect.orDie),
+        }),
     }
   }),
 )

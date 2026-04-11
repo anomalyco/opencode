@@ -500,7 +500,7 @@ export const BashTool = Tool.define(
               },
               ctx,
             )
-          }).pipe(Effect.orDie),
+          }),
       }
     }
   }),

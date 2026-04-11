@@ -55,7 +55,7 @@ export const MultiEditTool = Tool.define(
             },
             output: results.at(-1)!.output,
           }
-        }).pipe(Effect.orDie),
+        }),
     }
   }),
 )
