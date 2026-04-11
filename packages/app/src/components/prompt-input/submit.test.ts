@@ -26,13 +26,15 @@ const syncedDirectories: string[] = []
 const messagePages: Record<string, Array<{ info: { id: string } }>> = {}
 
 let params: { id?: string } = {}
+let current = "/repo/worktree-a"
+let root = "/repo/main"
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
-const clientFor = (directory: string) => {
-  createdClients.push(directory)
+const clientFor = (directory: string, track = true) => {
+  if (track) createdClients.push(directory)
   return {
     session: {
       create: async () => {
@@ -64,8 +66,6 @@ const clientFor = (directory: string) => {
 }
 
 beforeAll(async () => {
-  const rootClient = clientFor("/repo/main")
-
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => params,
@@ -132,8 +132,8 @@ beforeAll(async () => {
   mock.module("@/context/sdk", () => ({
     useSDK: () => {
       const sdk = {
-        directory: "/repo/main",
-        client: rootClient,
+        directory: current,
+        client: clientFor(current, false),
         url: "http://localhost:4096",
         createClient(opts: any) {
           return clientFor(opts.directory)
@@ -145,6 +145,7 @@ beforeAll(async () => {
 
   mock.module("@/context/sync", () => ({
     useSync: () => ({
+      project: { worktree: root },
       data: { command: [] },
       session: {
         optimistic: {
@@ -229,6 +230,8 @@ beforeEach(() => {
   sentCommands.length = 0
   syncedDirectories.length = 0
   toasts.length = 0
+  current = "/repo/worktree-a"
+  root = "/repo/main"
   selected = "/repo/worktree-a"
   variant = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
@@ -236,6 +239,39 @@ beforeEach(() => {
 })
 
 describe("prompt submit worktree selection", () => {
+  test("routes main selection to the project root from a sandbox page", async () => {
+    selected = "main"
+
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      resetInputUndo: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(createdClients).toEqual(["/repo/main"])
+    expect(createdSessions).toEqual(["/repo/main"])
+    expect(sentShell).toEqual(["/repo/main"])
+    expect(promoted).toEqual([{ directory: "/repo/main", sessionID: "session-1" }])
+  })
+
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
       info: () => undefined,
@@ -263,15 +299,15 @@ describe("prompt submit worktree selection", () => {
     selected = "/repo/worktree-b"
     await submit.handleSubmit(event)
 
-    expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+    expect(createdClients).toEqual(["/repo/worktree-b"])
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
     expect(promoted).toEqual([
       { directory: "/repo/worktree-a", sessionID: "session-1" },
       { directory: "/repo/worktree-b", sessionID: "session-2" },
     ])
-    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
   })
 
   test("applies auto-accept to newly created sessions", async () => {
