@@ -1,3 +1,4 @@
+import "@opentui/solid/runtime-plugin-support"
 import { Config } from "@/config/config"
 import { Installation } from "@/installation"
 import {
