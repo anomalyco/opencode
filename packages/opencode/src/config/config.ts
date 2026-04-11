@@ -740,6 +740,34 @@ export namespace Config {
       ref: "ServerConfig",
     })
 
+  export const Voice = z
+    .object({
+      type: z.enum(["whisper", "alm"]).optional().describe("Transcription provider type"),
+      whisper: z
+        .object({
+          url: z.string().optional().describe("Whisper API URL"),
+          apiKey: z.string().optional().describe("Whisper API key"),
+          model: z.string().optional().describe("Whisper model name"),
+          language: z.string().optional().describe("Whisper language code"),
+        })
+        .optional()
+        .describe("Whisper transcription settings"),
+      alm: z
+        .object({
+          url: z.string().optional().describe("Audio LM API URL"),
+          apiKey: z.string().optional().describe("Audio LM API key"),
+          model: z.string().optional().describe("Audio LM model name"),
+          prompt: z.string().optional().describe("Audio LM base prompt"),
+          system: z.string().optional().describe("Audio LM system prompt"),
+        })
+        .optional()
+        .describe("Audio language model transcription settings"),
+    })
+    .strict()
+    .meta({
+      ref: "VoiceConfig",
+    })
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -861,6 +889,48 @@ export namespace Config {
     })
 
   export type Provider = z.infer<typeof Provider>
+
+  const TTSVoice = z.enum([
+    "en-US-AvaNeural",
+    "en-US-AvaMultilingualNeural",
+    "en-US-AriaNeural",
+    "en-US-JennyNeural",
+    "en-US-GuyNeural",
+    "en-US-ChristopherNeural",
+    "en-US-EricNeural",
+    "en-US-MichelleNeural",
+    "en-US-RogerNeural",
+    "en-US-SteffanNeural",
+    "en-GB-SoniaNeural",
+    "en-GB-RyanNeural",
+    "en-GB-LibbyNeural",
+    "en-AU-NatashaNeural",
+    "en-AU-WilliamNeural",
+    "en-IE-EmilyNeural",
+    "en-CA-ClaraNeural",
+    "en-CA-LiamNeural",
+    "en-IN-NeerjaNeural",
+    "en-IN-PrabhatNeural",
+  ])
+
+  const TTSConfig = z
+    .object({
+      enabled: z.boolean().optional().default(true).describe("Enable text-to-speech for assistant responses"),
+      voice: TTSVoice.optional()
+        .default("en-US-AvaNeural")
+        .describe("Voice to use for TTS (Microsoft Edge neural voices)"),
+      rate: z
+        .string()
+        .optional()
+        .default("default")
+        .describe("Speech rate adjustment (e.g., '+10%', '-20%', 'default')"),
+      volume: z.string().optional().default("default").describe("Volume adjustment (e.g., '+10%', '-20%', 'default')"),
+      pitch: z.string().optional().default("default").describe("Pitch adjustment (e.g., '+10Hz', '-20Hz', 'default')"),
+    })
+    .strict()
+    .meta({
+      ref: "TTSConfig",
+    })
 
   export const Info = z
     .object({
@@ -1053,6 +1123,8 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      voice: Voice.optional().describe("Voice transcription settings"),
+      tts: TTSConfig.optional().describe("Text-to-speech configuration for assistant responses"),
     })
     .strict()
     .meta({

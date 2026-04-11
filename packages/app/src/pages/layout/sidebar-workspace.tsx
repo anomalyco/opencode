@@ -107,7 +107,7 @@ const WorkspaceHeader = (props: {
       when={!props.local()}
       fallback={
         <span class="text-14-medium text-text-base min-w-0 truncate">
-          {props.branch() ?? getFilename(props.directory)}
+          {props.branch() && props.branch() !== "HEAD" ? props.branch() : getFilename(props.directory)}
         </span>
       }
     >
@@ -311,8 +311,9 @@ export const SortableWorkspace = (props: {
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
-    const name = branch ?? getFilename(props.directory)
-    return props.ctx.workspaceName(props.directory, props.project.id, branch) ?? name
+    const effectiveBranch = branch && branch !== "HEAD" ? branch : undefined
+    const name = effectiveBranch ?? getFilename(props.directory)
+    return props.ctx.workspaceName(props.directory, props.project.id, effectiveBranch) ?? name
   })
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())

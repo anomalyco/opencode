@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, Switch, Match, onCleanup, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -24,11 +24,14 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Spinner } from "@opencode-ai/ui/spinner"
+import { showToast } from "@opencode-ai/ui/toast"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
+import { useVoiceMode } from "@/context/voice-mode"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -113,6 +116,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const { params, tabs, view } = useSessionLayout()
+  const voiceMode = useVoiceMode()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -263,6 +267,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
   })
+
+  const [recording, setRecording] = createSignal(false)
+  const [transcribing, setTranscribing] = createSignal(false)
+  const audio = {
+    recorder: undefined as MediaRecorder | undefined,
+    stream: undefined as MediaStream | undefined,
+    controller: undefined as AbortController | undefined,
+    chunks: [] as Blob[],
+    mime: "",
+  }
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
   const motion = (value: number) => ({
@@ -417,6 +431,240 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
+  const isVoiceSupported = () =>
+    typeof navigator !== "undefined" &&
+    typeof window !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof MediaRecorder !== "undefined"
+
+  const stopStream = () => {
+    audio.stream?.getTracks().forEach((track) => track.stop())
+    audio.stream = undefined
+  }
+
+  // Top-level cleanup — always runs on component unmount
+  onCleanup(() => {
+    if (audio.controller) audio.controller.abort()
+    if (audio.recorder) {
+      try { audio.recorder.stop() } catch {}
+      audio.recorder = undefined
+    }
+    stopStream()
+  })
+
+  const recordStart = async () => {
+    if (!isVoiceSupported()) {
+      showToast({
+        title: "Voice input unavailable",
+        description: "Your browser does not support audio recording.",
+      })
+      return false
+    }
+    if (audio.recorder) return false
+
+    const stream = await navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .catch(() => undefined)
+    if (!stream) {
+      showToast({
+        title: "Microphone blocked",
+        description: "Allow microphone access to start recording.",
+      })
+      return false
+    }
+
+    audio.stream = stream
+
+    const preferred = "audio/webm;codecs=opus"
+    const fallback = "audio/webm"
+    const mime = MediaRecorder.isTypeSupported(preferred)
+      ? preferred
+      : MediaRecorder.isTypeSupported(fallback)
+        ? fallback
+        : ""
+    if (!mime) {
+      stopStream()
+      showToast({
+        title: "Voice input unavailable",
+        description: "This browser does not support the available audio formats.",
+      })
+      return false
+    }
+    let recorder: MediaRecorder
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: mime })
+    } catch {
+      stopStream()
+      showToast({
+        title: "Voice input unavailable",
+        description: "Failed to initialize audio recorder.",
+      })
+      return false
+    }
+
+    audio.mime = recorder.mimeType || mime
+    audio.chunks = []
+    audio.recorder = recorder
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size === 0) return
+      audio.chunks.push(event.data)
+    }
+
+    recorder.start()
+    setRecording(true)
+    return true
+  }
+
+  const recordStop = async () => {
+    if (!audio.recorder) return
+    const recorder = audio.recorder
+    audio.recorder = undefined
+
+    const result = new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        resolve(new Blob(audio.chunks, { type: audio.mime || "audio/webm" }))
+      }
+    })
+
+    recorder.stop()
+    const blob = await result
+    stopStream()
+    setRecording(false)
+    return blob
+  }
+
+  const transcribeAudio = async (blob: Blob) => {
+    if (!blob.size) {
+      showToast({
+        title: "No audio captured",
+        description: "Try recording again.",
+      })
+      return
+    }
+
+    const mime = blob.type || "audio/webm"
+    const filename = mime.includes("webm") ? "audio.webm" : "audio.dat"
+    const file = new File([blob], filename, { type: mime })
+    const form = new FormData()
+    const currentPrompt = prompt.current()
+    const promptText = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    form.append("file", file)
+    if (params.id) {
+      form.append("sessionID", params.id)
+    }
+    if (promptText.trim()) {
+      form.append("prompt", promptText)
+    }
+
+    const fetcher = platform.fetch ?? fetch
+    const controller = new AbortController()
+    audio.controller = controller
+    setTranscribing(true)
+    const response = await fetcher(`${sdk.url}/voice/transcribe`, {
+      method: "POST",
+      body: form,
+      signal: controller.signal,
+    }).catch(() => undefined)
+
+    audio.controller = undefined
+
+    if (!response) {
+      setTranscribing(false)
+      if (controller.signal.aborted) return
+      showToast({
+        title: "Transcription failed",
+        description: "Failed to reach the server.",
+      })
+      return
+    }
+
+    const payload = await response.json().catch(() => ({ text: "" }))
+    const text = typeof payload?.text === "string" ? payload.text : ""
+    setTranscribing(false)
+
+    if (!response.ok) {
+      if (controller.signal.aborted) return
+      showToast({
+        title: "Transcription failed",
+        description: text || "Request failed.",
+      })
+      return
+    }
+
+    if (!text.trim()) {
+      showToast({
+        title: "No speech detected",
+        description: "Try speaking closer to the microphone.",
+      })
+      return
+    }
+
+    addPart({ type: "text", content: text, start: 0, end: 0 })
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      queueScroll()
+    })
+  }
+
+  const toggleVoice = async () => {
+    if (transcribing()) {
+      const controller = audio.controller
+      if (controller) {
+        controller.abort()
+        setTranscribing(false)
+        showToast({
+          title: "Transcription cancelled",
+          description: "Stopped the current transcription.",
+        })
+      }
+      return
+    }
+
+    if (recording()) {
+      const blob = await recordStop()
+      if (!blob) return
+      await transcribeAudio(blob)
+      return
+    }
+
+    await recordStart()
+  }
+
+  const voiceTitle = createMemo(() =>
+    transcribing() ? "Cancel transcription" : recording() ? "Stop recording" : "Voice input",
+  )
+
+  command.register(() => [
+    {
+      id: "prompt.voice",
+      title: "Voice input",
+      description: "Start or stop voice recording",
+      category: "Prompt",
+      keybind: "mod+shift+m",
+      onSelect: () => {
+        void toggleVoice()
+      },
+    },
+  ])
+
+  const voiceModeTitle = createMemo(() =>
+    voiceMode.isActive() ? `Voice Mode: ${voiceMode.state()}` : "Start voice mode",
+  )
+
+  command.register(() => [
+    {
+      id: "prompt.voice-mode",
+      title: "Voice mode",
+      description: "Toggle continuous hands-free voice mode",
+      category: "Prompt",
+      keybind: "mod+shift+v",
+      onSelect: () => {
+        void voiceMode.toggle()
+      },
+    },
+  ])
+
   const getCaretState = () => {
     const selection = window.getSelection()
     const textLength = promptLength(prompt.current())
@@ -532,6 +780,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("placeholder", (prev) => (prev + 1) % EXAMPLES.length)
     }, 6500)
     onCleanup(() => clearInterval(interval))
+    onCleanup(() => {
+      if (transcribing()) {
+        const controller = audio.controller
+        if (controller) controller.abort()
+        setTranscribing(false)
+      }
+      if (recording()) void recordStop()
+    })
   })
 
   const [composing, setComposing] = createSignal(false)
@@ -1383,6 +1639,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
+              <TooltipKeybind
+                placement="top"
+                title={language.t("prompt.action.attachFile")}
+                keybind={command.keybind("file.attach")}
+              >
+                <Button
+                  data-action="prompt-attach"
+                  type="button"
+                  variant="ghost"
+                  class="size-8 p-0"
+                  style={buttons()}
+                  onClick={pick}
+                  disabled={store.mode !== "normal"}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  aria-label={language.t("prompt.action.attachFile")}
+                >
+                  <Icon name="plus" class="size-4.5" />
+                </Button>
+              </TooltipKeybind>
+
+              <TooltipKeybind placement="top" title={voiceTitle()} keybind={command.keybind("prompt.voice")}>
+                <Button type="button" variant="ghost" class="h-6 w-6" onClick={toggleVoice}>
+                  <Switch>
+                    <Match when={transcribing()}>
+                      <Spinner class="size-4 text-icon-base" />
+                    </Match>
+                    <Match when={recording()}>
+                      <Icon name="stop" size="small" />
+                    </Match>
+                    <Match when={true}>
+                      <Icon name="mic" size="small" />
+                    </Match>
+                  </Switch>
+                </Button>
+              </TooltipKeybind>
+
+              <TooltipKeybind placement="top" title={voiceModeTitle()} keybind={command.keybind("prompt.voice-mode")}>
+                <Button
+                  type="button"
+                  variant={voiceMode.isActive() ? "primary" : "ghost"}
+                  class="h-6 w-6"
+                  classList={{
+                    "bg-primary/20 text-primary": voiceMode.isActive(),
+                  }}
+                  onClick={() => void voiceMode.toggle()}
+                >
+                  <Icon name="speech-bubble" size="small" />
+                </Button>
+              </TooltipKeybind>
+
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"

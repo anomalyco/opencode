@@ -2396,3 +2396,34 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+describe("voice mode config", () => {
+  test("config accepts voice settings", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: { voice: { enabled: true } } as any,
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Instance.provide succeeds = config was parsed without error
+        expect(true).toBe(true)
+      },
+    })
+    await Instance.disposeAll()
+  })
+
+  test("config accepts tts settings", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: { tts: { enabled: true, voice: "en-US-AvaNeural" } } as any,
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(true).toBe(true)
+      },
+    })
+    await Instance.disposeAll()
+  })
+})

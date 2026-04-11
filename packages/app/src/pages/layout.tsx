@@ -69,6 +69,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  sortSessions,
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
@@ -575,6 +576,17 @@ export default function Layout(props: ParentProps) {
     return projects.find((p) => p.worktree === root)
   })
 
+  // Auto-enable workspaces when the current directory is a sandbox of a project
+  createEffect(() => {
+    const dir = currentDir()
+    const project = currentProject()
+    if (!dir || !project) return
+    if (dir === project.worktree) return
+    if (project.vcs !== "git") return
+    if (layout.sidebar.workspaces(project.worktree)()) return
+    layout.sidebar.setWorkspaces(project.worktree, true)
+  })
+
   const [autoselecting] = createResource(async () => {
     await ready.promise
     await layout.ready.promise
@@ -613,8 +625,11 @@ export default function Layout(props: ParentProps) {
     setStore("workspaceBranchName", projectId, branch, next)
   }
 
-  const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
-    workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
+  const workspaceLabel = (directory: string, branch?: string, projectId?: string) => {
+    // For JJ co-located workspaces, branch is "HEAD" (detached) — fall through to directory name
+    const effectiveBranch = branch && branch !== "HEAD" ? branch : undefined
+    return workspaceName(directory, projectId, effectiveBranch) ?? effectiveBranch ?? getFilename(directory)
+  }
 
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
@@ -1276,6 +1291,12 @@ export default function Layout(props: ParentProps) {
     const root = projectRoot(directory)
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
+    // Auto-enable workspaces when navigating to a sandbox directory
+    if (project && directory !== root && project.vcs === "git") {
+      if (!layout.sidebar.workspaces(root)()) {
+        layout.sidebar.setWorkspaces(root, true)
+      }
+    }
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
@@ -1309,6 +1330,37 @@ export default function Layout(props: ParentProps) {
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
+    }
+
+    // When user explicitly opened a specific workspace (not the project root),
+    // navigate directly to that workspace instead of searching across all workspaces.
+    if (workspaceKey(directory) !== workspaceKey(root)) {
+      await refreshDirs(directory)
+      if (canOpen(directory)) {
+        const [dirStore] = globalSync.child(directory, { bootstrap: false })
+        const latest = sortedRootSessions(dirStore, Date.now())[0]
+        if (latest) {
+          setStore("lastProjectSession", root, { directory, id: latest.id, at: Date.now() })
+          navigateWithSidebarReset(`/${base64Encode(directory)}/session/${latest.id}`)
+          return
+        }
+        // Try fetching sessions from server for this specific workspace
+        const fetched = await globalSDK.client.session
+          .list({ directory })
+          .then((x) => x.data ?? [])
+          .catch(() => [] as Session[])
+        const visible = fetched
+          .filter((s) => !s.parentID && !s.time?.archived)
+          .sort(sortSessions(Date.now()))
+        if (visible[0]) {
+          setStore("lastProjectSession", root, { directory, id: visible[0].id, at: Date.now() })
+          navigateWithSidebarReset(`/${base64Encode(directory)}/session/${visible[0].id}`)
+          return
+        }
+      }
+      // No sessions in this workspace — navigate to it anyway (empty state)
+      navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
+      return
     }
 
     const projectSession = store.lastProjectSession[root]

@@ -31,6 +31,7 @@ import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { GlobalSyncProvider } from "@/context/global-sync"
+import { TTSProvider } from "@/context/tts"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -291,6 +292,7 @@ export function AppInterface(props: {
         <ServerKey>
           <GlobalSDKProvider>
             <GlobalSyncProvider>
+            <TTSProvider>
               <Dynamic
                 component={props.router ?? Router}
                 root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
@@ -301,6 +303,7 @@ export function AppInterface(props: {
                   <Route path="/session/:id?" component={SessionRoute} />
                 </Route>
               </Dynamic>
+            </TTSProvider>
             </GlobalSyncProvider>
           </GlobalSDKProvider>
         </ServerKey>

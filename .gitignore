@@ -29,3 +29,7 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# VAD runtime assets (fetched from node_modules)
+packages/app/public/*.wasm
+packages/app/public/*.onnx
