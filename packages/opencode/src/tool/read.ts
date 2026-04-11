@@ -106,14 +106,12 @@ export const ReadTool = Tool.define(
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
-      yield* Effect.promise(() =>
-        ctx.ask({
-          permission: "read",
-          patterns: [filepath],
-          always: ["*"],
-          metadata: {},
-        }),
-      )
+      yield* ctx.ask({
+        permission: "read",
+        patterns: [filepath],
+        always: ["*"],
+        metadata: {},
+      })
 
       if (!stat) return yield* miss(filepath)
 

@@ -30,7 +30,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: () => Effect.void,
 }
 
 Shell.acceptable.reset()
@@ -109,10 +109,11 @@ const each = (name: string, fn: (item: { label: string; shell: string }) => Prom
 
 const capture = (requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">>, stop?: Error) => ({
   ...ctx,
-  ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-    requests.push(req)
-    if (stop) throw stop
-  },
+  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+    Effect.sync(() => {
+      requests.push(req)
+      if (stop) throw stop
+    }),
 })
 
 const mustTruncate = (result: {

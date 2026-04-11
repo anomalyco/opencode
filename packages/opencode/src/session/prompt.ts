@@ -374,14 +374,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }),
             ),
           ask: (req) =>
-            Effect.runPromise(
-              permission.ask({
+            permission
+              .ask({
                 ...req,
                 sessionID: input.session.id,
                 tool: { messageID: input.processor.message.id, callID: options.toolCallId },
                 ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-              }),
-            ),
+              })
+              .pipe(Effect.orDie),
         })
 
         for (const item of yield* registry.tools({
@@ -444,7 +444,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
                   { args },
                 )
-                yield* Effect.promise(() => ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] }))
+                yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
                 const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
                   execute(args, opts),
                 )
@@ -597,15 +597,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }),
               )
             },
-            ask(req: any) {
-              return Effect.runPromise(
-                permission.ask({
+            ask: (req: any) =>
+              permission
+                .ask({
                   ...req,
                   sessionID,
                   ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
-                }),
-              )
-            },
+                })
+                .pipe(Effect.orDie),
           })
           .pipe(
             Effect.catchCause((cause) => {
@@ -1052,7 +1051,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       extra: { bypassCwdCheck: true, ...extra },
                       messages: [],
                       metadata: () => {},
-                      ask: async () => {},
+                      ask: () => Effect.void,
                     })
                     .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
                 }

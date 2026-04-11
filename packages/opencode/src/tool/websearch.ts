@@ -36,20 +36,18 @@ export const WebSearchTool = Tool.define(
       parameters: Parameters,
       execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "websearch",
-              patterns: [params.query],
-              always: ["*"],
-              metadata: {
-                query: params.query,
-                numResults: params.numResults,
-                livecrawl: params.livecrawl,
-                type: params.type,
-                contextMaxCharacters: params.contextMaxCharacters,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "websearch",
+            patterns: [params.query],
+            always: ["*"],
+            metadata: {
+              query: params.query,
+              numResults: params.numResults,
+              livecrawl: params.livecrawl,
+              type: params.type,
+              contextMaxCharacters: params.contextMaxCharacters,
+            },
+          })
 
           const result = yield* McpExa.call(
             http,

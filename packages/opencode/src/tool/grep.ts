@@ -32,18 +32,16 @@ export const GrepTool = Tool.define(
             throw new Error("pattern is required")
           }
 
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "grep",
-              patterns: [params.pattern],
-              always: ["*"],
-              metadata: {
-                pattern: params.pattern,
-                path: params.path,
-                include: params.include,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "grep",
+            patterns: [params.pattern],
+            always: ["*"],
+            metadata: {
+              pattern: params.pattern,
+              path: params.path,
+              include: params.include,
+            },
+          })
 
           let searchPath = params.path ?? Instance.directory
           searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)

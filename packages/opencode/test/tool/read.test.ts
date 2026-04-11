@@ -30,7 +30,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: () => Effect.void,
 }
 
 const it = testEffect(
@@ -95,9 +95,8 @@ const asks = () => {
     items,
     next: {
       ...ctx,
-      ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-        items.push(req)
-      },
+      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => { items.push(req) }),
     },
   }
 }
@@ -226,17 +225,18 @@ describe("tool.read env file permissions", () => {
                 let asked = false
                 const next = {
                   ...ctx,
-                  ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-                    for (const pattern of req.patterns) {
-                      const rule = Permission.evaluate(req.permission, pattern, info.permission)
-                      if (rule.action === "ask" && req.permission === "read") {
-                        asked = true
+                  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+                    Effect.sync(() => {
+                      for (const pattern of req.patterns) {
+                        const rule = Permission.evaluate(req.permission, pattern, info.permission)
+                        if (rule.action === "ask" && req.permission === "read") {
+                          asked = true
+                        }
+                        if (rule.action === "deny") {
+                          throw new Permission.DeniedError({ ruleset: info.permission })
+                        }
                       }
-                      if (rule.action === "deny") {
-                        throw new Permission.DeniedError({ ruleset: info.permission })
-                      }
-                    }
-                  },
+                    }),
                 }
 
                 yield* run({ filePath: path.join(dir, filename) }, next)

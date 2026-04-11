@@ -1,5 +1,6 @@
 import { EOL } from "os"
 import { basename } from "path"
+import { Effect } from "effect"
 import { Agent } from "../../../agent/agent"
 import { Provider } from "../../../provider/provider"
 import { Session } from "../../../session"
@@ -158,13 +159,15 @@ async function createToolContext(agent: Agent.Info) {
     abort: new AbortController().signal,
     messages: [],
     metadata: () => {},
-    async ask(req: Omit<Permission.Request, "id" | "sessionID" | "tool">) {
-      for (const pattern of req.patterns) {
-        const rule = Permission.evaluate(req.permission, pattern, ruleset)
-        if (rule.action === "deny") {
-          throw new Permission.DeniedError({ ruleset })
+    ask(req: Omit<Permission.Request, "id" | "sessionID" | "tool">) {
+      return Effect.sync(() => {
+        for (const pattern of req.patterns) {
+          const rule = Permission.evaluate(req.permission, pattern, ruleset)
+          if (rule.action === "deny") {
+            throw new Permission.DeniedError({ ruleset })
+          }
         }
-      }
+      })
     },
   }
 }

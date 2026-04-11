@@ -41,17 +41,15 @@ export const TaskTool = Tool.define(
       const cfg = yield* config.get()
 
       if (!ctx.extra?.bypassAgentCheck) {
-        yield* Effect.promise(() =>
-          ctx.ask({
-            permission: id,
-            patterns: [params.subagent_type],
-            always: ["*"],
-            metadata: {
-              description: params.description,
-              subagent_type: params.subagent_type,
-            },
-          }),
-        )
+        yield* ctx.ask({
+          permission: id,
+          patterns: [params.subagent_type],
+          always: ["*"],
+          metadata: {
+            description: params.description,
+            subagent_type: params.subagent_type,
+          },
+        })
       }
 
       const next = yield* agent.get(params.subagent_type)

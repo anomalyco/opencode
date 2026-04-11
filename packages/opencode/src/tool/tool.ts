@@ -23,7 +23,7 @@ export namespace Tool {
     extra?: { [key: string]: any }
     messages: MessageV2.WithParts[]
     metadata(input: { title?: string; metadata?: M }): void
-    ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Promise<void>
+    ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
   }
 
   export interface ExecuteResult<M extends Metadata = Metadata> {

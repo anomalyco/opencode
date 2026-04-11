@@ -51,14 +51,12 @@ export const SkillTool = Tool.define(
               throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
             }
 
-            yield* Effect.promise(() =>
-              ctx.ask({
-                permission: "skill",
-                patterns: [params.name],
-                always: [params.name],
-                metadata: {},
-              }),
-            )
+            yield* ctx.ask({
+              permission: "skill",
+              patterns: [params.name],
+              always: [params.name],
+              metadata: {},
+            })
 
             const dir = path.dirname(info.location)
             const base = pathToFileURL(dir).href

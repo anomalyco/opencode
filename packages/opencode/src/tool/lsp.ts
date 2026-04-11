@@ -42,7 +42,7 @@ export const LspTool = Tool.define(
         Effect.gen(function* () {
           const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
-          yield* Effect.promise(() => ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} }))
+          yield* ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} })
 
           const uri = pathToFileURL(file).href
           const position = { file, line: args.line - 1, character: args.character - 1 }

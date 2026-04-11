@@ -28,17 +28,15 @@ export const GlobTool = Tool.define(
       }),
       execute: (params: { pattern: string; path?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "glob",
-              patterns: [params.pattern],
-              always: ["*"],
-              metadata: {
-                pattern: params.pattern,
-                path: params.path,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "glob",
+            patterns: [params.pattern],
+            always: ["*"],
+            metadata: {
+              pattern: params.pattern,
+              path: params.path,
+            },
+          })
 
           let search = params.path ?? Instance.directory
           search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)

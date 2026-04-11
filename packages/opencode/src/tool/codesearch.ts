@@ -29,17 +29,15 @@ export const CodeSearchTool = Tool.define(
       }),
       execute: (params: { query: string; tokensNum: number }, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "codesearch",
-              patterns: [params.query],
-              always: ["*"],
-              metadata: {
-                query: params.query,
-                tokensNum: params.tokensNum,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "codesearch",
+            patterns: [params.query],
+            always: ["*"],
+            metadata: {
+              query: params.query,
+              tokensNum: params.tokensNum,
+            },
+          })
 
           const result = yield* McpExa.call(
             http,

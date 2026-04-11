@@ -56,16 +56,14 @@ export const ListTool = Tool.define(
           const searchPath = path.resolve(Instance.directory, params.path || ".")
           yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
 
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "list",
-              patterns: [searchPath],
-              always: ["*"],
-              metadata: {
-                path: searchPath,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "list",
+            patterns: [searchPath],
+            always: ["*"],
+            metadata: {
+              path: searchPath,
+            },
+          })
 
           const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
           const files = yield* rg.files({ cwd: searchPath, glob: ignoreGlobs }).pipe(

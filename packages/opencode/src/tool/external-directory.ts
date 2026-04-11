@@ -11,7 +11,11 @@ type Options = {
   kind?: Kind
 }
 
-export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
+export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
+  ctx: Tool.Context,
+  target?: string,
+  options?: Options,
+) {
   if (!target) return
 
   if (options?.bypass) return
@@ -26,7 +30,7 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
       ? AppFileSystem.normalizePathPattern(path.join(dir, "*"))
       : path.join(dir, "*").replaceAll("\\", "/")
 
-  await ctx.ask({
+  yield* ctx.ask({
     permission: "external_directory",
     patterns: [glob],
     always: [glob],
@@ -35,12 +39,8 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
       parentDir: dir,
     },
   })
-}
-
-export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
-  ctx: Tool.Context,
-  target?: string,
-  options?: Options,
-) {
-  yield* Effect.promise(() => assertExternalDirectory(ctx, target, options))
 })
+
+export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
+  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options))
+}

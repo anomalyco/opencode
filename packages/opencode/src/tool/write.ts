@@ -42,17 +42,15 @@ export const WriteTool = Tool.define(
           if (exists) yield* filetime.assert(ctx.sessionID, filepath)
 
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "edit",
-              patterns: [path.relative(Instance.worktree, filepath)],
-              always: ["*"],
-              metadata: {
-                filepath,
-                diff,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "edit",
+            patterns: [path.relative(Instance.worktree, filepath)],
+            always: ["*"],
+            metadata: {
+              filepath,
+              diff,
+            },
+          })
 
           yield* fs.writeWithDirs(filepath, params.content)
           yield* Effect.promise(() => Format.file(filepath))

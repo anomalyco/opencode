@@ -156,9 +156,8 @@ Use this skill.
           const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const ctx: Tool.Context = {
             ...baseCtx,
-            ask: async (req) => {
-              requests.push(req)
-            },
+            ask: (req) =>
+              Effect.sync(() => { requests.push(req) }),
           }
 
           const result = await runtime.runPromise(tool.execute({ name: "tool-skill" }, ctx))

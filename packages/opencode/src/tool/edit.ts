@@ -72,7 +72,7 @@ export const EditTool = Tool.define(
               const existed = await Filesystem.exists(filePath)
               contentNew = params.newString
               diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-              await ctx.ask({
+              await Effect.runPromise(ctx.ask({
                 permission: "edit",
                 patterns: [path.relative(Instance.worktree, filePath)],
                 always: ["*"],
@@ -80,7 +80,7 @@ export const EditTool = Tool.define(
                   filepath: filePath,
                   diff,
                 },
-              })
+              }))
               await Filesystem.write(filePath, params.newString)
               await Format.file(filePath)
               Bus.publish(File.Event.Edited, { file: filePath })
@@ -112,7 +112,7 @@ export const EditTool = Tool.define(
                 normalizeLineEndings(contentNew),
               ),
             )
-            await ctx.ask({
+            await Effect.runPromise(ctx.ask({
               permission: "edit",
               patterns: [path.relative(Instance.worktree, filePath)],
               always: ["*"],
@@ -120,7 +120,7 @@ export const EditTool = Tool.define(
                 filepath: filePath,
                 diff,
               },
-            })
+            }))
 
             await Filesystem.write(filePath, contentNew)
             await Format.file(filePath)

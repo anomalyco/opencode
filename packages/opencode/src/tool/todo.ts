@@ -22,14 +22,12 @@ export const TodoWriteTool = Tool.define<typeof parameters, Metadata, Todo.Servi
       parameters,
       execute: (params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "todowrite",
-              patterns: ["*"],
-              always: ["*"],
-              metadata: {},
-            }),
-          )
+          yield* ctx.ask({
+            permission: "todowrite",
+            patterns: ["*"],
+            always: ["*"],
+            metadata: {},
+          })
 
           yield* todo.update({
             sessionID: ctx.sessionID,

@@ -132,6 +132,7 @@ export namespace ToolRegistry {
                 Effect.promise(async () => {
                   const pluginCtx: PluginToolContext = {
                     ...toolCtx,
+                    ask: (req) => Effect.runPromise(toolCtx.ask(req)),
                     directory: ctx.directory,
                     worktree: ctx.worktree,
                   }

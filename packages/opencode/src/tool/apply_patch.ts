@@ -178,18 +178,16 @@ export const ApplyPatchTool = Tool.define(
 
       // Check permissions if needed
       const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath).replaceAll("\\", "/"))
-      yield* Effect.promise(() =>
-        ctx.ask({
-          permission: "edit",
-          patterns: relativePaths,
-          always: ["*"],
-          metadata: {
-            filepath: relativePaths.join(", "),
-            diff: totalDiff,
-            files,
-          },
-        }),
-      )
+      yield* ctx.ask({
+        permission: "edit",
+        patterns: relativePaths,
+        always: ["*"],
+        metadata: {
+          filepath: relativePaths.join(", "),
+          diff: totalDiff,
+          files,
+        },
+      })
 
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
