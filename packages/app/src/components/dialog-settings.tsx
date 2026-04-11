@@ -8,14 +8,20 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsPair } from "./settings-pair"
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{ defaultTab?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
   return (
     <Dialog size="x-large" transition>
-      <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
+      <Tabs
+        orientation="vertical"
+        variant="settings"
+        defaultValue={props.defaultTab ?? "general"}
+        class="h-full settings-dialog"
+      >
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-3 w-full pt-3">
@@ -45,6 +51,10 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="pair">
+                      <Icon name="link" />
+                      {language.t("settings.pair.title")}
+                    </Tabs.Trigger>
                   </div>
                 </div>
               </div>
@@ -66,6 +76,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
+        </Tabs.Content>
+        <Tabs.Content value="pair" class="no-scrollbar">
+          <SettingsPair />
         </Tabs.Content>
       </Tabs>
     </Dialog>

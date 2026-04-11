@@ -1059,6 +1059,13 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openSettings(),
       },
       {
+        id: "pair.show",
+        title: language.t("command.pair.show"),
+        category: language.t("command.category.settings"),
+        slash: "pair",
+        onSelect: () => openSettings("pair"),
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
@@ -1210,11 +1217,11 @@ export default function Layout(props: ParentProps) {
     })
   }
 
-  function openSettings() {
+  function openSettings(defaultTab?: string) {
     const run = ++dialogRun
     void import("@/components/dialog-settings").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSettings />)
+      dialog.show(() => <x.DialogSettings defaultTab={defaultTab} />)
     })
   }
 

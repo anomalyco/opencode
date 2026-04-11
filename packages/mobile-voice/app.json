@@ -1,0 +1,101 @@
+{
+  "expo": {
+    "name": "Control",
+    "slug": "control",
+    "version": "1.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "mobilevoice",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.anomalyco.mobilevoice",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.kernel.extended-virtual-addressing": true
+      },
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Control uses the microphone while you hold Record to turn your speech into text for an OpenCode session.",
+        "NSCameraUsageDescription": "Control uses the camera to scan the OpenCode pairing QR code shown on your computer.",
+        "NSLocalNetworkUsageDescription": "Control uses your local network to discover and connect to OpenCode servers running on your computer.",
+        "NSBonjourServices": ["_http._tcp."],
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "100.64.0.0/10": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            },
+            "ts.net": {
+              "NSIncludesSubdomains": true,
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#121212",
+          "android": {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 76
+          }
+        }
+      ],
+      "react-native-audio-api",
+      "expo-asset",
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "enableBackgroundRemoteNotifications": true,
+          "sounds": ["./assets/sounds/alert.wav"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "50b3dac3-8b5e-4142-b749-65ecf7b2904d"
+      }
+    },
+    "owner": "anomaly-co",
+    "runtimeVersion": "1.0.2",
+    "updates": {
+      "url": "https://u.expo.dev/50b3dac3-8b5e-4142-b749-65ecf7b2904d"
+    }
+  }
+}

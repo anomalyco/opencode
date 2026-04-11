@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/apn-relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "db:check": "bun run --env-file .env src/check.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@planetscale/database": "1.19.0",
+    "drizzle-orm": "1.0.0-beta.19-d95b7a4",
+    "hono": "4.10.7",
+    "jose": "6.0.11",
+    "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "1.0.9",
+    "@types/bun": "1.3.11",
+    "@typescript/native-preview": "7.0.0-dev.20251207.1",
+    "drizzle-kit": "1.0.0-beta.19-d95b7a4",
+    "typescript": "5.8.2"
+  }
+}

@@ -33,6 +33,7 @@ import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
+import { DialogPair } from "@tui/component/dialog-pair"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
@@ -674,6 +675,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         if (locked()) unlock()
         else lock()
         dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: "Pair mobile device",
+      value: "pair.show",
+      slash: {
+        name: "pair",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogPair />)
       },
       category: "System",
     },

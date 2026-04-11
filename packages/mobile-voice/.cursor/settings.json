@@ -1,0 +1,7 @@
+{
+  "plugins": {
+    "figma": {
+      "enabled": true
+    }
+  }
+}
