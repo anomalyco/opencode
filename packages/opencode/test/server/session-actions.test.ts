@@ -6,6 +6,8 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRunState } from "../../src/session/run-state"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { Effect } from "effect"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -65,7 +67,11 @@ describe("session action routes", () => {
       fn: async () => {
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
-        const busy = spyOn(SessionRunState, "assertNotBusy").mockRejectedValue(new Session.BusyError(session.id))
+        // Make the session busy by starting a runner via ensureRunning
+        const work = Effect.never as Effect.Effect<any>
+        await AppRuntime.runPromise(
+          SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, work)),
+        )
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
         const app = Server.Default().app
 
@@ -74,7 +80,6 @@ describe("session action routes", () => {
         })
 
         expect(res.status).toBe(400)
-        expect(busy).toHaveBeenCalledWith(session.id)
         expect(remove).not.toHaveBeenCalled()
 
         await Session.remove(session.id)
