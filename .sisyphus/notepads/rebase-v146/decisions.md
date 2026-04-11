@@ -1,0 +1,1 @@
+- Kept upstream Effect-native `session/index.ts`/middleware shapes, added `DuplicateIDError` support via shared import paths and `CreateInput.id`, and squashed the resolution into `pyyluxzz` so the workspace no longer reports conflicts.

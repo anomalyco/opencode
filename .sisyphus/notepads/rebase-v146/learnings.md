@@ -1,0 +1,1 @@
+- Branch 8 resolves by keeping upstream route migration in `server/instance/session.ts` and deleting `server/routes/session.ts`; only the create route needs `...errors(400, 409)` ported.

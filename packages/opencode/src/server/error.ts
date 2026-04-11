@@ -29,6 +29,25 @@ export const ERRORS = {
       },
     },
   },
+  409: {
+    description: "Conflict",
+    content: {
+      "application/json": {
+        schema: resolver(
+          z
+            .object({
+              name: z.literal("DuplicateIDError"),
+              data: z.object({
+                id: z.string(),
+              }),
+            })
+            .meta({
+              ref: "DuplicateIDError",
+            }),
+        ),
+      },
+    },
+  },
 } as const
 
 export function errors(...codes: number[]) {

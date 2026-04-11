@@ -198,7 +198,7 @@ export const SessionRoutes = lazy(() =>
         description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
         operationId: "session.create",
         responses: {
-          ...errors(400),
+          ...errors(400, 409),
           200: {
             description: "Successfully created session",
             content: {

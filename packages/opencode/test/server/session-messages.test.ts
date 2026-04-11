@@ -166,6 +166,7 @@ describe("session messages endpoint", () => {
   })
 })
 
+
 describe("session.prompt_async error handling", () => {
   test("prompt_async route has error handler for detached prompt call", async () => {
     const src = await Bun.file(new URL("../../src/server/instance/session.ts", import.meta.url)).text()

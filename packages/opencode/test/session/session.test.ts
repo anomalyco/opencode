@@ -8,6 +8,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { tmpdir } from "../fixture/fixture"
+import { SyncEvent } from "../../src/sync"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -177,5 +178,21 @@ describe("Session", () => {
     })
 
     expect(missing).toBe(true)
+  })
+})
+
+describe("DuplicateIDError", () => {
+  test("projector throws on duplicate session ID", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await create({})
+        expect(() => {
+          SyncEvent.run(SessionNs.Event.Created, { sessionID: session.id, info: session as any })
+        }).toThrow()
+        await remove(session.id)
+      },
+    })
   })
 })

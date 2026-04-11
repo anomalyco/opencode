@@ -1,0 +1,1 @@
+- `bun typecheck` initially failed because this workspace had no installed dependencies (`tsgo` missing); running `bun install` in the workspace restored the toolchain.
