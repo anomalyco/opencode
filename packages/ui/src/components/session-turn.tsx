@@ -20,6 +20,7 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll, suppressAutoScrollResize } from "../hooks"
 import { useI18n } from "../context/i18n"
+import { hiddenReasoning } from "./session-turn-state"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -473,11 +474,14 @@ export function SessionTurn(
     return end - start
   })
   const showThinking = createMemo(() => {
-    if (!working() || !!error()) return false
-    if (status().type === "retry") return false
+    if (!!error()) return false
     if (summary().visible > 0) return false
-    if (showReasoningSummaries()) return summary().visible === 0
-    return true
+    if (working()) {
+      if (status().type === "retry") return false
+      if (showReasoningSummaries()) return summary().visible === 0
+      return true
+    }
+    return hiddenReasoning(assistantList(), data.store.part ?? {}, showReasoningSummaries())
   })
 
   const autoScroll = createAutoScroll({
@@ -688,14 +692,24 @@ export function SessionTurn(
                 </Show>
                 <Show when={showThinking()}>
                   <div data-slot="session-turn-thinking">
-                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                    <Show
+                      when={working()}
+                      fallback={<span>{i18n.t("ui.messagePart.reasoning.thought")}</span>}
+                    >
+                      <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                    </Show>
                     <Show when={!showReasoningSummaries()}>
-                      <TextReveal
-                        text={summary().headingText}
-                        class="session-turn-thinking-heading"
-                        travel={25}
-                        duration={700}
-                      />
+                      <Show
+                        when={working()}
+                        fallback={<span class="session-turn-thinking-heading">{summary().headingText}</span>}
+                      >
+                        <TextReveal
+                          text={summary().headingText}
+                          class="session-turn-thinking-heading"
+                          travel={25}
+                          duration={700}
+                        />
+                      </Show>
                     </Show>
                   </div>
                 </Show>
