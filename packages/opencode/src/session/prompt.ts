@@ -1367,6 +1367,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             if (task?.type === "compaction") {
+              yield* compaction.prune({ sessionID })
               const result = yield* compaction.process({
                 messages: msgs,
                 parentID: lastUser.id,
