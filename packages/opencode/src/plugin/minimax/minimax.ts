@@ -13,8 +13,11 @@ const DEFAULT_RESOURCE_URL = "https://api.minimaxi.com/anthropic"
 // OAuth client ID, matches Apollo config "openCode" client
 const CLIENT_ID = "d38bdbee-2b8c-4c74-9a9c-5875fabe6317"
 
-// grant_type for device flow, must match Apollo config
-const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:user_code"
+// grant_type for device flow (RFC 8628 standard)
+const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+
+// OAuth scopes
+const OAUTH_SCOPES = "openid profile coding_plan"
 
 // Extra buffer before expiry to trigger proactive refresh (ms)
 const REFRESH_BUFFER_MS = 5 * 60 * 1000
@@ -38,8 +41,8 @@ async function doRefresh(refreshToken: string): Promise<{
 } | null> {
   const response = await fetch(`${AUTH_BASE_URL}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
       grant_type: "refresh_token",
       client_id: CLIENT_ID,
       refresh_token: refreshToken,
@@ -113,13 +116,13 @@ export async function MinimaxAuthPlugin(_input: PluginInput): Promise<Hooks> {
 
             const response = await fetch(`${AUTH_BASE_URL}/oauth/code`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                response_type: "code",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
                 client_id: CLIENT_ID,
-                state,
+                scope: OAUTH_SCOPES,
                 code_challenge: codeChallenge,
                 code_challenge_method: "S256",
+                state,
               }),
             })
 
@@ -140,6 +143,7 @@ export async function MinimaxAuthPlugin(_input: PluginInput): Promise<Hooks> {
             }
 
             const pollIntervalMs = data.interval ?? 5000
+            const deadline = data.expired_in // Unix timestamp (ms)
 
             return {
               url: data.verification_uri,
@@ -147,13 +151,13 @@ export async function MinimaxAuthPlugin(_input: PluginInput): Promise<Hooks> {
               method: "auto" as const,
 
               async callback() {
-                while (true) {
+                while (Date.now() < deadline) {
                   await sleep(pollIntervalMs + POLL_SAFETY_MARGIN_MS)
 
                   const tokenResponse = await fetch(`${AUTH_BASE_URL}/oauth/token`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({
                       grant_type: DEVICE_GRANT_TYPE,
                       client_id: CLIENT_ID,
                       user_code: data.user_code,
@@ -186,6 +190,9 @@ export async function MinimaxAuthPlugin(_input: PluginInput): Promise<Hooks> {
 
                   return { type: "failed" as const }
                 }
+
+                // Polling timed out
+                return { type: "failed" as const }
               },
             }
           },
