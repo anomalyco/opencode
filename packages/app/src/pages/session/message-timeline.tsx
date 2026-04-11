@@ -22,20 +22,15 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
+import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { Popover } from "@opencode-ai/ui/popover"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionRetry } from "@opencode-ai/ui/session-retry"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import type {
-  AssistantMessage,
-  Message as MessageType,
-  Part as PartType,
-  ToolPart,
-  UserMessage,
-} from "@opencode-ai/sdk/v2"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -217,6 +212,17 @@ function absolute(root: string, path: string) {
   return `${base}${sep}${child}`
 }
 
+function label(message: UserMessage, parts: Part[]) {
+  const title = message.summary?.title?.trim()
+  if (title) return title
+  const text = parts
+    .filter((part): part is TextPart => part.type === "text" && !(part as TextPart).synthetic)
+    .map((part) => part.text.trim())
+    .find(Boolean)
+  if (!text) return
+  return text.replace(/\s+/g, " ").slice(0, 120)
+}
+
 export function MessageTimeline(props: {
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean }
@@ -281,6 +287,7 @@ export function MessageTimeline(props: {
     return sync.data.message[id] ?? emptyMessages
   })
   const pendingMessage = createMemo(() => active(sessionMessages()))
+  const [jump, setJump] = createSignal(false)
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
@@ -550,6 +557,7 @@ export function MessageTimeline(props: {
 
     return undefined
   })
+  const currentMessage = createMemo(() => props.renderedUserMessages.find((item) => item.id === activeMessageID()))
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -1062,6 +1070,11 @@ export function MessageTimeline(props: {
     navigate(`/${params.dir}/session/${id}`)
   }
 
+  const jumpTo = (message: UserMessage) => {
+    setJump(false)
+    navigate(`#${props.anchor(message.id)}`)
+  }
+
   function DialogDeleteSession(props: { sessionID: string }) {
     const name = createMemo(
       () => sessionTitle(sync.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
@@ -1506,8 +1519,38 @@ export function MessageTimeline(props: {
                   </div>
                   <Show when={sessionID()}>
                     {(id) => (
-                      <div class="shrink-0 flex items-center gap-3">
+                      <div class="shrink-0 flex items-center gap-2">
                         <SessionContextUsage placement="bottom" />
+                        <Show when={props.renderedUserMessages.length > 0}>
+                          <Popover
+                            open={jump()}
+                            onOpenChange={setJump}
+                            placement="bottom-end"
+                            trigger={
+                              <Tooltip placement="bottom" value={language.t("command.message.next.description")}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  class="size-6"
+                                  aria-label={language.t("command.message.next.description")}
+                                >
+                                  <Icon name="bullet-list" size="small" />
+                                </Button>
+                              </Tooltip>
+                            }
+                            class="w-[320px] max-w-[min(320px,calc(100vw-24px))] p-2"
+                          >
+                            <div class="max-h-[min(60vh,420px)] overflow-y-auto">
+                              <MessageNav
+                                messages={props.renderedUserMessages}
+                                current={currentMessage()}
+                                size="normal"
+                                onMessageSelect={jumpTo}
+                                getLabel={(message) => label(message, sync.data.part[message.id] ?? [])}
+                              />
+                            </div>
+                          </Popover>
+                        </Show>
                         <DropdownMenu
                           gutter={4}
                           placement="bottom-end"
