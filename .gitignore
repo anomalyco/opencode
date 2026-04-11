@@ -50,6 +50,7 @@ image/README/image.png
 
 # Local screenshots / misc assets (not used by README)
 images/
+.artifacts/
 
 # Desktop icon backups / generated folders
 packages/desktop/src-tauri/icons/*.backup.*/
