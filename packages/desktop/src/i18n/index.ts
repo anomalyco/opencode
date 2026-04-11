@@ -79,7 +79,8 @@ function detectLocale(): Locale {
     if (!language) continue
     if (language.toLowerCase().startsWith("en")) return "en"
     if (language.toLowerCase().startsWith("zh")) {
-      if (language.toLowerCase().includes("hant")) return "zht"
+      const value = language.toLowerCase()
+      if (value.includes("hant") || value.includes("-tw") || value.includes("-hk") || value.includes("-mo")) return "zht"
       return "zh"
     }
     if (language.toLowerCase().startsWith("ko")) return "ko"

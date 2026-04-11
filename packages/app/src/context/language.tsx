@@ -135,7 +135,15 @@ export function loadLocaleDict(locale: Locale) {
 
 const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
   { locale: "en", match: (language) => language.startsWith("en") },
-  { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
+  {
+    locale: "zht",
+    match: (language) =>
+      language.startsWith("zh") &&
+      (language.includes("hant") ||
+        language.includes("-tw") ||
+        language.includes("-hk") ||
+        language.includes("-mo")),
+  },
   { locale: "zh", match: (language) => language.startsWith("zh") },
   { locale: "ko", match: (language) => language.startsWith("ko") },
   { locale: "de", match: (language) => language.startsWith("de") },
