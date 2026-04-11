@@ -55,8 +55,9 @@ function remappedFs(root: string) {
   ).pipe(Layer.provide(AppFileSystem.defaultLayer))
 }
 
-// Layer.fresh forces a new Storage instance so it picks up the remapped filesystem —
-// otherwise the outer testEffect's cached Storage wins.
+// Layer.fresh forces a new Storage instance — without it, Effect's in-test layer cache
+// returns the outer testEffect's Storage (which uses the real AppFileSystem), not a new
+// one built on top of remappedFs.
 const remappedStorage = (root: string) =>
   Layer.fresh(Storage.layer.pipe(Layer.provide(remappedFs(root)), Layer.provide(Git.defaultLayer)))
 
