@@ -450,6 +450,7 @@
       "version": "1.4.3",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
+        "effect": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
