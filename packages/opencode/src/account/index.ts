@@ -1,4 +1,4 @@
-import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
+import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, Context } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -181,7 +181,7 @@ export namespace Account {
     readonly poll: (input: Login) => Effect.Effect<PollResult, AccountError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Account") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Account") {}
 
   export const layer: Layer.Layer<Service, never, AccountRepo | HttpClient.HttpClient> = Layer.effect(
     Service,

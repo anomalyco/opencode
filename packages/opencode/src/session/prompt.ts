@@ -43,7 +43,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -76,7 +76,7 @@ export namespace SessionPrompt {
     readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionPrompt") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
   export const layer = Layer.effect(
     Service,

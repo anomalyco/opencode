@@ -5,7 +5,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, Context } from "effect"
 import z from "zod"
 
 export namespace ProviderAuth {
@@ -109,7 +109,7 @@ export namespace ProviderAuth {
     pending: Map<ProviderID, AuthOAuthResult>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
   export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
     Service,

@@ -19,7 +19,7 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -924,7 +924,7 @@ export namespace Provider {
     varsLoaders: Record<string, CustomVarsLoader>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Provider") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
   function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
     const result: Model["cost"] = {

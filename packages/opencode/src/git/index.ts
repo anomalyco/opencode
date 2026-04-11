@@ -1,5 +1,5 @@
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -80,7 +80,7 @@ export namespace Git {
     return "modified"
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Git") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Git") {}
 
   export const layer = Layer.effect(
     Service,

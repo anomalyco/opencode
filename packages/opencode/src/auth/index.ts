@@ -1,5 +1,5 @@
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Record, Result, Schema, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
@@ -49,7 +49,7 @@ export namespace Auth {
     readonly remove: (key: string) => Effect.Effect<void, AuthError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Auth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Auth") {}
 
   export const layer = Layer.effect(
     Service,

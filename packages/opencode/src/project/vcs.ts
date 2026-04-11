@@ -1,4 +1,4 @@
-import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Context, Stream } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
@@ -151,7 +151,7 @@ export namespace Vcs {
     root: Git.Base | undefined
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
   export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service | Bus.Service> = Layer.effect(
     Service,

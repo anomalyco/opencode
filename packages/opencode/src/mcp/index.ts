@@ -24,7 +24,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Exit, Layer, Option, ServiceMap, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Context, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -239,7 +239,7 @@ export namespace MCP {
     readonly getAuthStatus: (mcpName: string) => Effect.Effect<AuthStatus>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/MCP") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
 
   export const layer = Layer.effect(
     Service,

@@ -1,6 +1,6 @@
-import { Effect, Fiber, ScopedCache, Scope, ServiceMap } from "effect"
+import { Effect, Fiber, ScopedCache, Scope, Context } from "effect"
 import { Instance, type InstanceContext } from "@/project/instance"
-import { Context } from "@/util/context"
+import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
@@ -17,10 +17,10 @@ export namespace InstanceState {
     try {
       return Instance.bind(fn)
     } catch (err) {
-      if (!(err instanceof Context.NotFound)) throw err
+      if (!(err instanceof LocalContext.NotFound)) throw err
     }
     const fiber = Fiber.getCurrent()
-    const ctx = fiber ? ServiceMap.getReferenceUnsafe(fiber.services, InstanceRef) : undefined
+    const ctx = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
     if (!ctx) return fn
     return ((...args: any[]) => Instance.restore(ctx, () => fn(...args))) as F
   }

@@ -3,7 +3,7 @@ import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
-import { Context } from "../util/context"
+import { LocalContext } from "../util/local-context"
 import { Project } from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { State } from "./state"
@@ -14,7 +14,7 @@ export interface InstanceContext {
   project: Project.Info
 }
 
-const context = Context.create<InstanceContext>("instance")
+const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
 
 const disposal = {

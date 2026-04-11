@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Scope, Context } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
@@ -65,7 +65,7 @@ export namespace FileWatcher {
     readonly init: () => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileWatcher") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/FileWatcher") {}
 
   export const layer = Layer.effect(
     Service,

@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { SessionID } from "./schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import z from "zod"
 import { Database, eq, asc } from "../storage/db"
 import { TodoTable } from "./session.sql"
@@ -31,7 +31,7 @@ export namespace Todo {
     readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionTodo") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTodo") {}
 
   export const layer = Layer.effect(
     Service,

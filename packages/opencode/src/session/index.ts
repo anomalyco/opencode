@@ -29,7 +29,7 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
@@ -354,7 +354,7 @@ export namespace Session {
     }) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Session") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
   type Patch = z.infer<typeof Event.Updated.schema>["info"]
 

@@ -2,7 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import z from "zod"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
@@ -70,7 +70,7 @@ export namespace Command {
     readonly list: () => Effect.Effect<Info[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Command") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
   export const layer = Layer.effect(
     Service,

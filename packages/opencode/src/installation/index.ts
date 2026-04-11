@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { makeRuntime } from "@/effect/run-service"
@@ -91,7 +91,7 @@ export namespace Installation {
     readonly upgrade: (method: Method, target: string) => Effect.Effect<void, UpgradeFailedError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Installation") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
 
   export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildProcessSpawner.ChildProcessSpawner> =
     Layer.effect(

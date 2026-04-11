@@ -11,7 +11,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Process } from "../util/process"
 import { spawn as lspspawn } from "./launch"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -156,7 +156,7 @@ export namespace LSP {
     readonly outgoingCalls: (input: LocInput) => Effect.Effect<any[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LSP") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/LSP") {}
 
   export const layer = Layer.effect(
     Service,

@@ -29,7 +29,7 @@ import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
@@ -73,7 +73,7 @@ export namespace ToolRegistry {
     }) => Effect.Effect<Tool.Def[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
   export const layer: Layer.Layer<
     Service,

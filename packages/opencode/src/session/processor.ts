@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Layer, ServiceMap } from "effect"
+import { Cause, Deferred, Effect, Layer, Context } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -76,7 +76,7 @@ export namespace SessionProcessor {
 
   type StreamEvent = Event
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionProcessor") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
   export const layer: Layer.Layer<
     Service,

@@ -10,7 +10,7 @@ import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -112,7 +112,7 @@ export namespace Pty {
     ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Pty") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
   export const layer = Layer.effect(
     Service,
