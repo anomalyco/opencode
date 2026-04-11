@@ -20,6 +20,19 @@ export const canonicalWorkspaceDir = (route: string, canonical?: string) => {
   return canonical
 }
 
+export async function waitForMatch<T>(
+  read: () => T,
+  match: (value: T) => boolean,
+  opts?: { tries?: number; delay?: number },
+) {
+  const tries = opts?.tries ?? 20
+  const delay = opts?.delay ?? 10
+  for (let count = 0; count < tries; count += 1) {
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    if (match(read())) return
+  }
+}
+
 function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {

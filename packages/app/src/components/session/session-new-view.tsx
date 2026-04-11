@@ -26,16 +26,23 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const git = createMemo(() => sync.project?.vcs === "git")
+  const root = createMemo(() => {
+    const directory = sync.data.path.directory || sdk.directory
+    if (!git()) return directory || sync.data.path.worktree || sync.project?.worktree || sdk.directory
+    return sync.project?.worktree || sync.data.path.worktree || directory || sdk.directory
+  })
 
   const listed = createMemo(() => {
+    if (!git()) return []
     const items = sync.data.vcs?.worktrees ?? []
-    const fallback = sync.project?.worktree || sync.data.path.worktree || sync.data.path.directory || sdk.directory
+    const fallback = root()
     if (items.some((item) => workspaceKey(item.path) === workspaceKey(fallback))) return items
     return [{ path: fallback, branch: sync.data.vcs?.branch }, ...items]
   })
-  const root = createMemo(() => sync.project?.worktree || sync.data.path.worktree || sync.data.path.directory || sdk.directory)
   const worktrees = createMemo(() => {
     const project = sync.project
+    if (!git() || !project) return []
     const main = listed().find((item) => workspaceKey(item.path) === workspaceKey(project?.worktree || ""))
     const base = listed()
       .filter((item, index, list) => list.findIndex((x) => workspaceKey(x.path) === workspaceKey(item.path)) === index)
@@ -44,7 +51,6 @@ export function NewSessionView(props: NewSessionViewProps) {
         if (workspaceKey(b.path) === workspaceKey(root())) return 1
         return a.path.localeCompare(b.path)
       })
-    if (!project) return []
     return [
       { value: MAIN_WORKTREE, path: project.worktree, branch: main?.branch },
       ...base
@@ -86,7 +92,7 @@ export function NewSessionView(props: NewSessionViewProps) {
           <div class="w-full max-w-180 px-5 py-2">
             <div class="text-20-medium text-text-strong select-text break-words">{name()}</div>
             <div class="mt-1 break-all text-12-medium text-text-weak select-text">{root()}</div>
-            <Show when={!claw()}>
+            <Show when={!claw() && git()}>
               <div class="mt-5 grid gap-3 text-left">
                 <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
                   <div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-text-weaker">
@@ -141,14 +147,6 @@ export function NewSessionView(props: NewSessionViewProps) {
                     <div class="mt-1 break-all font-mono text-[13px] leading-6 text-text-strong select-text">{next()}</div>
                   </div>
                 </Show>
-              </div>
-            </Show>
-            <Show when={claw()}>
-              <div class="mt-5 rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
-                <div class="text-[10px] uppercase tracking-[0.12em] text-text-weaker">
-                  {language.t("session.new.meta.workspace")}
-                </div>
-                <div class="mt-1 break-all text-14-medium text-text-strong select-text">{root()}</div>
               </div>
             </Show>
           </div>
