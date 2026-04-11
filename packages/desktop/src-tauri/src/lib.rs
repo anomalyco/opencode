@@ -65,6 +65,22 @@ struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
 }
 
+pub struct CliOptions {
+    pub port: Option<u32>,
+    pub hostname: Option<String>,
+    pub warnings: Vec<String>,
+}
+
+impl Default for CliOptions {
+    fn default() -> Self {
+        Self {
+            port: None,
+            hostname: None,
+            warnings: Vec::new(),
+        }
+    }
+}
+
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
 struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
 
@@ -300,6 +316,10 @@ fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    run_with_options(CliOptions::default())
+}
+
+pub fn run_with_options(options: CliOptions) {
     let builder = make_specta_builder();
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
@@ -311,7 +331,16 @@ pub fn run() {
         .output();
 
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let has_cli_overrides = args
+                .iter()
+                .any(|a| a.starts_with("--port") || a.starts_with("--hostname"));
+            if has_cli_overrides {
+                tracing::info!(
+                    "Secondary instance launched with --port/--hostname overrides; \
+                     these are ignored since the primary instance is already running"
+                );
+            }
             // Focus existing window when another instance is launched
             if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
                 let _ = window.set_focus();
@@ -349,7 +378,7 @@ pub fn run() {
             handle.manage(logging::init(&log_dir));
 
             builder.mount_events(&handle);
-            tauri::async_runtime::spawn(initialize(handle));
+            tauri::async_runtime::spawn(initialize(handle, options));
 
             Ok(())
         });
@@ -415,8 +444,12 @@ fn test_export_types() {
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
 struct LoadingWindowComplete;
 
-async fn initialize(app: AppHandle) {
+async fn initialize(app: AppHandle, options: CliOptions) {
     tracing::info!("Initializing app");
+
+    for warning in &options.warnings {
+        tracing::warn!("{warning}");
+    }
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
@@ -424,8 +457,8 @@ async fn initialize(app: AppHandle) {
     spawn_cli_sync_task(app.clone());
 
     // Spawn sidecar immediately - credentials are known before health check
-    let port = get_sidecar_port();
-    let hostname = "127.0.0.1";
+    let port = options.port.unwrap_or_else(get_sidecar_port);
+    let hostname = options.hostname.as_deref().unwrap_or("127.0.0.1");
     let url = format!("http://{hostname}:{port}");
     let password = uuid::Uuid::new_v4().to_string();
 
