@@ -1,4 +1,4 @@
-import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
+import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, Context } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -7,7 +7,6 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 
-import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { AccountRepo, type AccountRow } from "./repo"
 import { normalizeServerUrl } from "./url"
@@ -181,7 +180,7 @@ export namespace Account {
     readonly poll: (input: Login) => Effect.Effect<PollResult, AccountError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Account") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Account") {}
 
   export const layer: Layer.Layer<Service, never, AccountRepo | HttpClient.HttpClient> = Layer.effect(
     Service,
@@ -454,18 +453,4 @@ export namespace Account {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(FetchHttpClient.layer))
-
-  export const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function active(): Promise<Info | undefined> {
-    return Option.getOrUndefined(await runPromise((service) => service.active()))
-  }
-
-  export async function orgsByAccount(): Promise<readonly AccountOrgs[]> {
-    return runPromise((service) => service.orgsByAccount())
-  }
-
-  export async function switchOrg(accountID: AccountID, orgID: OrgID) {
-    return runPromise((service) => service.use(accountID, Option.some(orgID)))
-  }
 }

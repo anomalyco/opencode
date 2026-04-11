@@ -15,8 +15,8 @@ const ctx = {
   agent: "test-agent",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
 const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
@@ -36,7 +36,7 @@ describe("tool.question", () => {
       Effect.gen(function* () {
         const question = yield* Question.Service
         const toolInfo = yield* QuestionTool
-        const tool = yield* Effect.promise(() => toolInfo.init())
+        const tool = yield* toolInfo.init()
         const questions = [
           {
             question: "What is your favorite color?",
@@ -49,7 +49,7 @@ describe("tool.question", () => {
           },
         ]
 
-        const fiber = yield* Effect.promise(() => tool.execute({ questions }, ctx)).pipe(Effect.forkScoped)
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
         const item = yield* pending(question)
         yield* question.reply({ requestID: item.id, answers: [["Red"]] })
 
@@ -64,7 +64,7 @@ describe("tool.question", () => {
       Effect.gen(function* () {
         const question = yield* Question.Service
         const toolInfo = yield* QuestionTool
-        const tool = yield* Effect.promise(() => toolInfo.init())
+        const tool = yield* toolInfo.init()
         const questions = [
           {
             question: "What is your favorite animal?",
@@ -73,7 +73,7 @@ describe("tool.question", () => {
           },
         ]
 
-        const fiber = yield* Effect.promise(() => tool.execute({ questions }, ctx)).pipe(Effect.forkScoped)
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
         const item = yield* pending(question)
         yield* question.reply({ requestID: item.id, answers: [["Dog"]] })
 

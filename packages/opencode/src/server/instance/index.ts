@@ -23,6 +23,7 @@ import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { WorkspaceRouterMiddleware } from "./middleware"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
   new Hono()
@@ -170,7 +171,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        const commands = await Command.list()
+        const commands = await AppRuntime.runPromise(Command.Service.use((svc) => svc.list()))
         return c.json(commands)
       },
     )
@@ -257,6 +258,6 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        return c.json(await Format.status())
+        return c.json(await AppRuntime.runPromise(Format.Service.use((svc) => svc.status())))
       },
     )
