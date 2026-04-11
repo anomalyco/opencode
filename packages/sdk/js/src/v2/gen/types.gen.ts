@@ -1179,6 +1179,7 @@ export type PermissionConfig =
       todowrite?: PermissionActionConfig
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
+      webfetch_auth?: PermissionActionConfig
       websearch?: PermissionActionConfig
       codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
@@ -3653,6 +3654,7 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    headless?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3853,6 +3855,7 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    headless?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3895,6 +3898,7 @@ export type SessionCommandData = {
     arguments: string
     command: string
     variant?: string
+    headless?: boolean
     parts?: Array<{
       id?: string
       type: "file"

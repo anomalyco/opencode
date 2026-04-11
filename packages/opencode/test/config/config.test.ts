@@ -2330,6 +2330,7 @@ test("parseManagedPlist parses permission rules", async () => {
         grep: "allow",
         glob: "allow",
         webfetch: "ask",
+        webfetch_auth: "ask",
         "~/.ssh/*": "deny",
       },
     }),
@@ -2338,6 +2339,7 @@ test("parseManagedPlist parses permission rules", async () => {
   expect(config.permission?.["*"]).toBe("ask")
   expect(config.permission?.grep).toBe("allow")
   expect(config.permission?.webfetch).toBe("ask")
+  expect(config.permission?.webfetch_auth).toBe("ask")
   expect(config.permission?.["~/.ssh/*"]).toBe("deny")
   const bash = config.permission?.bash as Record<string, string>
   expect(bash?.["rm -rf *"]).toBe("deny")

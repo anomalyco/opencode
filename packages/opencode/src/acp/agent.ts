@@ -202,7 +202,7 @@ export namespace ACP {
                   toolCall: {
                     toolCallId: permission.tool?.callID ?? permission.id,
                     status: "pending",
-                    title: permission.permission,
+                    title: permissionTitle(permission.permission),
                     rawInput: permission.metadata,
                     kind: toToolKind(permission.permission),
                     locations: toLocations(permission.permission, permission.metadata),
@@ -1558,6 +1558,7 @@ export namespace ACP {
       case "bash":
         return "execute"
       case "webfetch":
+      case "webfetch_auth":
         return "fetch"
 
       case "edit":
@@ -1578,6 +1579,11 @@ export namespace ACP {
       default:
         return "other"
     }
+  }
+
+  function permissionTitle(permission: string) {
+    if (permission === "webfetch_auth") return "Sign in to access this URL"
+    return permission
   }
 
   function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {

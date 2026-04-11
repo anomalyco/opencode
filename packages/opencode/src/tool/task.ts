@@ -137,6 +137,7 @@ export const TaskTool = Tool.define(
                 providerID: model.providerID,
               },
               agent: next.name,
+              headless: ctx.extra?.headless === true,
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),
                 ...(canTask ? {} : { task: false }),

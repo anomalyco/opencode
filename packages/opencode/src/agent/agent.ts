@@ -85,6 +85,7 @@ export namespace Agent {
 
           const defaults = Permission.fromConfig({
             "*": "allow",
+            webfetch_auth: "ask",
             doom_loop: "ask",
             external_directory: {
               "*": "ask",
@@ -169,6 +170,7 @@ export namespace Agent {
                   list: "allow",
                   bash: "allow",
                   webfetch: "allow",
+                  webfetch_auth: "ask",
                   websearch: "allow",
                   codesearch: "allow",
                   read: "allow",

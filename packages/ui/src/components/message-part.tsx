@@ -1644,8 +1644,19 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const device = createMemo(() => props.metadata.action === "device_code")
     const url = createMemo(() => {
       const value = props.input.url
+      if (typeof value !== "string") return ""
+      return value
+    })
+    const verify = createMemo(() => {
+      const value = props.metadata.verification_uri
+      if (typeof value !== "string") return ""
+      return value
+    })
+    const code = createMemo(() => {
+      const value = props.metadata.user_code
       if (typeof value !== "string") return ""
       return value
     })
@@ -1658,19 +1669,31 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
+                <TextShimmer text={device() ? "Sign in to access this URL" : i18n.t("ui.tool.webfetch")} active={pending() && !device()} />
               </span>
-              <Show when={!pending() && url()}>
-                <a
-                  data-slot="basic-tool-tool-subtitle"
-                  class="clickable subagent-link"
-                  href={url()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {url()}
-                </a>
+              <Show
+                when={device() && pending()}
+                fallback={
+                  <Show when={!pending() && url()}>
+                    <a
+                      data-slot="basic-tool-tool-subtitle"
+                      class="clickable subagent-link"
+                      href={url()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {url()}
+                    </a>
+                  </Show>
+                }
+              >
+                <Show when={verify()}>
+                  <span data-slot="basic-tool-tool-subtitle">{verify()}</span>
+                </Show>
+                <Show when={code()}>
+                  <span data-slot="basic-tool-tool-arg">{code()}</span>
+                </Show>
               </Show>
             </div>
             <Show when={!pending() && url()}>

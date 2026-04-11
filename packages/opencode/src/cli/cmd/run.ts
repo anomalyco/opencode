@@ -28,6 +28,8 @@ import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
 
+const SIGN_IN_TITLE = "Sign in to access this URL"
+
 type ToolProps<T> = {
   input: Tool.InferParameters<T>
   metadata: Tool.InferMetadata<T>
@@ -72,6 +74,17 @@ function fallback(part: ToolPart) {
     icon: "⚙",
     title: `${part.tool} ${title}`,
   })
+}
+
+function auth(meta: Record<string, unknown>) {
+  return {
+    url: typeof meta.url === "string" ? meta.url : "",
+    server: typeof meta.server === "string" ? meta.server : "",
+    scopes: typeof meta.scopes === "string" ? meta.scopes : "",
+    verification: typeof meta.verification_uri === "string" ? meta.verification_uri : "",
+    code: typeof meta.user_code === "string" ? meta.user_code : "",
+    action: typeof meta.action === "string" ? meta.action : "",
+  }
 }
 
 function glob(info: ToolProps<typeof GlobTool>) {
@@ -490,6 +503,28 @@ export const RunCommand = cmd({
               toggles.set(part.id, true)
             }
 
+            if (part.type === "tool" && part.tool === "webfetch" && part.state.status === "running") {
+              const meta = auth(props<typeof WebFetchTool>(part).metadata as Record<string, unknown>)
+              const key = part.callID + ":device"
+              if (meta.action === "device_code" && toggles.get(key) !== true) {
+                if (emit("webfetch_auth", { part })) continue
+                block(
+                  {
+                    icon: "%",
+                    title: SIGN_IN_TITLE,
+                    description: meta.url ? `for ${meta.url}` : undefined,
+                  },
+                  [
+                    meta.verification ? `Verification URL: ${meta.verification}` : undefined,
+                    meta.code ? `User code: ${meta.code}` : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(EOL),
+                )
+                toggles.set(key, true)
+              }
+            }
+
             if (part.type === "step-start") {
               if (emit("step_start", { part })) continue
             }
@@ -549,8 +584,30 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
+            const meta = auth(permission.metadata)
 
             if (args["dangerously-skip-permissions"]) {
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "once",
+              })
+            } else if (permission.permission === "webfetch_auth") {
+              if (!emit("permission", { permission, reply: "once" })) {
+                block(
+                  {
+                    icon: "%",
+                    title: SIGN_IN_TITLE,
+                    description: "allowing once in run mode",
+                  },
+                  [
+                    meta.url ? `URL: ${meta.url}` : undefined,
+                    meta.server ? `Auth server: ${meta.server}` : undefined,
+                    meta.scopes ? `Scopes: ${meta.scopes}` : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(EOL),
+                )
+              }
               await sdk.permission.reply({
                 requestID: permission.id,
                 reply: "once",
@@ -652,6 +709,7 @@ export const RunCommand = cmd({
           command: args.command,
           arguments: message,
           variant: args.variant,
+          headless: true,
         })
       } else {
         const model = args.model ? Provider.parseModel(args.model) : undefined
@@ -660,6 +718,7 @@ export const RunCommand = cmd({
           agent,
           model,
           variant: args.variant,
+          headless: true,
           parts: [...files, { type: "text", text: message }],
         })
       }

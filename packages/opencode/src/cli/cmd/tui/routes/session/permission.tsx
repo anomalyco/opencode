@@ -331,6 +331,31 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
+            if (permission === "webfetch_auth") {
+              const meta = props.request.metadata ?? {}
+              const url = typeof meta.url === "string" ? meta.url : ""
+              const server = typeof meta.server === "string" ? meta.server : ""
+              const scopes = typeof meta.scopes === "string" ? meta.scopes : ""
+              return {
+                icon: "%",
+                title: "Sign in to access this URL",
+                body: (
+                  <box paddingLeft={1} gap={1} flexDirection="column">
+                    <Show when={url}>
+                      <text fg={theme.textMuted}>{"URL: " + url}</text>
+                    </Show>
+                    <Show when={server}>
+                      <text fg={theme.textMuted}>{"Auth server: " + server}</text>
+                    </Show>
+                    <Show when={scopes}>
+                      <text fg={theme.textMuted}>{"Scopes: " + scopes}</text>
+                    </Show>
+                    <text fg={theme.textMuted}>This may open your browser and store credentials for future webfetch requests.</text>
+                  </box>
+                ),
+              }
+            }
+
             if (permission === "websearch") {
               const query = typeof data.query === "string" ? data.query : ""
               return {

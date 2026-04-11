@@ -1,6 +1,7 @@
 import { createConnection } from "net"
 import { createServer } from "http"
 import { Log } from "../util/log"
+import { escapeHtml } from "../auth/flow"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
@@ -45,7 +46,7 @@ const HTML_ERROR = (error: string) => `<!DOCTYPE html>
   <div class="container">
     <h1>Authorization Failed</h1>
     <p>An error occurred during authorization.</p>
-    <div class="error">${error}</div>
+    <div class="error">${escapeHtml(error)}</div>
   </div>
 </body>
 </html>`

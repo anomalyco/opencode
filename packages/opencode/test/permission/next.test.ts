@@ -50,12 +50,14 @@ test("fromConfig - mixed string and object values", () => {
     bash: { "*": "allow", rm: "deny" },
     edit: "allow",
     webfetch: "ask",
+    webfetch_auth: "ask",
   })
   expect(result).toEqual([
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "bash", pattern: "rm", action: "deny" },
     { permission: "edit", pattern: "*", action: "allow" },
     { permission: "webfetch", pattern: "*", action: "ask" },
+    { permission: "webfetch_auth", pattern: "*", action: "ask" },
   ])
 })
 

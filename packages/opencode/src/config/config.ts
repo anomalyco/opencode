@@ -490,6 +490,7 @@ export namespace Config {
           todowrite: PermissionAction.optional(),
           question: PermissionAction.optional(),
           webfetch: PermissionAction.optional(),
+          webfetch_auth: PermissionAction.optional(),
           websearch: PermissionAction.optional(),
           codesearch: PermissionAction.optional(),
           lsp: PermissionRule.optional(),

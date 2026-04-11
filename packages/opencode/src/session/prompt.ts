@@ -350,6 +350,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         tools?: Record<string, boolean>
         processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
         bypassAgentCheck: boolean
+        headless?: boolean
         messages: MessageV2.WithParts[]
       }) {
         using _ = log.time("resolveTools")
@@ -360,7 +361,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           abort: options.abortSignal!,
           messageID: input.processor.message.id,
           callID: options.toolCallId,
-          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
+          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps, headless: input.headless },
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
@@ -1641,6 +1642,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           agent: userAgent,
           parts,
           variant: input.variant,
+          headless: input.headless,
         })
         yield* bus.publish(Command.Event.Executed, {
           name: input.command,
@@ -1714,6 +1716,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
+    headless: z.boolean().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -1807,6 +1810,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    headless: z.boolean().optional(),
     parts: z
       .array(
         z.discriminatedUnion("type", [

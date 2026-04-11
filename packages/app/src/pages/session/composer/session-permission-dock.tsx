@@ -11,8 +11,20 @@ export function SessionPermissionDock(props: {
   onDecide: (response: "once" | "always" | "reject") => void
 }) {
   const language = useLanguage()
+  const auth = () => {
+    if (props.request.permission !== "webfetch_auth") return
+    const meta = props.request.metadata ?? {}
+    return {
+      url: typeof meta.url === "string" ? meta.url : "",
+      server: typeof meta.server === "string" ? meta.server : "",
+      scopes: typeof meta.scopes === "string" ? meta.scopes : "",
+    }
+  }
 
   const toolDescription = () => {
+    if (props.request.permission === "webfetch_auth") {
+      return "This may open your browser and store credentials for future webfetch requests."
+    }
     const key = `settings.permissions.tool.${props.request.permission}.description`
     const value = language.t(key as Parameters<typeof language.t>[0])
     if (value === key) return ""
@@ -52,6 +64,13 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
+      <Show when={auth()}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-hint">Sign in to access this URL</div>
+        </div>
+      </Show>
+
       <Show when={toolDescription()}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
@@ -59,7 +78,34 @@ export function SessionPermissionDock(props: {
         </div>
       </Show>
 
-      <Show when={props.request.patterns.length > 0}>
+      <Show when={auth()?.url}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-patterns">
+            <code class="text-12-regular text-text-base break-all">{"URL: " + auth()!.url}</code>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={auth()?.server}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-patterns">
+            <code class="text-12-regular text-text-base break-all">{"Auth server: " + auth()!.server}</code>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={auth()?.scopes}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-patterns">
+            <code class="text-12-regular text-text-base break-all">{"Scopes: " + auth()!.scopes}</code>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={props.request.permission !== "webfetch_auth" && props.request.patterns.length > 0}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-patterns">
