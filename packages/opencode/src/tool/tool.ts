@@ -94,7 +94,8 @@ export namespace Tool {
               return result
             }
             const agent = yield* Effect.promise(() => Agent.get(ctx.agent))
-            const truncated = yield* Effect.promise(() => Truncate.output(result.output, {}, agent))
+            const truncate = yield* Truncate.Service
+            const truncated = yield* truncate.output(result.output, {}, agent)
             return {
               ...result,
               output: truncated.content,
