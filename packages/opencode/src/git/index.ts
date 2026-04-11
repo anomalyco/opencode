@@ -1,6 +1,7 @@
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { Effect, Layer, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { Platform } from "@/util/platform"
 
 export namespace Git {
   const cfg = [
@@ -88,14 +89,27 @@ export namespace Git {
 
       const run = Effect.fn("Git.run")(
         function* (args: string[], opts: Options) {
-          const proc = ChildProcess.make("git", [...cfg, ...args], {
-            cwd: opts.cwd,
-            env: opts.env,
-            extendEnv: true,
-            stdin: "ignore",
-            stdout: "pipe",
-            stderr: "pipe",
-          })
+          // When cwd is a WSL UNC path, run git inside WSL
+          const wslInfo = Platform.isWslUncPath(opts.cwd) ? Platform.parseWslUncPath(opts.cwd) : undefined
+
+          const proc =
+            wslInfo && process.platform === "win32"
+              ? ChildProcess.make("wsl.exe", ["-d", wslInfo.distro, "-e", "git", ...cfg, ...args], {
+                  cwd: process.env.SYSTEMROOT || "C:\\Windows",
+                  env: opts.env,
+                  extendEnv: true,
+                  stdin: "ignore",
+                  stdout: "pipe",
+                  stderr: "pipe",
+                })
+              : ChildProcess.make("git", [...cfg, ...args], {
+                  cwd: opts.cwd,
+                  env: opts.env,
+                  extendEnv: true,
+                  stdin: "ignore",
+                  stdout: "pipe",
+                  stderr: "pipe",
+                })
           const handle = yield* spawner.spawn(proc)
           const [stdout, stderr] = yield* Effect.all(
             [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
