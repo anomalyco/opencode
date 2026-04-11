@@ -2837,3 +2837,51 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+describe("ProviderTransform.maxOutputTokens", () => {
+  const OUTPUT_TOKEN_MAX = 32000
+
+  const createMockModel = (overrides: any = {}) => ({
+    id: "test/model",
+    providerID: "test",
+    api: { id: "test", url: "https://test.com", npm: "@ai-sdk/test" },
+    name: "Test Model",
+    capabilities: { reasoning: false, toolcall: true, attachment: true },
+    limit: { context: 128000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+    ...overrides,
+  })
+
+  test("should return model output limit when valid", () => {
+    const model = createMockModel({ limit: { context: 200000, output: 64000 } })
+    const result = ProviderTransform.maxOutputTokens(model)
+    // Should be min of model output limit (64000) and OUTPUT_TOKEN_MAX (32000)
+    expect(result).toBe(32000)
+  })
+
+  test("should return OUTPUT_TOKEN_MAX when model limit.output is undefined", () => {
+    const model = createMockModel({ limit: { context: 128000 } })
+    const result = ProviderTransform.maxOutputTokens(model)
+    expect(result).toBe(OUTPUT_TOKEN_MAX)
+  })
+
+  test("should return OUTPUT_TOKEN_MAX when model limit.output is 0", () => {
+    const model = createMockModel({ limit: { context: 128000, output: 0 } })
+    const result = ProviderTransform.maxOutputTokens(model)
+    expect(result).toBe(OUTPUT_TOKEN_MAX)
+  })
+
+  test("should return OUTPUT_TOKEN_MAX when model limit.output is negative", () => {
+    const model = createMockModel({ limit: { context: 128000, output: -1 } })
+    const result = ProviderTransform.maxOutputTokens(model)
+    expect(result).toBe(OUTPUT_TOKEN_MAX)
+  })
+
+  test("should return min of model limit and OUTPUT_TOKEN_MAX", () => {
+    const model = createMockModel({ limit: { context: 128000, output: 16000 } })
+    const result = ProviderTransform.maxOutputTokens(model)
+    expect(result).toBe(16000)
+  })
+})

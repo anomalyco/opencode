@@ -945,7 +945,11 @@ export namespace ProviderTransform {
   }
 
   export function maxOutputTokens(model: Provider.Model): number {
-    return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+    const output = model.limit.output
+    if (!output || output <= 0) {
+      return OUTPUT_TOKEN_MAX
+    }
+    return Math.min(output, OUTPUT_TOKEN_MAX)
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
