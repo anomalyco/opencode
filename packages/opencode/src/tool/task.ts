@@ -36,6 +36,7 @@ export const TaskTool = Tool.define(
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const config = yield* Config.Service
+    const sessions = yield* Session.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
       const cfg = yield* config.get()
@@ -62,44 +63,41 @@ export const TaskTool = Tool.define(
 
       const taskID = params.task_id
       const session = taskID
-        ? yield* Effect.promise(() => {
-            const id = SessionID.make(taskID)
-            return Session.get(id).catch(() => undefined)
-          })
+        ? yield* sessions.get(SessionID.make(taskID)).pipe(
+            Effect.catchCause(() => Effect.succeed(undefined)),
+          )
         : undefined
       const nextSession =
         session ??
-        (yield* Effect.promise(() =>
-          Session.create({
-            parentID: ctx.sessionID,
-            title: params.description + ` (@${next.name} subagent)`,
-            permission: [
-              ...(canTodo
-                ? []
-                : [
-                    {
-                      permission: "todowrite" as const,
-                      pattern: "*" as const,
-                      action: "deny" as const,
-                    },
-                  ]),
-              ...(canTask
-                ? []
-                : [
-                    {
-                      permission: id,
-                      pattern: "*" as const,
-                      action: "deny" as const,
-                    },
-                  ]),
-              ...(cfg.experimental?.primary_tools?.map((item) => ({
-                pattern: "*",
-                action: "allow" as const,
-                permission: item,
-              })) ?? []),
-            ],
-          }),
-        ))
+        (yield* sessions.create({
+          parentID: ctx.sessionID,
+          title: params.description + ` (@${next.name} subagent)`,
+          permission: [
+            ...(canTodo
+              ? []
+              : [
+                  {
+                    permission: "todowrite" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
+            ...(canTask
+              ? []
+              : [
+                  {
+                    permission: id,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
+            ...(cfg.experimental?.primary_tools?.map((item) => ({
+              pattern: "*",
+              action: "allow" as const,
+              permission: item,
+            })) ?? []),
+          ],
+        }))
 
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
