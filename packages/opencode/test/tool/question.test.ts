@@ -36,7 +36,7 @@ describe("tool.question", () => {
       Effect.gen(function* () {
         const question = yield* Question.Service
         const toolInfo = yield* QuestionTool
-        const tool = yield* Effect.promise(() => toolInfo.init())
+        const tool = yield* toolInfo.init()
         const questions = [
           {
             question: "What is your favorite color?",
@@ -64,7 +64,7 @@ describe("tool.question", () => {
       Effect.gen(function* () {
         const question = yield* Question.Service
         const toolInfo = yield* QuestionTool
-        const tool = yield* Effect.promise(() => toolInfo.init())
+        const tool = yield* toolInfo.init()
         const questions = [
           {
             question: "What is your favorite animal?",

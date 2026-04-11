@@ -19,7 +19,7 @@ const runtime = ManagedRuntime.make(
 )
 
 function initBash() {
-  return runtime.runPromise(BashTool.pipe(Effect.flatMap((info) => Effect.promise(() => info.init()))))
+  return runtime.runPromise(BashTool.pipe(Effect.flatMap((info) => info.init())))
 }
 
 const ctx = {

@@ -43,7 +43,7 @@ const it = testEffect(
 
 const init = Effect.fn("WriteToolTest.init")(function* () {
   const info = yield* WriteTool
-  return yield* Effect.promise(() => info.init())
+  return yield* info.init()
 })
 
 const run = Effect.fn("WriteToolTest.run")(function* (

@@ -10,7 +10,7 @@ export const MultiEditTool = Tool.define(
   "multiedit",
   Effect.gen(function* () {
     const editInfo = yield* EditTool
-    const edit = yield* Effect.promise(() => editInfo.init())
+    const edit = yield* editInfo.init()
 
     return {
       description: DESCRIPTION,
