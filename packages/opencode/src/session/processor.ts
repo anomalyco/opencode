@@ -11,6 +11,7 @@ import { Session } from "."
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -72,6 +73,7 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    sentChars: number
   }
 
   type StreamEvent = Event
@@ -119,6 +121,7 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          sentChars: 0,
         }
         let aborted = false
         const slog = log.with({ sessionID: input.sessionID, messageID: input.assistantMessage.id })
@@ -360,6 +363,7 @@ export namespace SessionProcessor {
               ctx.assistantMessage.finish = value.finishReason
               ctx.assistantMessage.cost += usage.cost
               ctx.assistantMessage.tokens = usage.tokens
+              Token.updateRatio({ chars: ctx.sentChars, tokens: usage.tokens.input })
               yield* session.updatePart({
                 id: PartID.ascending(),
                 reason: value.finishReason,
@@ -539,6 +543,7 @@ export namespace SessionProcessor {
             yield* Effect.gen(function* () {
               ctx.currentText = undefined
               ctx.reasoningMap = {}
+              ctx.sentChars = JSON.stringify(streamInput.messages).length
               const stream = llm.stream(streamInput)
 
               yield* stream.pipe(
