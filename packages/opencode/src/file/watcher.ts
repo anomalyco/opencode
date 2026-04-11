@@ -8,7 +8,6 @@ import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Git } from "@/git"
 import { Instance } from "@/project/instance"
@@ -161,10 +160,4 @@ export namespace FileWatcher {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export function init() {
-    return runPromise((svc) => svc.init())
-  }
 }
