@@ -49,6 +49,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { Todo } from "./todo"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -102,6 +103,7 @@ export namespace SessionPrompt {
       const instruction = yield* Instruction.Service
       const state = yield* SessionRunState.Service
       const revert = yield* SessionRevert.Service
+      const todo = yield* Todo.Service
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
@@ -1286,6 +1288,49 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
 
+      const pendingTodoReminder = Effect.fn("SessionPrompt.pendingTodoReminder")(function* (input: {
+        sessionID: SessionID
+        user: MessageV2.User
+      }) {
+        const todos = yield* todo.get(input.sessionID)
+        const pending = todos.filter((item) => item.status === "pending" || item.status === "in_progress")
+        if (pending.length === 0) return false
+
+        const existing = yield* sessions.findMessage(input.sessionID, (msg) => msg.info.id === input.user.id)
+        const lastText = Option.isSome(existing)
+          ? existing.value.parts.find((part) => part.type === "text" && "text" in part)?.text
+          : undefined
+        if (lastText?.startsWith("There are still unfinished todos:")) return false
+
+        const userMsg: MessageV2.User = {
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: input.user.agent,
+          model: input.user.model,
+        }
+
+        const lines = pending.map((item) => `- [${item.status}] ${item.content}`)
+        const text = [
+          "There are still unfinished todos:",
+          ...lines,
+          "Please update the todo list to match the current state before finishing.",
+        ].join("\n")
+
+        yield* sessions.updateMessage(userMsg)
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: userMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          text,
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+
+        return true
+      })
+
       const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
         const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
         if (Option.isSome(match)) return match.value
@@ -1495,6 +1540,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   yield* sessions.updateMessage(handle.message)
                   return "break" as const
                 }
+
+                if (lastUser) {
+                  const reminded = yield* pendingTodoReminder({ sessionID, user: lastUser })
+                  if (reminded) return "continue" as const
+                }
               }
 
               if (result === "stop") return "break" as const
@@ -1663,8 +1713,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }),
   )
 
-  export const defaultLayer = Layer.suspend(() =>
-    layer.pipe(
+  export const defaultLayer = Layer.suspend(() => {
+    const base = layer.pipe(
       Layer.provide(SessionRunState.defaultLayer),
       Layer.provide(SessionStatus.defaultLayer),
       Layer.provide(SessionCompaction.defaultLayer),
@@ -1685,8 +1735,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Bus.layer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
-    ),
-  )
+    )
+
+    return base.pipe(Layer.provide(Todo.defaultLayer))
+  })
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export const PromptInput = z.object({
