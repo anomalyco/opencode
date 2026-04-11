@@ -50,5 +50,6 @@ ENV OPENCODE_APP_DIST_DIR=/app/packages/app/dist
 ENV PORT=3000
 
 EXPOSE 3000
+EXPOSE 9229 9230 9231
 
 CMD ["start-hosted-opencode"]

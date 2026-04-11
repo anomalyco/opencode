@@ -36,6 +36,15 @@ class UniverSDKError(RuntimeError):
     pass
 
 
+def _call_timeout_sec() -> float:
+    raw = os.environ.get("UNIVER_SDK_CALL_TIMEOUT_SEC", "30").strip()
+    try:
+        v = float(raw)
+        return v if v > 0 else 30.0
+    except ValueError:
+        return 30.0
+
+
 def _resolve_ws_url(explicit: str | None) -> str:
     """Default matches Bun `sdk-relay` (`UNIVER_SDK_PORT`, default 18766). Override with `UNIVER_SDK_WS`."""
     if explicit is not None:
@@ -163,9 +172,16 @@ class UniverSDK:
         if params is not None:
             payload["params"] = params
 
+        timeout = _call_timeout_sec()
         async with self._lock:
             await self._conn.send(json.dumps(payload))
-            raw = await self._conn.recv()
+            try:
+                raw = await asyncio.wait_for(self._conn.recv(), timeout=timeout)
+            except TimeoutError as e:
+                raise UniverSDKError(
+                    f"timed out after {timeout}s waiting for browser response to op={op!r} "
+                    "(relay forwarded the request; browser tab may be closed, frozen, or not running the spreadsheet viewer)"
+                ) from e
 
         if not isinstance(raw, str):
             raise UniverSDKError("Received non-text response from relay.")

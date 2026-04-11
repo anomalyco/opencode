@@ -12,7 +12,11 @@ fi
 
 /usr/local/bin/start-opencode-serve > /tmp/opencode-backend.log 2>&1 &
 backend_pid=$!
-/usr/local/bin/bun /app/packages/univer-sdk/script/sdk-relay.ts > /tmp/univer-sdk-relay.log 2>&1 &
+if [ "${VERITLY_REMOTE_DEBUG:-}" = "1" ]; then
+  /usr/local/bin/bun --inspect=0.0.0.0:9230 /app/packages/univer-sdk/script/sdk-relay.ts > /tmp/univer-sdk-relay.log 2>&1 &
+else
+  /usr/local/bin/bun /app/packages/univer-sdk/script/sdk-relay.ts > /tmp/univer-sdk-relay.log 2>&1 &
+fi
 relay_pid=$!
 
 cleanup() {
@@ -25,7 +29,11 @@ trap cleanup EXIT INT TERM
 for _ in $(seq 1 30); do
   if curl -fsS -u "$backend_username:$backend_password" http://127.0.0.1:4096/global/health >/dev/null 2>&1 \
     && curl -fsS "http://127.0.0.1:${relay_port}/health" >/dev/null 2>&1; then
-    exec bun /usr/local/bin/serve-custom-app.mjs
+    if [ "${VERITLY_REMOTE_DEBUG:-}" = "1" ]; then
+      exec bun --inspect=0.0.0.0:9231 /usr/local/bin/serve-custom-app.mjs
+    else
+      exec bun /usr/local/bin/serve-custom-app.mjs
+    fi
   fi
   sleep 1
 done

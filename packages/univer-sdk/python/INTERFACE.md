@@ -6,6 +6,7 @@ This file is the API contract for Python/AI clients talking to the local relay a
 
 - WebSocket URL (agent): `ws://127.0.0.1:18766/ws?role=agent` (relay default port `18766`, overridable via `UNIVER_SDK_PORT` on the Bun relay).
 - Python `UniverSDK` defaults: no-arg constructor → `UNIVER_SDK_WS` env if set, else `ws://127.0.0.1:{UNIVER_SDK_PORT}/ws` with `UNIVER_SDK_PORT` defaulting to `18766`.
+- After each request, Python waits for one JSON response on the same socket. If the browser never answers (tab closed, sheet not loaded, main thread stuck), that wait can hang. `UNIVER_SDK_CALL_TIMEOUT_SEC` caps this wait (default `30`).
 - Request JSON: `{ "id": "<string>", "op": "<operation>", "params": { ... } }`
 - Response JSON: `{ "id": "<string>", "ok": true, "result": <any> }` or `{ "id": "<string>", "ok": false, "error": "<message>" }`
 

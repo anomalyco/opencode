@@ -1,41 +1,27 @@
-# Railway runtime
+# OpenCode Veritly on Railway
 
-This repo can run as a single Railway service using the custom `packages/app` frontend plus the OpenCode `serve` backend behind one public port.
+## Remote Bun debug (fixed ports)
 
-## What it does
+Set **`VERITLY_REMOTE_DEBUG=1`** on a **dedicated** non-production service instance when you need to attach a debugger. Any other value (including unset) keeps the normal startup without Bun inspectors.
 
-- installs the full monorepo with `bun install`
-- builds the custom frontend from `packages/app`
-- starts the OpenCode backend on an internal port
-- serves the custom frontend on the public port and proxies API requests to the backend
-- keeps OpenCode state under `/data`
-- uses `/workspace` as a symlink to `/data/workspace`
+| Process | Inspector bind | Port |
+| --- | --- | --- |
+| OpenCode (`start-opencode-serve`) | `0.0.0.0` | **9229** |
+| sdk-relay | `0.0.0.0` | **9230** |
+| serve-custom-app (edge) | `0.0.0.0` | **9231** |
 
-## Railway setup
+Inspectors use `bun --inspect=0.0.0.0:<port>` (no `--inspect-wait`), so health checks are not blocked.
 
-Create one Railway service from this repo and use:
+### Security
 
-- Dockerfile: `Dockerfile`
-- volume mount: `/data`
-- healthcheck path: `/healthz`
+Exposing debug ports to the public internet is a serious risk (arbitrary code execution surface). Use only on isolated staging instances, restrict access, and remove `VERITLY_REMOTE_DEBUG` when finished.
 
-Required environment variables:
+### Operator: Railway TCP
 
-- `OPENCODE_SERVER_PASSWORD=<strong password>` from the Railway service environment
+Expose **three** separate TCP endpoints on Railway, one per port above, pointing at the same service/container. Railway assigns a public hostname (and often a distinct port) for each mapping. Use those values as the **host** (and **port** if shown) when attaching from your IDE.
 
-Useful optional environment variables:
+The image documents the ports via `EXPOSE 9229 9230 9231`; you still configure TCP exposure in the Railway dashboard.
 
-- `OPENCODE_SERVER_USERNAME=opencode`
-- `OPENAI_API_KEY=...`
-- `ANTHROPIC_API_KEY=...`
-- `CLOUDFLARE_ACCOUNT_ID=...`
-- `CLOUDFLARE_GATEWAY_ID=...`
-- `CLOUDFLARE_API_TOKEN=...`
+### WebStorm
 
-## Local smoke test
-
-```bash
-OPENCODE_SERVER_PASSWORD=testpass bun run web:veritly
-```
-
-Then open `http://localhost:4097`.
+Repo run configurations under `.idea/runConfigurations/` (`Railway OpenCode inspect 9229`, `Railway sdk-relay inspect 9230`, `Railway edge inspect 9231`) default to `http://127.0.0.1:<port>` with path mapping **`/app`** → **`$PROJECT_DIR$/vendor/opencode-veritly`**. Replace the host (and port if Railway assigns one) with the Railway TCP values for your service.
