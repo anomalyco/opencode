@@ -1,4 +1,8 @@
-export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" }
+export type InitStep =
+  | { phase: "server_waiting" }
+  | { phase: "sqlite_waiting" }
+  | { phase: "app_waiting" }
+  | { phase: "done" }
 
 export type ServerReadyData = {
   url: string
@@ -19,6 +23,7 @@ export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  onInitStep: (cb: (step: InitStep) => void) => () => void
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
   getWslConfig: () => Promise<WslConfig>
@@ -66,6 +71,7 @@ export type ElectronAPI = {
   setZoomFactor: (factor: number) => Promise<void>
   setTitlebar: (theme: TitlebarTheme) => Promise<void>
   loadingWindowComplete: () => void
+  mainWindowReady: () => void
   runUpdater: (alertOnFail: boolean) => Promise<void>
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void>

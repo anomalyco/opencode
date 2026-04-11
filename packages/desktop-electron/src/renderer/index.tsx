@@ -332,6 +332,7 @@ render(() => {
                 defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                 servers={servers()}
                 router={MemoryRouter}
+                onReady={() => window.api.mainWindowReady()}
               >
                 <Inner />
               </AppInterface>

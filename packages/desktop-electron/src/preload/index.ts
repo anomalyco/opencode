@@ -11,6 +11,11 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener("init-step", handler)
     })
   },
+  onInitStep: (cb) => {
+    const handler = (_: unknown, step: InitStep) => cb(step)
+    ipcRenderer.on("init-step", handler)
+    return () => ipcRenderer.removeListener("init-step", handler)
+  },
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
   getWslConfig: () => ipcRenderer.invoke("get-wsl-config"),
@@ -60,6 +65,7 @@ const api: ElectronAPI = {
   setZoomFactor: (factor) => ipcRenderer.invoke("set-zoom-factor", factor),
   setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
   loadingWindowComplete: () => ipcRenderer.send("loading-window-complete"),
+  mainWindowReady: () => ipcRenderer.send("main-window-ready"),
   runUpdater: (alertOnFail) => ipcRenderer.invoke("run-updater", alertOnFail),
   checkUpdate: () => ipcRenderer.invoke("check-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),

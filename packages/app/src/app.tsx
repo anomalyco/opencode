@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Duration, Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -161,7 +162,7 @@ const effectMinDuration =
   <A, E, R>(e: Effect.Effect<A, E, R>) =>
     Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
 
-function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
+function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; onReady?: () => void }>) {
   const server = useServer()
   const checkServerHealth = useCheckServerHealth()
 
@@ -187,6 +188,16 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           Effect.runPromise,
         ),
   )
+
+  let sent = false
+
+  createEffect(() => {
+    if (sent) return
+    const ready = checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"
+    if (!ready) return
+    sent = true
+    props.onReady?.()
+  })
 
   return (
     <Show
@@ -280,6 +291,7 @@ export function AppInterface(props: {
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
+  onReady?: () => void
 }) {
   return (
     <ServerProvider
@@ -287,7 +299,7 @@ export function AppInterface(props: {
       disableHealthCheck={props.disableHealthCheck}
       servers={props.servers}
     >
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+      <ConnectionGate disableHealthCheck={props.disableHealthCheck} onReady={props.onReady}>
         <ServerKey>
           <GlobalSDKProvider>
             <GlobalSyncProvider>
