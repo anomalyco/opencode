@@ -10,14 +10,14 @@ import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
-import { AppRuntime } from "@/effect/app-runtime"
+import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { ShareNext } from "@/share/share-next"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
-  void AppRuntime.runPromise(ShareNext.Service.use((svc) => svc.init()))
-  void AppRuntime.runPromise(Format.Service.use((svc) => svc.init()))
+  void BootstrapRuntime.runPromise(ShareNext.Service.use((svc) => svc.init()))
+  void BootstrapRuntime.runPromise(Format.Service.use((svc) => svc.init()))
   await LSP.init()
   File.init()
   FileWatcher.init()
