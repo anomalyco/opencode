@@ -31,7 +31,7 @@ export namespace Observability {
     : undefined
 
   export const layer = !base
-    ? Layer.empty
+    ? EffectLogger.layer
     : Layer.mergeAll(
         EffectLogger.layer,
         Otlp.layerJson({
