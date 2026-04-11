@@ -288,13 +288,15 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
 
+        const current = updates.permission !== undefined ? await Session.get(sessionID) : undefined
+
         if (updates.title !== undefined) {
           await Session.setTitle({ sessionID, title: updates.title })
         }
         if (updates.permission !== undefined) {
           await Session.setPermission({
             sessionID,
-            permission: Permission.expandRuleset(updates.permission),
+            permission: Permission.merge(current?.permission ?? [], Permission.expandRuleset(updates.permission)),
           })
         }
         if (updates.time?.archived !== undefined) {
