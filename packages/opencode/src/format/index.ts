@@ -2,7 +2,6 @@ import { Effect, Layer, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
@@ -193,18 +192,4 @@ export namespace Format {
     Layer.provide(Config.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((s) => s.init())
-  }
-
-  export async function status() {
-    return runPromise((s) => s.status())
-  }
-
-  export async function file(filepath: string) {
-    return runPromise((s) => s.file(filepath))
-  }
 }
