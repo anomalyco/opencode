@@ -226,25 +226,21 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
       if (process.platform === "win32") return AppFileSystem.normalizePathPattern(path.join(dir, "*"))
       return path.join(dir, "*")
     })
-    yield* Effect.promise(() =>
-      ctx.ask({
-        permission: "external_directory",
-        patterns: globs,
-        always: globs,
-        metadata: {},
-      }),
-    )
+    yield* ctx.ask({
+      permission: "external_directory",
+      patterns: globs,
+      always: globs,
+      metadata: {},
+    })
   }
 
   if (scan.patterns.size === 0) return
-  yield* Effect.promise(() =>
-    ctx.ask({
-      permission: "bash",
-      patterns: Array.from(scan.patterns),
-      always: Array.from(scan.always),
-      metadata: {},
-    }),
-  )
+  yield* ctx.ask({
+    permission: "bash",
+    patterns: Array.from(scan.patterns),
+    always: Array.from(scan.always),
+    metadata: {},
+  })
 })
 
 function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
@@ -294,7 +290,7 @@ const parser = lazy(async () => {
 })
 
 // TODO: we may wanna rename this tool so it works better on other shells
-export const BashTool = Tool.defineEffect(
+export const BashTool = Tool.define(
   "bash",
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
@@ -389,7 +385,7 @@ export const BashTool = Tool.defineEffect(
       let expired = false
       let aborted = false
 
-      ctx.metadata({
+      yield* ctx.metadata({
         metadata: {
           output: "",
           description: input.description,
@@ -401,17 +397,15 @@ export const BashTool = Tool.defineEffect(
           const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(
-            Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
-              Effect.sync(() => {
-                output += chunk
-                ctx.metadata({
-                  metadata: {
-                    output: preview(output),
-                    description: input.description,
-                  },
-                })
-              }),
-            ),
+            Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
+              output += chunk
+              return ctx.metadata({
+                metadata: {
+                  output: preview(output),
+                  description: input.description,
+                },
+              })
+            }),
           )
 
           const abort = Effect.callback<void>((resume) => {
@@ -504,7 +498,7 @@ export const BashTool = Tool.defineEffect(
               },
               ctx,
             )
-          }).pipe(Effect.orDie, Effect.runPromise),
+          }),
       }
     }
   }),

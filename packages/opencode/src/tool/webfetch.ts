@@ -18,7 +18,7 @@ const parameters = z.object({
   timeout: z.number().describe("Optional timeout in seconds (max 120)").optional(),
 })
 
-export const WebFetchTool = Tool.defineEffect(
+export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
@@ -33,18 +33,16 @@ export const WebFetchTool = Tool.defineEffect(
             throw new Error("URL must start with http:// or https://")
           }
 
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "webfetch",
-              patterns: [params.url],
-              always: ["*"],
-              metadata: {
-                url: params.url,
-                format: params.format,
-                timeout: params.timeout,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "webfetch",
+            patterns: [params.url],
+            always: ["*"],
+            metadata: {
+              url: params.url,
+              format: params.format,
+              timeout: params.timeout,
+            },
+          })
 
           const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
@@ -153,7 +151,7 @@ export const WebFetchTool = Tool.defineEffect(
             default:
               return { output: content, title, metadata: {} }
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )
