@@ -11,9 +11,11 @@ import { Session } from "../../session"
 import { Config } from "../../config/config"
 import { ConsoleState } from "../../config/console-state"
 import { Account, AccountID, OrgID } from "../../account"
+import { AppRuntime } from "../../effect/app-runtime"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Option } from "effect"
 import { WorkspaceRoutes } from "./workspace"
 import { Agent } from "@/agent/agent"
 
@@ -55,7 +57,10 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const [consoleState, groups] = await Promise.all([Config.getConsoleState(), Account.orgsByAccount()])
+        const [consoleState, groups] = await Promise.all([
+          Config.getConsoleState(),
+          AppRuntime.runPromise(Account.Service.use((svc) => svc.orgsByAccount())),
+        ])
         return c.json({
           ...consoleState,
           switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
@@ -80,8 +85,12 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const [groups, active] = await Promise.all([Account.orgsByAccount(), Account.active()])
+        const [groups, active] = await Promise.all([
+          AppRuntime.runPromise(Account.Service.use((svc) => svc.orgsByAccount())),
+          AppRuntime.runPromise(Account.Service.use((svc) => svc.active())),
+        ])
 
+        const info = Option.getOrUndefined(active)
         const orgs = groups.flatMap((group) =>
           group.orgs.map((org) => ({
             accountID: group.account.id,
@@ -89,7 +98,7 @@ export const ExperimentalRoutes = lazy(() =>
             accountUrl: group.account.url,
             orgID: org.id,
             orgName: org.name,
-            active: !!active && active.id === group.account.id && active.active_org_id === org.id,
+            active: !!info && info.id === group.account.id && info.active_org_id === org.id,
           })),
         )
         return c.json({ orgs })
@@ -115,7 +124,9 @@ export const ExperimentalRoutes = lazy(() =>
       validator("json", ConsoleSwitchBody),
       async (c) => {
         const body = c.req.valid("json")
-        await Account.switchOrg(AccountID.make(body.accountID), OrgID.make(body.orgID))
+        await AppRuntime.runPromise(
+          Account.Service.use((svc) => svc.use(AccountID.make(body.accountID), Option.some(OrgID.make(body.orgID)))),
+        )
         return c.json(true)
       },
     )
