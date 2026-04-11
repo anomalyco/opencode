@@ -1,0 +1,71 @@
+name: Sync OpenCode Changelog
+
+on:
+  schedule:
+    # Runs every 6 hours — adjust to taste (cron is UTC)
+    - cron: "0 */6 * * *"
+
+  # Allow a manual run from the Actions tab at any time
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to push the updated CHANGELOG.md
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Check out the repo
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # shallow clone is fine here
+
+      # -----------------------------------------------------------------------
+      # 2. Set up Python
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # -----------------------------------------------------------------------
+      # 3. Install dependencies
+      # -----------------------------------------------------------------------
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml
+
+      # -----------------------------------------------------------------------
+      # 4. Run the sync script
+      # -----------------------------------------------------------------------
+      - name: Sync changelog
+        id: sync
+        run: python scripts/sync_changelog.py
+
+      # -----------------------------------------------------------------------
+      # 5. Commit and push only when CHANGELOG.md actually changed
+      # -----------------------------------------------------------------------
+      - name: Commit updated changelog
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add CHANGELOG.md
+
+          # Exit cleanly (no commit, no push) when there is nothing new
+          if git diff --cached --quiet; then
+            echo "No changes to CHANGELOG.md — already up to date."
+            exit 0
+          fi
+
+          # Pull the latest remote state before pushing to avoid race conditions
+          git pull --rebase origin "${{ github.ref_name }}"
+
+          LATEST=$(grep -m1 '^# v' CHANGELOG.md | sed 's/^# //')
+          git commit -m "chore: sync changelog — ${LATEST}"
+          git push origin "${{ github.ref_name }}"
