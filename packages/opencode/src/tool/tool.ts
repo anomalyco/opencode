@@ -47,8 +47,12 @@ export namespace Tool {
 
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
-    init: () => Promise<DefWithoutID<Parameters, M>>
+    init: () => Effect.Effect<DefWithoutID<Parameters, M>>
   }
+
+  type Init<Parameters extends z.ZodType, M extends Metadata> =
+    | DefWithoutID<Parameters, M>
+    | (() => Effect.Effect<DefWithoutID<Parameters, M>>)
 
   export type InferParameters<T> =
     T extends Info<infer P, any>
@@ -66,60 +70,58 @@ export namespace Tool {
         ? Def<P, M>
         : never
 
-  function wrap<Parameters extends z.ZodType, Result extends Metadata>(
-    id: string,
-    init: (() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>,
-  ) {
-    return async () => {
-      const toolInfo = init instanceof Function ? await init() : { ...init }
-      const execute = toolInfo.execute
-      toolInfo.execute = (args, ctx) =>
-        Effect.gen(function* () {
-          yield* Effect.try({
-            try: () => toolInfo.parameters.parse(args),
-            catch: (error) => {
-              if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-                return new Error(toolInfo.formatValidationError(error), { cause: error })
-              }
-              return new Error(
-                `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-                { cause: error },
-              )
-            },
-          })
-          const result = yield* execute(args, ctx)
-          if (result.metadata.truncated !== undefined) {
-            return result
-          }
-          const agent = yield* Effect.promise(() => Agent.get(ctx.agent))
-          const truncated = yield* Effect.promise(() => Truncate.output(result.output, {}, agent))
-          return {
-            ...result,
-            output: truncated.content,
-            metadata: {
-              ...result.metadata,
-              truncated: truncated.truncated,
-              ...(truncated.truncated && { outputPath: truncated.outputPath }),
-            },
-          }
-        }).pipe(Effect.orDie)
-      return toolInfo
-    }
+  function wrap<Parameters extends z.ZodType, Result extends Metadata>(id: string, init: Init<Parameters, Result>) {
+    return () =>
+      Effect.gen(function* () {
+        const toolInfo = init instanceof Function ? { ...(yield* init()) } : { ...init }
+        const execute = toolInfo.execute
+        toolInfo.execute = (args, ctx) =>
+          Effect.gen(function* () {
+            yield* Effect.try({
+              try: () => toolInfo.parameters.parse(args),
+              catch: (error) => {
+                if (error instanceof z.ZodError && toolInfo.formatValidationError) {
+                  return new Error(toolInfo.formatValidationError(error), { cause: error })
+                }
+                return new Error(
+                  `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+                  { cause: error },
+                )
+              },
+            })
+            const result = yield* execute(args, ctx)
+            if (result.metadata.truncated !== undefined) {
+              return result
+            }
+            const agent = yield* Effect.promise(() => Agent.get(ctx.agent))
+            const truncated = yield* Effect.promise(() => Truncate.output(result.output, {}, agent))
+            return {
+              ...result,
+              output: truncated.content,
+              metadata: {
+                ...result.metadata,
+                truncated: truncated.truncated,
+                ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              },
+            }
+          }).pipe(Effect.orDie)
+        return toolInfo
+      })
   }
 
   export function define<Parameters extends z.ZodType, Result extends Metadata, R, ID extends string = string>(
     id: ID,
-    init: Effect.Effect<(() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>, never, R>,
+    init: Effect.Effect<Init<Parameters, Result>, never, R>,
   ): Effect.Effect<Info<Parameters, Result>, never, R> & { id: ID } {
     return Object.assign(
-      Effect.map(init, (next) => ({ id, init: wrap(id, next) })),
+      Effect.map(init, (init) => ({ id, init: wrap(id, init) })),
       { id },
     )
   }
 
   export function init<P extends z.ZodType, M extends Metadata>(info: Info<P, M>): Effect.Effect<Def<P, M>> {
     return Effect.gen(function* () {
-      const init = yield* Effect.promise(() => info.init())
+      const init = yield* info.init()
       return {
         ...init,
         id: info.id,

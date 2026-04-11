@@ -229,24 +229,24 @@ Still open:
 
 ## Tool interface → Effect
 
-Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `init` and `execute` return `Effect` instead of `Promise`. This lets tool implementations compose natively with the Effect pipeline rather than being wrapped in `Effect.promise()` at the call site. Requires:
+`Tool.Def.execute` and `Tool.Info.init` already return `Effect` on this branch. Tool definitions should now stay Effect-native all the way through initialization instead of using Promise-returning init callbacks. Tools can still use lazy init callbacks when they need instance-bound state at init time, but those callbacks should return `Effect`, not `Promise`. Remaining work is:
 
-1. Migrate each tool to return Effects
-2. Update `Tool.define()` factory to work with Effects
-3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing
+1. Migrate each tool body to return Effects
+2. Keep `Tool.define()` inputs Effect-native
+3. Update remaining callers to `yield*` tool initialization instead of `await`ing
 
 ### Tool migration details
 
-Until the tool interface itself returns `Effect`, use this transitional pattern for migrated tools:
+With `Tool.Info.init()` now effectful, use this transitional pattern for migrated tools that still need Promise-based boundaries internally:
 
 - `Tool.defineEffect(...)` should `yield*` the services the tool depends on and close over them in the returned tool definition.
-- Keep the bridge at the Promise boundary only. Prefer a single `Effect.runPromise(...)` in the temporary `async execute(...)` implementation, and move the inner logic into `Effect.fn(...)` helpers instead of scattering `runPromise` islands through the tool body.
+- Keep the bridge at the Promise boundary only inside the tool body when required by external APIs. Do not return Promise-based init callbacks from `Tool.define()`.
 - If a tool starts requiring new services, wire them into `ToolRegistry.defaultLayer` so production callers resolve the same dependencies as tests.
 
 Tool tests should use the existing Effect helpers in `packages/opencode/test/lib/effect.ts`:
 
 - Use `testEffect(...)` / `it.live(...)` instead of creating fake local wrappers around effectful tools.
-- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* Effect.promise(() => info.init())`.
+- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* info.init()`.
 - Run tests inside a real instance with `provideTmpdirInstance(...)` or `provideInstance(tmpdirScoped(...))` so instance-scoped services resolve exactly as they do in production.
 
 This keeps migrated tool tests aligned with the production service graph today, and makes the eventual `Tool.Info` → `Effect` cleanup mostly mechanical later.

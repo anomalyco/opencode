@@ -23,23 +23,23 @@ describe("Tool.define", () => {
 
     const info = await Effect.runPromise(Tool.define("test-tool", Effect.succeed(original)))
 
-    await info.init()
-    await info.init()
-    await info.init()
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
 
     expect(original.execute).toBe(originalExecute)
   })
 
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
+  test("effect-defined tool returns fresh objects and is unaffected", async () => {
     const info = await Effect.runPromise(
       Tool.define(
         "test-fn-tool",
-        Effect.succeed(() => Promise.resolve(makeTool("test"))),
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
       ),
     )
 
-    const first = await info.init()
-    const second = await info.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
@@ -47,8 +47,8 @@ describe("Tool.define", () => {
   test("object-defined tool returns distinct objects per init() call", async () => {
     const info = await Effect.runPromise(Tool.define("test-copy", Effect.succeed(makeTool("test"))))
 
-    const first = await info.init()
-    const second = await info.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
