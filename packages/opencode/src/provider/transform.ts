@@ -151,6 +151,88 @@ export namespace ProviderTransform {
       return result
     }
 
+    // GLM / ZhipuAI: filter empty content, scrub tool IDs, fix consecutive roles, handle reasoning
+    if (model.api.id.toLowerCase().includes("glm") || ["zai", "zhipuai"].includes(model.providerID.toLowerCase())) {
+      const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "").substring(0, 64)
+      const isInterleaved = typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field
+      const field = isInterleaved ? (model.capabilities.interleaved as { field: string }).field : null
+
+      const result: ModelMessage[] = []
+      for (let i = 0; i < msgs.length; i++) {
+        const msg = msgs[i]
+        const nextMsg = msgs[i + 1]
+
+        // Skip empty string content
+        if (typeof msg.content === "string") {
+          if (msg.content === "") continue
+          result.push(msg)
+          continue
+        }
+
+        if (!Array.isArray(msg.content)) {
+          result.push(msg)
+          continue
+        }
+
+        // Filter empty text/reasoning parts
+        let filtered = msg.content.filter((part) => {
+          if ((part.type === "text" || part.type === "reasoning") && part.text === "") return false
+          return true
+        })
+
+        // Remove reasoning parts for non-interleaved models (GLM API doesn't support them)
+        if (!isInterleaved) filtered = filtered.filter((part) => part.type !== "reasoning")
+
+        if (filtered.length === 0) continue
+
+        // Scrub tool call/result IDs
+        if (msg.role === "assistant" || msg.role === "tool") {
+          filtered = filtered.map((part) => {
+            if (part.type === "tool-call" || part.type === "tool-result") {
+              return { ...part, toolCallId: scrub(part.toolCallId) }
+            }
+            return part
+          })
+        }
+
+        // Extract reasoning to providerOptions for interleaved models
+        if (isInterleaved && msg.role === "assistant") {
+          const reasoning = filtered.filter((p: any) => p.type === "reasoning")
+          const text = reasoning.map((p: any) => p.text).join("")
+          const rest = filtered.filter((p: any) => p.type !== "reasoning")
+
+          if (text) {
+            result.push({
+              ...msg,
+              content: rest,
+              providerOptions: {
+                ...msg.providerOptions,
+                openaiCompatible: {
+                  ...(msg.providerOptions as any)?.openaiCompatible,
+                  ...(field ? { [field]: text } : {}),
+                },
+              },
+            } as ModelMessage)
+          } else {
+            result.push({ ...msg, content: rest } as ModelMessage)
+          }
+        } else {
+          result.push({ ...msg, content: filtered } as ModelMessage)
+        }
+
+        // Fix consecutive assistant messages (GLM requires strict user/assistant alternation)
+        const last = result[result.length - 1]
+        if (last?.role === "assistant" && nextMsg?.role === "assistant") {
+          result.push({
+            role: "user",
+            content: [{ type: "text", text: "Done." }],
+          })
+        }
+      }
+
+      return result
+    }
+
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {

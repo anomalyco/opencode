@@ -2889,3 +2889,156 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+describe("ProviderTransform.message - GLM/ZhipuAI normalization", () => {
+  const glmModel = {
+    id: "zai/glm-5-turbo",
+    providerID: "zai",
+    api: {
+      id: "glm-5-turbo",
+      url: "https://open.bigmodel.cn/api/paas/v4",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "GLM-5 Turbo",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("filters out messages with empty string content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, glmModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("filters out empty text parts from array content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, glmModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+
+  test("removes reasoning parts for non-interleaved models", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, glmModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("scrubs tool call IDs to alphanumeric", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_abc-123!@#",
+            toolName: "bash",
+            input: { command: "ls" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, glmModel, {})
+
+    expect((result[0].content as any[])[0].toolCallId).toBe("call_abc-123")
+  })
+
+  test("fixes consecutive assistant messages by inserting bridge user message", () => {
+    const msgs = [
+      { role: "assistant", content: [{ type: "text", text: "First reply" }] },
+      { role: "assistant", content: [{ type: "text", text: "Second reply" }] },
+      { role: "user", content: "Thanks" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, glmModel, {})
+
+    expect(result).toHaveLength(4)
+    expect(result[0].role).toBe("assistant")
+    expect(result[0].content).toEqual([{ type: "text", text: "First reply" }])
+    expect(result[1].role).toBe("user")
+    expect(result[1].content).toEqual([{ type: "text", text: "Done." }])
+    expect(result[2].role).toBe("assistant")
+    expect(result[2].content).toEqual([{ type: "text", text: "Second reply" }])
+    expect(result[3].role).toBe("user")
+  })
+
+  test("does not normalize non-GLM providers", () => {
+    const openaiModel = {
+      ...glmModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+
+    const msgs = [
+      { role: "assistant", content: "" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "call_abc!@#", toolName: "bash", input: {} },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("")
+    expect((result[1].content as any[])[1].toolCallId).toBe("call_abc!@#")
+  })
+})
