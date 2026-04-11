@@ -12,15 +12,10 @@
   "scripts": {
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
-    "dev": "electron-vite dev",
-    "prebuild": "bun ./scripts/prebuild.ts",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
-    "package": "electron-builder --config electron-builder.config.ts",
-    "package:mac": "electron-builder --mac --config electron-builder.config.ts",
-    "package:win": "electron-builder --win --config electron-builder.config.ts",
-    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
-    "native:build": "bun install --cwd native"
+    "dev": "vite",
+    "build": "bun run typecheck && vite build",
+    "preview": "vite preview",
+    "tauri": "bun ./scripts/tauri.ts"
   },
   "main": "./out/main/index.js",
   "dependencies": {
