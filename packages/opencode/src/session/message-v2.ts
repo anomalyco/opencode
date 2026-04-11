@@ -23,6 +23,26 @@ interface FetchDecompressionError extends Error {
   path: string
 }
 
+function streamValue(msg: string) {
+  const m = /^Type validation failed: Value: (.+?)\.\nError message:/s.exec(msg)
+  if (!m) return
+  try {
+    return JSON.parse(m[1])
+  } catch {
+    return
+  }
+}
+
+function wrappedServerError(msg: string) {
+  if (!msg.includes("Type validation failed")) return
+  if (!msg.includes("invalid_union")) return
+  const v = streamValue(msg)
+  if (!v || typeof v !== "object") return
+  if (!("error" in v) || typeof v.error !== "object" || v.error === null) return
+  if ((v.error as { type?: unknown }).type !== "server_error") return
+  return JSON.stringify(v)
+}
+
 export namespace MessageV2 {
   export function isMedia(mime: string) {
     return mime.startsWith("image/") || mime === "application/pdf"
@@ -1022,7 +1042,19 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case e instanceof Error:
-        return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+        const msg = errorMessage(e)
+        const body = wrappedServerError(msg)
+        if (body) {
+          return new MessageV2.APIError(
+            {
+              message: "Stream failed before terminal event",
+              isRetryable: true,
+              responseBody: body,
+            },
+            { cause: e },
+          ).toObject()
+        }
+        return new NamedError.Unknown({ message: msg }, { cause: e }).toObject()
       default:
         try {
           const parsed = ProviderError.parseStreamError(e)

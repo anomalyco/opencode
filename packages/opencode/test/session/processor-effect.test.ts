@@ -17,11 +17,24 @@ import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
+import { Filesystem } from "../../src/util/filesystem"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { raw, reply, TestLLMServer } from "../lib/llm-server"
+import { raw, rawResponses, reply, TestLLMServer } from "../lib/llm-server"
+
+async function loadFixture(providerID: string, modelID: string) {
+  const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
+  const data = await Filesystem.readJson<Record<string, Provider.Info & { models: Record<string, Provider.Model> }>>(
+    fixturePath,
+  )
+  const provider = data[providerID]
+  if (!provider) throw new Error(`Missing provider in fixture: ${providerID}`)
+  const model = provider.models[modelID]
+  if (!model) throw new Error(`Missing model in fixture: ${modelID}`)
+  return { provider, model }
+}
 
 Log.init({ print: false })
 
@@ -73,6 +86,43 @@ function providerCfg(url: string) {
       },
     },
   }
+}
+
+function openaiCfg(url: string) {
+  return {
+    enabled_providers: ["openai"],
+    provider: {
+      openai: {
+        name: "OpenAI",
+        env: ["OPENAI_API_KEY"],
+        npm: "@ai-sdk/openai",
+        api: "https://api.openai.com/v1",
+        models: {
+          "gpt-5.4": {
+            id: "gpt-5.4",
+            name: "gpt-5.4",
+            attachment: true,
+            reasoning: true,
+            tool_call: true,
+            temperature: false,
+            release_date: "2025-01-01",
+            limit: { context: 400000, output: 128000 },
+            cost: { input: 0, output: 0 },
+            options: {},
+          },
+        },
+        options: {
+          apiKey: "test-openai-key",
+          baseURL: url,
+        },
+      },
+    },
+  }
+}
+
+const openai = {
+  providerID: ProviderID.make("openai"),
+  modelID: ModelID.make("gpt-5.4"),
 }
 
 function agent(): Agent.Info {
@@ -825,5 +875,77 @@ it.live("session.processor effect tests mark interruptions aborted without manua
         expect(state).toMatchObject({ type: "idle" })
       }),
     { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests surface wrapped responses validation failures through session errors", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const seen = defer<void>()
+        const { processors, session, provider } = yield* boot()
+        const fixture = yield* Effect.promise(() => loadFixture("openai", "gpt-5.4"))
+        const bus = yield* Bus.Service
+        const sts = yield* SessionStatus.Service
+
+        yield* llm.push(
+          rawResponses({
+            chunks: [{ error: { code: "", message: "", type: "server_error" }, request_id: "" }],
+          }),
+        )
+        yield* llm.text("after")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "wrapped error")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(openai.providerID, openai.modelID)
+        const errs: NonNullable<MessageV2.Assistant["error"]>[] = []
+        const states: number[] = []
+        const st = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          if (evt.properties.status.type === "retry") states.push(evt.properties.status.attempt)
+        })
+        const off = yield* bus.subscribeCallback(Session.Event.Error, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          if (!evt.properties.error) return
+          errs.push(evt.properties.error)
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: openai.providerID, modelID: fixture.model.id },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "wrapped error" }],
+          tools: {},
+        }).pipe(Effect.timeout("6 seconds"))
+        const stored = MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        off()
+        st()
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(states).toStrictEqual([1])
+        expect(handle.message.error).toBeUndefined()
+        expect(errs).toHaveLength(0)
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") {
+          expect(stored.info.error).toBeUndefined()
+        }
+      }),
+    { git: true, config: (url) => openaiCfg(url) },
   ),
 )
