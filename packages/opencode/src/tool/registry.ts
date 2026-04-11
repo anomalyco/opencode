@@ -44,6 +44,7 @@ import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "../filesystem"
+import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
@@ -89,6 +90,7 @@ export namespace ToolRegistry {
     | FileTime.Service
     | Instruction.Service
     | AppFileSystem.Service
+    | Bus.Service
     | HttpClient.HttpClient
     | ChildProcessSpawner
     | Ripgrep.Service
@@ -334,6 +336,7 @@ export namespace ToolRegistry {
       Layer.provide(FileTime.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Bus.layer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),

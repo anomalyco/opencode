@@ -25,6 +25,7 @@ export const ApplyPatchTool = Tool.define(
     const lsp = yield* LSP.Service
     const afs = yield* AppFileSystem.Service
     const format = yield* Format.Service
+    const bus = yield* Bus.Service
 
     const run = Effect.fn("ApplyPatchTool.execute")(function* (params: z.infer<typeof PatchParams>, ctx: Tool.Context) {
       if (!params.patchText) {
@@ -226,13 +227,13 @@ export const ApplyPatchTool = Tool.define(
 
         if (edited) {
           yield* format.file(edited)
-          Bus.publish(File.Event.Edited, { file: edited })
+          yield* bus.publish(File.Event.Edited, { file: edited })
         }
       }
 
       // Publish file change events
       for (const update of updates) {
-        Bus.publish(FileWatcher.Event.Updated, update)
+        yield* bus.publish(FileWatcher.Event.Updated, update)
       }
 
       // Notify LSP of file changes and collect diagnostics

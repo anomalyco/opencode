@@ -34,7 +34,7 @@ export namespace FileTime {
     readonly read: (sessionID: SessionID, file: string) => Effect.Effect<void>
     readonly get: (sessionID: SessionID, file: string) => Effect.Effect<Date | undefined>
     readonly assert: (sessionID: SessionID, filepath: string) => Effect.Effect<void>
-    readonly withLock: <T>(filepath: string, fn: () => Promise<T>) => Effect.Effect<T>
+    readonly withLock: <T>(filepath: string, fn: () => Effect.Effect<T>) => Effect.Effect<T>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileTime") {}
@@ -103,8 +103,8 @@ export namespace FileTime {
         )
       })
 
-      const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Promise<T>) {
-        return yield* Effect.promise(fn).pipe((yield* getLock(filepath)).withPermits(1))
+      const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Effect.Effect<T>) {
+        return yield* fn().pipe((yield* getLock(filepath)).withPermits(1))
       })
 
       return Service.of({ read, get, assert, withLock })
@@ -128,6 +128,6 @@ export namespace FileTime {
   }
 
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromise((s) => s.withLock(filepath, fn))
+    return runPromise((s) => s.withLock(filepath, () => Effect.promise(fn)))
   }
 }
