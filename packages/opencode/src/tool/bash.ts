@@ -12,6 +12,7 @@ import { AppFileSystem } from "@/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
+import { Platform } from "@/util/platform"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
@@ -23,6 +24,7 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const PS = new Set(["powershell", "pwsh"])
+const WSL = new Set(["wsl.exe", "wsl"])
 const CWD = new Set(["cd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -243,8 +245,19 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
   })
 })
 
-function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
-  if (process.platform === "win32" && PS.has(name)) {
+function cmd(shell: string, shName: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  if (process.platform === "win32" && WSL.has(shName)) {
+    const info = Platform.parseWslUncPath(cwd)
+    const args = info ? ["-d", info.distro, "-e", "bash", "-lc", command] : ["-e", "bash", "-lc", command]
+    return ChildProcess.make(shell, args, {
+      cwd: process.env.SYSTEMROOT || "C:\\Windows",
+      env,
+      stdin: "ignore",
+      detached: false,
+    })
+  }
+
+  if (process.platform === "win32" && PS.has(shName)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
       env,
@@ -456,10 +469,11 @@ export const BashTool = Tool.define(
 
     return () =>
       Effect.sync(() => {
-        const shell = Shell.acceptable()
+        const shell = Shell.forDirectory(Instance.directory)
         const name = Shell.name(shell)
-        const chain =
-          name === "powershell"
+        const chain = WSL.has(name)
+          ? "Commands run inside WSL via bash. Use '&&' to chain dependent commands (e.g., `git add . && git commit -m \"message\"`)."
+          : name === "powershell"
             ? "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell 5.1 does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
             : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
         log.info("bash tool using shell", { shell })
