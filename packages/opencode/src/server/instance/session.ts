@@ -677,7 +677,7 @@ export const SessionRoutes = lazy(() =>
           return c.json(messages)
         }
 
-        const page = await MessageV2.page({
+        const page = MessageV2.page({
           sessionID,
           limit: query.limit,
           before: query.before,
@@ -691,6 +691,42 @@ export const SessionRoutes = lazy(() =>
           c.header("X-Next-Cursor", page.cursor)
         }
         return c.json(page.items)
+      },
+    )
+    .get(
+      "/:sessionID/message/count",
+      describeRoute({
+        summary: "Get message count",
+        description: "Get the total number of messages in a session.",
+        operationId: "session.messageCount",
+        responses: {
+          200: {
+            description: "Message count",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ count: z.number() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const count = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            yield* session.get(sessionID)
+            return yield* session.messageCount({ sessionID })
+          }),
+        )
+        return c.json({ count })
       },
     )
     .get(
@@ -725,7 +761,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        const message = await MessageV2.get({
+        const message = MessageV2.get({
           sessionID: params.sessionID,
           messageID: params.messageID,
         })

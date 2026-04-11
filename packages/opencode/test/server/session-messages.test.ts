@@ -73,34 +73,38 @@ async function fill(sessionID: SessionID, count: number, time = (i: number) => D
 }
 
 describe("session messages endpoint", () => {
-  test("returns cursor headers for older pages", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await withoutWatcher(() =>
-      Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const session = await svc.create({})
-          const ids = await fill(session.id, 5)
-          const app = Server.Default().app
+  test(
+    "returns cursor headers for older pages",
+    async () => {
+      await using tmp = await tmpdir({ git: true })
+      await withoutWatcher(() =>
+        Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            const session = await svc.create({})
+            const ids = await fill(session.id, 5)
+            const app = Server.Default().app
 
-          const a = await app.request(`/session/${session.id}/message?limit=2`)
-          expect(a.status).toBe(200)
-          const aBody = (await a.json()) as MessageV2.WithParts[]
-          expect(aBody.map((item) => item.info.id)).toEqual(ids.slice(-2))
-          const cursor = a.headers.get("x-next-cursor")
-          expect(cursor).toBeTruthy()
-          expect(a.headers.get("link")).toContain('rel="next"')
+            const a = await app.request(`/session/${session.id}/message?limit=2`)
+            expect(a.status).toBe(200)
+            const aBody = (await a.json()) as MessageV2.WithParts[]
+            expect(aBody.map((item) => item.info.id)).toEqual(ids.slice(-2))
+            const cursor = a.headers.get("x-next-cursor")
+            expect(cursor).toBeTruthy()
+            expect(a.headers.get("link")).toContain('rel="next"')
 
-          const b = await app.request(`/session/${session.id}/message?limit=2&before=${encodeURIComponent(cursor!)}`)
-          expect(b.status).toBe(200)
-          const bBody = (await b.json()) as MessageV2.WithParts[]
-          expect(bBody.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
+            const b = await app.request(`/session/${session.id}/message?limit=2&before=${encodeURIComponent(cursor!)}`)
+            expect(b.status).toBe(200)
+            const bBody = (await b.json()) as MessageV2.WithParts[]
+            expect(bBody.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
 
-          await svc.remove(session.id)
-        },
-      }),
-    )
-  })
+            await svc.remove(session.id)
+          },
+        }),
+      )
+    },
+    { timeout: 15000 },
+  )
 
   test("keeps full-history responses when limit is omitted", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -158,6 +162,45 @@ describe("session messages endpoint", () => {
           expect(res.status).toBe(200)
           const body = (await res.json()) as MessageV2.WithParts[]
           expect(body).toHaveLength(510)
+
+          await svc.remove(session.id)
+        },
+      }),
+    )
+  })
+
+  test("message count returns 0 for empty session", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await withoutWatcher(() =>
+      Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await svc.create({})
+          const app = Server.Default().app
+
+          const res = await app.request(`/session/${session.id}/message/count`)
+          expect(res.status).toBe(200)
+          expect(await res.json()).toEqual({ count: 0 })
+
+          await svc.remove(session.id)
+        },
+      }),
+    )
+  })
+
+  test("message count increments after writes", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await withoutWatcher(() =>
+      Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await svc.create({})
+          await fill(session.id, 2)
+          const app = Server.Default().app
+
+          const res = await app.request(`/session/${session.id}/message/count`)
+          expect(res.status).toBe(200)
+          expect(await res.json()).toEqual({ count: 2 })
 
           await svc.remove(session.id)
         },

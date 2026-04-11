@@ -8,10 +8,10 @@ import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt, sql } from "../storage/db"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
-import { PartTable, SessionTable } from "./session.sql"
+import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -200,6 +200,7 @@ export namespace Session {
     summary: Info.shape.summary,
   })
   export const MessagesInput = z.object({ sessionID: SessionID.zod, limit: z.number().optional() })
+  export const MessageCountInput = z.object({ sessionID: SessionID.zod })
 
   export const Event = {
     Created: SyncEvent.define({
@@ -354,6 +355,7 @@ export namespace Session {
     readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
     readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
     readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
+    readonly messageCount: (input: z.infer<typeof MessageCountInput>) => Effect.Effect<number>
     readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
     readonly remove: (sessionID: SessionID) => Effect.Effect<void>
     readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
@@ -627,6 +629,17 @@ export namespace Session {
         return Array.from(MessageV2.stream(input.sessionID)).reverse()
       })
 
+      const messageCount = Effect.fn("Session.messageCount")(function* (input: z.infer<typeof MessageCountInput>) {
+        const result = yield* db((d) =>
+          d
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(MessageTable)
+            .where(eq(MessageTable.session_id, input.sessionID))
+            .get(),
+        )
+        return result?.count ?? 0
+      })
+
       const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
         sessionID: SessionID
         messageID: MessageID
@@ -689,6 +702,7 @@ export namespace Session {
         setSummary,
         diff,
         messages,
+        messageCount,
         children,
         remove,
         updateMessage,
