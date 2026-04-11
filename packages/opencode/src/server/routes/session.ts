@@ -94,7 +94,7 @@ export const SessionRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const result = await SessionStatus.list()
+        const result = await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.list()))
         return c.json(Object.fromEntries(result))
       },
     )
