@@ -724,7 +724,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        await SessionRunState.assertNotBusy(params.sessionID)
+        await AppRuntime.runPromise(SessionRunState.Service.use((svc) => svc.assertNotBusy(params.sessionID)))
         await Session.removeMessage({
           sessionID: params.sessionID,
           messageID: params.messageID,
