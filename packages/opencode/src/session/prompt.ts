@@ -1665,8 +1665,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const promptOps: TaskPromptOps = {
         cancel: (sessionID) => run.fork(cancel(sessionID)),
-        resolvePromptParts: (template) => run.promise(resolvePromptParts(template)),
-        prompt: (input) => run.promise(prompt(input)),
+        resolvePromptParts: (template) => resolvePromptParts(template),
+        prompt: (input) => prompt(input),
       }
 
       return Service.of({
