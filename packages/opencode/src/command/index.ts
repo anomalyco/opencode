@@ -1,6 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import type { InstanceContext } from "@/project/instance"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context } from "effect"
@@ -189,10 +188,4 @@ export namespace Command {
     Layer.provide(MCP.defaultLayer),
     Layer.provide(Skill.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
 }
