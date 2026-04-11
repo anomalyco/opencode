@@ -1,190 +1,230 @@
-import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+import { Config } from "../../src/config/config"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
-import { MessageV2 } from "../../src/session/message-v2"
-import { MessageID, SessionID } from "../../src/session/schema"
-import { SessionPrompt } from "../../src/session/prompt"
 import { Session } from "../../src/session"
-import { TaskTool } from "../../src/tool/task"
-import { tmpdir } from "../fixture/fixture"
+import { MessageV2 } from "../../src/session/message-v2"
+import type { SessionPrompt } from "../../src/session/prompt"
+import { MessageID, PartID } from "../../src/session/schema"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { ToolRegistry } from "../../src/tool/registry"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
-afterEach(async () => {
-  mock.restore()
-  await Instance.disposeAll()
+const ref = { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") }
+
+const it = testEffect(
+  Layer.mergeAll(
+    Agent.defaultLayer,
+    Config.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Session.defaultLayer,
+    ToolRegistry.defaultLayer,
+    Bus.layer,
+  ),
+)
+
+const seed = Effect.fn("seed")(function* (title = "Pinned") {
+  const sessions = yield* Session.Service
+  const chat = yield* sessions.create({ title })
+  const user = yield* sessions.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID: chat.id,
+    agent: "build",
+    model: ref,
+    time: { created: Date.now() },
+  })
+  const assistant: MessageV2.Assistant = {
+    id: MessageID.ascending(),
+    role: "assistant",
+    parentID: user.id,
+    sessionID: chat.id,
+    mode: "build",
+    agent: "build",
+    cost: 0,
+    path: { cwd: "/tmp", root: "/tmp" },
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ref.modelID,
+    providerID: ref.providerID,
+    time: { created: Date.now() },
+  }
+  yield* sessions.updateMessage(assistant)
+  return { chat, assistant }
 })
 
-const ref = {
-  providerID: ProviderID.make("test"),
-  modelID: ModelID.make("test-model"),
-}
-
-function ctx(input: { sessionID: SessionID; messageID: MessageID; abort: AbortSignal }) {
+function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string): MessageV2.WithParts {
+  const id = MessageID.ascending()
   return {
-    sessionID: input.sessionID,
-    messageID: input.messageID,
-    agent: "build",
-    abort: input.abort,
-    messages: [],
-    metadata: () => {},
-    ask: async () => {},
-    extra: { bypassAgentCheck: true },
+    info: {
+      id,
+      role: "assistant",
+      parentID: input.messageID ?? MessageID.ascending(),
+      sessionID: input.sessionID,
+      mode: input.agent ?? "general",
+      agent: input.agent ?? "general",
+      cost: 0.42,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 11, output: 22, reasoning: 3, cache: { read: 4, write: 5 } },
+      modelID: input.model?.modelID ?? ref.modelID,
+      providerID: input.model?.providerID ?? ref.providerID,
+      time: { created: Date.now() },
+      finish: "stop",
+    },
+    parts: [
+      {
+        id: PartID.ascending(),
+        messageID: id,
+        sessionID: input.sessionID,
+        type: "text",
+        text,
+      },
+    ],
   }
 }
 
-function fakeParent(sessionID: SessionID, messageID: MessageID, path: string) {
+function stubOps(opts?: { text?: string; fail?: Error; abort?: AbortController }): TaskPromptOps {
   return {
-    info: {
-      id: messageID,
-      role: "assistant" as const,
-      parentID: MessageID.make("msg_user"),
-      sessionID,
-      modelID: ref.modelID,
-      providerID: ref.providerID,
-      mode: "build",
-      agent: "build",
-      path: { cwd: path, root: path },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      time: { created: Date.now() },
-    },
-    parts: [],
-  } as any
+    cancel() {},
+    resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+    prompt: (input) =>
+      Effect.gen(function* () {
+        if (opts?.abort) {
+          opts.abort.abort()
+          return yield* Effect.fail(new Error("aborted"))
+        }
+        if (opts?.fail) return yield* Effect.fail(opts.fail)
+        return reply(input, opts?.text ?? "done")
+      }),
+  }
 }
 
-test("TaskTool emits started then stopped with completed status", async () => {
-  await using tmp = await tmpdir({ git: true })
+describe("tool.task lifecycle events", () => {
+  it.live("emits started then stopped with completed status", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const bus = yield* Bus.Service
+        const seen: Array<{ type: string; properties: any }> = []
+        const offA = yield* bus.subscribeCallback(Session.Event.SubagentStarted, (e) => seen.push(e))
+        const offB = yield* bus.subscribeCallback(Session.Event.SubagentStopped, (e) => seen.push(e))
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const seen: Array<{ type: string; properties: any }> = []
-      const offA = Bus.subscribe(Session.Event.SubagentStarted, (evt) => seen.push(evt))
-      const offB = Bus.subscribe(Session.Event.SubagentStopped, (evt) => seen.push(evt))
+        const tool = yield* TaskTool
+        const def = yield* Effect.promise(() => tool.init())
 
-      const parent = SessionID.descending()
-      const parentMsg = MessageID.make("msg_parent")
-
-      spyOn(MessageV2, "get").mockReturnValue(fakeParent(parent, parentMsg, tmp.path))
-
-      spyOn(SessionPrompt, "resolvePromptParts").mockResolvedValue([{ type: "text", text: "do work" }] as any)
-      spyOn(SessionPrompt, "prompt").mockResolvedValue({
-        info: {
-          id: MessageID.make("msg_child"),
-          role: "assistant" as const,
-          parentID: MessageID.make("msg_user"),
-          sessionID: SessionID.descending(),
-          modelID: ref.modelID,
-          providerID: ref.providerID,
-          mode: "general",
-          agent: "general",
-          path: { cwd: tmp.path, root: tmp.path },
-          cost: 0.42,
-          tokens: { input: 11, output: 22, reasoning: 3, cache: { read: 4, write: 5 } },
-          time: { created: Date.now(), completed: Date.now() + 5 },
-        },
-        parts: [{ type: "text", text: "done" }],
-      } as any)
-
-      const tool = await TaskTool.init({ agent: await Agent.get("build") })
-      await tool.execute(
-        { description: "Run subagent", prompt: "do work", subagent_type: "general" },
-        ctx({ sessionID: parent, messageID: parentMsg, abort: AbortSignal.any([]) }),
-      )
-
-      await Bun.sleep(10)
-      offA()
-      offB()
-
-      expect(seen).toHaveLength(2)
-      expect(seen[0].type).toBe("session.subagent.started")
-      expect(seen[1].type).toBe("session.subagent.stopped")
-      expect(seen[1].properties.status).toBe("completed")
-      expect(seen[1].properties.tokens.input).toBe(11)
-      expect(seen[1].properties.cost).toBe(0.42)
-      expect(seen[1].properties.sessionID).toBe(seen[0].properties.sessionID)
-      expect(seen[1].properties.parentID).toBe(parent)
-    },
-  })
-})
-
-test("TaskTool emits stopped with failed status when prompt throws", async () => {
-  await using tmp = await tmpdir({ git: true })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const seen: Array<{ type: string; properties: any }> = []
-      const offA = Bus.subscribe(Session.Event.SubagentStarted, (evt) => seen.push(evt))
-      const offB = Bus.subscribe(Session.Event.SubagentStopped, (evt) => seen.push(evt))
-
-      const parent = SessionID.descending()
-      const parentMsg = MessageID.make("msg_parent")
-
-      spyOn(MessageV2, "get").mockReturnValue(fakeParent(parent, parentMsg, tmp.path))
-      spyOn(SessionPrompt, "resolvePromptParts").mockResolvedValue([{ type: "text", text: "do work" }] as any)
-      spyOn(SessionPrompt, "prompt").mockRejectedValue(new Error("boom"))
-
-      const tool = await TaskTool.init({ agent: await Agent.get("build") })
-      await expect(
-        tool.execute(
+        yield* def.execute(
           { description: "Run subagent", prompt: "do work", subagent_type: "general" },
-          ctx({ sessionID: parent, messageID: parentMsg, abort: AbortSignal.any([]) }),
-        ),
-      ).rejects.toThrow("boom")
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ text: "result text" }), bypassAgentCheck: true },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
 
-      await Bun.sleep(10)
-      offA()
-      offB()
+        offA()
+        offB()
 
-      expect(seen).toHaveLength(2)
-      expect(seen[0].type).toBe("session.subagent.started")
-      expect(seen[1].type).toBe("session.subagent.stopped")
-      expect(seen[1].properties.status).toBe("failed")
-      expect(seen[1].properties.error).toContain("boom")
-    },
-  })
-})
+        expect(seen).toHaveLength(2)
+        expect(seen[0].type).toBe("session.subagent.started")
+        expect(seen[1].type).toBe("session.subagent.stopped")
+        expect(seen[1].properties.status).toBe("completed")
+        expect(seen[1].properties.parentID).toBe(chat.id)
+        expect(seen[1].properties.tokens.input).toBe(11)
+        expect(seen[1].properties.cost).toBe(0.42)
+        expect(seen[1].properties.sessionID).toBe(seen[0].properties.sessionID)
+      }),
+    ),
+  )
 
-test("TaskTool emits stopped with cancelled status when abort signal is triggered", async () => {
-  await using tmp = await tmpdir({ git: true })
+  it.live("emits stopped with failed status when prompt fails", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const bus = yield* Bus.Service
+        const seen: Array<{ type: string; properties: any }> = []
+        const offA = yield* bus.subscribeCallback(Session.Event.SubagentStarted, (e) => seen.push(e))
+        const offB = yield* bus.subscribeCallback(Session.Event.SubagentStopped, (e) => seen.push(e))
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const seen: Array<{ type: string; properties: any }> = []
-      const offA = Bus.subscribe(Session.Event.SubagentStarted, (evt) => seen.push(evt))
-      const offB = Bus.subscribe(Session.Event.SubagentStopped, (evt) => seen.push(evt))
+        const tool = yield* TaskTool
+        const def = yield* Effect.promise(() => tool.init())
 
-      const parent = SessionID.descending()
-      const parentMsg = MessageID.make("msg_parent")
-      const ctrl = new AbortController()
+        yield* def
+          .execute(
+            { description: "Run subagent", prompt: "do work", subagent_type: "general" },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps: stubOps({ fail: new Error("boom") }), bypassAgentCheck: true },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
 
-      spyOn(MessageV2, "get").mockReturnValue(fakeParent(parent, parentMsg, tmp.path))
-      spyOn(SessionPrompt, "resolvePromptParts").mockResolvedValue([{ type: "text", text: "do work" }] as any)
-      spyOn(SessionPrompt, "prompt").mockImplementation(async () => {
-        ctrl.abort()
-        throw new Error("aborted")
-      })
+        yield* Effect.sleep("10 millis")
+        offA()
+        offB()
 
-      const tool = await TaskTool.init({ agent: await Agent.get("build") })
-      await expect(
-        tool.execute(
-          { description: "Run subagent", prompt: "do work", subagent_type: "general" },
-          ctx({ sessionID: parent, messageID: parentMsg, abort: ctrl.signal }),
-        ),
-      ).rejects.toThrow()
+        expect(seen).toHaveLength(2)
+        expect(seen[0].type).toBe("session.subagent.started")
+        expect(seen[1].type).toBe("session.subagent.stopped")
+        expect(seen[1].properties.status).toBe("failed")
+        expect(seen[1].properties.error).toContain("boom")
+      }),
+    ),
+  )
 
-      await Bun.sleep(10)
-      offA()
-      offB()
+  it.live("emits stopped with cancelled status when abort signal fires", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const bus = yield* Bus.Service
+        const seen: Array<{ type: string; properties: any }> = []
+        const offA = yield* bus.subscribeCallback(Session.Event.SubagentStarted, (e) => seen.push(e))
+        const offB = yield* bus.subscribeCallback(Session.Event.SubagentStopped, (e) => seen.push(e))
+        const ctrl = new AbortController()
 
-      expect(seen).toHaveLength(2)
-      expect(seen[0].type).toBe("session.subagent.started")
-      expect(seen[1].type).toBe("session.subagent.stopped")
-      expect(seen[1].properties.status).toBe("cancelled")
-      expect(seen[1].properties.error).toBeUndefined()
-    },
-  })
+        const tool = yield* TaskTool
+        const def = yield* Effect.promise(() => tool.init())
+
+        yield* def
+          .execute(
+            { description: "Run subagent", prompt: "do work", subagent_type: "general" },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: ctrl.signal,
+              extra: { promptOps: stubOps({ abort: ctrl }), bypassAgentCheck: true },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        yield* Effect.sleep("10 millis")
+        offA()
+        offB()
+
+        expect(seen).toHaveLength(2)
+        expect(seen[0].type).toBe("session.subagent.started")
+        expect(seen[1].type).toBe("session.subagent.stopped")
+        expect(seen[1].properties.status).toBe("cancelled")
+        expect(seen[1].properties.error).toBeUndefined()
+      }),
+    ),
+  )
 })
