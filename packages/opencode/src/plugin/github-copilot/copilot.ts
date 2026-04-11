@@ -83,30 +83,45 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 // Completions API
                 if (body?.messages && url.includes("completions")) {
                   const last = body.messages[body.messages.length - 1]
+                  const hasToolCalls = body.messages.some(
+                    (msg: any) =>
+                      Array.isArray(msg.content) && msg.content.some((part: any) => part?.type === "tool_result") ||
+                      msg.role === "tool",
+                  )
                   return {
                     isVision: body.messages.some(
                       (msg: any) =>
                         Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: hasToolCalls || last?.role !== "user",
                   }
                 }
 
                 // Responses API
                 if (body?.input) {
                   const last = body.input[body.input.length - 1]
+                  const hasToolCalls = body.input.some(
+                    (item: any) =>
+                      Array.isArray(item?.content) && item.content.some((part: any) => part?.type === "tool_result") ||
+                      item.role === "tool",
+                  )
                   return {
                     isVision: body.input.some(
                       (item: any) =>
                         Array.isArray(item?.content) && item.content.some((part: any) => part.type === "input_image"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: hasToolCalls || last?.role !== "user",
                   }
                 }
 
                 // Messages API
                 if (body?.messages) {
                   const last = body.messages[body.messages.length - 1]
+                  const hasToolCalls = body.messages.some(
+                    (msg: any) =>
+                      Array.isArray(msg.content) && msg.content.some((part: any) => part?.type === "tool_result") ||
+                      msg.role === "tool",
+                  )
                   const hasNonToolCalls =
                     Array.isArray(last?.content) && last.content.some((part: any) => part?.type !== "tool_result")
                   return {
@@ -122,7 +137,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                               part.content.some((nested: any) => nested?.type === "image")),
                         ),
                     ),
-                    isAgent: !(last?.role === "user" && hasNonToolCalls),
+                    isAgent: hasToolCalls || !(last?.role === "user" && hasNonToolCalls),
                   }
                 }
               } catch {}
