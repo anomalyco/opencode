@@ -61,7 +61,7 @@ describe("session action routes", () => {
         )
 
         expect(res.status).toBe(200)
-        expect(await res.json()).toBe(true)
+        expect(yield* Effect.promise(() => res.json())).toBe(true)
         expect(cancel).toHaveBeenCalledWith(session.id)
 
         yield* Effect.promise(() => Session.remove(session.id))
