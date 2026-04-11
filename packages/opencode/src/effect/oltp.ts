@@ -1,6 +1,6 @@
-import { Duration, Logger, Layer } from "effect"
+import { Duration, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { OtlpLogger, OtlpMetrics, OtlpSerialization, OtlpTracer } from "effect/unstable/observability"
+import { Otlp } from "effect/unstable/observability"
 import { EffectLogger } from "@/effect/logger"
 import { Flag } from "@/flag/flag"
 import { CHANNEL, VERSION } from "@/installation/meta"
@@ -32,28 +32,14 @@ export namespace Observability {
 
   export const layer = !base
     ? Layer.empty
-    : (() => {
-        const url = (path: string) => new URL(path, base).toString()
-        return Layer.mergeAll(
-          Logger.layer([
-            EffectLogger.logger,
-            OtlpLogger.make({
-              url: url("/v1/logs"),
-              exportInterval: Duration.seconds(5),
-              headers,
-              resource,
-            }),
-          ]),
-          OtlpMetrics.layer({
-            url: url("/v1/metrics"),
-            headers,
-            resource,
-          }),
-          OtlpTracer.layer({
-            url: url("/v1/traces"),
-            headers,
-            resource,
-          }),
-        ).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer))
-      })()
+    : Layer.mergeAll(
+        EffectLogger.layer,
+        Otlp.layerJson({
+          baseUrl: base,
+          loggerExportInterval: Duration.seconds(5),
+          loggerMergeWithExisting: true,
+          resource,
+          headers,
+        }),
+      ).pipe(Layer.provide(FetchHttpClient.layer))
 }
