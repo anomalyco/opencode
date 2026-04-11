@@ -7,6 +7,7 @@ import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRunState } from "../../src/session/run-state"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { SessionStatus } from "../../src/session/status"
 import { Effect } from "effect"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
@@ -67,12 +68,13 @@ describe("session action routes", () => {
       fn: async () => {
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
-        // Make the session busy by forking a never-ending runner
-        AppRuntime.runFork(
+        // Make the session busy by forking a never-ending runner, then wait for status
+        void AppRuntime.runPromise(
           SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, Effect.never)),
         )
-        // Give the fiber time to start and mark the session busy
-        await new Promise((r) => setTimeout(r, 50))
+        while ((await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(session.id)))).type !== "busy") {
+          await new Promise((r) => setTimeout(r, 5))
+        }
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
         const app = Server.Default().app
 
