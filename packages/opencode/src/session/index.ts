@@ -361,10 +361,11 @@ export namespace Session {
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))
 
-  export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const storage = yield* Storage.Service
 
       const createNext = Effect.fn("Session.createNext")(function* (input: {
         id?: SessionID
@@ -585,7 +586,7 @@ export namespace Session {
       })
 
       const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-        return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
+        return yield* storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID]).pipe(
           Effect.orElseSucceed((): Snapshot.FileDiff[] => []),
         )
       })
@@ -660,7 +661,7 @@ export namespace Session {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
