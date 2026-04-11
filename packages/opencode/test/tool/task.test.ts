@@ -4,6 +4,7 @@ import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Session } from "@/session/session"
+import { Bus } from "../../src/bus"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -31,6 +32,7 @@ const it = testEffect(
     Session.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
+    Bus.layer,
   ),
 )
 
