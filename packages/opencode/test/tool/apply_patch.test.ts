@@ -22,7 +22,7 @@ const baseCtx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: () => Effect.void,
 }
 
 type AskInput = {

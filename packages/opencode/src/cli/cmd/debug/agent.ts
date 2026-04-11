@@ -158,7 +158,7 @@ async function createToolContext(agent: Agent.Info) {
     agent: agent.name,
     abort: new AbortController().signal,
     messages: [],
-    metadata: () => {},
+    metadata: () => Effect.void,
     ask(req: Omit<Permission.Request, "id" | "sessionID" | "tool">) {
       return Effect.sync(() => {
         for (const pattern of req.patterns) {

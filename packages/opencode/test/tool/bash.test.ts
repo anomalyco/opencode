@@ -29,7 +29,7 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: () => Effect.void,
   ask: () => Effect.void,
 }
 
@@ -982,13 +982,14 @@ describe("tool.bash abort", () => {
             {
               ...ctx,
               abort: controller.signal,
-              metadata: (input) => {
-                const output = (input.metadata as { output?: string })?.output
-                if (output && output.includes("before") && !controller.signal.aborted) {
-                  collected.push(output)
-                  controller.abort()
-                }
-              },
+              metadata: (input) =>
+                Effect.sync(() => {
+                  const output = (input.metadata as { output?: string })?.output
+                  if (output && output.includes("before") && !controller.signal.aborted) {
+                    collected.push(output)
+                    controller.abort()
+                  }
+                }),
             },
           ),
         )
@@ -1074,10 +1075,11 @@ describe("tool.bash abort", () => {
             },
             {
               ...ctx,
-              metadata: (input) => {
-                const output = (input.metadata as { output?: string })?.output
-                if (output) updates.push(output)
-              },
+              metadata: (input) =>
+                Effect.sync(() => {
+                  const output = (input.metadata as { output?: string })?.output
+                  if (output) updates.push(output)
+                }),
             },
           ),
         )

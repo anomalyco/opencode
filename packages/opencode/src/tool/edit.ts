@@ -158,7 +158,7 @@ export const EditTool = Tool.define(
             if (change.removed) filediff.deletions += change.count || 0
           }
 
-          ctx.metadata({
+          yield* ctx.metadata({
             metadata: {
               diff,
               filediff,

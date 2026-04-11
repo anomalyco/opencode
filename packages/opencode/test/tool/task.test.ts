@@ -208,7 +208,7 @@ describe("tool.task", () => {
             abort: new AbortController().signal,
             extra: { promptOps },
             messages: [],
-            metadata() {},
+            metadata: () => Effect.void,
             ask: () => Effect.void,
           },
         )
@@ -246,7 +246,7 @@ describe("tool.task", () => {
               abort: new AbortController().signal,
               extra: { promptOps, ...extra },
               messages: [],
-              metadata() {},
+              metadata: () => Effect.void,
               ask: (input) =>
                 Effect.sync(() => {
                   calls.push(input)
@@ -295,7 +295,7 @@ describe("tool.task", () => {
             abort: new AbortController().signal,
             extra: { promptOps },
             messages: [],
-            metadata() {},
+            metadata: () => Effect.void,
             ask: () => Effect.void,
           },
         )
@@ -334,7 +334,7 @@ describe("tool.task", () => {
               abort: new AbortController().signal,
               extra: { promptOps },
               messages: [],
-              metadata() {},
+              metadata: () => Effect.void,
               ask: () => Effect.void,
             },
           )

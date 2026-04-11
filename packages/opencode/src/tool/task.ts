@@ -109,7 +109,7 @@ export const TaskTool = Tool.define(
         providerID: msg.info.providerID,
       }
 
-      ctx.metadata({
+      yield* ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: nextSession.id,

@@ -15,7 +15,7 @@ const ctx = {
   agent: "test-agent",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: () => Effect.void,
   ask: () => Effect.void,
 }
 

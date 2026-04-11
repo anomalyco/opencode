@@ -385,7 +385,7 @@ export const BashTool = Tool.define(
       let expired = false
       let aborted = false
 
-      ctx.metadata({
+      yield* ctx.metadata({
         metadata: {
           output: "",
           description: input.description,
@@ -397,16 +397,15 @@ export const BashTool = Tool.define(
           const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(
-            Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
-              Effect.sync(() => {
-                output += chunk
-                ctx.metadata({
-                  metadata: {
-                    output: preview(output),
-                    description: input.description,
-                  },
-                })
-              }),
+            Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
+              output += chunk
+              return ctx.metadata({
+                metadata: {
+                  output: preview(output),
+                  description: input.description,
+                },
+              })
+            },
             ),
           )
 

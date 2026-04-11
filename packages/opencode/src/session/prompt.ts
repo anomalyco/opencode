@@ -364,21 +364,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
-            run.promise(
-              input.processor.updateToolCall(options.toolCallId, (match) => {
-                if (!["running", "pending"].includes(match.state.status)) return match
-                return {
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: { start: Date.now() },
-                  },
-                }
-              }),
-            ),
+            input.processor.updateToolCall(options.toolCallId, (match) => {
+              if (!["running", "pending"].includes(match.state.status)) return match
+              return {
+                ...match,
+                state: {
+                  title: val.title,
+                  metadata: val.metadata,
+                  status: "running",
+                  input: args,
+                  time: { start: Date.now() },
+                },
+              }
+            }),
           ask: (req) =>
             permission
               .ask({
@@ -592,17 +590,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             callID: part.callID,
             extra: { bypassAgentCheck: true, promptOps },
             messages: msgs,
-            metadata(val: { title?: string; metadata?: Record<string, any> }) {
-              return run.promise(
-                Effect.gen(function* () {
-                  part = yield* sessions.updatePart({
-                    ...part,
-                    type: "tool",
-                    state: { ...part.state, ...val },
-                  } satisfies MessageV2.ToolPart)
-                }),
-              )
-            },
+            metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
+              Effect.gen(function* () {
+                part = yield* sessions.updatePart({
+                  ...part,
+                  type: "tool",
+                  state: { ...part.state, ...val },
+                } satisfies MessageV2.ToolPart)
+              }),
             ask: (req: any) =>
               permission
                 .ask({
@@ -1054,7 +1049,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, ...extra },
                       messages: [],
-                      metadata: () => {},
+                      metadata: () => Effect.void,
                       ask: () => Effect.void,
                     })
                     .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
