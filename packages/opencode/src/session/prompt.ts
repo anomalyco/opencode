@@ -197,7 +197,7 @@ export namespace SessionPrompt {
           .pipe(
             Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
             Stream.map((e) => e.text),
-            Stream.runFold(() => "", (acc, d) => acc + d),
+            Stream.mkString,
             Effect.orDie,
           )
         const cleaned = text
