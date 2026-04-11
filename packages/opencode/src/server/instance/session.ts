@@ -13,6 +13,7 @@ import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { Effect } from "effect"
 import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
@@ -724,11 +725,17 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        await AppRuntime.runPromise(SessionRunState.Service.use((svc) => svc.assertNotBusy(params.sessionID)))
-        await Session.removeMessage({
-          sessionID: params.sessionID,
-          messageID: params.messageID,
-        })
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const state = yield* SessionRunState.Service
+            const session = yield* Session.Service
+            yield* state.assertNotBusy(params.sessionID)
+            yield* session.removeMessage({
+              sessionID: params.sessionID,
+              messageID: params.messageID,
+            })
+          }),
+        )
         return c.json(true)
       },
     )
