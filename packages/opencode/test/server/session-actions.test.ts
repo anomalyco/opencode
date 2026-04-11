@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn } from "bun:test"
+import { Effect, Fiber, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
@@ -6,11 +7,11 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRunState } from "../../src/session/run-state"
-import { AppRuntime } from "../../src/effect/app-runtime"
 import { SessionStatus } from "../../src/session/status"
-import { Effect } from "effect"
+import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 Log.init({ print: false })
 
@@ -18,6 +19,15 @@ afterEach(async () => {
   mock.restore()
   await Instance.disposeAll()
 })
+
+const it = testEffect(
+  Layer.mergeAll(
+    Session.defaultLayer,
+    SessionRunState.defaultLayer,
+    SessionStatus.defaultLayer,
+    Bus.layer,
+  ),
+)
 
 async function user(sessionID: SessionID, text: string) {
   const msg = await Session.updateMessage({
@@ -39,54 +49,54 @@ async function user(sessionID: SessionID, text: string) {
 }
 
 describe("session action routes", () => {
-  test("abort route calls SessionPrompt.cancel", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
+  it.live("abort route calls SessionPrompt.cancel", () =>
+    provideTmpdirInstance({ git: true })(
+      Effect.gen(function* () {
+        const session = yield* Effect.promise(() => Session.create({}))
         const cancel = spyOn(SessionPrompt, "cancel").mockResolvedValue()
         const app = Server.Default().app
 
-        const res = await app.request(`/session/${session.id}/abort`, {
-          method: "POST",
-        })
+        const res = yield* Effect.promise(() =>
+          app.request(`/session/${session.id}/abort`, { method: "POST" }),
+        )
 
         expect(res.status).toBe(200)
         expect(await res.json()).toBe(true)
         expect(cancel).toHaveBeenCalledWith(session.id)
 
-        await Session.remove(session.id)
-      },
-    })
-  })
+        yield* Effect.promise(() => Session.remove(session.id))
+      }),
+    ),
+  )
 
-  test("delete message route returns 400 when session is busy", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const msg = await user(session.id, "hello")
-        // Make the session busy by forking a never-ending runner, then wait for status
-        void AppRuntime.runPromise(
-          SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, Effect.never)),
-        )
-        while ((await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(session.id)))).type !== "busy") {
-          await new Promise((r) => setTimeout(r, 5))
-        }
+  it.live("delete message route returns 400 when session is busy", () =>
+    provideTmpdirInstance({ git: true })(
+      Effect.gen(function* () {
+        const session = yield* Effect.promise(() => Session.create({}))
+        const msg = yield* Effect.promise(() => user(session.id, "hello"))
+
+        // Make session busy: fork a never-ending runner and wait for status
+        const state = yield* SessionRunState.Service
+        const status = yield* SessionStatus.Service
+        yield* Effect.fork(state.ensureRunning(session.id, Effect.never, Effect.never))
+        yield* Effect.fn("waitBusy")(function* () {
+          while ((yield* status.get(session.id)).type !== "busy") {
+            yield* Effect.sleep("5 millis")
+          }
+        })()
+
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
         const app = Server.Default().app
 
-        const res = await app.request(`/session/${session.id}/message/${msg.id}`, {
-          method: "DELETE",
-        })
+        const res = yield* Effect.promise(() =>
+          app.request(`/session/${session.id}/message/${msg.id}`, { method: "DELETE" }),
+        )
 
         expect(res.status).toBe(400)
         expect(remove).not.toHaveBeenCalled()
 
-        await Session.remove(session.id)
-      },
-    })
-  })
+        yield* Effect.promise(() => Session.remove(session.id))
+      }),
+    ),
+  )
 })
