@@ -613,10 +613,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
               return Effect.void
             }),
-          )
-          .pipe(
-          Effect.onInterrupt(() =>
-            Effect.gen(function* () {
+            Effect.onInterrupt(() =>
+              Effect.gen(function* () {
               taskAbort.abort()
               assistantMessage.finish = "tool-calls"
               assistantMessage.time.completed = Date.now()
@@ -633,9 +631,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   },
                 } satisfies MessageV2.ToolPart)
               }
-            }),
-          ),
-        )
+            })),
+          )
 
         const attachments = result?.attachments?.map((attachment) => ({
           ...attachment,
