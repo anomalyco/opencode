@@ -96,6 +96,28 @@ export function Prompt(props: PromptProps) {
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
+  const [searching, setSearching] = createSignal(false)
+  const [query, setQuery] = createSignal("")
+  const [matchIdx, setMatchIdx] = createSignal<number | undefined>(undefined)
+  const [saved, setSaved] = createSignal("")
+
+  const match = createMemo(() => {
+    const q = query()
+    if (!q) return undefined
+    return history.search(q, matchIdx())
+  })
+
+  function exitSearch(accept: boolean) {
+    if (!searching()) return
+    setSearching(false)
+    if (!accept) {
+      input.setText(saved())
+    }
+    setQuery("")
+    setMatchIdx(undefined)
+    setSaved("")
+  }
+
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
 
@@ -183,6 +205,7 @@ export function Prompt(props: PromptProps) {
       () => props.sessionID,
       () => {
         setStore("placeholder", randomIndex(list().length))
+        exitSearch(false)
       },
       { defer: true },
     ),
@@ -886,6 +909,15 @@ export function Prompt(props: PromptProps) {
         promptPartTypeId={() => promptPartTypeId}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
+        <Show when={searching()}>
+          <box paddingLeft={2} height={1}>
+            <text fg={match() ? theme.text : theme.error}>
+              {match() ? "(reverse-i-search): " : "(failed reverse-i-search): "}
+              <span style={{ fg: theme.primary }}>{query()}</span>
+              {match() ? ` · ${match()!.entry.input.length > 60 ? match()!.entry.input.slice(0, 60) + "…" : match()!.entry.input}` : ""}
+            </text>
+          </box>
+        </Show>
         <box
           border={["left"]}
           borderColor={highlight()}
@@ -918,6 +950,55 @@ export function Prompt(props: PromptProps) {
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
                 if (props.disabled) {
+                  e.preventDefault()
+                  return
+                }
+                // Reverse search mode
+                if (searching()) {
+                  e.preventDefault()
+                  if (keybind.match("history_search", e)) {
+                    // Cycle to next older match
+                    const idx = matchIdx()
+                    if (idx !== undefined && idx > 0) {
+                      setMatchIdx(idx - 1)
+                    }
+                    return
+                  }
+                  if (e.name === "escape") {
+                    exitSearch(false)
+                    return
+                  }
+                  if (e.name === "return") {
+                    const m = match()
+                    if (m) {
+                      input.setText(m.entry.input)
+                      setStore("prompt", m.entry)
+                      setStore("mode", m.entry.mode ?? "normal")
+                      restoreExtmarksFromParts(m.entry.parts)
+                    }
+                    exitSearch(true)
+                    return
+                  }
+                  if (e.name === "backspace") {
+                    const q = query()
+                    if (q.length > 0) {
+                      setQuery(q.slice(0, -1))
+                      setMatchIdx(undefined)
+                    }
+                    return
+                  }
+                  if (e.name.length === 1 && !e.ctrl && !e.meta) {
+                    setQuery(query() + e.name)
+                    setMatchIdx(undefined)
+                    return
+                  }
+                  return
+                }
+                if (!autocomplete.visible && keybind.match("history_search", e)) {
+                  setSaved(input.plainText)
+                  setSearching(true)
+                  setQuery("")
+                  setMatchIdx(undefined)
                   e.preventDefault()
                   return
                 }
