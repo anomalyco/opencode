@@ -363,37 +363,30 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.addToHistory(currentPrompt, mode)
     input.resetHistoryNavigation()
 
-    const projectDirectory = sdk.directory
-    console.log("[DEBUG handleSubmit] sdk.directory", {
-      projectDirectory,
-      projectDirectoryLength: projectDirectory?.length ?? 0,
-    })
-
-    // Guard: 确保 projectDirectory 不为空
-    if (!projectDirectory || projectDirectory.trim() === "") {
-      console.error("[BUG] sdk.directory is empty", {
-        projectDirectory,
-        paramsDir: params.dir,
-        sdkUrl: sdk.url,
-      })
-      showToast({
-        variant: "error",
-        title: language.t("prompt.toast.sessionCreateFailed.title"),
-        description: "项目目录未就绪，请稍后再试或重新打开项目",
-      })
-      return
-    }
+    const currentDirectory = sdk.directory
+    const rootDirectory = sync.project?.worktree || currentDirectory
 
     const isNewSession = !params.id
     const worktreeSelection = input.newSessionWorktree?.trim() || "main"
 
-    let sessionDirectory = projectDirectory
+    let sessionDirectory = currentDirectory
     let client = sdk.client
 
     if (isNewSession) {
+      if (worktreeSelection === "main") {
+        sessionDirectory = rootDirectory
+      }
+
       if (worktreeSelection === "create") {
-        const createdWorktree = await client.worktree
-          .create({ directory: projectDirectory })
+        const rootClient =
+          rootDirectory === currentDirectory
+            ? sdk.client
+            : sdk.createClient({
+                directory: rootDirectory,
+                throwOnError: true,
+              })
+        const createdWorktree = await rootClient.worktree
+          .create({ directory: rootDirectory })
           .then((x) => x.data)
           .catch((err) => {
             showToast({
@@ -418,12 +411,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         sessionDirectory = worktreeSelection
       }
 
-      if (sessionDirectory !== projectDirectory) {
+      if (sessionDirectory !== currentDirectory) {
         // Guard: 确保 sessionDirectory 不为空（worktree 场景）
         if (!sessionDirectory || sessionDirectory.trim() === "") {
           console.error("[BUG] sessionDirectory is empty in worktree path", {
             sessionDirectory,
-            projectDirectory,
+            currentDirectory,
+            rootDirectory,
             worktreeSelection,
           })
           showToast({
@@ -440,6 +434,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           throwOnError: true,
         })
         globalSync.child(sessionDirectory)
+      } else {
+        client = sdk.client
       }
 
       input.onNewSessionWorktreeReset?.()
@@ -597,13 +593,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const worktree = WorktreeState.get(sessionDirectory)
       if (!worktree || worktree.status !== "pending") return true
 
-      if (sessionDirectory === projectDirectory) {
+      if (sessionDirectory === currentDirectory) {
         sync.set("session_status", session.id, { type: "busy" })
       }
 
       const controller = new AbortController()
       const cleanup = () => {
-        if (sessionDirectory === projectDirectory) {
+        if (sessionDirectory === currentDirectory) {
           sync.set("session_status", session.id, { type: "idle" })
         }
         removeOptimisticMessage()
@@ -654,12 +650,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       globalSync,
       draft,
       messageID,
-      optimisticBusy: sessionDirectory === projectDirectory,
+      optimisticBusy: sessionDirectory === currentDirectory,
       before: waitForWorktree,
     }).catch((err) => {
       if (aborted(err)) return
       pending.delete(session.id)
-      if (sessionDirectory === projectDirectory) {
+      if (sessionDirectory === currentDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
       }
       showToast({
