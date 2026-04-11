@@ -275,9 +275,64 @@ export namespace ProviderTransform {
     })
   }
 
+  /**
+   * Safety net: injects synthetic tool-results for any orphaned tool-calls.
+   * Catches corruption from normalizeMessages dropping messages, error-skip logic,
+   * lost step boundaries during retries, and filterCompacted cutting pairs.
+   *
+   * @see https://github.com/anomalyco/opencode/issues/21326
+   */
+  export function ensureToolIntegrity(msgs: ModelMessage[]): ModelMessage[] {
+    const calls = new Map<string, { idx: number; tool: string }>()
+    const results = new Set<string>()
+
+    msgs.forEach((msg, i) => {
+      if (!Array.isArray(msg.content)) return
+      for (const part of msg.content) {
+        if (part.type === "tool-call") calls.set(part.toolCallId, { idx: i, tool: part.toolName })
+        if (part.type === "tool-result") results.add(part.toolCallId)
+      }
+    })
+
+    const orphans = [...calls.entries()]
+      .filter(([id]) => !results.has(id))
+      .map(([id, info]) => ({ id, idx: info.idx, tool: info.tool }))
+
+    if (orphans.length === 0) return msgs
+
+    const grouped = Map.groupBy(orphans, (o) => o.idx)
+
+    return msgs.flatMap((msg, i) => {
+      const pending = grouped.get(i)
+      if (!pending) return [msg]
+
+      const synthetic = pending.map((o) => ({
+        type: "tool-result" as const,
+        toolCallId: o.id,
+        toolName: o.tool,
+        output: { type: "error-text" as const, value: "[Tool execution was interrupted]" },
+      }))
+
+      const next = msgs[i + 1]
+      if (next?.role === "tool" && Array.isArray(next.content)) {
+        next.content.push(...synthetic)
+        return [msg]
+      }
+
+      return [msg, { role: "tool" as const, content: synthetic }]
+    })
+  }
+
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    if (
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/amazon-bedrock" ||
+      model.providerID === "google-vertex-anthropic"
+    ) {
+      msgs = ensureToolIntegrity(msgs)
+    }
     if (
       (model.providerID === "anthropic" ||
         model.providerID === "google-vertex-anthropic" ||

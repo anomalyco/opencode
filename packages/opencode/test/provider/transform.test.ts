@@ -1132,13 +1132,26 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(1)
+    // normalizeMessages keeps the tool-call (filtering only empty text/reasoning),
+    // and ensureToolIntegrity adds a synthetic tool-result for the orphaned tool-call
+    expect(result).toHaveLength(2)
     expect(result[0].content).toHaveLength(1)
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
       toolCallId: "123",
       toolName: "bash",
       input: { command: "ls" },
+    })
+    expect(result[1]).toMatchObject({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "123",
+          toolName: "bash",
+          output: { type: "error-text", value: "[Tool execution was interrupted]" },
+        },
+      ],
     })
   })
 
@@ -2835,5 +2848,263 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+})
+
+describe("ProviderTransform.ensureToolIntegrity", () => {
+  test("returns messages unchanged when all tool-calls have matching tool-results", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "run ls" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } }],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "call-1", toolName: "bash", output: { type: "text", value: "file.ts" } }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+
+    expect(result).toHaveLength(3)
+    expect(result).toStrictEqual(msgs)
+  })
+
+  test("injects synthetic tool-result for orphaned tool-call when no tool message follows", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "run ls" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } }],
+      },
+      { role: "user", content: [{ type: "text", text: "next message" }] },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+
+    expect(result).toHaveLength(4)
+    expect(result[2]).toStrictEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call-1",
+          toolName: "bash",
+          output: { type: "error-text", value: "[Tool execution was interrupted]" },
+        },
+      ],
+    })
+    expect(result[3].role).toBe("user")
+  })
+
+  test("appends synthetic tool-result to existing tool message for partial orphans", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "run two tools" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } },
+          { type: "tool-call", toolCallId: "call-2", toolName: "read", input: { path: "/tmp" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call-1", toolName: "bash", output: { type: "text", value: "ok" } },
+          // call-2 is missing its tool-result
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+
+    expect(result).toHaveLength(3)
+    const toolMsg = result[2]
+    expect(toolMsg.content).toHaveLength(2)
+    expect(toolMsg.content[1]).toStrictEqual({
+      type: "tool-result",
+      toolCallId: "call-2",
+      toolName: "read",
+      output: { type: "error-text", value: "[Tool execution was interrupted]" },
+    })
+  })
+
+  test("handles multiple orphaned tool-calls across different assistant messages", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "step 1" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call-1", toolName: "bash", input: {} }],
+      },
+      { role: "user", content: [{ type: "text", text: "step 2" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call-2", toolName: "read", input: {} }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+
+    expect(result).toHaveLength(6) // 4 original + 2 synthetic tool messages
+    expect(result[2]).toMatchObject({
+      role: "tool",
+      content: [{ type: "tool-result", toolCallId: "call-1", toolName: "bash" }],
+    })
+    expect(result[5]).toMatchObject({
+      role: "tool",
+      content: [{ type: "tool-result", toolCallId: "call-2", toolName: "read" }],
+    })
+  })
+
+  test("does not affect messages without tool-calls", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+
+    expect(result).toStrictEqual(msgs)
+  })
+
+  test("handles the normalizeMessages scenario where assistant message is removed", () => {
+    // Simulates Vector 1: normalizeMessages removed an assistant message with tool-calls,
+    // but a tool message with results for those calls remains orphaned.
+    // In practice this means tool-results exist without tool-calls (opposite orphan).
+    // ensureToolIntegrity only fixes missing tool-results, not missing tool-calls.
+    // tool-results without tool-calls are valid (Anthropic does not reject them).
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "call-orphan", toolName: "bash", output: { type: "text", value: "ok" } }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+
+    // Should not crash or modify — orphaned tool-results are not our problem
+    expect(result).toStrictEqual(msgs)
+  })
+
+  test("handles empty messages array", () => {
+    const result = ProviderTransform.ensureToolIntegrity([])
+    expect(result).toStrictEqual([])
+  })
+
+  test("handles messages with string content (non-array)", () => {
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "hi there" },
+    ] as any[]
+
+    const result = ProviderTransform.ensureToolIntegrity(msgs)
+    expect(result).toStrictEqual(msgs)
+  })
+
+  test("end-to-end: normalizeMessages drops message then ensureToolIntegrity repairs", () => {
+    // Simulates the full pipeline where normalizeMessages removes an empty assistant
+    // message that was between a user message and a tool message, leaving a tool-call
+    // in a prior assistant message without its tool-result.
+    const anthropicModel = {
+      id: "anthropic/claude-opus-4-6",
+      providerID: "anthropic",
+      api: {
+        id: "claude-opus-4-6",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+      name: "Claude Opus",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.015, output: 0.075, cache: { read: 0.0015, write: 0.01875 } },
+      limit: { context: 200000, output: 32000 },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    // Step 1 assistant has tool-call + text
+    // Step 2 assistant has ONLY empty reasoning (will be dropped by normalizeMessages)
+    // Tool message has results for step 1's tool-call
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "analyze this" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "I'll run a command" },
+          { type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call-1", toolName: "bash", output: { type: "text", value: "file.ts" } },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Now let me read it" },
+          { type: "tool-call", toolCallId: "call-2", toolName: "read", input: { filePath: "file.ts" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call-2", toolName: "read", output: { type: "text", value: "content" } },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          // Only empty reasoning — normalizeMessages will drop this entire message
+          { type: "reasoning", text: "" },
+        ],
+      },
+      // The next step's assistant with a tool-call
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Final step" },
+          { type: "tool-call", toolCallId: "call-3", toolName: "write", input: { path: "out.ts" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call-3", toolName: "write", output: { type: "text", value: "written" } },
+        ],
+      },
+    ] as any[]
+
+    // Run through full pipeline
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    // The empty assistant message should be gone (normalizeMessages removes it)
+    // But all tool-call/tool-result pairs should still be intact (ensureToolIntegrity)
+    const allToolCalls = new Set<string>()
+    const allToolResults = new Set<string>()
+    for (const msg of result) {
+      if (!Array.isArray(msg.content)) continue
+      for (const part of msg.content) {
+        if (part.type === "tool-call") allToolCalls.add(part.toolCallId)
+        if (part.type === "tool-result") allToolResults.add(part.toolCallId)
+      }
+    }
+
+    // Every tool-call must have a matching tool-result
+    for (const id of allToolCalls) {
+      expect(allToolResults.has(id)).toBe(true)
+    }
   })
 })
