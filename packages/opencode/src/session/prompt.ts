@@ -388,7 +388,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 ...req,
                 sessionID: input.session.id,
                 tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-                ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+                ruleset: Permission.merge(
+                  input.session.permission ?? [],
+                  input.agent.permission,
+                  input.model.permission ? Permission.fromConfig(input.model.permission) : [],
+                ),
               })
               .pipe(Effect.orDie),
         })

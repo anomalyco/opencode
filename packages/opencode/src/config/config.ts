@@ -842,6 +842,8 @@ export namespace Config {
       provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()).optional(),
+      timeout: z.number().int().positive().optional().describe("Per-model bash timeout override in milliseconds"),
+      permission: Permission.optional().describe("Per-model tool permission override"),
       variants: z
         .record(
           z.string(),
@@ -853,6 +855,7 @@ export namespace Config {
         )
         .optional()
         .describe("Variant-specific configuration"),
+      fallback: z.array(z.string()).optional().describe("Fallback model IDs to try when this model fails (e.g., rate limits, server errors). Tries the first available model."),
     })
     .partial()
 
