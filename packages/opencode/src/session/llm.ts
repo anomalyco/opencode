@@ -94,305 +94,343 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
-      Config.get(),
-      Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
-    ])
-    // TODO: move this to a proper hook
-    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
-    const system: string[] = []
-    system.push(
-      [
-        // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-        // any custom prompt passed into this call
-        ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
-      ]
-        .filter((x) => x)
-        .join("\n"),
-    )
+    async function attempt(m: Provider.Model) {
+      const [language, cfg, provider, auth] = await Promise.all([
+        Provider.getLanguage(m),
+        Config.get(),
+        Provider.getProvider(m.providerID),
+        Auth.get(m.providerID),
+      ])
+      // TODO: move this to a proper hook
+      const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
-    const header = system[0]
-    await Plugin.trigger(
-      "experimental.chat.system.transform",
-      { sessionID: input.sessionID, model: input.model },
-      { system },
-    )
-    // rejoin to maintain 2-part structure for caching if header unchanged
-    if (system.length > 2 && system[0] === header) {
-      const rest = system.slice(1)
-      system.length = 0
-      system.push(header, rest.join("\n"))
-    }
+      const system: string[] = []
+      system.push(
+        [
+          // use agent prompt otherwise provider prompt
+          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(m)),
+          // any custom prompt passed into this call
+          ...input.system,
+          // any custom prompt from last user message
+          ...(input.user.system ? [input.user.system] : []),
+        ]
+          .filter((x) => x)
+          .join("\n"),
+      )
 
-    const variant =
-      !input.small && input.model.variants && input.user.model.variant
-        ? input.model.variants[input.user.model.variant]
-        : {}
-    const base = input.small
-      ? ProviderTransform.smallOptions(input.model)
-      : ProviderTransform.options({
-          model: input.model,
-          sessionID: input.sessionID,
-          providerOptions: provider.options,
-        })
-    const options: Record<string, any> = pipe(
-      base,
-      mergeDeep(input.model.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
-    )
-    if (isOpenaiOauth) {
-      options.instructions = system.join("\n")
-    }
+      const header = system[0]
+      await Plugin.trigger(
+        "experimental.chat.system.transform",
+        { sessionID: input.sessionID, model: m },
+        { system },
+      )
+      // rejoin to maintain 2-part structure for caching if header unchanged
+      if (system.length > 2 && system[0] === header) {
+        const rest = system.slice(1)
+        system.length = 0
+        system.push(header, rest.join("\n"))
+      }
 
-    const isWorkflow = language instanceof GitLabWorkflowLanguageModel
-    const messages = isOpenaiOauth
-      ? input.messages
-      : isWorkflow
+      const variant =
+        !input.small && m.variants && input.user.model.variant
+          ? m.variants[input.user.model.variant]
+          : {}
+      const base = input.small
+        ? ProviderTransform.smallOptions(m)
+        : ProviderTransform.options({
+            model: m,
+            sessionID: input.sessionID,
+            providerOptions: provider.options,
+          })
+      const options: Record<string, any> = pipe(
+        base,
+        mergeDeep(m.options),
+        mergeDeep(input.agent.options),
+        mergeDeep(variant),
+      )
+      if (isOpenaiOauth) {
+        options.instructions = system.join("\n")
+      }
+
+      const isWorkflow = language instanceof GitLabWorkflowLanguageModel
+      const messages = isOpenaiOauth
         ? input.messages
-        : [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
-            ...input.messages,
-          ]
+        : isWorkflow
+          ? input.messages
+          : [
+              ...system.map(
+                (x): ModelMessage => ({
+                  role: "system",
+                  content: x,
+                }),
+              ),
+              ...input.messages,
+            ]
 
-    const params = await Plugin.trigger(
-      "chat.params",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent.name,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-          : undefined,
-        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-        topK: ProviderTransform.topK(input.model),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
-        options,
-      },
-    )
+      const params = await Plugin.trigger(
+        "chat.params",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent.name,
+          model: m,
+          provider,
+          message: input.user,
+        },
+        {
+          temperature: m.capabilities.temperature
+            ? (input.agent.temperature ?? ProviderTransform.temperature(m))
+            : undefined,
+          topP: input.agent.topP ?? ProviderTransform.topP(m),
+          topK: ProviderTransform.topK(m),
+          maxOutputTokens: ProviderTransform.maxOutputTokens(m),
+          options,
+        },
+      )
 
-    const { headers } = await Plugin.trigger(
-      "chat.headers",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent.name,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        headers: {},
-      },
-    )
+      const { headers } = await Plugin.trigger(
+        "chat.headers",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent.name,
+          model: m,
+          provider,
+          message: input.user,
+        },
+        {
+          headers: {},
+        },
+      )
 
-    const tools = await resolveTools(input)
+      const tools = await resolveTools(input)
 
-    // LiteLLM and some Anthropic proxies require the tools parameter to be present
-    // when message history contains tool calls, even if no tools are being used.
-    // Add a dummy tool that is never called to satisfy this validation.
-    // This is enabled for:
-    // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-    // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
-    const isLiteLLMProxy =
-      provider.options?.["litellmProxy"] === true ||
-      input.model.providerID.toLowerCase().includes("litellm") ||
-      input.model.api.id.toLowerCase().includes("litellm")
+      // LiteLLM and some Anthropic proxies require tools parameter to be present
+      // when message history contains tool calls, even if no tools are being used.
+      // Add a dummy tool that is never called to satisfy this validation.
+      // This is enabled for:
+      // 1. Providers with "litellm" in their ID or API ID (auto-detected)
+      // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
+      const isLiteLLMProxy =
+        provider.options?.["litellmProxy"] === true ||
+        m.providerID.toLowerCase().includes("litellm") ||
+        m.api.id.toLowerCase().includes("litellm")
 
-    // LiteLLM/Bedrock rejects requests where the message history contains tool
-    // calls but no tools param is present. When there are no active tools (e.g.
-    // during compaction), inject a stub tool to satisfy the validation requirement.
-    // The stub description explicitly tells the model not to call it.
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
-      tools["_noop"] = tool({
-        description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
-        inputSchema: jsonSchema({
-          type: "object",
-          properties: {
-            reason: { type: "string", description: "Unused" },
-          },
-        }),
-        execute: async () => ({ output: "", title: "", metadata: {} }),
-      })
-    }
-
-    // Wire up toolExecutor for DWS workflow models so that tool calls
-    // from the workflow service are executed via opencode's tool system
-    // and results sent back over the WebSocket.
-    if (language instanceof GitLabWorkflowLanguageModel) {
-      const workflowModel = language as GitLabWorkflowLanguageModel & {
-        sessionID?: string
-        sessionPreapprovedTools?: string[]
-        approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
-      }
-      workflowModel.sessionID = input.sessionID
-      workflowModel.systemPrompt = system.join("\n")
-      workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
-        const t = tools[toolName]
-        if (!t || !t.execute) {
-          return { result: "", error: `Unknown tool: ${toolName}` }
-        }
-        try {
-          const result = await t.execute!(JSON.parse(argsJson), {
-            toolCallId: _requestID,
-            messages: input.messages,
-            abortSignal: input.abort,
-          })
-          const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
-          return {
-            result: output,
-            metadata: typeof result === "object" ? result?.metadata : undefined,
-            title: typeof result === "object" ? result?.title : undefined,
-          }
-        } catch (e: any) {
-          return { result: "", error: e.message ?? String(e) }
-        }
-      }
-
-      const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
-      workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
-        const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
-        return !match || match.action !== "ask"
-      })
-
-      const approvedToolsForSession = new Set<string>()
-      workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
-        const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
-        // Auto-approve tools that were already approved in this session
-        // (prevents infinite approval loops for server-side MCP tools)
-        if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
-          return { approved: true }
-        }
-
-        const id = PermissionID.ascending()
-        let reply: Permission.Reply | undefined
-        let unsub: (() => void) | undefined
-        try {
-          unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
-            if (evt.properties.requestID === id) reply = evt.properties.reply
-          })
-          const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
-            try {
-              const parsed = JSON.parse(t.args) as Record<string, unknown>
-              const title = (parsed?.title ?? parsed?.name ?? "") as string
-              return title ? `${t.name}: ${title}` : t.name
-            } catch {
-              return t.name
-            }
-          })
-          const uniquePatterns = [...new Set(toolPatterns)] as string[]
-          await Permission.ask({
-            id,
-            sessionID: SessionID.make(input.sessionID),
-            permission: "workflow_tool_approval",
-            patterns: uniquePatterns,
-            metadata: { tools: approvalTools },
-            always: uniquePatterns,
-            ruleset: [],
-          })
-          for (const name of uniqueNames) approvedToolsForSession.add(name)
-          workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
-          return { approved: true }
-        } catch {
-          return { approved: false }
-        } finally {
-          unsub?.()
-        }
-      })
-    }
-
-    return streamText({
-      onError(error) {
-        l.error("stream error", {
-          error,
+      // LiteLLM/Bedrock rejects requests where message history contains tool
+      // calls but no tools param is present. When there are no active tools (e.g.
+      // during compaction), inject a stub tool to satisfy the validation requirement.
+      // The stub description explicitly tells the model not to call it.
+      if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+        tools["_noop"] = tool({
+          description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
+          inputSchema: jsonSchema({
+            type: "object",
+            properties: {
+              reason: { type: "string", description: "Unused" },
+            },
+          }),
+          execute: async () => ({ output: "", title: "", metadata: {} }),
         })
-      },
-      async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
-          l.info("repairing tool call", {
-            tool: failed.toolCall.toolName,
-            repaired: lower,
+      }
+
+      // Wire up toolExecutor for DWS workflow models so that tool calls
+      // from workflow service are executed via opencode's tool system
+      // and results sent back over the WebSocket.
+      if (language instanceof GitLabWorkflowLanguageModel) {
+        const workflowModel = language as GitLabWorkflowLanguageModel & {
+          sessionID?: string
+          sessionPreapprovedTools?: string[]
+          approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
+        }
+        workflowModel.sessionID = input.sessionID
+        workflowModel.systemPrompt = system.join("\n")
+        workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
+          const t = tools[toolName]
+          if (!t || !t.execute) {
+            return { result: "", error: `Unknown tool: ${toolName}` }
+          }
+          try {
+            const result = await t.execute!(JSON.parse(argsJson), {
+              toolCallId: _requestID,
+              messages: input.messages,
+              abortSignal: input.abort,
+            })
+            const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
+            return {
+              result: output,
+              metadata: typeof result === "object" ? result?.metadata : undefined,
+              title: typeof result === "object" ? result?.title : undefined,
+            }
+          } catch (e: any) {
+            return { result: "", error: e.message ?? String(e) }
+          }
+        }
+
+        const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
+        workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
+          const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
+          return !match || match.action !== "ask"
+        })
+
+        const approvedToolsForSession = new Set<string>()
+        workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
+          const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
+          // Auto-approve tools that were already approved in this session
+          // (prevents infinite approval loops for server-side MCP tools)
+          if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
+            return { approved: true }
+          }
+
+          const id = PermissionID.ascending()
+          let reply: Permission.Reply | undefined
+          let unsub: (() => void) | undefined
+          try {
+            unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
+              if (evt.properties.requestID === id) reply = evt.properties.reply
+            })
+            const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
+              try {
+                const parsed = JSON.parse(t.args) as Record<string, unknown>
+                const title = (parsed?.title ?? parsed?.name ?? "") as string
+                return title ? `${t.name}: ${title}` : t.name
+              } catch {
+                return t.name
+              }
+            })
+            const uniquePatterns = [...new Set(toolPatterns)] as string[]
+            await Permission.ask({
+              id,
+              sessionID: SessionID.make(input.sessionID),
+              permission: "workflow_tool_approval",
+              patterns: uniquePatterns,
+              metadata: { tools: approvalTools },
+              always: uniquePatterns,
+              ruleset: [],
+            })
+            for (const name of uniqueNames) approvedToolsForSession.add(name)
+            workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
+            return { approved: true }
+          } catch {
+            return { approved: false }
+          } finally {
+            unsub?.()
+          }
+        })
+      }
+
+      return streamText({
+        onError(error) {
+          l.error("stream error", {
+            error,
           })
+        },
+        async experimental_repairToolCall(failed) {
+          const lower = failed.toolCall.toolName.toLowerCase()
+          if (lower !== failed.toolCall.toolName && tools[lower]) {
+            l.info("repairing tool call", {
+              tool: failed.toolCall.toolName,
+              repaired: lower,
+            })
+            return {
+              ...failed.toolCall,
+              toolName: lower,
+            }
+          }
           return {
             ...failed.toolCall,
-            toolName: lower,
-          }
-        }
-        return {
-          ...failed.toolCall,
-          input: JSON.stringify({
-            tool: failed.toolCall.toolName,
-            error: failed.error.message,
-          }),
-          toolName: "invalid",
-        }
-      },
-      temperature: params.temperature,
-      topP: params.topP,
-      topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
-      toolChoice: input.toolChoice,
-      maxOutputTokens: params.maxOutputTokens,
-      abortSignal: input.abort,
-      headers: {
-        ...(input.model.providerID.startsWith("opencode")
-          ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": input.user.id,
-              "x-opencode-client": Flag.OPENCODE_CLIENT,
-            }
-          : {
-              "x-session-affinity": input.sessionID,
-              ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-              "User-Agent": `opencode/${Installation.VERSION}`,
+            input: JSON.stringify({
+              tool: failed.toolCall.toolName,
+              error: failed.error.message,
             }),
-        ...input.model.headers,
-        ...headers,
-      },
-      maxRetries: input.retries ?? 0,
-      messages,
-      model: wrapLanguageModel({
-        model: language,
-        middleware: [
-          {
-            specificationVersion: "v3" as const,
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
-              }
-              return args.params
-            },
-          },
-        ],
-      }),
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-          sessionId: input.sessionID,
+            toolName: "invalid",
+          }
         },
-      },
-    })
+        temperature: params.temperature,
+        topP: params.topP,
+        topK: params.topK,
+        providerOptions: ProviderTransform.providerOptions(m, params.options),
+        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+        tools,
+        toolChoice: input.toolChoice,
+        maxOutputTokens: params.maxOutputTokens,
+        abortSignal: input.abort,
+        headers: {
+          ...(m.providerID.startsWith("opencode")
+            ? {
+                "x-opencode-project": Instance.project.id,
+                "x-opencode-session": input.sessionID,
+                "x-opencode-request": input.user.id,
+                "x-opencode-client": Flag.OPENCODE_CLIENT,
+              }
+            : {
+                "x-session-affinity": input.sessionID,
+                ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
+                "User-Agent": `opencode/${Installation.VERSION}`,
+              }),
+          ...m.headers,
+          ...headers,
+        },
+        maxRetries: input.retries ?? 0,
+        messages,
+        model: wrapLanguageModel({
+          model: language,
+          middleware: [
+            {
+              specificationVersion: "v3" as const,
+              async transformParams(args) {
+                if (args.type === "stream") {
+                  // @ts-expect-error
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, m, options)
+                }
+                return args.params
+              },
+            },
+          ],
+        }),
+        experimental_telemetry: {
+          isEnabled: cfg.experimental?.openTelemetry,
+          metadata: {
+            userId: cfg.username ?? "unknown",
+            sessionId: input.sessionID,
+          },
+        },
+      })
+    }
+
+    try {
+      return await attempt(input.model)
+    } catch (e) {
+      const err = e as any
+      const isRetryable = 
+        (err.statusCode === 429) || 
+        (err.statusCode >= 500 && err.statusCode < 600) ||
+        err.message?.toLowerCase().includes("timeout") ||
+        err.name === "AbortError"
+
+      if (isRetryable && input.model.fallback?.length) {
+        const fbId = input.model.fallback[0]
+        l.info("model failed, trying fallback", {
+          primaryModel: input.model.id,
+          fallbackModel: fbId,
+          error: err.message,
+        })
+
+        try {
+          const parsed = Provider.parseModel(fbId)
+          const fbModel = await Provider.getModel(parsed.providerID, parsed.modelID)
+          return await attempt(fbModel)
+        } catch (fbErr) {
+          l.error("fallback model also failed", {
+            fallbackModel: fbId,
+            error: fbErr,
+          })
+          throw e
+        }
+      }
+
+      throw e
+    }
   }
+
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(

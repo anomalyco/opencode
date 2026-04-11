@@ -881,8 +881,11 @@ export namespace Provider {
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
+      timeout: z.number().int().positive().optional(),
       release_date: z.string(),
+      permission: z.record(z.string(), Config.PermissionRule).optional(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      fallback: z.array(z.string()).optional(),
     })
     .meta({
       ref: "Model",
@@ -1164,9 +1167,12 @@ export namespace Provider {
                   output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
                 },
                 headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+                timeout: model.timeout ?? existingModel?.timeout,
                 family: model.family ?? existingModel?.family ?? "",
                 release_date: model.release_date ?? existingModel?.release_date ?? "",
+                permission: model.permission ?? existingModel?.permission,
                 variants: {},
+                fallback: model.fallback ?? existingModel?.fallback,
               }
               const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
               parsedModel.variants = mapValues(
