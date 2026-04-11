@@ -61,6 +61,50 @@ describe("plugin.auth-override", () => {
     expect(copilot[0].label).toBe("Test Override Auth")
     expect(plainMethods[ProviderID.make("github-copilot")][0].label).not.toBe("Test Override Auth")
   }, 30000) // Increased timeout for plugin installation
+
+  test("user plugin does not override built-in openai auth", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const pluginDir = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
+
+        await Bun.write(
+          path.join(pluginDir, "custom-openai-auth.ts"),
+          [
+            "export default {",
+            '  id: "demo.custom-openai-auth",',
+            "  server: async () => ({",
+            "    auth: {",
+            '      provider: "openai",',
+            "      methods: [",
+            '        { type: "api", label: "Test Override Auth" },',
+            "      ],",
+            "      loader: async () => ({ access: 'test-token' }),",
+            "    },",
+            "  }),",
+            "}",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    const methods = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        return Effect.runPromise(
+          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
+        )
+      },
+    })
+
+    const openai = methods[ProviderID.make("openai")]
+    expect(openai).toBeDefined()
+    expect(openai.some((x) => x.label === "ChatGPT Pro/Plus (browser)")).toBe(true)
+    expect(openai.some((x) => x.label === "ChatGPT Pro/Plus (headless)")).toBe(true)
+    expect(openai.some((x) => x.label === "Manually enter API Key")).toBe(true)
+    expect(openai.some((x) => x.label === "Test Override Auth")).toBe(false)
+  }, 30000)
 })
 
 const file = path.join(import.meta.dir, "../../src/plugin/index.ts")

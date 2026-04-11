@@ -118,16 +118,23 @@ export namespace ProviderAuth {
       const state = yield* InstanceState.make<State>(
         Effect.fn("ProviderAuth.state")(function* () {
           const plugins = yield* plugin.list()
+
+          const hooks: Record<ProviderID, Hook> = {}
+
+          for (const item of plugins) {
+            const auth = item.auth
+            if (!auth?.provider) continue
+
+            const id = ProviderID.make(auth.provider)
+            if (id === "openai" && hooks[id]) continue
+            hooks[id] = auth
+          }
+
           return {
-            hooks: Record.fromEntries(
-              Arr.filterMap(plugins, (x) =>
-                x.auth?.provider !== undefined
-                  ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
-                  : Result.failVoid,
-              ),
-            ),
+            hooks,
             pending: new Map<ProviderID, AuthOAuthResult>(),
           }
+
         }),
       )
 
