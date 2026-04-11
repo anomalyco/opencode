@@ -29,7 +29,7 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Option, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
@@ -352,6 +352,11 @@ export namespace Session {
       field: string
       delta: string
     }) => Effect.Effect<void>
+    /** Finds the first message matching the predicate, searching newest-first. */
+    readonly findMessage: (
+      sessionID: SessionID,
+      predicate: (msg: MessageV2.WithParts) => boolean,
+    ) => Effect.Effect<Option.Option<MessageV2.WithParts>>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -636,6 +641,17 @@ export namespace Session {
         yield* bus.publish(MessageV2.Event.PartDelta, input)
       })
 
+      /** Finds the first message matching the predicate, searching newest-first. */
+      const findMessage = Effect.fn("Session.findMessage")(function* (
+        sessionID: SessionID,
+        predicate: (msg: MessageV2.WithParts) => boolean,
+      ) {
+        for (const item of MessageV2.stream(sessionID)) {
+          if (predicate(item)) return Option.some(item)
+        }
+        return Option.none<MessageV2.WithParts>()
+      })
+
       return Service.of({
         create,
         fork,
@@ -657,6 +673,7 @@ export namespace Session {
         updatePart,
         getPart,
         updatePartDelta,
+        findMessage,
       })
     }),
   )
