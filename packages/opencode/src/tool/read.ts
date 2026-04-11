@@ -13,6 +13,10 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
@@ -92,7 +96,7 @@ export const ReadTool = Tool.define(
       if (process.platform === "win32") {
         filepath = AppFileSystem.normalizePath(filepath)
       }
-      const title = path.relative(Instance.worktree, filepath)
+      const title = toPosix(path.relative(Instance.worktree, filepath))
 
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(

@@ -10,6 +10,10 @@ import { Instance } from "../project/instance"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 function getLastModel(sessionID: SessionID) {
   for (const item of MessageV2.stream(sessionID)) {
     if (item.info.role === "user" && item.info.model) return item.info.model
@@ -30,7 +34,7 @@ export const PlanExitTool = Tool.define(
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const info = yield* session.get(ctx.sessionID)
-          const plan = path.relative(Instance.worktree, Session.plan(info))
+          const plan = toPosix(path.relative(Instance.worktree, Session.plan(info)))
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,
             questions: [

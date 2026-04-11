@@ -17,6 +17,10 @@ import { Format } from "../format"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "../filesystem"
@@ -79,7 +83,7 @@ export const EditTool = Tool.define(
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
                 yield* ctx.ask({
                   permission: "edit",
-                  patterns: [path.relative(Instance.worktree, filePath)],
+                  patterns: [toPosix(path.relative(Instance.worktree, filePath))],
                   always: ["*"],
                   metadata: {
                     filepath: filePath,
@@ -119,7 +123,7 @@ export const EditTool = Tool.define(
               )
               yield* ctx.ask({
                 permission: "edit",
-                patterns: [path.relative(Instance.worktree, filePath)],
+                patterns: [toPosix(path.relative(Instance.worktree, filePath))],
                 always: ["*"],
                 metadata: {
                   filepath: filePath,
@@ -179,7 +183,7 @@ export const EditTool = Tool.define(
               diff,
               filediff,
             },
-            title: `${path.relative(Instance.worktree, filePath)}`,
+            title: toPosix(path.relative(Instance.worktree, filePath)),
             output,
           }
         }),

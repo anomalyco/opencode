@@ -9,6 +9,10 @@ import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "../filesystem"
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 const operations = [
   "goToDefinition",
   "findReferences",
@@ -46,7 +50,7 @@ export const LspTool = Tool.define(
 
           const uri = pathToFileURL(file).href
           const position = { file, line: args.line - 1, character: args.character - 1 }
-          const relPath = path.relative(Instance.worktree, file)
+          const relPath = toPosix(path.relative(Instance.worktree, file))
           const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
 
           const exists = yield* fs.existsSafe(file)
