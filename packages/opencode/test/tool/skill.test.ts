@@ -1,6 +1,8 @@
 import { Effect, Layer, ManagedRuntime } from "effect"
+import { Agent } from "../../src/agent/agent"
 import { Skill } from "../../src/skill"
 import { Ripgrep } from "../../src/file/ripgrep"
+import { Truncate } from "../../src/tool/truncate"
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -150,7 +152,7 @@ Use this skill.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const runtime = ManagedRuntime.make(Layer.mergeAll(Skill.defaultLayer, Ripgrep.defaultLayer))
+          const runtime = ManagedRuntime.make(Layer.mergeAll(Skill.defaultLayer, Ripgrep.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer))
           const info = await runtime.runPromise(SkillTool)
           const tool = await runtime.runPromise(info.init())
           const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []

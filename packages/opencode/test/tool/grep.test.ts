@@ -6,8 +6,10 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Truncate } from "../../src/tool/truncate"
+import { Agent } from "../../src/agent/agent"
 
-const runtime = ManagedRuntime.make(Layer.mergeAll(CrossSpawnSpawner.defaultLayer))
+const runtime = ManagedRuntime.make(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer))
 
 function initGrep() {
   return runtime.runPromise(GrepTool.pipe(Effect.flatMap((info) => info.init())))

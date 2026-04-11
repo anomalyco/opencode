@@ -7,12 +7,14 @@ import { Instance } from "../../src/project/instance"
 import { LSP } from "../../src/lsp"
 import { AppFileSystem } from "../../src/filesystem"
 import { Format } from "../../src/format"
+import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
+import { Truncate } from "../../src/tool/truncate"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const runtime = ManagedRuntime.make(
-  Layer.mergeAll(LSP.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer, Bus.layer),
+  Layer.mergeAll(LSP.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer, Bus.layer, Truncate.defaultLayer, Agent.defaultLayer),
 )
 
 const baseCtx = {

@@ -9,8 +9,10 @@ import { FileTime } from "../../src/file/time"
 import { LSP } from "../../src/lsp"
 import { AppFileSystem } from "../../src/filesystem"
 import { Format } from "../../src/format"
+import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
+import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
@@ -34,7 +36,7 @@ async function touch(file: string, time: number) {
 }
 
 const runtime = ManagedRuntime.make(
-  Layer.mergeAll(LSP.defaultLayer, FileTime.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer, Bus.layer),
+  Layer.mergeAll(LSP.defaultLayer, FileTime.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer, Bus.layer, Truncate.defaultLayer, Agent.defaultLayer),
 )
 
 afterAll(async () => {

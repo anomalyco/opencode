@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
+import { Agent } from "../../src/agent/agent"
+import { Truncate } from "../../src/tool/truncate"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -27,7 +29,7 @@ async function withFetch(fetch: (req: Request) => Response | Promise<Response>, 
 function initTool() {
   return WebFetchTool.pipe(
     Effect.flatMap((info) => info.init()),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer)),
     Effect.runPromise,
   )
 }
