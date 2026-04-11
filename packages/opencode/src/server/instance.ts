@@ -30,6 +30,7 @@ import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { errorHandler } from "./middleware"
 import { getMimeType } from "hono/utils/mime"
+import { AppRuntime } from "@/effect/app-runtime"
 
 const log = Log.create({ service: "server" })
 
@@ -277,7 +278,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
         },
       }),
       async (c) => {
-        return c.json(await Format.status())
+        return c.json(await AppRuntime.runPromise(Format.Service.use((svc) => svc.status())))
       },
     )
     .all("/*", async (c) => {

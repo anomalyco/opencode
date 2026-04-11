@@ -904,12 +904,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
-        const model = yield* Effect.promise(async () => {
-          for await (const item of MessageV2.stream(sessionID)) {
-            if (item.info.role === "user" && item.info.model) return item.info.model
-          }
-        })
-        if (model) return model
+        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+        if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
         return yield* provider.defaultModel()
       })
 
@@ -1292,16 +1288,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
 
-      const lastAssistant = (sessionID: SessionID) =>
-        Effect.promise(async () => {
-          let latest: MessageV2.WithParts | undefined
-          for await (const item of MessageV2.stream(sessionID)) {
-            latest ??= item
-            if (item.info.role !== "user") return item
-          }
-          if (latest) return latest
-          throw new Error("Impossible")
-        })
+      const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
+        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
+        if (Option.isSome(match)) return match.value
+        const msgs = yield* sessions.messages({ sessionID, limit: 1 })
+        if (msgs.length > 0) return msgs[0]
+        throw new Error("Impossible")
+      })
 
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
