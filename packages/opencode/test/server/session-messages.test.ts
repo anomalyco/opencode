@@ -178,3 +178,51 @@ describe("session.prompt_async error handling", () => {
     expect(route).toContain("Bus.publish(Session.Event.Error")
   })
 })
+
+describe("message ordering", () => {
+  test("returns messages in reverse chronological order", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await withoutWatcher(() =>
+      Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+          // Insert with out-of-order timestamps
+          const times = [300, 100, 200]
+          const ids = [] as MessageID[]
+          for (const t of times) {
+            const id = MessageID.ascending()
+            ids.push(id)
+            await Session.updateMessage({
+              id,
+              sessionID: session.id,
+              role: "user",
+              time: { created: t },
+              agent: "test",
+              model: { providerID: "test", modelID: "test" },
+              tools: {},
+              mode: "",
+            } as unknown as MessageV2.Info)
+            await Session.updatePart({
+              id: PartID.ascending(),
+              sessionID: session.id,
+              messageID: id,
+              type: "text",
+              text: `t${t}`,
+            })
+          }
+
+          const app = Server.Default().app
+          const res = await app.request(`/session/${session.id}/message`)
+          expect(res.status).toBe(200)
+          const body = (await res.json()) as MessageV2.WithParts[]
+          const order = body.map((m) => m.info.time.created)
+          // API returns oldest-first (page internally queries desc for cursor, then returns items)
+          expect(order).toEqual([100, 200, 300])
+
+          await Session.remove(session.id)
+        },
+      }),
+    )
+  })
+})
