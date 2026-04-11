@@ -50,6 +50,10 @@ export namespace Tool {
     init: () => Effect.Effect<DefWithoutID<Parameters, M>>
   }
 
+  type Init<Parameters extends z.ZodType, M extends Metadata> =
+    | DefWithoutID<Parameters, M>
+    | (() => Effect.Effect<DefWithoutID<Parameters, M>>)
+
   export type InferParameters<T> =
     T extends Info<infer P, any>
       ? z.infer<P>
@@ -66,13 +70,10 @@ export namespace Tool {
         ? Def<P, M>
         : never
 
-  function wrap<Parameters extends z.ZodType, Result extends Metadata>(
-    id: string,
-    init: (() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>,
-  ) {
+  function wrap<Parameters extends z.ZodType, Result extends Metadata>(id: string, init: Init<Parameters, Result>) {
     return () =>
       Effect.gen(function* () {
-        const toolInfo = init instanceof Function ? yield* Effect.promise(() => init()) : { ...init }
+        const toolInfo = init instanceof Function ? { ...(yield* init()) } : { ...init }
         const execute = toolInfo.execute
         toolInfo.execute = (args, ctx) =>
           Effect.gen(function* () {
@@ -110,10 +111,10 @@ export namespace Tool {
 
   export function define<Parameters extends z.ZodType, Result extends Metadata, R, ID extends string = string>(
     id: ID,
-    init: Effect.Effect<(() => Promise<DefWithoutID<Parameters, Result>>) | DefWithoutID<Parameters, Result>, never, R>,
+    init: Effect.Effect<Init<Parameters, Result>, never, R>,
   ): Effect.Effect<Info<Parameters, Result>, never, R> & { id: ID } {
     return Object.assign(
-      Effect.map(init, (next) => ({ id, init: wrap(id, next) })),
+      Effect.map(init, (init) => ({ id, init: wrap(id, init) })),
       { id },
     )
   }

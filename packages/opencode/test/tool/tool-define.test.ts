@@ -30,11 +30,11 @@ describe("Tool.define", () => {
     expect(original.execute).toBe(originalExecute)
   })
 
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
+  test("effect-defined tool returns fresh objects and is unaffected", async () => {
     const info = await Effect.runPromise(
       Tool.define(
         "test-fn-tool",
-        Effect.succeed(() => Promise.resolve(makeTool("test"))),
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
       ),
     )
 
