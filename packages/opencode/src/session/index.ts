@@ -38,6 +38,18 @@ export namespace Session {
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
 
+  function normalizeSessionDirectory(directory: string) {
+    let value = directory.replaceAll("\\", "/")
+    const wslMatch = value.match(/(?:^|\/+)(?:wsl(?:\.localhost|\$))\/[^/]+(\/.*)$/i)
+    if (wslMatch?.[1]) {
+      value = wslMatch[1]
+    }
+    const drive = value.match(/^([A-Za-z]:)\/+$/)
+    if (drive) return `${drive[1]}/`
+    if (/^\/+$/i.test(value)) return "/"
+    return value.replace(/\/+$/, "")
+  }
+
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
   }
@@ -381,12 +393,13 @@ export namespace Session {
         permission?: Permission.Ruleset
       }) {
         const ctx = yield* InstanceState.context
+        const directory = normalizeSessionDirectory(input.directory)
         const result: Info = {
           id: SessionID.descending(input.id),
           slug: Slug.create(),
           version: Installation.VERSION,
           projectID: ctx.project.id,
-          directory: input.directory,
+          directory,
           workspaceID: input.workspaceID,
           parentID: input.parentID,
           title: input.title ?? createDefaultTitle(!!input.parentID),
