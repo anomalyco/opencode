@@ -6,10 +6,10 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
-import { SessionPrompt } from "../../src/session/prompt"
+import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { TaskTool } from "../../src/tool/task"
+import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { ToolRegistry } from "../../src/tool/registry"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -61,6 +61,17 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   yield* session.updateMessage(assistant)
   return { chat, assistant }
 })
+
+function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
+  return {
+    cancel() {},
+    resolvePromptParts: async (template) => [{ type: "text", text: template }],
+    prompt: async (input) => {
+      opts?.onPrompt?.(input)
+      return reply(input, opts?.text ?? "done")
+    },
+  }
+}
 
 function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string): MessageV2.WithParts {
   const id = MessageID.ascending()
@@ -180,21 +191,8 @@ describe("tool.task", () => {
         const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
         const tool = yield* TaskTool
         const def = yield* Effect.promise(() => tool.init())
-        const resolve = SessionPrompt.resolvePromptParts
-        const prompt = SessionPrompt.prompt
-        let seen: Parameters<typeof SessionPrompt.prompt>[0] | undefined
-
-        SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-        SessionPrompt.prompt = async (input) => {
-          seen = input
-          return reply(input, "resumed")
-        }
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            SessionPrompt.resolvePromptParts = resolve
-            SessionPrompt.prompt = prompt
-          }),
-        )
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
 
         const result = yield* Effect.promise(() =>
           def.execute(
@@ -209,6 +207,7 @@ describe("tool.task", () => {
               messageID: assistant.id,
               agent: "build",
               abort: new AbortController().signal,
+              extra: { promptOps },
               messages: [],
               metadata() {},
               ask: async () => {},
@@ -232,20 +231,10 @@ describe("tool.task", () => {
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
         const def = yield* Effect.promise(() => tool.init())
-        const resolve = SessionPrompt.resolvePromptParts
-        const prompt = SessionPrompt.prompt
         const calls: unknown[] = []
+        const promptOps = stubOps()
 
-        SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-        SessionPrompt.prompt = async (input) => reply(input, "done")
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            SessionPrompt.resolvePromptParts = resolve
-            SessionPrompt.prompt = prompt
-          }),
-        )
-
-        const exec = (extra?: { bypassAgentCheck?: boolean }) =>
+        const exec = (extra?: Record<string, any>) =>
           Effect.promise(() =>
             def.execute(
               {
@@ -258,7 +247,7 @@ describe("tool.task", () => {
                 messageID: assistant.id,
                 agent: "build",
                 abort: new AbortController().signal,
-                extra,
+                extra: { promptOps, ...extra },
                 messages: [],
                 metadata() {},
                 ask: async (input) => {
@@ -292,21 +281,8 @@ describe("tool.task", () => {
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
         const def = yield* Effect.promise(() => tool.init())
-        const resolve = SessionPrompt.resolvePromptParts
-        const prompt = SessionPrompt.prompt
-        let seen: Parameters<typeof SessionPrompt.prompt>[0] | undefined
-
-        SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-        SessionPrompt.prompt = async (input) => {
-          seen = input
-          return reply(input, "created")
-        }
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            SessionPrompt.resolvePromptParts = resolve
-            SessionPrompt.prompt = prompt
-          }),
-        )
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
         const result = yield* Effect.promise(() =>
           def.execute(
@@ -321,6 +297,7 @@ describe("tool.task", () => {
               messageID: assistant.id,
               agent: "build",
               abort: new AbortController().signal,
+              extra: { promptOps },
               messages: [],
               metadata() {},
               ask: async () => {},
@@ -346,21 +323,8 @@ describe("tool.task", () => {
           const { chat, assistant } = yield* seed()
           const tool = yield* TaskTool
           const def = yield* Effect.promise(() => tool.init())
-          const resolve = SessionPrompt.resolvePromptParts
-          const prompt = SessionPrompt.prompt
-          let seen: Parameters<typeof SessionPrompt.prompt>[0] | undefined
-
-          SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-          SessionPrompt.prompt = async (input) => {
-            seen = input
-            return reply(input, "done")
-          }
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              SessionPrompt.resolvePromptParts = resolve
-              SessionPrompt.prompt = prompt
-            }),
-          )
+          let seen: SessionPrompt.PromptInput | undefined
+          const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
           const result = yield* Effect.promise(() =>
             def.execute(
@@ -374,6 +338,7 @@ describe("tool.task", () => {
                 messageID: assistant.id,
                 agent: "build",
                 abort: new AbortController().signal,
+                extra: { promptOps },
                 messages: [],
                 metadata() {},
                 ask: async () => {},

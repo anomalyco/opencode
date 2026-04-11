@@ -44,9 +44,10 @@ import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { TaskTool } from "@/tool/task"
+import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 
 // @ts-ignore
@@ -64,6 +65,7 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
+  const elog = EffectLogger.create({ service: "session.prompt" })
 
   export interface Interface {
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -102,7 +104,7 @@ export namespace SessionPrompt {
       const revert = yield* SessionRevert.Service
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-        log.info("cancel", { sessionID })
+        yield* elog.info("cancel", { sessionID })
         yield* state.cancel(sessionID)
       })
 
@@ -196,11 +198,7 @@ export namespace SessionPrompt {
         const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
         yield* sessions
           .setTitle({ sessionID: input.session.id, title: t })
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.sync(() => log.error("failed to generate title", { error: Cause.squash(cause) })),
-            ),
-          )
+          .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
       })
 
       const insertReminders = Effect.fn("SessionPrompt.insertReminders")(function* (input: {
@@ -356,7 +354,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           abort: options.abortSignal!,
           messageID: input.processor.message.id,
           callID: options.toolCallId,
-          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
@@ -586,7 +584,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               abort: signal,
               callID: part.callID,
-              extra: { bypassAgentCheck: true },
+              extra: { bypassAgentCheck: true, promptOps },
               messages: msgs,
               metadata(val: { title?: string; metadata?: Record<string, any> }) {
                 return Effect.runPromise(
@@ -1302,13 +1300,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
           const ctx = yield* InstanceState.context
+          const slog = elog.with({ sessionID })
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
-            log.info("loop", { step, sessionID })
+            yield* slog.info("loop", { step })
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
@@ -1344,7 +1343,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
-              log.info("exiting loop", { sessionID })
+              yield* slog.info("exiting loop")
               break
             }
 
@@ -1540,7 +1539,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
 
       const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        log.info("command", input)
+        yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
         const cmd = yield* commands.get(input.command)
         if (!cmd) {
           const available = (yield* commands.list()).map((c) => c.name)
@@ -1655,6 +1654,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return result
       })
 
+      const promptOps: TaskPromptOps = {
+        cancel: (sessionID) => Effect.runFork(cancel(sessionID)),
+        resolvePromptParts: (template) => Effect.runPromise(resolvePromptParts(template)),
+        prompt: (input) => Effect.runPromise(prompt(input)),
+      }
+
       return Service.of({
         cancel,
         prompt,
@@ -1666,7 +1671,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }),
   )
 
-  const defaultLayer = Layer.suspend(() =>
+  export const defaultLayer = Layer.suspend(() =>
     layer.pipe(
       Layer.provide(SessionRunState.defaultLayer),
       Layer.provide(SessionStatus.defaultLayer),

@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
+import { Effect, ManagedRuntime, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
+import { LSP } from "../../src/lsp"
+import { AppFileSystem } from "../../src/filesystem"
+import { Format } from "../../src/format"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+
+const runtime = ManagedRuntime.make(Layer.mergeAll(LSP.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer))
 
 const baseCtx = {
   sessionID: SessionID.make("ses_test"),
@@ -40,7 +46,8 @@ type ToolCtx = typeof baseCtx & {
 }
 
 const execute = async (params: { patchText: string }, ctx: ToolCtx) => {
-  const tool = await ApplyPatchTool.init()
+  const info = await runtime.runPromise(ApplyPatchTool)
+  const tool = await info.init()
   return tool.execute(params, ctx)
 }
 
