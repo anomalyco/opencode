@@ -4,6 +4,7 @@ import { Session } from "."
 import { SessionID, MessageID, PartID } from "./schema"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
+import { ProviderTransform } from "../provider/transform"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
 import { Token } from "../util/token"
@@ -33,8 +34,17 @@ export namespace SessionCompaction {
   }
 
   export const PRUNE_MINIMUM = 20_000
-  export const PRUNE_PROTECT = 40_000
-  const PRUNE_PROTECTED_TOOLS = ["skill"]
+  export const PRUNE_PROTECT_MIN = 20_000
+  export const PRUNE_PROTECT_RATIO = 0.15
+  export const PRUNE_PROACTIVE_RATIO = 0.5
+  const PRUNE_PROTECTED_TOOLS = [
+    "skill",
+    "compress",
+    "todowrite",
+    "background_output",
+    "lsp_diagnostics",
+    "lsp_symbols",
+  ]
 
   export interface Interface {
     readonly isOverflow: (input: {
@@ -42,6 +52,11 @@ export namespace SessionCompaction {
       model: Provider.Model
     }) => Effect.Effect<boolean>
     readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
+    readonly pruneIfNeeded: (input: {
+      sessionID: SessionID
+      tokens: MessageV2.Assistant["tokens"]
+      model: Provider.Model
+    }) => Effect.Effect<void>
     readonly process: (input: {
       parentID: MessageID
       messages: MessageV2.WithParts[]
@@ -100,6 +115,16 @@ export namespace SessionCompaction {
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
         if (!msgs) return
 
+        let contextLimit = 128_000
+        const lastAssistant = msgs.findLast((m) => m.info.role === "assistant")
+        if (lastAssistant && lastAssistant.info.role === "assistant") {
+          try {
+            const model = yield* provider.getModel(lastAssistant.info.providerID, lastAssistant.info.modelID)
+            contextLimit = model.limit.context || 128_000
+          } catch {}
+        }
+        const protect = Math.max(PRUNE_PROTECT_MIN, Math.round(contextLimit * PRUNE_PROTECT_RATIO))
+
         let total = 0
         let pruned = 0
         const toPrune: MessageV2.ToolPart[] = []
@@ -115,10 +140,10 @@ export namespace SessionCompaction {
             if (part.type === "tool")
               if (part.state.status === "completed") {
                 if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-                if (part.state.time.compacted) break loop
+                if (part.state.time.compacted) continue
                 const estimate = Token.estimate(part.state.output)
                 total += estimate
-                if (total > PRUNE_PROTECT) {
+                if (total > protect) {
                   pruned += estimate
                   toPrune.push(part)
                 }
@@ -368,9 +393,30 @@ When constructing the summary, try to stick to this template:
         })
       })
 
+      const pruneIfNeeded = Effect.fn("SessionCompaction.pruneIfNeeded")(function* (input: {
+        sessionID: SessionID
+        tokens: MessageV2.Assistant["tokens"]
+        model: Provider.Model
+      }) {
+        const cfg = yield* config.get()
+        if (cfg.compaction?.prune === false) return
+        const context = input.model.limit.context
+        if (context === 0) return
+        const maxOutput = ProviderTransform.maxOutputTokens(input.model)
+        const reserved = cfg.compaction?.reserved ?? Math.min(20_000, maxOutput)
+        const usable = input.model.limit.input ? input.model.limit.input - reserved : context - maxOutput
+        const count =
+          input.tokens.total ||
+          input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+        if (count < usable * PRUNE_PROACTIVE_RATIO) return
+        log.info("proactive prune triggered", { count, usable, ratio: count / usable })
+        yield* prune({ sessionID: input.sessionID })
+      })
+
       return Service.of({
         isOverflow,
         prune,
+        pruneIfNeeded,
         process: processCompaction,
         create,
       })
