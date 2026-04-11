@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
@@ -25,15 +26,19 @@ import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { Skill } from "../../src/skill"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Ripgrep } from "../../src/file/ripgrep"
+import { Format } from "../../src/format"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
@@ -139,7 +144,7 @@ const filetime = Layer.succeed(
     read: () => Effect.void,
     get: () => Effect.succeed(undefined),
     assert: () => Effect.void,
-    withLock: (_filepath, fn) => Effect.promise(fn),
+    withLock: (_filepath, fn) => fn(),
   }),
 )
 
@@ -166,6 +171,11 @@ function makeHttp() {
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -176,6 +186,7 @@ function makeHttp() {
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
+      Layer.provide(SessionRevert.defaultLayer),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
       Layer.provideMerge(proc),
@@ -724,19 +735,12 @@ it.live(
           const registry = yield* ToolRegistry.Service
           const { task } = yield* registry.named()
           const original = task.execute
-          task.execute = async (_args, ctx) => {
-            ready.resolve()
-            ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-            await new Promise<void>(() => {})
-            return {
-              title: "",
-              metadata: {
-                sessionId: SessionID.make("task"),
-                model: ref,
-              },
-              output: "",
-            }
-          }
+          task.execute = (_args, ctx) =>
+            Effect.callback<never>((resume) => {
+              ready.resolve()
+              ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
+              return Effect.sync(() => aborted.resolve())
+            })
           yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
 
           const { prompt, chat } = yield* boot()
@@ -1382,11 +1386,10 @@ function hangUntilAborted(tool: { execute: (...args: any[]) => any }) {
   const ready = defer<void>()
   const aborted = defer<void>()
   const original = tool.execute
-  tool.execute = async (_args: any, ctx: any) => {
+  tool.execute = (_args: any, ctx: any) => {
     ready.resolve()
     ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-    await new Promise<void>(() => {})
-    return { title: "", metadata: {}, output: "" }
+    return Effect.callback<never>(() => {})
   }
   const restore = Effect.addFinalizer(() => Effect.sync(() => void (tool.execute = original)))
   return { ready, aborted, restore }

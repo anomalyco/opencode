@@ -5,11 +5,16 @@ import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
-import { SessionPrompt } from "../session/prompt"
+import type { SessionPrompt } from "../session/prompt"
 import { Config } from "../config/config"
-import { Permission } from "@/permission"
 import { Effect } from "effect"
 import { Log } from "@/util/log"
+
+export interface TaskPromptOps {
+  cancel(sessionID: SessionID): void
+  resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
+  prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
+}
 
 const id = "task"
 
@@ -26,27 +31,26 @@ const parameters = z.object({
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
-export const TaskTool = Tool.defineEffect(
+export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const config = yield* Config.Service
+    const sessions = yield* Session.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
       const cfg = yield* config.get()
 
       if (!ctx.extra?.bypassAgentCheck) {
-        yield* Effect.promise(() =>
-          ctx.ask({
-            permission: id,
-            patterns: [params.subagent_type],
-            always: ["*"],
-            metadata: {
-              description: params.description,
-              subagent_type: params.subagent_type,
-            },
-          }),
-        )
+        yield* ctx.ask({
+          permission: id,
+          patterns: [params.subagent_type],
+          always: ["*"],
+          metadata: {
+            description: params.description,
+            subagent_type: params.subagent_type,
+          },
+        })
       }
 
       const next = yield* agent.get(params.subagent_type)
@@ -59,44 +63,39 @@ export const TaskTool = Tool.defineEffect(
 
       const taskID = params.task_id
       const session = taskID
-        ? yield* Effect.promise(() => {
-            const id = SessionID.make(taskID)
-            return Session.get(id).catch(() => undefined)
-          })
+        ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const nextSession =
         session ??
-        (yield* Effect.promise(() =>
-          Session.create({
-            parentID: ctx.sessionID,
-            title: params.description + ` (@${next.name} subagent)`,
-            permission: [
-              ...(canTodo
-                ? []
-                : [
-                    {
-                      permission: "todowrite" as const,
-                      pattern: "*" as const,
-                      action: "deny" as const,
-                    },
-                  ]),
-              ...(canTask
-                ? []
-                : [
-                    {
-                      permission: id,
-                      pattern: "*" as const,
-                      action: "deny" as const,
-                    },
-                  ]),
-              ...(cfg.experimental?.primary_tools?.map((item) => ({
-                pattern: "*",
-                action: "allow" as const,
-                permission: item,
-              })) ?? []),
-            ],
-          }),
-        ))
+        (yield* sessions.create({
+          parentID: ctx.sessionID,
+          title: params.description + ` (@${next.name} subagent)`,
+          permission: [
+            ...(canTodo
+              ? []
+              : [
+                  {
+                    permission: "todowrite" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
+            ...(canTask
+              ? []
+              : [
+                  {
+                    permission: id,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
+            ...(cfg.experimental?.primary_tools?.map((item) => ({
+              pattern: "*",
+              action: "allow" as const,
+              permission: item,
+            })) ?? []),
+          ],
+        }))
 
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
@@ -106,7 +105,7 @@ export const TaskTool = Tool.defineEffect(
         providerID: msg.info.providerID,
       }
 
-      ctx.metadata({
+      yield* ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: nextSession.id,
@@ -114,10 +113,13 @@ export const TaskTool = Tool.defineEffect(
         },
       })
 
+      const ops = ctx.extra?.promptOps as TaskPromptOps
+      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+
       const messageID = MessageID.ascending()
 
       function cancel() {
-        SessionPrompt.cancel(nextSession.id)
+        ops.cancel(nextSession.id)
       }
 
       return yield* Effect.acquireUseRelease(
@@ -126,24 +128,22 @@ export const TaskTool = Tool.defineEffect(
         }),
         () =>
           Effect.gen(function* () {
-            const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(params.prompt))
-            const result = yield* Effect.promise(() =>
-              SessionPrompt.prompt({
-                messageID,
-                sessionID: nextSession.id,
-                model: {
-                  modelID: model.modelID,
-                  providerID: model.providerID,
-                },
-                agent: next.name,
-                tools: {
-                  ...(canTodo ? {} : { todowrite: false }),
-                  ...(canTask ? {} : { task: false }),
-                  ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
-                },
-                parts,
-              }),
-            )
+            const parts = yield* ops.resolvePromptParts(params.prompt)
+            const result = yield* ops.prompt({
+              messageID,
+              sessionID: nextSession.id,
+              model: {
+                modelID: model.modelID,
+                providerID: model.providerID,
+              },
+              agent: next.name,
+              tools: {
+                ...(canTodo ? {} : { todowrite: false }),
+                ...(canTask ? {} : { task: false }),
+                ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+              },
+              parts,
+            })
 
             return {
               title: params.description,
@@ -170,24 +170,7 @@ export const TaskTool = Tool.defineEffect(
     return {
       description: DESCRIPTION,
       parameters,
-      async execute(params: z.infer<typeof parameters>, ctx) {
-        return Effect.runPromise(run(params, ctx))
-      },
+      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )
-
-export const TaskDescription: Tool.DynamicDescription = (agent) =>
-  Effect.gen(function* () {
-    const items = yield* Effect.promise(() =>
-      Agent.list().then((items) => items.filter((item) => item.mode !== "primary")),
-    )
-    const filtered = items.filter((item) => Permission.evaluate(id, item.name, agent.permission).action !== "deny")
-    const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
-    const description = list
-      .map(
-        (item) => `- ${item.name}: ${item.description ?? "This subagent should only be called manually by the user."}`,
-      )
-      .join("\n")
-    return ["Available agent types and the tools they have access to:", description].join("\n")
-  })

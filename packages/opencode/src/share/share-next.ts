@@ -1,10 +1,9 @@
 import type * as SDK from "@opencode-ai/sdk/v2"
-import { Effect, Exit, Layer, Option, Schema, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session"
@@ -74,7 +73,7 @@ export namespace ShareNext {
     readonly remove: (sessionID: SessionID) => Effect.Effect<void, unknown>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ShareNext") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
 
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))
@@ -159,7 +158,10 @@ export namespace ShareNext {
 
           if (disabled) return cache
 
-          const watch = <D extends { type: string }>(def: D, fn: (evt: { properties: any }) => Effect.Effect<void>) =>
+          const watch = <D extends { type: string }>(
+            def: D,
+            fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
+          ) =>
             bus.subscribe(def as never).pipe(
               Stream.runForEach((evt) =>
                 fn(evt).pipe(
@@ -194,6 +196,7 @@ export namespace ShareNext {
           yield* watch(Session.Event.Diff, (evt) =>
             sync(evt.properties.sessionID, [{ type: "session_diff", data: evt.properties.diff }]),
           )
+          yield* watch(Session.Event.Deleted, (evt) => remove(evt.properties.sessionID))
 
           return cache
         }),
@@ -344,26 +347,4 @@ export namespace ShareNext {
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Session.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function url() {
-    return runPromise((svc) => svc.url())
-  }
-
-  export async function request(): Promise<Req> {
-    return runPromise((svc) => svc.request())
-  }
-
-  export async function create(sessionID: SessionID) {
-    return runPromise((svc) => svc.create(sessionID))
-  }
-
-  export async function remove(sessionID: SessionID) {
-    return runPromise((svc) => svc.remove(sessionID))
-  }
 }

@@ -1,7 +1,7 @@
 import { InstanceState } from "@/effect/instance-state"
 import { Runner } from "@/effect/runner"
 import { makeRuntime } from "@/effect/run-service"
-import { Effect, Layer, Scope, ServiceMap } from "effect"
+import { Effect, Layer, Scope, Context } from "effect"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
@@ -23,7 +23,7 @@ export namespace SessionRunState {
     ) => Effect.Effect<MessageV2.WithParts>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionRunState") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
 
   export const layer = Layer.effect(
     Service,

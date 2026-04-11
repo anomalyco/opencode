@@ -9,11 +9,14 @@ import { SessionPrompt } from "../../session/prompt"
 import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
+import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
+import { Command } from "../../command"
 import { Log } from "../../util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
@@ -91,7 +94,7 @@ export const SessionRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const result = await SessionStatus.list()
+        const result = await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.list()))
         return c.json(Object.fromEntries(result))
       },
     )
@@ -183,7 +186,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const todos = await Todo.get(sessionID)
+        const todos = await AppRuntime.runPromise(Todo.Service.use((svc) => svc.get(sessionID)))
         return c.json(todos)
       },
     )
@@ -205,10 +208,10 @@ export const SessionRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", Session.create.schema.optional()),
+      validator("json", Session.create.schema),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        const session = await SessionShare.create(body)
         return c.json(session)
       },
     )
@@ -292,6 +295,7 @@ export const SessionRoutes = lazy(() =>
         return c.json(session)
       },
     )
+    // TODO(v2): remove this dedicated route and rely on the normal `/init` command flow.
     .post(
       "/:sessionID/init",
       describeRoute({
@@ -317,11 +321,24 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", Session.initialize.schema.omit({ sessionID: true })),
+      validator(
+        "json",
+        z.object({
+          modelID: ModelID.zod,
+          providerID: ProviderID.zod,
+          messageID: MessageID.zod,
+        }),
+      ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        await Session.initialize({ ...body, sessionID })
+        await SessionPrompt.command({
+          sessionID,
+          messageID: body.messageID,
+          model: body.providerID + "/" + body.modelID,
+          command: Command.Default.INIT,
+          arguments: "",
+        })
         return c.json(true)
       },
     )
@@ -411,7 +428,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.share(sessionID)
+        await SessionShare.share(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
       },
@@ -476,12 +493,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.unshare.schema,
+          sessionID: SessionID.zod,
         }),
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.unshare(sessionID)
+        await SessionShare.unshare(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
       },

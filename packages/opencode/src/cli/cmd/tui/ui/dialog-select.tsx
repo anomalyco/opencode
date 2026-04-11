@@ -26,6 +26,7 @@ export interface DialogSelectProps<T> {
   keybind?: {
     keybind?: Keybind.Info
     title: string
+    side?: "left" | "right"
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
@@ -42,6 +43,7 @@ export interface DialogSelectOption<T = any> {
   disabled?: boolean
   bg?: RGBA
   gutter?: JSX.Element
+  margin?: JSX.Element
   onSelect?: (ctx: DialogContext) => void
 }
 
@@ -234,6 +236,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   props.ref?.(ref)
 
   const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled && x.keybind) ?? [])
+  const left = createMemo(() => keybinds().filter((item) => item.side !== "right"))
+  const right = createMemo(() => keybinds().filter((item) => item.side === "right"))
 
   return (
     <box gap={1} paddingBottom={1}>
@@ -312,6 +316,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       <box
                         id={JSON.stringify(option.value)}
                         flexDirection="row"
+                        position="relative"
                         onMouseMove={() => {
                           setStore("input", "mouse")
                         }}
@@ -335,6 +340,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         paddingRight={3}
                         gap={1}
                       >
+                        <Show when={!current() && option.margin}>
+                          <box position="absolute" left={1} flexShrink={0}>
+                            {option.margin}
+                          </box>
+                        </Show>
                         <Option
                           title={option.title}
                           footer={flatten() ? (option.category ?? option.footer) : option.footer}
@@ -353,17 +363,38 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </scrollbox>
       </Show>
       <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
-        <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
-          <For each={keybinds()}>
-            {(item) => (
-              <text>
-                <span style={{ fg: theme.text }}>
-                  <b>{item.title}</b>{" "}
-                </span>
-                <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
-              </text>
-            )}
-          </For>
+        <box
+          paddingRight={2}
+          paddingLeft={4}
+          flexDirection="row"
+          justifyContent="space-between"
+          flexShrink={0}
+          paddingTop={1}
+        >
+          <box flexDirection="row" gap={2}>
+            <For each={left()}>
+              {(item) => (
+                <text>
+                  <span style={{ fg: theme.text }}>
+                    <b>{item.title}</b>{" "}
+                  </span>
+                  <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+                </text>
+              )}
+            </For>
+          </box>
+          <box flexDirection="row" gap={2}>
+            <For each={right()}>
+              {(item) => (
+                <text>
+                  <span style={{ fg: theme.text }}>
+                    <b>{item.title}</b>{" "}
+                  </span>
+                  <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+                </text>
+              )}
+            </For>
+          </box>
         </box>
       </Show>
     </box>

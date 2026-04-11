@@ -44,8 +44,12 @@ async function waitForHealth(url: string, probe = "/global/health") {
   throw new Error(`Timed out waiting for backend health at ${url}${probe}${last ? ` (${last})` : ""}`)
 }
 
+function done(proc: ReturnType<typeof spawn>) {
+  return proc.exitCode !== null || proc.signalCode !== null
+}
+
 async function waitExit(proc: ReturnType<typeof spawn>, timeout = 10_000) {
-  if (proc.exitCode !== null) return
+  if (done(proc)) return
   await Promise.race([
     new Promise<void>((resolve) => proc.once("exit", () => resolve())),
     new Promise<void>((resolve) => setTimeout(resolve, timeout)),
@@ -123,11 +127,11 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   return {
     url,
     async stop() {
-      if (proc.exitCode === null) {
+      if (!done(proc)) {
         proc.kill("SIGTERM")
         await waitExit(proc)
       }
-      if (proc.exitCode === null) {
+      if (!done(proc)) {
         proc.kill("SIGKILL")
         await waitExit(proc)
       }
