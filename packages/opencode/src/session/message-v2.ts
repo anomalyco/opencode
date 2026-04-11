@@ -209,6 +209,7 @@ export namespace MessageV2 {
     type: z.literal("compaction"),
     auto: z.boolean(),
     overflow: z.boolean().optional(),
+    tail_start_id: MessageID.zod.optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -927,14 +928,21 @@ export namespace MessageV2 {
   export function filterCompacted(msgs: Iterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
+    let retain: MessageID | undefined
     for (const msg of msgs) {
       result.push(msg)
-      if (
-        msg.info.role === "user" &&
-        completed.has(msg.info.id) &&
-        msg.parts.some((part) => part.type === "compaction")
-      )
-        break
+      if (retain) {
+        if (msg.info.id === retain) break
+        continue
+      }
+      if (msg.info.role === "user" && completed.has(msg.info.id)) {
+        const part = msg.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction")
+        if (!part) continue
+        if (!part.tail_start_id) break
+        retain = part.tail_start_id
+        if (msg.info.id === retain) break
+        continue
+      }
       if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
         completed.add(msg.info.parentID)
     }
