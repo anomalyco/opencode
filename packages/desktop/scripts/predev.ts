@@ -5,11 +5,37 @@ import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./util
 const RUST_TARGET = Bun.env.TAURI_ENV_TARGET_TRIPLE
 
 const sidecarConfig = getCurrentSidecar(RUST_TARGET)
+const rustTarget = RUST_TARGET ?? sidecarConfig.rustTarget
 
-const binaryPath = windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`)
+async function build(baseline: boolean) {
+  const cmd = baseline ? $`bun run build --single --baseline` : $`bun run build --single`
+  return cmd.cwd("../opencode").nothrow()
+}
 
-await (sidecarConfig.ocBinary.includes("-baseline")
-  ? $`cd ../opencode && bun run build --single --baseline --skip-install`
-  : $`cd ../opencode && bun run build --single --skip-install`)
+function fallbackBinary(name: string) {
+  return name.replace("-baseline", "")
+}
 
-await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)
+let binary = sidecarConfig.ocBinary
+
+const baseline = sidecarConfig.ocBinary.includes("-baseline")
+
+if (baseline) {
+  const result = await build(true)
+  if (result.exitCode !== 0 && process.platform === "win32") {
+    binary = fallbackBinary(binary)
+    console.warn(`baseline sidecar build failed, falling back to ${binary}`)
+    const retry = await build(false)
+    if (retry.exitCode !== 0) process.exit(retry.exitCode)
+  }
+  if (result.exitCode !== 0 && process.platform !== "win32") process.exit(result.exitCode)
+}
+
+if (!baseline) {
+  const result = await build(false)
+  if (result.exitCode !== 0) process.exit(result.exitCode)
+}
+
+const binaryPath = windowsify(`../opencode/dist/${binary}/bin/opencode`)
+
+await copyBinaryToSidecarFolder(binaryPath, rustTarget)

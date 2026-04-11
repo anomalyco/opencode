@@ -1536,7 +1536,21 @@ export default function ConfigPage() {
     },
   )
 
-  const space = createMemo(() => workspace() as ConfigWorkspace | undefined)
+  const space = createMemo<ConfigWorkspace | undefined>(() => {
+    const data = workspace() as ConfigWorkspace | undefined
+    const root = globalSync.data.path.config
+    if (!data && !root) return
+    if (!root) return data
+    return {
+      configRoot: root,
+      agentsRoot: join(root, "agents"),
+      skillsRoot: join(root, "skills"),
+      pluginsRoot: join(root, "plugins"),
+      agentsMdPath: join(root, "AGENTS.md"),
+      agents: data?.agents ?? [],
+      plugins: data?.plugins ?? [],
+    }
+  })
   const cfg = createMemo(() => globalSync.data.config)
   const t = language.t
 
@@ -1992,8 +2006,10 @@ export default function ConfigPage() {
     if (hit !== undefined) return Promise.resolve(hit)
     const prev = pending.get(item.path)
     if (prev) return prev
-    const next = ((platform.readConfigFile?.(item.path).catch(() => "") as Promise<string | null | undefined>) ??
-      Promise.resolve("")).then((text) => {
+    const next = (
+      (platform.readConfigFile?.(item.path).catch(() => "") as Promise<string | null | undefined>) ??
+      Promise.resolve("")
+    ).then((text) => {
       const value = text ?? ""
       cache.set(item.path, value)
       return value
@@ -2081,7 +2097,7 @@ export default function ConfigPage() {
     }
     const item = docs().get(next)
     const root = section === "skills" && item ? dir(item.path) : undefined
-    const text = item ? item.content ?? cache.get(item.path) : undefined
+    const text = item ? (item.content ?? cache.get(item.path)) : undefined
     const tree = root ? trees.get(root) : undefined
     if (item && (text === undefined || (root && !tree))) {
       const values = await Promise.all([loadDoc(item), root ? loadTree(root) : Promise.resolve(undefined)])
@@ -2129,6 +2145,19 @@ export default function ConfigPage() {
           setState({ doc: "", text: "", saved: "", busy: false })
           return
         }
+        void open(item)
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [state.section, agentsMd().at(0)?.id] as const,
+      ([section, id]) => {
+        if (section !== "agents-md" || !id) return
+        if (state.doc === id || state.pick === id) return
+        const item = docs().get(id)
+        if (!item) return
         void open(item)
       },
     ),
@@ -3286,9 +3315,7 @@ export default function ConfigPage() {
               <Match when={state.section === "agents"}>
                 <Show
                   when={!agentWait()}
-                  fallback={
-                    <Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />
-                  }
+                  fallback={<Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />}
                 >
                   <Editor
                     item={currentDoc()}

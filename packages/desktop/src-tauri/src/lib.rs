@@ -164,9 +164,13 @@ fn config_root() -> Option<PathBuf> {
         }
     }
 
-    env::var("HOME")
-        .ok()
-        .map(|dir| PathBuf::from(dir).join(".config").join("opencode"))
+    if let Ok(dir) = env::var("HOME") {
+        if !dir.is_empty() {
+            return Some(PathBuf::from(dir).join(".config").join("opencode"));
+        }
+    }
+
+    dirs::home_dir().map(|dir| dir.join(".config").join("opencode"))
 }
 
 fn startup_mark(
