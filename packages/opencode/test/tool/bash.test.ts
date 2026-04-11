@@ -916,7 +916,7 @@ describe("tool.bash abort", () => {
         const bash = await initBash()
         const controller = new AbortController()
         const collected: string[] = []
-        const result = Effect.runPromise(bash.execute(
+        const res = await Effect.runPromise(bash.execute(
           {
             command: `echo before && sleep 30`,
             description: "Long running command",
@@ -933,7 +933,6 @@ describe("tool.bash abort", () => {
             },
           },
         ))
-        const res = await result
         expect(res.output).toContain("before")
         expect(res.output).toContain("User aborted the command")
         expect(collected.length).toBeGreaterThan(0)

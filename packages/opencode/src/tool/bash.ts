@@ -429,14 +429,8 @@ export const BashTool = Tool.define(
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
 
-          if (exit.kind === "abort") {
-            aborted = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-          if (exit.kind === "timeout") {
-            expired = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
+          if (exit.kind === "abort") aborted = true
+          if (exit.kind === "timeout") expired = true
 
           return exit.kind === "exit" ? exit.code : null
         }),
