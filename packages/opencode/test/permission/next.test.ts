@@ -89,6 +89,16 @@ test("fromConfig - expands exact tilde to home directory", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
 })
 
+test("expandRuleset - expands tilde to home directory", () => {
+  const result = Permission.expandRuleset([{ permission: "external_directory", pattern: "~/projects/*", action: "allow" }])
+  expect(result).toEqual([{ permission: "external_directory", pattern: `${os.homedir()}/projects/*`, action: "allow" }])
+})
+
+test("expandRuleset - expands $HOME to home directory", () => {
+  const result = Permission.expandRuleset([{ permission: "external_directory", pattern: "$HOME/projects/*", action: "allow" }])
+  expect(result).toEqual([{ permission: "external_directory", pattern: `${os.homedir()}/projects/*`, action: "allow" }])
+})
+
 test("evaluate - matches expanded tilde pattern", () => {
   const ruleset = Permission.fromConfig({ external_directory: { "~/projects/*": "allow" } })
   const result = Permission.evaluate("external_directory", `${os.homedir()}/projects/file.txt`, ruleset)

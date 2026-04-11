@@ -3266,6 +3266,7 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    permission?: PermissionRuleset
     time?: {
       archived?: number
     }
