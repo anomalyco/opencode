@@ -7,6 +7,7 @@ import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "../config"
 import { Effect, Schema } from "effect"
+import { Instruction } from "../session/instruction"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): void
@@ -128,6 +129,16 @@ export const TaskTool = Tool.define(
         () =>
           Effect.gen(function* () {
             const parts = yield* ops.resolvePromptParts(params.prompt)
+
+            const instructions = yield* Effect.promise(() => Instruction.systemPaths())
+            if (instructions.size > 0) {
+              const names = [...instructions].map((p) => p.split("/").pop()).join(", ")
+              parts.push({
+                type: "text",
+                text: `IMPORTANT: You must follow all project-level instructions from your system prompt (${names}). These rules apply to this task.`,
+              })
+            }
+
             const result = yield* ops.prompt({
               messageID,
               sessionID: nextSession.id,
