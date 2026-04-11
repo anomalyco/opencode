@@ -176,5 +176,7 @@ describe("session.prompt_async error handling", () => {
     const route = src.slice(start, end)
     expect(route).toContain(".catch(")
     expect(route).toContain("Bus.publish(Session.Event.Error")
+    expect(route).toContain("Instance.bind(")
+    expect(route).not.toContain("return stream(c")
   })
 })

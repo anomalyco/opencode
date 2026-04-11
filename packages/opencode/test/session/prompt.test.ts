@@ -2,7 +2,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { fileURLToPath } from "url"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -25,6 +25,14 @@ function defer<T>() {
     resolve = done
   })
   return { promise, resolve }
+}
+
+function fail<A, E, R>(fx: Effect.Effect<A, E, R>) {
+  return Effect.gen(function* () {
+    const exit = yield* fx.pipe(Effect.exit)
+    if (Exit.isFailure(exit)) return Cause.squash(exit.cause)
+    throw new Error("expected effect to fail")
+  })
 }
 
 function chat(text: string) {
@@ -375,25 +383,18 @@ describe("session.prompt regression", () => {
               const prompt = yield* SessionPrompt.Service
               const sessions = yield* Session.Service
               const session = yield* sessions.create({ title: "Prompt cancel regression" })
-              const task = Effect.runPromise(
-                prompt.prompt({
+              const task = yield* prompt
+                .prompt({
                   sessionID: session.id,
                   agent: "build",
                   parts: [{ type: "text", text: "Cancel me" }],
-                }),
-              )
+                })
+                .pipe(Effect.forkChild)
 
               yield* Effect.promise(() => ready.promise)
               yield* prompt.cancel(session.id)
 
-              const result = yield* Effect.promise(() =>
-                Promise.race([
-                  task,
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error("timed out waiting for cancel")), 1000),
-                  ),
-                ]),
-              )
+              const result = yield* Fiber.join(task)
 
               expect(result.info.role).toBe("assistant")
               if (result.info.role === "assistant") {
@@ -498,25 +499,20 @@ describe("session.agent-resolution", () => {
             const prompt = yield* SessionPrompt.Service
             const sessions = yield* Session.Service
             const session = yield* sessions.create({})
-            const err = yield* Effect.promise(() =>
-              Effect.runPromise(
-                prompt.prompt({
-                  sessionID: session.id,
-                  agent: "nonexistent-agent-xyz",
-                  noReply: true,
-                  parts: [{ type: "text", text: "hello" }],
-                }),
-              ).then(
-                () => undefined,
-                (e) => e,
-              ),
+            const err = yield* fail(
+              prompt.prompt({
+                sessionID: session.id,
+                agent: "nonexistent-agent-xyz",
+                noReply: true,
+                parts: [{ type: "text", text: "hello" }],
+              }),
             )
             expect(err).toBeDefined()
             expect(err).not.toBeInstanceOf(TypeError)
-            expect(NamedError.Unknown.isInstance(err)).toBe(true)
-            if (NamedError.Unknown.isInstance(err)) {
-              expect(err.data.message).toContain('Agent not found: "nonexistent-agent-xyz"')
-            }
+            expect(err).toBeInstanceOf(NamedError.Unknown)
+            expect((err as InstanceType<typeof NamedError.Unknown>).data.message).toContain(
+              'Agent not found: "nonexistent-agent-xyz"',
+            )
           }),
         ),
     })
@@ -532,23 +528,16 @@ describe("session.agent-resolution", () => {
             const prompt = yield* SessionPrompt.Service
             const sessions = yield* Session.Service
             const session = yield* sessions.create({})
-            const err = yield* Effect.promise(() =>
-              Effect.runPromise(
-                prompt.prompt({
-                  sessionID: session.id,
-                  agent: "nonexistent-agent-xyz",
-                  noReply: true,
-                  parts: [{ type: "text", text: "hello" }],
-                }),
-              ).then(
-                () => undefined,
-                (e) => e,
-              ),
+            const err = yield* fail(
+              prompt.prompt({
+                sessionID: session.id,
+                agent: "nonexistent-agent-xyz",
+                noReply: true,
+                parts: [{ type: "text", text: "hello" }],
+              }),
             )
-            expect(NamedError.Unknown.isInstance(err)).toBe(true)
-            if (NamedError.Unknown.isInstance(err)) {
-              expect(err.data.message).toContain("build")
-            }
+            expect(err).toBeInstanceOf(NamedError.Unknown)
+            expect((err as InstanceType<typeof NamedError.Unknown>).data.message).toContain("build")
           }),
         ),
     })
@@ -564,25 +553,20 @@ describe("session.agent-resolution", () => {
             const prompt = yield* SessionPrompt.Service
             const sessions = yield* Session.Service
             const session = yield* sessions.create({})
-            const err = yield* Effect.promise(() =>
-              Effect.runPromise(
-                prompt.command({
-                  sessionID: session.id,
-                  command: "nonexistent-command-xyz",
-                  arguments: "",
-                }),
-              ).then(
-                () => undefined,
-                (e) => e,
-              ),
+            const err = yield* fail(
+              prompt.command({
+                sessionID: session.id,
+                command: "nonexistent-command-xyz",
+                arguments: "",
+              }),
             )
             expect(err).toBeDefined()
             expect(err).not.toBeInstanceOf(TypeError)
-            expect(NamedError.Unknown.isInstance(err)).toBe(true)
-            if (NamedError.Unknown.isInstance(err)) {
-              expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
-              expect(err.data.message).toContain("init")
-            }
+            expect(err).toBeInstanceOf(NamedError.Unknown)
+            expect((err as InstanceType<typeof NamedError.Unknown>).data.message).toContain(
+              'Command not found: "nonexistent-command-xyz"',
+            )
+            expect((err as InstanceType<typeof NamedError.Unknown>).data.message).toContain("init")
           }),
         ),
     })

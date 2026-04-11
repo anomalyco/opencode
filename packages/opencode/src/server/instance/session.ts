@@ -25,7 +25,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { Instance } from "@/project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -198,7 +198,7 @@ export const SessionRoutes = lazy(() =>
         description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
         operationId: "session.create",
         responses: {
-          ...errors(400),
+          ...errors(400, 409),
           200: {
             description: "Successfully created session",
             content: {
@@ -416,7 +416,12 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.cancel(c.req.valid("param").sessionID)))
+        const run = Instance.bind(() => {
+          AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.cancel(c.req.valid("param").sessionID))).catch(
+            () => undefined,
+          )
+        })
+        run()
         return c.json(true)
       },
     )
@@ -677,7 +682,7 @@ export const SessionRoutes = lazy(() =>
           return c.json(messages)
         }
 
-        const page = await MessageV2.page({
+        const page = MessageV2.page({
           sessionID,
           limit: query.limit,
           before: query.before,
@@ -725,7 +730,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        const message = await MessageV2.get({
+        const message = MessageV2.get({
           sessionID: params.sessionID,
           messageID: params.messageID,
         })
@@ -918,15 +923,25 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID }))).catch((err) => {
-          log.error("prompt_async failed", { sessionID, error: err })
-          Bus.publish(Session.Event.Error, {
-            sessionID,
-            error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+        const run = Instance.bind(() => {
+          AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID }))).catch((err) => {
+            log.error("prompt_async failed", {
+              sessionID,
+              error: err,
+              stack: err instanceof Error ? err.stack : undefined,
+            })
+            const error = MessageV2.fromError(err, {
+              providerID: body.model?.providerID ?? ProviderID.make("unknown"),
+            })
+            Bus.publish(Session.Event.Error, {
+              sessionID,
+              error,
+            })
           })
         })
-
-        return c.body(null, 204)
+        run()
+        c.status(204)
+        return c.body(null)
       },
     )
     .post(
