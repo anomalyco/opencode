@@ -8,7 +8,6 @@ on:
       - dev
       - beta
       - snapshot-*
-      - server-cleanup
   workflow_dispatch:
     inputs:
       bump:
