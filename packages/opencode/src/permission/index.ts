@@ -276,10 +276,6 @@ export namespace Permission {
     return pattern
   }
 
-  export function expandRuleset(ruleset: Ruleset) {
-    return ruleset.map((rule) => ({ ...rule, pattern: expand(rule.pattern) }))
-  }
-
   export function fromConfig(permission: Config.Permission) {
     const ruleset: Ruleset = []
     for (const [key, value] of Object.entries(permission)) {
@@ -287,7 +283,9 @@ export namespace Permission {
         ruleset.push({ permission: key, action: value, pattern: "*" })
         continue
       }
-      ruleset.push(...expandRuleset(Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern, action }))))
+      ruleset.push(
+        ...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action })),
+      )
     }
     return ruleset
   }

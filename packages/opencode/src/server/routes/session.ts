@@ -211,10 +211,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.create.schema),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await SessionShare.create({
-          ...body,
-          permission: body.permission ? Permission.expandRuleset(body.permission) : body.permission,
-        })
+        const session = await SessionShare.create(body)
         return c.json(session)
       },
     )
@@ -296,7 +293,7 @@ export const SessionRoutes = lazy(() =>
         if (updates.permission !== undefined) {
           await Session.setPermission({
             sessionID,
-            permission: Permission.merge(current?.permission ?? [], Permission.expandRuleset(updates.permission)),
+            permission: Permission.merge(current?.permission ?? [], updates.permission),
           })
         }
         if (updates.time?.archived !== undefined) {
