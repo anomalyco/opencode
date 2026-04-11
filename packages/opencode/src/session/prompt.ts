@@ -1693,7 +1693,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(Session.defaultLayer),
       Layer.provide(SessionRevert.defaultLayer),
       Layer.provide(
-        Layer.mergeAll(Agent.defaultLayer, SystemPrompt.defaultLayer, LLM.defaultLayer, Bus.layer, CrossSpawnSpawner.defaultLayer),
+        Layer.mergeAll(
+          Agent.defaultLayer,
+          SystemPrompt.defaultLayer,
+          LLM.defaultLayer,
+          Bus.layer,
+          CrossSpawnSpawner.defaultLayer,
+        ),
       ),
     ),
   )

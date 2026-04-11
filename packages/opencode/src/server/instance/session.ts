@@ -273,6 +273,7 @@ export const SessionRoutes = lazy(() =>
         "json",
         z.object({
           title: z.string().optional(),
+          permission: Permission.Ruleset.optional(),
           time: z
             .object({
               archived: z.number().optional(),
@@ -283,9 +284,16 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
+        const current = await Session.get(sessionID)
 
         if (updates.title !== undefined) {
           await Session.setTitle({ sessionID, title: updates.title })
+        }
+        if (updates.permission !== undefined) {
+          await Session.setPermission({
+            sessionID,
+            permission: Permission.merge(current.permission ?? [], updates.permission),
+          })
         }
         if (updates.time?.archived !== undefined) {
           await Session.setArchived({ sessionID, time: updates.time.archived })
