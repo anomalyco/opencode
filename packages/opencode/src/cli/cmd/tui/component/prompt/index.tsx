@@ -589,6 +589,13 @@ export function Prompt(props: PromptProps) {
   ])
 
   async function submit() {
+    // IME: double-defer may fire before onContentChange flushes the last
+    // composed character (e.g. Korean hangul) to the store, so read
+    // plainText directly and sync before any downstream reads.
+    if (input && !input.isDestroyed && input.plainText !== store.prompt.input) {
+      setStore("prompt", "input", input.plainText)
+      syncExtmarksWithPromptParts()
+    }
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
