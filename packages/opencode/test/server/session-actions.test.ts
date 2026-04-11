@@ -67,11 +67,12 @@ describe("session action routes", () => {
       fn: async () => {
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
-        // Make the session busy by starting a runner via ensureRunning
-        const work = Effect.never as Effect.Effect<any>
-        await AppRuntime.runPromise(
-          SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, work)),
+        // Make the session busy by forking a never-ending runner
+        AppRuntime.runFork(
+          SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, Effect.never)),
         )
+        // Give the fiber time to start and mark the session busy
+        await new Promise((r) => setTimeout(r, 50))
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
         const app = Server.Default().app
 
