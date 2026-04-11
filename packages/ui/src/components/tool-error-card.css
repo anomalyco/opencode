@@ -16,14 +16,14 @@
 
   [data-slot="tool-error-card-content"] {
     position: relative;
-    padding-left: 24px;
+    padding-inline-start: 24px;
     margin-bottom: 8px;
     -webkit-user-select: text;
     user-select: text;
   }
 
   > [data-component="collapsible"].tool-collapsible[data-open="true"] [data-slot="tool-error-card-content"] {
-    padding-right: 40px;
+    padding-inline-end: 40px;
   }
 
   [data-slot="tool-error-card-copy"] {

@@ -60,8 +60,8 @@
   ol {
     margin-top: 0.5rem;
     margin-bottom: 1rem;
-    margin-left: 0;
-    padding-left: 1.5rem;
+    margin-inline-start: 0;
+    padding-inline-start: 1.5rem;
     list-style-position: outside;
   }
 
@@ -71,7 +71,7 @@
 
   ol {
     list-style-type: decimal;
-    padding-left: 2.25rem;
+    padding-inline-start: 2.25rem;
   }
 
   li {
@@ -97,18 +97,18 @@
   li > ol {
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
-    padding-left: 1rem; /* Minimal indent for nesting only */
+    padding-inline-start: 1rem; /* Minimal indent for nesting only */
   }
 
   li > ol {
-    padding-left: 1.75rem;
+    padding-inline-start: 1.75rem;
   }
 
   /* Blockquotes */
   blockquote {
-    border-left: 2px solid var(--border-weak-base);
+    border-inline-start: 2px solid var(--border-weak-base);
     margin: 1.5rem 0;
-    padding-left: 0.5rem;
+    padding-inline-start: 0.5rem;
     color: var(--text-weak);
     font-style: normal;
   }
@@ -240,7 +240,7 @@
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
     border-bottom: 1px solid var(--border-weaker-base);
     padding: 0.75rem 0.5rem;
-    text-align: left;
+    text-align: start;
     vertical-align: top;
   }
 

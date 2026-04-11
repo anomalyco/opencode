@@ -30,10 +30,10 @@
     color: var(--text-base);
     width: var(--diffs-column-content-width);
     left: var(--diffs-column-number-width);
-    padding-left: 8px;
+    padding-inline-start: 8px;
     user-select: none;
     cursor: default;
-    text-align: left;
+    text-align: start;
 
     [data-slot="diff-hunk-separator-content-span"] {
       mix-blend-mode: var(--text-mix-blend-mode);

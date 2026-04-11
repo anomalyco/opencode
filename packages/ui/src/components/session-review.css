@@ -119,8 +119,8 @@
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
-    direction: rtl;
-    text-align: left;
+    direction: rtl; /* truncate-start: shows end of file path */
+    text-align: left; /* override RTL alignment for short paths */
   }
 
   [data-slot="session-review-filename"] {

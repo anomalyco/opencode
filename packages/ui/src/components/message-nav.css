@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding-left: 0;
+  padding-inline-start: 0;
   list-style: none;
 
   &[data-size="normal"] {
@@ -77,7 +77,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  text-align: left;
+  text-align: start;
 
   &[data-active] {
     color: var(--text-strong);

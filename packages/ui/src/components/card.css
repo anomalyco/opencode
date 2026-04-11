@@ -39,7 +39,7 @@
   &::before {
     content: "";
     position: absolute;
-    left: 0;
+    inset-inline-start: 0;
     top: var(--card-line-pad);
     bottom: var(--card-line-pad);
     width: 2px;
@@ -89,6 +89,6 @@
   }
 
   :where([data-card="actions"], [data-slot="card-actions"]) {
-    padding-left: var(--card-indent);
+    padding-inline-start: var(--card-indent);
   }
 }

@@ -30,7 +30,7 @@
     gap: 8px;
     width: fit-content;
     max-width: min(82%, 64ch);
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 
   [data-slot="user-message-attachment"] {
@@ -115,7 +115,7 @@
   [data-slot="user-message-body"] {
     width: fit-content;
     max-width: min(82%, 64ch);
-    margin-left: auto;
+    margin-inline-start: auto;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -167,7 +167,7 @@
 
   [data-slot="user-message-meta"] {
     user-select: none;
-    text-align: right;
+    text-align: end;
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -189,7 +189,7 @@
     user-select: none;
     flex: 0 0 auto;
     white-space: nowrap;
-    text-align: right;
+    text-align: end;
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],
@@ -488,8 +488,8 @@
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
-    direction: rtl;
-    text-align: left;
+    direction: rtl; /* truncate-start: shows end of file path */
+    text-align: left; /* override RTL alignment for short paths */
   }
 
   [data-slot="message-part-filename"] {
@@ -637,9 +637,9 @@
 
 [data-component="context-tool-group-list"] {
   padding-top: 6px;
-  padding-right: 0;
+  padding-inline-end: 0;
   padding-bottom: 4px;
-  padding-left: 13px;
+  padding-inline-start: 13px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -815,8 +815,7 @@
     gap: 8px;
 
     [data-component="button"] {
-      padding-left: 12px;
-      padding-right: 12px;
+      padding-inline: 12px;
     }
   }
 }
@@ -950,7 +949,7 @@
     border: 1px solid var(--border-weak-base);
     border-radius: 6px;
     box-shadow: none;
-    text-align: left;
+    text-align: start;
     width: 100%;
     cursor: pointer;
     transition:
@@ -1066,7 +1065,7 @@
   }
 
   [data-slot="question-custom-input-wrap"] {
-    padding-left: 36px;
+    padding-inline-start: 36px;
   }
 
   [data-slot="question-custom-input"] {
@@ -1196,8 +1195,8 @@
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
-    direction: rtl;
-    text-align: left;
+    direction: rtl; /* truncate-start: shows end of file path */
+    text-align: left; /* override RTL alignment for short paths */
   }
 
   [data-slot="apply-patch-filename"] {

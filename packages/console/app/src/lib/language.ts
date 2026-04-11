@@ -216,9 +216,15 @@ export function tag(locale: Locale) {
   return TAG[locale]
 }
 
+const RTL_LOCALES: ReadonlySet<string> = new Set(["ar", "he", "fa", "ur"])
+
 export function dir(locale: Locale) {
-  if (locale === "ar") return "rtl"
+  if (RTL_LOCALES.has(locale)) return "rtl"
   return "ltr"
+}
+
+export function isRtl(locale: Locale) {
+  return RTL_LOCALES.has(locale)
 }
 
 function match(input: string): Locale | null {
