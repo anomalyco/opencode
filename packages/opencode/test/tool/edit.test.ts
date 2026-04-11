@@ -45,7 +45,7 @@ const resolve = () =>
   runtime.runPromise(
     Effect.gen(function* () {
       const info = yield* EditTool
-      return yield* Effect.promise(() => info.init())
+      return yield* info.init()
     }),
   )
 

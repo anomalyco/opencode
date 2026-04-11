@@ -191,7 +191,7 @@ describe("tool.task", () => {
         const { chat, assistant } = yield* seed()
         const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
 
@@ -229,7 +229,7 @@ describe("tool.task", () => {
       Effect.gen(function* () {
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
         const calls: unknown[] = []
         const promptOps = stubOps()
 
@@ -278,7 +278,7 @@ describe("tool.task", () => {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
@@ -318,7 +318,7 @@ describe("tool.task", () => {
           const sessions = yield* Session.Service
           const { chat, assistant } = yield* seed()
           const tool = yield* TaskTool
-          const def = yield* Effect.promise(() => tool.init())
+          const def = yield* tool.init()
           let seen: SessionPrompt.PromptInput | undefined
           const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 

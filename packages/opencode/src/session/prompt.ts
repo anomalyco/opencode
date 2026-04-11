@@ -102,6 +102,8 @@ export namespace SessionPrompt {
       const instruction = yield* Instruction.Service
       const state = yield* SessionRunState.Service
       const revert = yield* SessionRevert.Service
+      const sys = yield* SystemPrompt.Service
+      const llm = yield* LLM.Service
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
@@ -180,21 +182,24 @@ export namespace SessionPrompt {
         const msgs = onlySubtasks
           ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
           : yield* MessageV2.toModelMessagesEffect(context, mdl)
-        const text = yield* Effect.promise(async (signal) => {
-          const result = await LLM.stream({
+        const text = yield* llm
+          .stream({
             agent: ag,
             user: firstInfo,
             system: [],
             small: true,
             tools: {},
             model: mdl,
-            abort: signal,
             sessionID: input.session.id,
             retries: 2,
             messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
           })
-          return result.text
-        })
+          .pipe(
+            Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
+            Stream.map((e) => e.text),
+            Stream.mkString,
+            Effect.orDie,
+          )
         const cleaned = text
           .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
           .split("\n")
@@ -1462,8 +1467,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
               const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                Effect.promise(() => SystemPrompt.skills(agent)),
-                Effect.promise(() => SystemPrompt.environment(model)),
+                sys.skills(agent),
+                Effect.sync(() => sys.environment(model)),
                 instruction.system().pipe(Effect.orDie),
                 MessageV2.toModelMessagesEffect(msgs, model),
               ])
@@ -1687,9 +1692,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(SessionRevert.defaultLayer),
-      Layer.provide(Agent.defaultLayer),
-      Layer.provide(Bus.layer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(
+        Layer.mergeAll(
+          Agent.defaultLayer,
+          SystemPrompt.defaultLayer,
+          LLM.defaultLayer,
+          Bus.layer,
+          CrossSpawnSpawner.defaultLayer,
+        ),
+      ),
     ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)

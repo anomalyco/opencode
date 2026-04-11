@@ -46,7 +46,7 @@ const it = testEffect(
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
-  return yield* Effect.promise(() => info.init())
+  return yield* info.init()
 })
 
 const run = Effect.fn("ReadToolTest.run")(function* (

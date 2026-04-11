@@ -152,7 +152,7 @@ Use this skill.
         fn: async () => {
           const runtime = ManagedRuntime.make(Layer.mergeAll(Skill.defaultLayer, Ripgrep.defaultLayer))
           const info = await runtime.runPromise(SkillTool)
-          const tool = await info.init()
+          const tool = await runtime.runPromise(info.init())
           const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const ctx: Tool.Context = {
             ...baseCtx,
