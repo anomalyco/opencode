@@ -165,22 +165,53 @@ export namespace Skill {
     }
 
     const cfg = yield* config.get()
-    for (const item of cfg.skills?.paths ?? []) {
-      const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
-      const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
-      if (!(yield* fsys.isDir(dir))) {
-        log.warn("skill path not found", { path: dir })
-        continue
-      }
+    if (Array.isArray(cfg.skills)) {
+      for (const item of cfg.skills) {
+        if (state.skills[item.name]) {
+          log.warn("duplicate skill name", {
+            name: item.name,
+            existing: state.skills[item.name].location,
+            duplicate: path.join(directory, "opencode.json"),
+          })
+        }
 
-      yield* scan(state, bus, dir, SKILL_PATTERN)
+        state.skills[item.name] = {
+          name: item.name,
+          description: item.description,
+          location: path.join(directory, "opencode.json"),
+          content: [
+            "# Legacy Inline Skill",
+            "",
+            "This skill was loaded from the legacy `skills` array in `opencode.json`.",
+            "",
+            "```bash",
+            item.command,
+            "```",
+          ].join("\n"),
+        }
+      }
     }
 
-    for (const url of cfg.skills?.urls ?? []) {
-      const pulledDirs = yield* discovery.pull(url)
-      for (const dir of pulledDirs) {
-        state.dirs.add(dir)
+    if (!Array.isArray(cfg.skills)) {
+      for (const item of cfg.skills?.paths ?? []) {
+        const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+        const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+        if (!(yield* fsys.isDir(dir))) {
+          log.warn("skill path not found", { path: dir })
+          continue
+        }
+
         yield* scan(state, bus, dir, SKILL_PATTERN)
+      }
+    }
+
+    if (!Array.isArray(cfg.skills)) {
+      for (const url of cfg.skills?.urls ?? []) {
+        const pulledDirs = yield* discovery.pull(url)
+        for (const dir of pulledDirs) {
+          state.dirs.add(dir)
+          yield* scan(state, bus, dir, SKILL_PATTERN)
+        }
       }
     }
 

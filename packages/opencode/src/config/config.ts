@@ -522,6 +522,17 @@ export namespace Config {
   })
   export type Skills = z.infer<typeof Skills>
 
+  export const LegacySkill = z
+    .object({
+      name: z.string(),
+      description: z.string(),
+      command: z.string(),
+    })
+    .catchall(z.unknown())
+  export const LegacySkills = z.array(LegacySkill)
+  export type LegacySkill = z.infer<typeof LegacySkill>
+  export type LegacySkills = z.infer<typeof LegacySkills>
+
   export const Agent = z
     .object({
       model: ModelId.optional(),
@@ -916,7 +927,10 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
-      skills: Skills.optional().describe("Additional skill folder paths"),
+      skills: z
+        .union([Skills, LegacySkills])
+        .optional()
+        .describe("Additional skill folder paths, remote skill URLs, or legacy inline skills"),
       watcher: z
         .object({
           ignore: z.array(z.string()).optional(),

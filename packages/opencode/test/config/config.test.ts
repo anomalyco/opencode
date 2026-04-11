@@ -491,6 +491,41 @@ test("handles command configuration", async () => {
   })
 })
 
+test("accepts legacy skills array in opencode.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skills: [
+            {
+              name: "test",
+              description: "Test skill",
+              command: "echo test",
+            },
+          ],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(Array.isArray(config.skills)).toBe(true)
+      expect(config.skills).toEqual([
+        {
+          name: "test",
+          description: "Test skill",
+          command: "echo test",
+        },
+      ])
+    },
+  })
+})
+
 test("migrates autoshare to share field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

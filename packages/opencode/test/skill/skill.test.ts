@@ -224,6 +224,39 @@ test("returns empty array when no skills exist", async () => {
   })
 })
 
+test("loads legacy inline skills from opencode.json", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skills: [
+            {
+              name: "test",
+              description: "Test skill",
+              command: "echo test",
+            },
+          ],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      expect(skills[0].name).toBe("test")
+      expect(skills[0].description).toBe("Test skill")
+      expect(skills[0].location).toBe(path.join(tmp.path, "opencode.json"))
+      expect(skills[0].content).toContain("echo test")
+    },
+  })
+})
+
 test("discovers skills from .agents/skills/ directory", async () => {
   await using tmp = await tmpdir({
     git: true,
