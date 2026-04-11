@@ -137,6 +137,8 @@ export namespace Project {
       const emitUpdated = (data: Info) =>
         Effect.sync(() =>
           GlobalBus.emit("event", {
+            directory: "global",
+            project: data.id,
             payload: { type: Event.Updated.type, properties: data },
           }),
         )
@@ -158,7 +160,7 @@ export namespace Project {
         return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
           Effect.map((x) => x.trim()),
           Effect.map(ProjectID.make),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.catch(() => Effect.void),
         )
       })
 

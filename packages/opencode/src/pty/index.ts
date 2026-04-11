@@ -359,7 +359,7 @@ export namespace Pty {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -369,10 +369,6 @@ export namespace Pty {
 
   export async function get(id: PtyID) {
     return runPromise((svc) => svc.get(id))
-  }
-
-  export async function resize(id: PtyID, cols: number, rows: number) {
-    return runPromise((svc) => svc.resize(id, cols, rows))
   }
 
   export async function write(id: PtyID, data: string) {

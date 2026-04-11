@@ -159,7 +159,10 @@ export namespace ShareNext {
 
           if (disabled) return cache
 
-          const watch = <D extends { type: string }>(def: D, fn: (evt: { properties: any }) => Effect.Effect<void>) =>
+          const watch = <D extends { type: string }>(
+            def: D,
+            fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
+          ) =>
             bus.subscribe(def as never).pipe(
               Stream.runForEach((evt) =>
                 fn(evt).pipe(
@@ -194,6 +197,7 @@ export namespace ShareNext {
           yield* watch(Session.Event.Diff, (evt) =>
             sync(evt.properties.sessionID, [{ type: "session_diff", data: evt.properties.diff }]),
           )
+          yield* watch(Session.Event.Deleted, (evt) => remove(evt.properties.sessionID))
 
           return cache
         }),
