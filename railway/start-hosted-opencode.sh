@@ -10,6 +10,8 @@ if [ -z "$backend_password" ]; then
   exit 1
 fi
 
+/usr/local/bin/start-tailscale
+
 /usr/local/bin/start-opencode-serve > /tmp/opencode-backend.log 2>&1 &
 backend_pid=$!
 if [ "${VERITLY_REMOTE_DEBUG:-}" = "1" ]; then

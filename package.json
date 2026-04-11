@@ -9,6 +9,8 @@
 		"dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
 		"web:veritly": "bash railway/start-local-hosted-opencode.sh",
 		"build:veritly-hosted": "VITE_OPENCODE_SERVER_URL=/api bun run --cwd packages/app build",
+		"build:veritly-hosted:debug": "VERITLY_DEBUG_BUILD=1 bun run build:veritly-hosted",
+		"debug:docker": "bash ./debug.bun.sh",
 		"dev:desktop": "bun --cwd packages/desktop tauri dev",
 		"dev:web": "bun --cwd packages/app dev",
 		"dev:storybook": "bun --cwd packages/storybook storybook",
