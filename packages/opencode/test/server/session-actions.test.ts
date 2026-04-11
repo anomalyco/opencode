@@ -7,7 +7,6 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRunState } from "../../src/session/run-state"
-import { SessionStatus } from "../../src/session/status"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
@@ -67,15 +66,12 @@ describe("session action routes", () => {
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
 
-        // Make session busy: fire off a never-ending runner and poll until busy
-        void AppRuntime.runPromise(
-          SessionRunState.Service.use((svc) => svc.ensureRunning(session.id, Effect.never, Effect.never)),
-        )
-        while (true) {
-          const s = await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(session.id)))
-          if (s.type === "busy") break
-          await new Promise((r) => setTimeout(r, 10))
-        }
+        // Mock assertNotBusy on the resolved service instance to throw BusyError
+        const svc = await AppRuntime.runPromise(
+          SessionRunState.Service.use((s) => Effect.succeed(s)),
+        ) as Record<string, any>
+        const orig = svc.assertNotBusy
+        svc.assertNotBusy = () => Effect.die(new Session.BusyError(session.id))
 
         const remove = spyOn(Session, "removeMessage").mockResolvedValue(msg.id)
         const app = Server.Default().app
@@ -85,6 +81,7 @@ describe("session action routes", () => {
         expect(res.status).toBe(400)
         expect(remove).not.toHaveBeenCalled()
 
+        svc.assertNotBusy = orig
         await Session.remove(session.id)
       },
     })
