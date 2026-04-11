@@ -1,6 +1,5 @@
 import z from "zod"
 import type { ZodObject } from "zod"
-import { EventEmitter } from "events"
 import { Database, eq } from "@/storage/db"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
@@ -33,6 +32,8 @@ export namespace SyncEvent {
   export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
   type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
+  type Sync<T> = T extends Promise<any> ? never : T
+  const sessionTypes = new Set(["session.created", "session.updated", "session.deleted"])
 
   export const registry = new Map<string, Definition>()
   let projectors: Map<Definition, ProjectorFunc> | undefined
@@ -66,7 +67,7 @@ export namespace SyncEvent {
   }
 
   export function versionedType<A extends string>(type: A): A
-  export function versionedType<A extends string, B extends number>(type: A, version: B): `${A}/${B}`
+  export function versionedType<A extends string, B extends number>(type: A, version: B): `${A}.${B}`
   export function versionedType(type: string, version?: number) {
     return version ? `${type}.${version}` : type
   }
@@ -103,6 +104,99 @@ export namespace SyncEvent {
     return [def, func as ProjectorFunc]
   }
 
+  function root(type: string, agg: string): string | undefined {
+    if (sessionTypes.has(type)) return
+    const version = versions.get(type)
+    if (!version) return
+    const def = registry.get(versionedType(type, version))
+    if (!def) return
+    if (def.aggregate !== "sessionID") return
+    return Database.sessionRoot(agg)
+  }
+
+  function seq(type: string, agg: string) {
+    const id = root(type, agg)
+    if (id) {
+      return Database.session(id)
+        .select({ seq: EventSequenceTable.seq })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, agg))
+        .get()
+    }
+    return Database.use((db) =>
+      db
+        .select({ seq: EventSequenceTable.seq })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, agg))
+        .get(),
+    )
+  }
+
+  function transact<T>(
+    type: string,
+    agg: string,
+    cb: (tx: Database.TxOrDb) => Sync<T>,
+    options?: { behavior?: "deferred" | "immediate" | "exclusive" },
+  ): Sync<T> {
+    const id = root(type, agg)
+    if (id) {
+      return Database.session(id).transaction((tx) => cb(tx), { behavior: options?.behavior }) as Sync<T>
+    }
+    return Database.transaction(cb, options)
+  }
+
+  function apply<Def extends Definition>(tx: Database.TxOrDb, projector: ProjectorFunc, def: Def, event: Event<Def>) {
+    projector(tx, event.data)
+
+    if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+      tx.insert(EventSequenceTable)
+        .values({
+          aggregate_id: event.aggregateID,
+          seq: event.seq,
+        })
+        .onConflictDoUpdate({
+          target: EventSequenceTable.aggregate_id,
+          set: { seq: event.seq },
+        })
+        .run()
+      tx.insert(EventTable)
+        .values({
+          id: event.id,
+          seq: event.seq,
+          aggregate_id: event.aggregateID,
+          type: versionedType(def.type, def.version),
+          data: event.data as Record<string, unknown>,
+        })
+        .run()
+    }
+  }
+
+  function emit<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
+    return () => {
+      if (options?.publish) {
+        const result = convertEvent(def.type, event.data)
+        if (result instanceof Promise) {
+          result.then((data) => {
+            ProjectBus.publish({ type: def.type, properties: def.schema }, data)
+          })
+        } else {
+          ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+        }
+
+        GlobalBus.emit("event", {
+          directory: Instance.directory,
+          project: Instance.project.id,
+          workspace: WorkspaceContext.workspaceID,
+          payload: {
+            type: "sync",
+            name: versionedType(def.type, def.version),
+            ...event,
+          },
+        })
+      }
+    }
+  }
+
   function process<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
     if (projectors == null) {
       throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
@@ -115,55 +209,8 @@ export namespace SyncEvent {
 
     // idempotent: need to ignore any events already logged
 
-    Database.transaction((tx) => {
-      projector(tx, event.data)
-
-      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-        tx.insert(EventSequenceTable)
-          .values({
-            aggregate_id: event.aggregateID,
-            seq: event.seq,
-          })
-          .onConflictDoUpdate({
-            target: EventSequenceTable.aggregate_id,
-            set: { seq: event.seq },
-          })
-          .run()
-        tx.insert(EventTable)
-          .values({
-            id: event.id,
-            seq: event.seq,
-            aggregate_id: event.aggregateID,
-            type: versionedType(def.type, def.version),
-            data: event.data as Record<string, unknown>,
-          })
-          .run()
-      }
-
-      Database.effect(() => {
-        if (options?.publish) {
-          const result = convertEvent(def.type, event.data)
-          if (result instanceof Promise) {
-            result.then((data) => {
-              ProjectBus.publish({ type: def.type, properties: def.schema }, data)
-            })
-          } else {
-            ProjectBus.publish({ type: def.type, properties: def.schema }, result)
-          }
-
-          GlobalBus.emit("event", {
-            directory: Instance.directory,
-            project: Instance.project.id,
-            workspace: WorkspaceContext.workspaceID,
-            payload: {
-              type: "sync",
-              name: versionedType(def.type, def.version),
-              ...event,
-            },
-          })
-        }
-      })
-    })
+    transact(def.type, event.aggregateID, (tx) => apply(tx, projector, def, event))
+    Database.effect(emit(def, event, options))
   }
 
   // TODO:
@@ -172,19 +219,13 @@ export namespace SyncEvent {
   //   and it validets all the sequence ids
   // * when loading events from db, apply zod validation to ensure shape
 
-  export function replay(event: SerializedEvent, options?: { publish: boolean }) {
+  export function replay(event: SerializedEvent, options?: { republish: boolean }) {
     const def = registry.get(event.type)
     if (!def) {
       throw new Error(`Unknown event type: ${event.type}`)
     }
 
-    const row = Database.use((db) =>
-      db
-        .select({ seq: EventSequenceTable.seq })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, event.aggregateID))
-        .get(),
-    )
+    const row = seq(def.type, event.aggregateID)
 
     const latest = row?.seq ?? -1
     if (event.seq <= latest) {
@@ -196,7 +237,7 @@ export namespace SyncEvent {
       throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
-    process(def, event, { publish: !!options?.publish })
+    process(def, event, { publish: !!options?.republish })
   }
 
   export function replayAll(events: SerializedEvent[], options?: { publish: boolean }) {
@@ -213,13 +254,14 @@ export namespace SyncEvent {
       }
     }
     for (const item of events) {
-      replay(item, options)
+      replay(item, options ? { republish: options.publish } : undefined)
     }
     return source
   }
 
   export function run<Def extends Definition>(def: Def, data: Event<Def>["data"], options?: { publish?: boolean }) {
     const agg = (data as Record<string, string>)[def.aggregate]
+    const publish = options?.publish ?? true
     // This should never happen: we've enforced it via typescript in
     // the definition
     if (agg == null) {
@@ -230,12 +272,13 @@ export namespace SyncEvent {
       throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
     }
 
-    const { publish = true } = options || {}
-
     // Note that this is an "immediate" transaction which is critical.
     // We need to make sure we can safely read and write with nothing
     // else changing the data from under us
-    Database.transaction(
+    let fn = () => {}
+    transact(
+      def.type,
+      agg,
       (tx) => {
         const id = EventID.ascending()
         const row = tx
@@ -246,12 +289,18 @@ export namespace SyncEvent {
         const seq = row?.seq != null ? row.seq + 1 : 0
 
         const event = { id, seq, aggregateID: agg, data }
-        process(def, event, { publish })
+        const projector = projectors?.get(def)
+        if (!projector) {
+          throw new Error(`Projector not found for event: ${def.type}`)
+        }
+        apply(tx, projector, def, event)
+        fn = emit(def, event, { publish })
       },
       {
         behavior: "immediate",
       },
     )
+    Database.effect(fn)
   }
 
   export function remove(aggregateID: string) {

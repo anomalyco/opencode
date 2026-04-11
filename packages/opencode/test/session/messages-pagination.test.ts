@@ -449,7 +449,7 @@ describe("MessageV2.parts", () => {
         const session = await svc.create({})
         const [id] = await fill(session.id, 1)
 
-        const result = MessageV2.parts(id)
+        const result = MessageV2.parts(id, session.id)
         expect(result).toHaveLength(1)
         expect(result[0].type).toBe("text")
         expect((result[0] as MessageV2.TextPart).text).toBe("m0")
@@ -466,7 +466,7 @@ describe("MessageV2.parts", () => {
         const session = await svc.create({})
         const id = await addUser(session.id)
 
-        const result = MessageV2.parts(id)
+        const result = MessageV2.parts(id, session.id)
         expect(result).toEqual([])
 
         await svc.remove(session.id)
@@ -496,7 +496,7 @@ describe("MessageV2.parts", () => {
           text: "third",
         })
 
-        const result = MessageV2.parts(id)
+        const result = MessageV2.parts(id, session.id)
         expect(result).toHaveLength(3)
         expect((result[0] as MessageV2.TextPart).text).toBe("m0")
         expect((result[1] as MessageV2.TextPart).text).toBe("second")
@@ -525,7 +525,7 @@ describe("MessageV2.parts", () => {
         const session = await svc.create({})
         const [id] = await fill(session.id, 1)
 
-        const result = MessageV2.parts(id)
+        const result = MessageV2.parts(id, session.id)
         expect(result[0].sessionID).toBe(session.id)
         expect(result[0].messageID).toBe(id)
 
@@ -852,7 +852,7 @@ describe("MessageV2 consistency", () => {
         const [id] = await fill(session.id, 1)
 
         const got = MessageV2.get({ sessionID: session.id, messageID: id })
-        const standalone = MessageV2.parts(id)
+        const standalone = MessageV2.parts(id, session.id)
         expect(got.parts).toEqual(standalone)
 
         await svc.remove(session.id)

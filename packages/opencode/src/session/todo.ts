@@ -4,6 +4,7 @@ import { SessionID } from "./schema"
 import { Effect, Layer, Context } from "effect"
 import z from "zod"
 import { Database, eq, asc } from "../storage/db"
+import { makeRuntime } from "@/effect/run-service"
 import { TodoTable } from "./session.sql"
 
 export namespace Todo {
@@ -39,11 +40,12 @@ export namespace Todo {
       const bus = yield* Bus.Service
 
       const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
-        yield* Effect.sync(() =>
-          Database.transaction((db) => {
-            db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+        yield* Effect.sync(() => {
+          const db = Database.resolveSession(input.sessionID)
+          db.transaction((tx) => {
+            tx.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
             if (input.todos.length === 0) return
-            db.insert(TodoTable)
+            tx.insert(TodoTable)
               .values(
                 input.todos.map((todo, position) => ({
                   session_id: input.sessionID,
@@ -54,22 +56,21 @@ export namespace Todo {
                 })),
               )
               .run()
-          }),
-        )
+          })
+        })
         yield* bus.publish(Event.Updated, input)
       })
 
       const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
-        const rows = yield* Effect.sync(() =>
-          Database.use((db) =>
-            db
-              .select()
-              .from(TodoTable)
-              .where(eq(TodoTable.session_id, sessionID))
-              .orderBy(asc(TodoTable.position))
-              .all(),
-          ),
-        )
+        const rows = yield* Effect.sync(() => {
+          const db = Database.resolveSession(sessionID)
+          return db
+            .select()
+            .from(TodoTable)
+            .where(eq(TodoTable.session_id, sessionID))
+            .orderBy(asc(TodoTable.position))
+            .all()
+        })
         return rows.map((row) => ({
           content: row.content,
           status: row.status,
@@ -82,4 +83,14 @@ export namespace Todo {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function get(sessionID: SessionID) {
+    return runPromise((svc) => svc.get(sessionID))
+  }
+
+  export async function update(input: { sessionID: SessionID; todos: Info[] }) {
+    return runPromise((svc) => svc.update(input))
+  }
 }

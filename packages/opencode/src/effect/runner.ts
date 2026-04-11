@@ -184,8 +184,8 @@ export namespace Runner {
         case "ShellThenRun":
           return [
             Effect.gen(function* () {
-              yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
               yield* stopShell(st.shell)
+              yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
               yield* idleIfCurrent()
             }),
             { _tag: "Idle" } as const,

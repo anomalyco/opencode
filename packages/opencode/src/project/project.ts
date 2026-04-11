@@ -133,6 +133,12 @@ export namespace Project {
       const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
         Effect.sync(() => Database.use(fn))
 
+      type Sync<T> = T extends Promise<any> ? never : T
+
+      const tx = <T>(
+        fn: (d: Parameters<typeof Database.transaction>[0] extends (trx: infer D) => any ? D : never) => Sync<T>,
+      ) => Effect.sync(() => Database.transaction(fn, { behavior: "immediate" }))
+
       const emitUpdated = (data: Info) =>
         Effect.sync(() =>
           GlobalBus.emit("event", {
@@ -246,7 +252,7 @@ export namespace Project {
         })
 
         // Phase 2: upsert
-        const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+        const row = yield* tx((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
         const existing = row
           ? fromRow(row)
           : {
@@ -278,9 +284,8 @@ export namespace Project {
           { concurrency: "unbounded" },
         ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
 
-        yield* db((d) =>
-          d
-            .insert(ProjectTable)
+        yield* tx((d) => {
+          d.insert(ProjectTable)
             .values({
               id: result.id,
               worktree: result.worktree,
@@ -308,18 +313,15 @@ export namespace Project {
                 commands: result.commands,
               },
             })
-            .run(),
-        )
+            .run()
 
-        if (data.id !== ProjectID.global) {
-          yield* db((d) =>
-            d
-              .update(SessionTable)
-              .set({ project_id: data.id })
-              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
-              .run(),
-          )
-        }
+          if (data.id === ProjectID.global) return
+
+          d.update(SessionTable)
+            .set({ project_id: data.id })
+            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+            .run()
+        })
 
         yield* emitUpdated(result)
         return { project: result, sandbox: data.sandbox }

@@ -23,6 +23,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
+import { makeRuntime } from "@/effect/run-service"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
@@ -424,6 +425,14 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
+        if (!input.parentID) {
+          try {
+            Database.session(result.id)
+          } catch (e) {
+            log.error("failed to create per-tree db", { error: e })
+          }
+        }
+
         if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // This only exist for backwards compatibility. We should not be
           // manually publishing this event; it is a sync event now
@@ -498,19 +507,17 @@ export namespace Session {
         }).pipe(Effect.withSpan("Session.updatePart"))
 
       const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
-        const row = Database.use((db) =>
-          db
-            .select()
-            .from(PartTable)
-            .where(
-              and(
-                eq(PartTable.session_id, input.sessionID),
-                eq(PartTable.message_id, input.messageID),
-                eq(PartTable.id, input.partID),
-              ),
-            )
-            .get(),
-        )
+        const row = Database.resolveSession(input.sessionID)
+          .select()
+          .from(PartTable)
+          .where(
+            and(
+              eq(PartTable.session_id, input.sessionID),
+              eq(PartTable.message_id, input.messageID),
+              eq(PartTable.id, input.partID),
+            ),
+          )
+          .get()
         if (!row) return
         return {
           ...row.data,
@@ -703,6 +710,24 @@ export namespace Session {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function create(input?: CreateInput) {
+    return runPromise((svc) => svc.create(input))
+  }
+
+  export async function remove(sessionID: SessionID) {
+    return runPromise((svc) => svc.remove(sessionID))
+  }
+
+  export async function updateMessage<T extends MessageV2.Info>(msg: T) {
+    return runPromise((svc) => svc.updateMessage(msg))
+  }
+
+  export async function updatePart<T extends MessageV2.Part>(part: T) {
+    return runPromise((svc) => svc.updatePart(part))
+  }
 
   export function* list(input?: {
     directory?: string
