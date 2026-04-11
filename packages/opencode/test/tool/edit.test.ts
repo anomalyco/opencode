@@ -89,7 +89,12 @@ describe("tool.edit", () => {
           const { FileWatcher } = await import("../../src/file/watcher")
 
           const events: string[] = []
+          let resolveUpdated!: () => void
+          const updated = new Promise<void>((resolve) => {
+            resolveUpdated = resolve
+          })
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
+          const unsubUpdatedOnce = Bus.subscribe(FileWatcher.Event.Updated, () => resolveUpdated())
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -101,7 +106,9 @@ describe("tool.edit", () => {
             ctx,
           )
 
+          await updated
           expect(events).toContain("updated")
+          unsubUpdatedOnce()
           unsubUpdated()
         },
       })
@@ -305,7 +312,12 @@ describe("tool.edit", () => {
           const { FileWatcher } = await import("../../src/file/watcher")
 
           const events: string[] = []
+          let resolveUpdated!: () => void
+          const updated = new Promise<void>((resolve) => {
+            resolveUpdated = resolve
+          })
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
+          const unsubUpdatedOnce = Bus.subscribe(FileWatcher.Event.Updated, () => resolveUpdated())
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -317,7 +329,9 @@ describe("tool.edit", () => {
             ctx,
           )
 
+          await updated
           expect(events).toContain("updated")
+          unsubUpdatedOnce()
           unsubUpdated()
         },
       })
