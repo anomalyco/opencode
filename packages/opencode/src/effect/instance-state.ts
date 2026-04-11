@@ -1,4 +1,5 @@
 import { Effect, Fiber, ScopedCache, Scope, ServiceMap } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { Instance, type InstanceContext } from "@/project/instance"
 import { Context } from "@/util/context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
@@ -47,7 +48,7 @@ export namespace InstanceState {
           }),
       })
 
-      const off = registerDisposer((directory) => Effect.runPromise(ScopedCache.invalidate(cache, directory)))
+      const off = registerDisposer((directory) => Effect.runPromise(ScopedCache.invalidate(cache, directory).pipe(Effect.provide(EffectLogger.layer))))
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       return {

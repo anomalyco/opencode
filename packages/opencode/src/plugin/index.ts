@@ -12,6 +12,7 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
@@ -83,7 +84,7 @@ export namespace Plugin {
   }
 
   function publishPluginError(bus: Bus.Interface, message: string) {
-    Effect.runFork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+    Effect.runFork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }).pipe(Effect.provide(EffectLogger.layer)))
   }
 
   async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {

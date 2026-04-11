@@ -20,6 +20,7 @@ import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { Effect, Layer, ServiceMap } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -1215,7 +1216,7 @@ export namespace Provider {
 
             const options = yield* Effect.promise(() =>
               plugin.auth!.loader!(
-                () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie)) as any,
+                () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie, Effect.provide(EffectLogger.layer))) as any,
                 database[plugin.auth!.provider],
               ),
             )
