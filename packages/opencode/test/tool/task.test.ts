@@ -65,11 +65,12 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
 function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
   return {
     cancel() {},
-    resolvePromptParts: async (template) => [{ type: "text", text: template }],
-    prompt: async (input) => {
-      opts?.onPrompt?.(input)
-      return reply(input, opts?.text ?? "done")
-    },
+    resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+    prompt: (input) =>
+      Effect.sync(() => {
+        opts?.onPrompt?.(input)
+        return reply(input, opts?.text ?? "done")
+      }),
   }
 }
 
