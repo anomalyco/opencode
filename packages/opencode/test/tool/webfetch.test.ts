@@ -26,7 +26,7 @@ async function withFetch(fetch: (req: Request) => Response | Promise<Response>, 
 
 function initTool() {
   return WebFetchTool.pipe(
-    Effect.flatMap((info) => Effect.promise(() => info.init())),
+    Effect.flatMap((info) => info.init()),
     Effect.provide(FetchHttpClient.layer),
     Effect.runPromise,
   )

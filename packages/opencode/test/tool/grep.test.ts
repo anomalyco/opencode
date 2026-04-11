@@ -10,7 +10,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 const runtime = ManagedRuntime.make(Layer.mergeAll(CrossSpawnSpawner.defaultLayer))
 
 function initGrep() {
-  return runtime.runPromise(GrepTool.pipe(Effect.flatMap((info) => Effect.promise(() => info.init()))))
+  return runtime.runPromise(GrepTool.pipe(Effect.flatMap((info) => info.init())))
 }
 
 const ctx = {
