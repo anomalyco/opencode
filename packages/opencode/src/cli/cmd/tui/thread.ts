@@ -242,6 +242,10 @@ export const TuiThreadCommand = cmd({
     } finally {
       unguard?.()
     }
-    process.exit(0)
+    // On Windows we cannot await the worker shutdown or call
+    // worker.terminate() — both destroy the console window.  The worker
+    // is still alive so the event loop won't drain; force-exit here.
+    // On other platforms the index.ts finally{} safety-net handles exit.
+    if (process.platform === "win32") process.exit(0)
   },
 })
