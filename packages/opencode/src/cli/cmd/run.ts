@@ -375,6 +375,11 @@ export const RunCommand = cmd({
         action: "deny",
         pattern: "*",
       },
+      {
+        permission: "edit",
+        action: "allow",
+        pattern: "*",
+      },
     ]
 
     function title() {
