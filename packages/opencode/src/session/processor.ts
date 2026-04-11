@@ -11,7 +11,9 @@ import { Session } from "."
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { SessionCompaction } from "./compaction"
 import { Token } from "@/util/token"
+import { ProviderTransform } from "@/provider/transform"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -398,6 +400,20 @@ export namespace SessionProcessor {
                 isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
               ) {
                 ctx.needsCompaction = true
+              }
+              if (!ctx.assistantMessage.summary) {
+                const context = ctx.model.limit.context
+                if (context > 0) {
+                  const maxOutput = ProviderTransform.maxOutputTokens(ctx.model)
+                  const reserved = (yield* config.get()).compaction?.reserved ?? Math.min(20_000, maxOutput)
+                  const usable = ctx.model.limit.input ? ctx.model.limit.input - reserved : context - maxOutput
+                  const count =
+                    usage.tokens.total ||
+                    usage.tokens.input + usage.tokens.output + usage.tokens.cache.read + usage.tokens.cache.write
+                  if (count >= usable * 0.5) {
+                    SessionCompaction.prune({ sessionID: ctx.sessionID })
+                  }
+                }
               }
               return
             }
