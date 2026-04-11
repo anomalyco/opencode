@@ -576,12 +576,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         let error: Error | undefined
+        const taskAbort = new AbortController()
         const result = yield* taskTool
           .execute(taskArgs, {
             agent: task.agent,
             messageID: assistantMessage.id,
             sessionID,
-            abort: AbortSignal.any([]),
+            abort: taskAbort.signal,
             callID: part.callID,
             extra: { bypassAgentCheck: true, promptOps },
             messages: msgs,
@@ -611,12 +612,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const defect = Cause.squash(cause)
               error = defect instanceof Error ? defect : new Error(String(defect))
               log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-              return Effect.succeed(undefined)
+              return Effect.void
             }),
           )
           .pipe(
           Effect.onInterrupt(() =>
             Effect.gen(function* () {
+              taskAbort.abort()
               assistantMessage.finish = "tool-calls"
               assistantMessage.time.completed = Date.now()
               yield* sessions.updateMessage(assistantMessage)
