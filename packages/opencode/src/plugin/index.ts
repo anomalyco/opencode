@@ -124,7 +124,7 @@ export namespace Plugin {
                   Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
                 }
               : undefined,
-            fetch: async (...args) => Server.Default().app.fetch(...args),
+            fetch: async (...args) => (await Server.Default()).app.fetch(...args),
           })
           const cfg = yield* config.get()
           const input: PluginInput = {
@@ -210,13 +210,15 @@ export namespace Plugin {
                 return message
               },
             }).pipe(
-              Effect.catch((message) =>
-                bus.publish(Session.Event.Error, {
-                  error: new NamedError.Unknown({
-                    message: `Failed to load plugin ${load.spec}: ${message}`,
-                  }).toObject(),
-                }),
-              ),
+              Effect.catch(() => {
+                // TODO: make proper events for this
+                // bus.publish(Session.Event.Error, {
+                //   error: new NamedError.Unknown({
+                //     message: `Failed to load plugin ${load.spec}: ${message}`,
+                //   }).toObject(),
+                // })
+                return Effect.void
+              }),
             )
           }
 
