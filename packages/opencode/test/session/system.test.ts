@@ -3,7 +3,6 @@ import path from "path"
 import { Effect } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
-import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { tmpdir } from "../fixture/fixture"
 
@@ -41,9 +40,9 @@ description: ${description}
         fn: async () => {
           const build = await Agent.get("build")
           const runSkills = Effect.gen(function* () {
-            const svc = yield* Skill.Service
-            return yield* SystemPrompt.skills(build!, svc)
-          }).pipe(Effect.provide(Skill.defaultLayer))
+            const svc = yield* SystemPrompt.Service
+            return yield* svc.skills(build!)
+          }).pipe(Effect.provide(SystemPrompt.defaultLayer))
 
           const first = await Effect.runPromise(runSkills)
           const second = await Effect.runPromise(runSkills)
