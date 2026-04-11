@@ -4,7 +4,6 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { Account } from "@/account"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session"
@@ -348,26 +347,4 @@ export namespace ShareNext {
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Session.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function url() {
-    return runPromise((svc) => svc.url())
-  }
-
-  export async function request(): Promise<Req> {
-    return runPromise((svc) => svc.request())
-  }
-
-  export async function create(sessionID: SessionID) {
-    return runPromise((svc) => svc.create(sessionID))
-  }
-
-  export async function remove(sessionID: SessionID) {
-    return runPromise((svc) => svc.remove(sessionID))
-  }
 }
