@@ -1112,6 +1112,13 @@ export namespace Provider {
           // extend database from config
           for (const [providerID, provider] of configProviders) {
             const existing = database[providerID]
+
+            // Validate custom providers that have no database entry
+            if (!existing && !provider.api && !provider.npm && !provider.models) {
+              log.warn("custom provider has no api, npm, or models — skipping", { providerID })
+              continue
+            }
+
             const parsed: Info = {
               id: ProviderID.make(providerID),
               name: provider.name ?? existing?.name ?? providerID,
@@ -1196,6 +1203,12 @@ export namespace Provider {
               )
               parsed.models[modelID] = parsedModel
             }
+
+            // Warn if custom provider has models with no context limit
+            if (!existing && Object.values(parsed.models).some((m) => m.limit.context === 0)) {
+              log.warn("custom provider models have no context limit — set limit.context in config", { providerID })
+            }
+
             database[providerID] = parsed
           }
 
