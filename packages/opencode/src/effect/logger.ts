@@ -55,7 +55,7 @@ export namespace EffectLogger {
     }
   })
 
-  export const layer = Logger.layer([logger], { mergeWithExisting: true })
+  export const layer = Logger.layer([logger], { mergeWithExisting: false })
 
   export const create = (base: Fields = {}): Handle => ({
     debug: (msg, extra) => call((item) => Effect.logDebug(item), base, msg, extra),
