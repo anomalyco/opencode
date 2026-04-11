@@ -2,6 +2,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import * as Stream from "effect/Stream"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
@@ -18,7 +19,7 @@ export const SkillTool = Tool.define(
     const rg = yield* Ripgrep.Service
 
     return async () => {
-      const list = await Effect.runPromise(skill.available())
+      const list = await Effect.runPromise(skill.available().pipe(Effect.provide(EffectLogger.layer)))
 
       const description =
         list.length === 0

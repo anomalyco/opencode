@@ -3,6 +3,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, ServiceMap } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import z from "zod"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
@@ -140,6 +141,7 @@ export namespace Command {
                           .map((message) => (message.content.type === "text" ? message.content.text : ""))
                           .join("\n") || "",
                     ),
+                    Effect.provide(EffectLogger.layer),
                   ),
               )
             },

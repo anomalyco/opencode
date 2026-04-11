@@ -1,5 +1,6 @@
 import z from "zod"
 import { Effect, Exit, Layer, PubSub, Scope, ServiceMap, Stream } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { Log } from "../util/log"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
@@ -146,7 +147,7 @@ export namespace Bus {
 
           return () => {
             log.info("unsubscribing", { type })
-            Effect.runFork(Scope.close(scope, Exit.void))
+            Effect.runFork(Scope.close(scope, Exit.void).pipe(Effect.provide(EffectLogger.layer)))
           }
         })
       }

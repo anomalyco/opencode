@@ -30,6 +30,7 @@ import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
@@ -136,7 +137,7 @@ export namespace ToolRegistry {
                 Effect.gen(function* () {
                   const pluginCtx: PluginToolContext = {
                     ...toolCtx,
-                    ask: (req) => Effect.runPromise(toolCtx.ask(req)),
+                    ask: (req) => Effect.runPromise(toolCtx.ask(req).pipe(Effect.provide(EffectLogger.layer))),
                     directory: ctx.directory,
                     worktree: ctx.worktree,
                   }
