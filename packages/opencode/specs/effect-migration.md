@@ -223,7 +223,7 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 
 Still open:
 
-- [ ] `SessionTodo` — `session/todo.ts`
+- [x] `SessionTodo` — `session/todo.ts`
 - [ ] `SyncEvent` — `sync/index.ts`
 - [ ] `Workspace` — `control-plane/workspace.ts`
 
@@ -338,4 +338,5 @@ For each service, the migration is roughly:
 
 - `SessionStatus` — migrated 2026-04-11. Replaced the last route and retry-policy callers with `AppRuntime.runPromise(SessionStatus.Service.use(...))` and removed the `makeRuntime(...)` facade.
 - `ShareNext` — migrated 2026-04-11. Swapped remaining async callers to `AppRuntime.runPromise(ShareNext.Service.use(...))`, removed the `makeRuntime(...)` facade, and kept instance bootstrap on the shared app runtime.
+- `SessionTodo` — migrated 2026-04-10. Already matched the target service shape in `session/todo.ts`: single namespace, traced Effect methods, and no `makeRuntime(...)` facade remained; checklist updated to reflect the completed migration.
 - `Storage` — migrated 2026-04-10. One production caller (`Session.diff`) and all storage.test.ts tests converted to effectful style. Facades and `makeRuntime` removed.

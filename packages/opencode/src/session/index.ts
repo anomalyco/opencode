@@ -850,15 +850,4 @@ export namespace Session {
     MessageV2.Part.parse(part)
     return runPromise((svc) => svc.updatePart(part))
   }
-
-  export const updatePartDelta = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-      partID: PartID.zod,
-      field: z.string(),
-      delta: z.string(),
-    }),
-    (input) => runPromise((svc) => svc.updatePartDelta(input)),
-  )
 }
