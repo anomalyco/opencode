@@ -6,6 +6,7 @@ import { Process } from "../util/process"
 import z from "zod"
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
+import { EventEmitter } from "events"
 import fsNode from "fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
@@ -1542,6 +1543,28 @@ export namespace Config {
         const state = yield* InstanceState.make<State>(
           Effect.fn("Config.state")(function* (ctx) {
             return yield* loadInstanceState(ctx)
+          }),
+        )
+
+        // Hot-reload: listen for config file changes via GlobalBus
+        const CONFIG_FILENAMES = ["opencode.json", "opencode.jsonc", "config.json"]
+        let reloadTimer: ReturnType<typeof setTimeout> | undefined
+        const listener = (evt: any) => {
+          if (evt?.payload?.type !== "file.watcher.updated") return
+          if (evt?.payload?.properties?.event === "unlink") return
+          const file = evt?.payload?.properties?.file as string | undefined
+          if (!file) return
+          if (!CONFIG_FILENAMES.some((name) => file.endsWith(name) && !file.includes("node_modules"))) return
+          if (reloadTimer) clearTimeout(reloadTimer)
+          reloadTimer = setTimeout(() => {
+            log.info("config file changed, reloading", { file })
+            void Instance.disposeAll().catch(() => {})
+          }, 500)
+        }
+        EventEmitter.prototype.on.call(GlobalBus, "event", listener)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            EventEmitter.prototype.off.call(GlobalBus, "event", listener)
           }),
         )
 
