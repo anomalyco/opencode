@@ -6,6 +6,7 @@ import { lookup } from "mime-types"
 import { Effect, FileSystem, Layer, Schema, Context } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "../util/glob"
+import { Platform } from "../util/platform"
 
 export namespace AppFileSystem {
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
@@ -188,6 +189,8 @@ export namespace AppFileSystem {
 
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
+    // WSL UNC paths are already valid Windows paths — skip realpathSync
+    if (Platform.isWslUncPath(p)) return p
     const resolved = pathResolve(windowsPath(p))
     try {
       return realpathSync.native(resolved)
