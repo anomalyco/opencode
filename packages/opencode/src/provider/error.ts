@@ -28,6 +28,21 @@ export namespace ProviderError {
     /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
   ]
 
+  const CONNECTION_PATTERNS = /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|fetch failed/i
+  const LOCALHOST_PATTERN = /(?:localhost|127\.0\.0\.1|\[::1\]):\d+/
+
+  function localProviderHint(url: string | undefined, providerID: string): string | undefined {
+    if (!url || !LOCALHOST_PATTERN.test(url)) return undefined
+
+    if (providerID === "ollama" || url.includes(":11434")) return "Is Ollama running? Start it with: ollama serve"
+    if (providerID === "litellm" || url.includes(":4000"))
+      return "Is LiteLLM proxy running? Check your base URL and API key"
+    if (providerID === "lm-studio" || url.includes(":1234"))
+      return "Is LM Studio server running? Open LM Studio and start the local server"
+    if (providerID === "localai") return "Is LocalAI server running? Check your configuration"
+    return "Cannot connect to local provider. Is the server running?"
+  }
+
   function isOpenAiErrorRetryable(e: APICallError) {
     const status = e.statusCode
     if (!status) return e.isRetryable
@@ -178,6 +193,23 @@ export namespace ProviderError {
         type: "context_overflow",
         message: m,
         responseBody: input.error.responseBody,
+      }
+    }
+
+    // Detect connection errors to local providers and add helpful hints
+    if (CONNECTION_PATTERNS.test(m)) {
+      const hint = localProviderHint(input.error.url, input.providerID)
+      if (hint) {
+        const metadata = input.error.url ? { url: input.error.url } : undefined
+        return {
+          type: "api_error",
+          message: `${m}. ${hint}`,
+          statusCode: input.error.statusCode,
+          isRetryable: false,
+          responseHeaders: input.error.responseHeaders,
+          responseBody: input.error.responseBody,
+          metadata,
+        }
       }
     }
 
