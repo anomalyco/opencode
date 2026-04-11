@@ -17,6 +17,7 @@ import {
   latestRootSession,
   sortedProjectSessions,
   latestWorkspaceSession,
+  waitForMatch,
   workspaceKey,
 } from "./helpers"
 import { projectSelected } from "./sidebar-project-helpers"
@@ -135,6 +136,21 @@ describe("layout workspace helpers", () => {
   test("uses canonical workspace dir only for the same workspace", () => {
     expect(canonicalWorkspaceDir("/tmp/demo///", "/tmp/demo")).toBe("/tmp/demo")
     expect(canonicalWorkspaceDir("/tmp/p", "/tmp/s")).toBe("/tmp/p")
+  })
+
+  test("waits for async state to match before continuing", async () => {
+    let key = "openclaw"
+    setTimeout(() => {
+      key = "sidecar"
+    }, 0)
+
+    await waitForMatch(
+      () => key,
+      (value) => value === "sidecar",
+      { tries: 10, delay: 1 },
+    )
+
+    expect(key).toBe("sidecar")
   })
 
   test("keeps local first while preserving known order", () => {

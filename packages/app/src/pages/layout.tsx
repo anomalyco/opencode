@@ -85,6 +85,7 @@ import {
   latestRootSession,
   sortedProjectSessions,
   sortedRootSessions,
+  waitForMatch,
   workspaceKey,
 } from "./layout/helpers"
 import {
@@ -171,17 +172,7 @@ export default function Layout(props: ParentProps) {
   const openclawDir = "/openclaw"
   const openclawSlug = base64Encode(openclawDir)
   const isOpenclawDir = (directory?: string) => directory === openclawDir
-  const waitServer = (key: ServerConnection.Key) =>
-    new Promise<void>((resolve) => {
-      if (server.key === key) {
-        resolve()
-        return
-      }
-      queueMicrotask(() => {
-        if (server.key === key) resolve()
-        else resolve()
-      })
-    })
+  const waitServer = (key: ServerConnection.Key) => waitForMatch(() => server.key, (value) => value === key)
   const openclawProject = createMemo(
     () =>
       ({
