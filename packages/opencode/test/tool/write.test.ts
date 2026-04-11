@@ -42,7 +42,7 @@ const run = Effect.fn("WriteToolTest.run")(function* (
   next: Tool.Context = ctx,
 ) {
   const tool = yield* init()
-  return yield* Effect.promise(() => tool.execute(args, next))
+  return yield* tool.execute(args, next)
 })
 
 const markRead = Effect.fn("WriteToolTest.markRead")(function* (sessionID: string, filepath: string) {

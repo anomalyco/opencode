@@ -37,7 +37,7 @@ export const IGNORE_PATTERNS = [
 
 const LIMIT = 100
 
-export const ListTool = Tool.defineEffect(
+export const ListTool = Tool.define(
   "list",
   Effect.gen(function* () {
     const rg = yield* Ripgrep.Service
@@ -130,7 +130,7 @@ export const ListTool = Tool.defineEffect(
             },
             output,
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

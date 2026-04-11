@@ -18,7 +18,7 @@ const parameters = z.object({
   timeout: z.number().describe("Optional timeout in seconds (max 120)").optional(),
 })
 
-export const WebFetchTool = Tool.defineEffect(
+export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
@@ -153,7 +153,7 @@ export const WebFetchTool = Tool.defineEffect(
             default:
               return { output: content, title, metadata: {} }
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

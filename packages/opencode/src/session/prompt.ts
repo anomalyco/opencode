@@ -403,7 +403,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
                     { args },
                   )
-                  const result = yield* Effect.promise(() => item.execute(args, ctx))
+                  const result = yield* item.execute(args, ctx)
                   const output = {
                     ...result,
                     attachments: result.attachments?.map((attachment) => ({
@@ -576,43 +576,45 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         let error: Error | undefined
-        const result = yield* Effect.promise((signal) =>
-          taskTool
-            .execute(taskArgs, {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID,
-              abort: signal,
-              callID: part.callID,
-              extra: { bypassAgentCheck: true, promptOps },
-              messages: msgs,
-              metadata(val: { title?: string; metadata?: Record<string, any> }) {
-                return Effect.runPromise(
-                  Effect.gen(function* () {
-                    part = yield* sessions.updatePart({
-                      ...part,
-                      type: "tool",
-                      state: { ...part.state, ...val },
-                    } satisfies MessageV2.ToolPart)
-                  }),
-                )
-              },
-              ask(req: any) {
-                return Effect.runPromise(
-                  permission.ask({
-                    ...req,
-                    sessionID,
-                    ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
-                  }),
-                )
-              },
-            })
-            .catch((e) => {
-              error = e instanceof Error ? e : new Error(String(e))
+        const result = yield* taskTool
+          .execute(taskArgs, {
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            sessionID,
+            abort: AbortSignal.any([]),
+            callID: part.callID,
+            extra: { bypassAgentCheck: true, promptOps },
+            messages: msgs,
+            metadata(val: { title?: string; metadata?: Record<string, any> }) {
+              return Effect.runPromise(
+                Effect.gen(function* () {
+                  part = yield* sessions.updatePart({
+                    ...part,
+                    type: "tool",
+                    state: { ...part.state, ...val },
+                  } satisfies MessageV2.ToolPart)
+                }),
+              )
+            },
+            ask(req: any) {
+              return Effect.runPromise(
+                permission.ask({
+                  ...req,
+                  sessionID,
+                  ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                }),
+              )
+            },
+          })
+          .pipe(
+            Effect.catchCause((cause) => {
+              const defect = Cause.squash(cause)
+              error = defect instanceof Error ? defect : new Error(String(defect))
               log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-              return undefined
+              return Effect.succeed(undefined)
             }),
-        ).pipe(
+          )
+          .pipe(
           Effect.onInterrupt(() =>
             Effect.gen(function* () {
               assistantMessage.finish = "tool-calls"
@@ -1037,19 +1039,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
                 const { read } = yield* registry.named()
-                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) =>
-                  Effect.promise((signal: AbortSignal) =>
-                    read.execute(args, {
+                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) => {
+                  const controller = new AbortController()
+                  return read
+                    .execute(args, {
                       sessionID: input.sessionID,
-                      abort: signal,
+                      abort: controller.signal,
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, ...extra },
                       messages: [],
-                      metadata: async () => {},
+                      metadata: () => {},
                       ask: async () => {},
-                    }),
-                  )
+                    })
+                    .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
+                }
 
                 if (part.mime === "text/plain") {
                   let offset: number | undefined

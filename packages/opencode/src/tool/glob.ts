@@ -9,7 +9,7 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "../filesystem"
 
-export const GlobTool = Tool.defineEffect(
+export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
     const rg = yield* Ripgrep.Service
@@ -90,7 +90,7 @@ export const GlobTool = Tool.defineEffect(
             },
             output: output.join("\n"),
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

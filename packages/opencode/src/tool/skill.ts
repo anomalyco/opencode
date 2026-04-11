@@ -11,7 +11,7 @@ const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
 })
 
-export const SkillTool = Tool.defineEffect(
+export const SkillTool = Tool.define(
   "skill",
   Effect.gen(function* () {
     const skill = yield* Skill.Service
@@ -94,7 +94,7 @@ export const SkillTool = Tool.defineEffect(
                 dir,
               },
             }
-          }).pipe(Effect.orDie, Effect.runPromise),
+          }).pipe(Effect.orDie),
       }
     }
   }),

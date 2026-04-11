@@ -17,7 +17,7 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
-export const WriteTool = Tool.defineEffect(
+export const WriteTool = Tool.define(
   "write",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
@@ -92,7 +92,7 @@ export const WriteTool = Tool.defineEffect(
             },
             output,
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

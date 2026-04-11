@@ -54,7 +54,7 @@ const run = Effect.fn("ReadToolTest.run")(function* (
   next: Tool.Context = ctx,
 ) {
   const tool = yield* init()
-  return yield* Effect.promise(() => tool.execute(args, next))
+  return yield* tool.execute(args, next)
 })
 
 const exec = Effect.fn("ReadToolTest.exec")(function* (

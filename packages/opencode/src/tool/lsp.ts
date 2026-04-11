@@ -21,7 +21,7 @@ const operations = [
   "outgoingCalls",
 ] as const
 
-export const LspTool = Tool.defineEffect(
+export const LspTool = Tool.define(
   "lsp",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
@@ -85,7 +85,7 @@ export const LspTool = Tool.defineEffect(
             metadata: { result },
             output: result.length === 0 ? `No results found for ${args.operation}` : JSON.stringify(result, null, 2),
           }
-        }).pipe(Effect.runPromise),
+        }),
     }
   }),
 )

@@ -19,7 +19,7 @@ const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
 })
 
-export const ApplyPatchTool = Tool.defineEffect(
+export const ApplyPatchTool = Tool.define(
   "apply_patch",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
@@ -281,9 +281,7 @@ export const ApplyPatchTool = Tool.defineEffect(
     return {
       description: DESCRIPTION,
       parameters: PatchParams,
-      async execute(params: z.infer<typeof PatchParams>, ctx) {
-        return Effect.runPromise(run(params, ctx).pipe(Effect.orDie))
-      },
+      execute: (params: z.infer<typeof PatchParams>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

@@ -40,7 +40,7 @@ const Parameters = z.object({
   replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
 })
 
-export const EditTool = Tool.defineEffect(
+export const EditTool = Tool.define(
   "edit",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
@@ -176,7 +176,7 @@ export const EditTool = Tool.defineEffect(
             title: `${path.relative(Instance.worktree, filePath)}`,
             output,
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

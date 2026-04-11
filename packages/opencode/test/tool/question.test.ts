@@ -49,7 +49,7 @@ describe("tool.question", () => {
           },
         ]
 
-        const fiber = yield* Effect.promise(() => tool.execute({ questions }, ctx)).pipe(Effect.forkScoped)
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
         const item = yield* pending(question)
         yield* question.reply({ requestID: item.id, answers: [["Red"]] })
 
@@ -73,7 +73,7 @@ describe("tool.question", () => {
           },
         ]
 
-        const fiber = yield* Effect.promise(() => tool.execute({ questions }, ctx)).pipe(Effect.forkScoped)
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
         const item = yield* pending(question)
         yield* question.reply({ requestID: item.id, answers: [["Dog"]] })
 

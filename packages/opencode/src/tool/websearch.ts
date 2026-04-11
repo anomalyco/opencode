@@ -24,7 +24,7 @@ const Parameters = z.object({
     .describe("Maximum characters for context string optimized for LLMs (default: 10000)"),
 })
 
-export const WebSearchTool = Tool.defineEffect(
+export const WebSearchTool = Tool.define(
   "websearch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
@@ -70,7 +70,7 @@ export const WebSearchTool = Tool.defineEffect(
             title: `Web search: ${params.query}`,
             metadata: {},
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

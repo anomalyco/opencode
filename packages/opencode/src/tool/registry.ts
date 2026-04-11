@@ -101,6 +101,7 @@ export namespace ToolRegistry {
       const agents = yield* Agent.Service
       const skill = yield* Skill.Service
 
+      const invalid = yield* InvalidTool
       const task = yield* TaskTool
       const read = yield* ReadTool
       const question = yield* QuestionTool
@@ -127,23 +128,24 @@ export namespace ToolRegistry {
               id,
               parameters: z.object(def.args),
               description: def.description,
-              execute: async (args, toolCtx) => {
-                const pluginCtx: PluginToolContext = {
-                  ...toolCtx,
-                  directory: ctx.directory,
-                  worktree: ctx.worktree,
-                }
-                const result = await def.execute(args as any, pluginCtx)
-                const out = await Truncate.output(result, {}, await Agent.get(toolCtx.agent))
-                return {
-                  title: "",
-                  output: out.truncated ? out.content : result,
-                  metadata: {
-                    truncated: out.truncated,
-                    outputPath: out.truncated ? out.outputPath : undefined,
-                  },
-                }
-              },
+              execute: (args, toolCtx) =>
+                Effect.promise(async () => {
+                  const pluginCtx: PluginToolContext = {
+                    ...toolCtx,
+                    directory: ctx.directory,
+                    worktree: ctx.worktree,
+                  }
+                  const result = await def.execute(args as any, pluginCtx)
+                  const out = await Truncate.output(result, {}, await Agent.get(toolCtx.agent))
+                  return {
+                    title: "",
+                    output: out.truncated ? out.content : result,
+                    metadata: {
+                      truncated: out.truncated,
+                      outputPath: out.truncated ? out.outputPath : undefined,
+                    },
+                  }
+                }),
             }
           }
 
@@ -174,7 +176,7 @@ export namespace ToolRegistry {
             ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
           const tool = yield* Effect.all({
-            invalid: Tool.init(InvalidTool),
+            invalid: Tool.init(invalid),
             bash: Tool.init(bash),
             read: Tool.init(read),
             glob: Tool.init(globtool),

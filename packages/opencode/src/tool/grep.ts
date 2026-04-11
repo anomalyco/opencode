@@ -14,7 +14,7 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
 
-export const GrepTool = Tool.defineEffect(
+export const GrepTool = Tool.define(
   "grep",
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
@@ -171,7 +171,7 @@ export const GrepTool = Tool.defineEffect(
             },
             output: outputLines.join("\n"),
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

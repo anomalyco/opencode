@@ -32,14 +32,14 @@ describe("tool.grep", () => {
       directory: projectRoot,
       fn: async () => {
         const grep = await initGrep()
-        const result = await grep.execute(
+        const result = await Effect.runPromise(grep.execute(
           {
             pattern: "export",
             path: path.join(projectRoot, "src/tool"),
             include: "*.ts",
           },
           ctx,
-        )
+        ))
         expect(result.metadata.matches).toBeGreaterThan(0)
         expect(result.output).toContain("Found")
       },
@@ -56,13 +56,13 @@ describe("tool.grep", () => {
       directory: tmp.path,
       fn: async () => {
         const grep = await initGrep()
-        const result = await grep.execute(
+        const result = await Effect.runPromise(grep.execute(
           {
             pattern: "xyznonexistentpatternxyz123",
             path: tmp.path,
           },
           ctx,
-        )
+        ))
         expect(result.metadata.matches).toBe(0)
         expect(result.output).toBe("No files found")
       },
@@ -81,13 +81,13 @@ describe("tool.grep", () => {
       directory: tmp.path,
       fn: async () => {
         const grep = await initGrep()
-        const result = await grep.execute(
+        const result = await Effect.runPromise(grep.execute(
           {
             pattern: "line",
             path: tmp.path,
           },
           ctx,
-        )
+        ))
         expect(result.metadata.matches).toBeGreaterThan(0)
       },
     })

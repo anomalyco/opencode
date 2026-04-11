@@ -294,7 +294,7 @@ const parser = lazy(async () => {
 })
 
 // TODO: we may wanna rename this tool so it works better on other shells
-export const BashTool = Tool.defineEffect(
+export const BashTool = Tool.define(
   "bash",
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
@@ -504,7 +504,7 @@ export const BashTool = Tool.defineEffect(
               },
               ctx,
             )
-          }).pipe(Effect.orDie, Effect.runPromise),
+          }).pipe(Effect.orDie),
       }
     }
   }),
