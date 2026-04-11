@@ -17,6 +17,10 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 export const WriteTool = Tool.define(
   "write",
   Effect.gen(function* () {
@@ -46,7 +50,7 @@ export const WriteTool = Tool.define(
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(Instance.worktree, filepath)],
+            patterns: [toPosix(path.relative(Instance.worktree, filepath))],
             always: ["*"],
             metadata: {
               filepath,
@@ -82,7 +86,7 @@ export const WriteTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, filepath),
+            title: toPosix(path.relative(Instance.worktree, filepath)),
             metadata: {
               diagnostics,
               filepath,

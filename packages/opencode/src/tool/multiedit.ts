@@ -6,6 +6,10 @@ import DESCRIPTION from "./multiedit.txt"
 import path from "path"
 import { Instance } from "../project/instance"
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 export const MultiEditTool = Tool.define(
   "multiedit",
   Effect.gen(function* () {
@@ -49,7 +53,7 @@ export const MultiEditTool = Tool.define(
             results.push(result)
           }
           return {
-            title: path.relative(Instance.worktree, params.filePath),
+            title: toPosix(path.relative(Instance.worktree, params.filePath)),
             metadata: {
               results: results.map((r) => r.metadata),
             },

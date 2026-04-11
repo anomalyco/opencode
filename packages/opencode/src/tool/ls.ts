@@ -8,6 +8,10 @@ import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 export const IGNORE_PATTERNS = [
   "node_modules/",
   "__pycache__/",
@@ -121,7 +125,7 @@ export const ListTool = Tool.define(
           const output = `${searchPath}/\n` + renderDir(".", 0)
 
           return {
-            title: path.relative(Instance.worktree, searchPath),
+            title: toPosix(path.relative(Instance.worktree, searchPath)),
             metadata: {
               count: files.length,
               truncated: files.length >= LIMIT,

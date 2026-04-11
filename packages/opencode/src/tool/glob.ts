@@ -9,6 +9,10 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "../filesystem"
 
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/")
+}
+
 export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
@@ -81,7 +85,7 @@ export const GlobTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, search),
+            title: toPosix(path.relative(Instance.worktree, search)),
             metadata: {
               count: files.length,
               truncated,
