@@ -59,9 +59,4 @@ export OPENCODE_PROJECTS_ROOT=/workspace
 export OPENCODE_CONFIG_CONTENT
 
 log "starting opencode backend host=127.0.0.1 port=4096"
-if [ "${VERITLY_REMOTE_DEBUG:-}" = "1" ]; then
-	log "remote debug: bun inspect 0.0.0.0:9229"
-	exec bun --inspect=0.0.0.0:9229 --cwd /app/packages/opencode src/index.ts serve --hostname 127.0.0.1 --port 4096
-else
-	exec bun --cwd /app/packages/opencode src/index.ts serve --hostname 127.0.0.1 --port 4096
-fi
+exec bun --cwd /app/packages/opencode src/index.ts serve --hostname 127.0.0.1 --port 4096
