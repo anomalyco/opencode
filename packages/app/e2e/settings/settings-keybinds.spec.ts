@@ -241,7 +241,7 @@ test("changing file open keybind works", async ({ page, gotoSession }) => {
   await expect(keybindButton).toBeVisible()
 
   const initialKeybind = await keybindButton.textContent()
-  expect(initialKeybind).toContain("P")
+  expect(initialKeybind).toContain("K")
 
   await keybindButton.click()
   await expect(keybindButton).toHaveText(/press/i)

@@ -1,4 +1,4 @@
-import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -9,20 +9,26 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
-import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { DialogSelectModel } from "./dialog-select-model"
-import { DialogSelectProvider } from "./dialog-select-provider"
+import { useLanguage } from "@/context/language"
+import { useProviders } from "@/hooks/use-providers"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const providers = useProviders()
+
+  const all = () => {
+    void import("./dialog-select-provider").then((x) => {
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
+  }
 
   const alive = { value: true }
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -34,16 +40,30 @@ export function DialogConnectProvider(props: { provider: string }) {
     timer.current = undefined
   })
 
-  const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
-  const methods = createMemo(
+  const provider = createMemo(
     () =>
-      globalSync.data.provider_auth[props.provider] ?? [
-        {
-          type: "api",
-          label: language.t("provider.connect.method.apiKey"),
-        },
-      ],
+      providers.all().find((x) => x.id === props.provider) ??
+      globalSync.data.provider.all.find((x) => x.id === props.provider)!,
   )
+  const fallback = createMemo<ProviderAuthMethod[]>(() => [
+    {
+      type: "api" as const,
+      label: language.t("provider.connect.method.apiKey"),
+    },
+  ])
+  const [auth] = createResource(
+    () => props.provider,
+    async () => {
+      const cached = globalSync.data.provider_auth[props.provider]
+      if (cached) return cached
+      const res = await globalSDK.client.provider.auth()
+      if (!alive.value) return fallback()
+      globalSync.set("provider_auth", res.data ?? {})
+      return res.data?.[props.provider] ?? fallback()
+    },
+  )
+  const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
+  const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
@@ -178,7 +198,11 @@ export function DialogConnectProvider(props: { provider: string }) {
       index: 0,
     })
 
-    const prompts = createMemo(() => method()?.prompts ?? [])
+    const prompts = createMemo<NonNullable<ProviderAuthMethod["prompts"]>>(() => {
+      const value = method()
+      if (value?.type !== "oauth") return []
+      return value.prompts ?? []
+    })
     const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
       if (!prompt.when) return true
       const actual = value[prompt.when.key]
@@ -297,8 +321,12 @@ export function DialogConnectProvider(props: { provider: string }) {
     listRef?.onKeyDown(e)
   }
 
-  onMount(() => {
+  let auto = false
+  createEffect(() => {
+    if (auto) return
+    if (loading()) return
     if (methods().length === 1) {
+      auto = true
       selectMethod(0)
     }
   })
@@ -316,7 +344,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   function goBack() {
     if (methods().length === 1) {
-      dialog.show(() => <DialogSelectProvider />)
+      all()
       return
     }
     if (store.authorization) {
@@ -327,7 +355,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       dispatch({ type: "method.reset" })
       return
     }
-    dialog.show(() => <DialogSelectProvider />)
+    all()
   }
 
   function MethodSelection() {
@@ -574,6 +602,14 @@ export function DialogConnectProvider(props: { provider: string }) {
         <div class="px-2.5 pb-10 flex flex-col gap-6">
           <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
             <Switch>
+              <Match when={loading()}>
+                <div class="text-14-regular text-text-base">
+                  <div class="flex items-center gap-x-2">
+                    <Spinner />
+                    <span>{language.t("provider.connect.status.inProgress")}</span>
+                  </div>
+                </div>
+              </Match>
               <Match when={store.methodIndex === undefined}>
                 <MethodSelection />
               </Match>
