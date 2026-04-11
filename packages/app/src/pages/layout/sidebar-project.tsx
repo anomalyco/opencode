@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Button } from "@opencode-ai/ui/button"
@@ -11,7 +11,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
-import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
+import { displayName, sortedRootSessions } from "./helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -19,10 +19,10 @@ export type ProjectSidebarContext = {
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   hoverProject: Accessor<string | undefined>
-  nav: Accessor<HTMLElement | undefined>
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
+  onHoverOpenChanged: (worktree: string, hovered: boolean) => void
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
@@ -31,8 +31,7 @@ export type ProjectSidebarContext = {
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
-  sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "children" | "mobile" | "dense" | "popover">
-  setHoverSession: (id: string | undefined) => void
+  sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "mobile" | "dense">
 }
 
 export const ProjectDragOverlay = (props: {
@@ -54,7 +53,6 @@ export const ProjectDragOverlay = (props: {
 const ProjectTile = (props: {
   project: LocalProject
   mobile?: boolean
-  nav: Accessor<HTMLElement | undefined>
   sidebarHovering: Accessor<boolean>
   selected: Accessor<boolean>
   active: Accessor<boolean>
@@ -194,10 +192,7 @@ const ProjectPreviewPanel = (props: {
   workspaces: Accessor<string[]>
   label: (directory: string) => string
   projectSessions: Accessor<ReturnType<typeof sortedRootSessions>>
-  projectChildren: Accessor<Map<string, string[]>>
   workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
-  workspaceChildren: (directory: string) => Map<string, string[]>
-  setOpen: (value: boolean) => void
   ctx: ProjectSidebarContext
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
@@ -218,9 +213,8 @@ const ProjectPreviewPanel = (props: {
                 list={props.projectSessions()}
                 slug={base64Encode(props.project.worktree)}
                 dense
+                showTooltip
                 mobile={props.mobile}
-                popover={false}
-                children={props.projectChildren()}
               />
             )}
           </For>
@@ -229,7 +223,6 @@ const ProjectPreviewPanel = (props: {
         <For each={props.workspaces()}>
           {(directory) => {
             const sessions = createMemo(() => props.workspaceSessions(directory))
-            const children = createMemo(() => props.workspaceChildren(directory))
             return (
               <div class="flex flex-col gap-1">
                 <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
@@ -246,9 +239,8 @@ const ProjectPreviewPanel = (props: {
                       list={sessions()}
                       slug={base64Encode(directory)}
                       dense
+                      showTooltip
                       mobile={props.mobile}
-                      popover={false}
-                      children={children()}
                     />
                   )}
                 </For>
@@ -264,7 +256,7 @@ const ProjectPreviewPanel = (props: {
         class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
         onClick={() => {
           props.ctx.openSidebar()
-          props.setOpen(false)
+          props.ctx.onHoverOpenChanged(props.project.worktree, false)
           if (props.selected()) return
           props.ctx.navigateToProject(props.project.worktree)
         }}
@@ -289,28 +281,16 @@ export const SortableProject = (props: {
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
   const [state, setState] = createStore({
-    open: false,
     menu: false,
     suppressHover: false,
   })
 
+  const isHoverProject = () => props.ctx.hoverProject() === props.project.worktree
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
-  const active = createMemo(
-    () => state.menu || (preview() ? state.open : overlay() && props.ctx.hoverProject() === props.project.worktree),
-  )
+  const active = createMemo(() => state.menu || (preview() ? isHoverProject() : overlay() && isHoverProject()))
 
-  createEffect(() => {
-    if (preview()) return
-    if (!state.open) return
-    setState("open", false)
-  })
-
-  createEffect(() => {
-    if (!selected()) return
-    if (!state.open) return
-    setState("open", false)
-  })
+  const hoverOpen = () => isHoverProject() && preview() && !selected() && !state.menu
 
   const label = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
@@ -322,20 +302,14 @@ export const SortableProject = (props: {
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
-  const projectChildren = createMemo(() => childMapByParent(projectStore().session))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
     return sortedRootSessions(data, props.sortNow())
-  }
-  const workspaceChildren = (directory: string) => {
-    const [data] = globalSync.child(directory, { bootstrap: false })
-    return childMapByParent(data.session)
   }
   const tile = () => (
     <ProjectTile
       project={props.project}
       mobile={props.mobile}
-      nav={props.ctx.nav}
       sidebarHovering={props.ctx.sidebarHovering}
       selected={selected}
       active={active}
@@ -351,7 +325,7 @@ export const SortableProject = (props: {
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}
       setMenu={(value) => setState("menu", value)}
-      setOpen={(value) => setState("open", value)}
+      setOpen={(value) => props.ctx.onHoverOpenChanged(props.project.worktree, value)}
       setSuppressHover={(value) => setState("suppressHover", value)}
       language={language}
     />
@@ -362,7 +336,7 @@ export const SortableProject = (props: {
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
       <Show when={preview() && !selected()} fallback={tile()}>
         <HoverCard
-          open={!state.suppressHover && state.open && !state.menu}
+          open={!state.suppressHover && hoverOpen() && !state.menu}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
@@ -371,8 +345,7 @@ export const SortableProject = (props: {
           onOpenChange={(value) => {
             if (state.menu) return
             if (value && state.suppressHover) return
-            setState("open", value)
-            if (value) props.ctx.setHoverSession(undefined)
+            props.ctx.onHoverOpenChanged(props.project.worktree, value)
           }}
         >
           <ProjectPreviewPanel
@@ -383,10 +356,7 @@ export const SortableProject = (props: {
             workspaces={workspaces}
             label={label}
             projectSessions={projectSessions}
-            projectChildren={projectChildren}
             workspaceSessions={workspaceSessions}
-            workspaceChildren={workspaceChildren}
-            setOpen={(value) => setState("open", value)}
             ctx={props.ctx}
             language={language}
           />

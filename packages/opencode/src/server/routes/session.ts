@@ -6,19 +6,25 @@ import z from "zod"
 import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "../../session/prompt"
+import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
+import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
+import { Command } from "../../command"
 import { Log } from "../../util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Bus } from "../../bus"
+import { NamedError } from "@opencode-ai/util/error"
 
 const log = Log.create({ service: "server" })
 
@@ -88,7 +94,7 @@ export const SessionRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const result = await SessionStatus.list()
+        const result = await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.list()))
         return c.json(Object.fromEntries(result))
       },
     )
@@ -119,7 +125,6 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        log.info("SEARCH", { url: c.req.url })
         const session = await Session.get(sessionID)
         return c.json(session)
       },
@@ -181,7 +186,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const todos = await Todo.get(sessionID)
+        const todos = await AppRuntime.runPromise(Todo.Service.use((svc) => svc.get(sessionID)))
         return c.json(todos)
       },
     )
@@ -203,10 +208,10 @@ export const SessionRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", Session.create.schema.optional()),
+      validator("json", Session.create.schema),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        const session = await SessionShare.create(body)
         return c.json(session)
       },
     )
@@ -279,17 +284,18 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
 
-        let session = await Session.get(sessionID)
         if (updates.title !== undefined) {
-          session = await Session.setTitle({ sessionID, title: updates.title })
+          await Session.setTitle({ sessionID, title: updates.title })
         }
         if (updates.time?.archived !== undefined) {
-          session = await Session.setArchived({ sessionID, time: updates.time.archived })
+          await Session.setArchived({ sessionID, time: updates.time.archived })
         }
 
+        const session = await Session.get(sessionID)
         return c.json(session)
       },
     )
+    // TODO(v2): remove this dedicated route and rely on the normal `/init` command flow.
     .post(
       "/:sessionID/init",
       describeRoute({
@@ -315,11 +321,24 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", Session.initialize.schema.omit({ sessionID: true })),
+      validator(
+        "json",
+        z.object({
+          modelID: ModelID.zod,
+          providerID: ProviderID.zod,
+          messageID: MessageID.zod,
+        }),
+      ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        await Session.initialize({ ...body, sessionID })
+        await SessionPrompt.command({
+          sessionID,
+          messageID: body.messageID,
+          model: body.providerID + "/" + body.modelID,
+          command: Command.Default.INIT,
+          arguments: "",
+        })
         return c.json(true)
       },
     )
@@ -379,7 +398,7 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        SessionPrompt.cancel(c.req.valid("param").sessionID)
+        await SessionPrompt.cancel(c.req.valid("param").sessionID)
         return c.json(true)
       },
     )
@@ -409,7 +428,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.share(sessionID)
+        await SessionShare.share(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
       },
@@ -434,13 +453,13 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: SessionSummary.diff.schema.shape.sessionID,
+          sessionID: SessionSummary.DiffInput.shape.sessionID,
         }),
       ),
       validator(
         "query",
         z.object({
-          messageID: SessionSummary.diff.schema.shape.messageID,
+          messageID: SessionSummary.DiffInput.shape.messageID,
         }),
       ),
       async (c) => {
@@ -474,12 +493,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.unshare.schema,
+          sessionID: SessionID.zod,
         }),
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.unshare(sessionID)
+        await SessionShare.unshare(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
       },
@@ -697,7 +716,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        SessionPrompt.assertNotBusy(params.sessionID)
+        await SessionRunState.assertNotBusy(params.sessionID)
         await Session.removeMessage({
           sessionID: params.sessionID,
           messageID: params.messageID,
@@ -841,13 +860,17 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
-        c.status(204)
-        c.header("Content-Type", "application/json")
-        return stream(c, async () => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
+          log.error("prompt_async failed", { sessionID, error: err })
+          Bus.publish(Session.Event.Error, {
+            sessionID,
+            error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+          })
         })
+
+        return c.body(null, 204)
       },
     )
     .post(
@@ -898,7 +921,7 @@ export const SessionRoutes = lazy(() =>
             description: "Created message",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.Assistant),
+                schema: resolver(MessageV2.WithParts),
               },
             },
           },

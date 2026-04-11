@@ -31,12 +31,14 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 - Use `Schema.Defect` instead of `unknown` for defect-like causes.
 - In `Effect.gen` / `Effect.fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
 
-## Runtime vs Instances
+## Runtime vs InstanceState
 
-- Use the shared runtime for process-wide services with one lifecycle for the whole app.
-- Use `src/effect/instances.ts` for per-directory or per-project services that need `InstanceContext`, per-instance state, or per-instance cleanup.
-- If two open directories should not share one copy of the service, it belongs in `Instances`.
-- Instance-scoped services should read context from `InstanceContext`, not `Instance.*` globals.
+- Use `makeRuntime` (from `src/effect/run-service.ts`) for all services. It returns `{ runPromise, runFork, runCallback }` backed by a shared `memoMap` that deduplicates layers.
+- Use `InstanceState` (from `src/effect/instance-state.ts`) for per-directory or per-project state that needs per-instance cleanup. It uses `ScopedCache` keyed by directory — each open project gets its own state, automatically cleaned up on disposal.
+- If two open directories should not share one copy of the service, it needs `InstanceState`.
+- Do the work directly in the `InstanceState.make` closure — `ScopedCache` handles run-once semantics. Don't add fibers, `ensure()` callbacks, or `started` flags on top.
+- Use `Effect.addFinalizer` or `Effect.acquireRelease` inside the `InstanceState.make` closure for cleanup (subscriptions, process teardown, etc.).
+- Use `Effect.forkScoped` inside the closure for background stream consumers — the fiber is interrupted when the instance is disposed.
 
 ## Preferred Effect services
 
@@ -47,11 +49,15 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 - Prefer `Path.Path`, `Config`, `Clock`, and `DateTime` when those concerns are already inside Effect code.
 - For background loops or scheduled tasks, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
 
+## Effect.cached for deduplication
+
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect-migration.md` for the full pattern.
+
 ## Instance.bind — ALS for native callbacks
 
 `Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
 
-Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish`, `Instance.state()`, or anything that reads `Instance.directory`.
+Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish` or anything that reads `Instance.directory`.
 
 You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
 

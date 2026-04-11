@@ -27,7 +27,7 @@ export function canNavigateHistoryAtCursor(direction: "up" | "down", text: strin
   const atStart = position === 0
   const atEnd = position === text.length
   if (inHistory) return atStart || atEnd
-  if (direction === "up") return position === 0
+  if (direction === "up") return position === 0 && text.length === 0
   return position === text.length
 }
 

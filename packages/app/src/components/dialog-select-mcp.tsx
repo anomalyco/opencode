@@ -1,10 +1,12 @@
 import { useMutation } from "@tanstack/solid-query"
-import { Component, createMemo, Show } from "solid-js"
+import { Component, createEffect, createMemo, on, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
+import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 
 const statusLabels = {
@@ -18,6 +20,48 @@ export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const [state, setState] = createStore({
+    done: false,
+    loading: false,
+  })
+
+  createEffect(
+    on(
+      () => sync.data.mcp_ready,
+      (ready, prev) => {
+        if (!ready && prev) setState("done", false)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (state.done || state.loading) return
+    if (sync.data.mcp_ready) {
+      setState("done", true)
+      return
+    }
+
+    setState("loading", true)
+    void sdk.client.mcp
+      .status()
+      .then((result) => {
+        sync.set("mcp", result.data ?? {})
+        sync.set("mcp_ready", true)
+        setState("done", true)
+      })
+      .catch((err) => {
+        setState("done", true)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => {
+        setState("loading", false)
+      })
+  })
 
   const items = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})

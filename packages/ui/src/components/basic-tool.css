@@ -7,6 +7,21 @@
   gap: 0px;
   justify-content: flex-start;
 
+  &[data-clickable="true"] {
+    cursor: pointer;
+  }
+
+  &[data-hide-details="true"] {
+    [data-slot="basic-tool-tool-trigger-content"] {
+      flex: 1 1 auto;
+      max-width: 100%;
+    }
+
+    [data-slot="basic-tool-tool-info"] {
+      flex: 1 1 auto;
+    }
+  }
+
   [data-slot="basic-tool-tool-trigger-content"] {
     flex: 0 1 auto;
     width: auto;
@@ -163,5 +178,82 @@
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+  }
+}
+
+[data-component="task-tool-card"] {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-weak-base, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--background-base) 92%, transparent);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+
+  [data-slot="basic-tool-tool-info-structured"] {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  [data-slot="basic-tool-tool-info-main"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: center;
+  }
+
+  [data-component="task-tool-spinner"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  [data-component="task-tool-action"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--icon-weak);
+    margin-left: auto;
+    opacity: 0;
+    transition:
+      opacity 0.15s ease,
+      color 0.15s ease;
+  }
+
+  [data-component="task-tool-title"] {
+    flex-shrink: 0;
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    text-transform: capitalize;
+  }
+
+  [data-slot="basic-tool-tool-subtitle"] {
+    color: var(--text-strong);
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--border-weak-base, rgba(255, 255, 255, 0.08));
+    background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
+
+    [data-component="task-tool-action"] {
+      opacity: 1;
+    }
   }
 }

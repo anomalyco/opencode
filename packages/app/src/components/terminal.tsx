@@ -1,4 +1,7 @@
-import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
+import { withAlpha } from "@opencode-ai/ui/theme/color"
+import { useTheme } from "@opencode-ai/ui/theme/context"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import type { HexColor } from "@opencode-ai/ui/theme/types"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -171,6 +174,7 @@ export const Terminal = (props: TerminalProps) => {
   const auth = server.current?.http
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""
+  const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
@@ -516,8 +520,12 @@ export const Terminal = (props: TerminalProps) => {
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = username
-        next.password = password
+        if (!sameOrigin && password) {
+          next.searchParams.set("auth_token", btoa(`${username}:${password}`))
+          // For same-origin requests, let the browser reuse the page's existing auth.
+          next.username = username
+          next.password = password
+        }
 
         const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"

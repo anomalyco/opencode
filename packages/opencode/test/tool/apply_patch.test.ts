@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
+import { Effect, ManagedRuntime, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
+import { LSP } from "../../src/lsp"
+import { AppFileSystem } from "../../src/filesystem"
+import { Format } from "../../src/format"
+import { Bus } from "../../src/bus"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+
+const runtime = ManagedRuntime.make(
+  Layer.mergeAll(LSP.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer, Bus.layer),
+)
 
 const baseCtx = {
   sessionID: SessionID.make("ses_test"),
@@ -13,7 +22,7 @@ const baseCtx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: () => Effect.void,
 }
 
 type AskInput = {
@@ -27,9 +36,7 @@ type AskInput = {
       filePath: string
       relativePath: string
       type: "add" | "update" | "delete" | "move"
-      diff: string
-      before: string
-      after: string
+      patch: string
       additions: number
       deletions: number
       movePath?: string
@@ -38,21 +45,23 @@ type AskInput = {
 }
 
 type ToolCtx = typeof baseCtx & {
-  ask: (input: AskInput) => Promise<void>
+  ask: (input: AskInput) => Effect.Effect<void>
 }
 
 const execute = async (params: { patchText: string }, ctx: ToolCtx) => {
-  const tool = await ApplyPatchTool.init()
-  return tool.execute(params, ctx)
+  const info = await runtime.runPromise(ApplyPatchTool)
+  const tool = await info.init()
+  return Effect.runPromise(tool.execute(params, ctx))
 }
 
 const makeCtx = () => {
   const calls: AskInput[] = []
   const ctx: ToolCtx = {
     ...baseCtx,
-    ask: async (input) => {
-      calls.push(input)
-    },
+    ask: (input) =>
+      Effect.sync(() => {
+        calls.push(input)
+      }),
   }
 
   return { ctx, calls }
@@ -112,12 +121,12 @@ describe("tool.apply_patch freeform", () => {
         const addFile = permissionCall.metadata.files.find((f) => f.type === "add")
         expect(addFile).toBeDefined()
         expect(addFile!.relativePath).toBe("nested/new.txt")
-        expect(addFile!.after).toBe("created\n")
+        expect(addFile!.patch).toContain("+created")
 
         const updateFile = permissionCall.metadata.files.find((f) => f.type === "update")
         expect(updateFile).toBeDefined()
-        expect(updateFile!.before).toContain("line2")
-        expect(updateFile!.after).toContain("changed")
+        expect(updateFile!.patch).toContain("-line2")
+        expect(updateFile!.patch).toContain("+changed")
 
         const added = await fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")
         expect(added).toBe("created\n")
@@ -151,8 +160,8 @@ describe("tool.apply_patch freeform", () => {
         expect(moveFile.type).toBe("move")
         expect(moveFile.relativePath).toBe("renamed/dir/name.txt")
         expect(moveFile.movePath).toBe(path.join(fixture.path, "renamed/dir/name.txt"))
-        expect(moveFile.before).toBe("old content\n")
-        expect(moveFile.after).toBe("new content\n")
+        expect(moveFile.patch).toContain("-old content")
+        expect(moveFile.patch).toContain("+new content")
       },
     })
   })

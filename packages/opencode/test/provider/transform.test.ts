@@ -1557,6 +1557,35 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
     expect(result[0].providerOptions?.openai).toBeUndefined()
   })
 
+  test("azure cognitive services remaps providerID to 'azure' key", () => {
+    const model = createModel("azure-cognitive-services", "@ai-sdk/azure")
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              "azure-cognitive-services": { part: true },
+            },
+          },
+        ],
+        providerOptions: {
+          "azure-cognitive-services": { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+    const part = result[0].content[0] as any
+
+    expect(result[0].providerOptions?.azure).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.["azure-cognitive-services"]).toBeUndefined()
+    expect(part.providerOptions?.azure).toEqual({ part: true })
+    expect(part.providerOptions?.["azure-cognitive-services"]).toBeUndefined()
+  })
+
   test("copilot remaps providerID to 'copilot' key", () => {
     const model = createModel("github-copilot", "@ai-sdk/github-copilot")
     const msgs = [
@@ -1629,6 +1658,43 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
   })
 })
 
+describe("ProviderTransform.message - bedrock caching with non-bedrock providerID", () => {
+  test("applies cache options at message level when npm package is amazon-bedrock", () => {
+    const model = {
+      id: "aws/us.anthropic.claude-opus-4-6-v1",
+      providerID: "aws",
+      api: {
+        id: "us.anthropic.claude-opus-4-6-v1",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      name: "Claude Opus 4.6",
+      capabilities: {},
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a helpful assistant" }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    // Cache should be at the message level and not the content-part level
+    expect(result[0].providerOptions?.bedrock).toEqual({
+      cachePoint: { type: "default" },
+    })
+    expect(result[0].content[0].providerOptions?.bedrock).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.message - cache control on gateway", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({
@@ -1684,6 +1750,58 @@ describe("ProviderTransform.message - cache control on gateway", () => {
         url: "https://api.anthropic.com",
         npm: "@ai-sdk/anthropic",
       },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions).toEqual({
+      anthropic: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      openrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      bedrock: {
+        cachePoint: {
+          type: "default",
+        },
+      },
+      openaiCompatible: {
+        cache_control: {
+          type: "ephemeral",
+        },
+      },
+      copilot: {
+        copilot_cache_control: {
+          type: "ephemeral",
+        },
+      },
+    })
+  })
+
+  test("google-vertex-anthropic applies cache control", () => {
+    const model = createModel({
+      providerID: "google-vertex-anthropic",
+      api: {
+        id: "google-vertex-anthropic",
+        url: "https://us-central1-aiplatform.googleapis.com",
+        npm: "@ai-sdk/google-vertex/anthropic",
+      },
+      id: "claude-sonnet-4@20250514",
     })
     const msgs = [
       {

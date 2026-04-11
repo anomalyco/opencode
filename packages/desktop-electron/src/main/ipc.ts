@@ -13,7 +13,6 @@ const pickerFilters = (ext?: string[]) => {
 
 type Deps = {
   killSidecar: () => void
-  installCli: () => Promise<string>
   awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
@@ -34,7 +33,6 @@ type Deps = {
 
 export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("install-cli", () => deps.installCli())
   ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
     const send = (step: InitStep) => event.sender.send("init-step", step)
     return deps.awaitInitialization(send)
@@ -88,7 +86,7 @@ export function registerIpcHandlers(deps: Deps) {
     "open-directory-picker",
     async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
-        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : [])],
+        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
         title: opts?.title ?? "Choose a folder",
         defaultPath: opts?.defaultPath,
       })
