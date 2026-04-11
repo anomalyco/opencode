@@ -2,11 +2,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
+import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2"
 import { ArgsProvider } from "../../../src/cli/cmd/tui/context/args"
 import { ExitProvider } from "../../../src/cli/cmd/tui/context/exit"
 import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { SyncProvider, useSync } from "../../../src/cli/cmd/tui/context/sync"
+import { sessionPermissionRequest, sessionQuestionRequest } from "../../../src/cli/cmd/tui/routes/session/request-tree"
 
 const sighup = new Set(process.listeners("SIGHUP"))
 
@@ -85,6 +87,94 @@ function data(workspace?: string | null) {
 type Hit = {
   path: string
   workspace?: string
+}
+
+function event(payload: Event, input: { directory: string; workspace?: string }): GlobalEvent {
+  return {
+    directory: input.directory,
+    workspace: input.workspace,
+    payload,
+  }
+}
+
+function createSource() {
+  let fn: ((event: GlobalEvent) => void) | undefined
+
+  return {
+    source: {
+      subscribe: async (handler: (event: GlobalEvent) => void) => {
+        fn = handler
+        return () => {
+          if (fn === handler) fn = undefined
+        }
+      },
+    },
+    emit(evt: GlobalEvent) {
+      if (!fn) throw new Error("event source not ready")
+      fn(evt)
+    },
+  }
+}
+
+function ses(id: string, updated: number, parentID?: string) {
+  return event(
+    {
+      type: "session.updated",
+      properties: {
+        info: {
+          id,
+          parentID,
+          title: id,
+          time: { updated },
+        },
+      },
+    } as Event,
+    { directory: "/tmp/root" },
+  )
+}
+
+function perm(id: string, sessionID: string) {
+  return event(
+    {
+      type: "permission.asked",
+      properties: {
+        id,
+        sessionID,
+        permission: "bash",
+        patterns: ["*"],
+        metadata: {},
+        always: [],
+      },
+    } as Event,
+    { directory: "/tmp/root" },
+  )
+}
+
+function ask(id: string, sessionID: string) {
+  return event(
+    {
+      type: "question.asked",
+      properties: {
+        id,
+        sessionID,
+        questions: [
+          {
+            question: "Pick one",
+            header: "pick",
+            options: [{ label: "one", description: "first" }],
+            multiple: false,
+          },
+        ],
+      },
+    } as Event,
+    { directory: "/tmp/root" },
+  )
+}
+
+function tree(source: ReturnType<typeof createSource>) {
+  source.emit(ses("root", 1))
+  source.emit(ses("child", 2, "root"))
+  source.emit(ses("grand", 3, "child"))
 }
 
 function createFetch(log: Hit[]) {
@@ -173,7 +263,7 @@ function createFetch(log: Hit[]) {
   ) satisfies typeof fetch
 }
 
-async function mount(log: Hit[]) {
+async function mount(log: Hit[], events?: { subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void> }) {
   let project!: ReturnType<typeof useProject>
   let sync!: ReturnType<typeof useSync>
   let done!: () => void
@@ -186,7 +276,7 @@ async function mount(log: Hit[]) {
       url="http://test"
       directory="/tmp/root"
       fetch={createFetch(log)}
-      events={{ subscribe: async () => () => {} }}
+      events={events ?? { subscribe: async () => () => {} }}
     >
       <ArgsProvider continue={false}>
         <ExitProvider>
@@ -285,6 +375,67 @@ describe("SyncProvider", () => {
       expect(sync.data.message.ses_1[0]?.id).toBe("msg_1")
       expect(sync.data.part.msg_1[0]).toMatchObject({ type: "text", text: "part-ws_b" })
       expect(sync.data.session_diff.ses_1[0]?.file).toBe("ws_b.ts")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("surfaces nested grandchild permission request from sync events", async () => {
+    const log: Hit[] = []
+    const source = createSource()
+    const { app, sync } = await mount(log, source.source)
+
+    try {
+      await waitBoot(log)
+
+      tree(source)
+      source.emit(perm("perm-grand", "grand"))
+
+      await wait(() => (sync.data.permission.grand?.length ?? 0) === 1)
+
+      const req = sessionPermissionRequest(sync.data.session, sync.data.permission, sync.session.get("root"))
+      expect(req?.id).toBe("perm-grand")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("surfaces nested grandchild question request from sync events", async () => {
+    const log: Hit[] = []
+    const source = createSource()
+    const { app, sync } = await mount(log, source.source)
+
+    try {
+      await waitBoot(log)
+
+      tree(source)
+      source.emit(ask("q-grand", "grand"))
+
+      await wait(() => (sync.data.question.grand?.length ?? 0) === 1)
+
+      const req = sessionQuestionRequest(sync.data.session, sync.data.question, sync.session.get("root"))
+      expect(req?.id).toBe("q-grand")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("prefers root permission request over descendant", async () => {
+    const log: Hit[] = []
+    const source = createSource()
+    const { app, sync } = await mount(log, source.source)
+
+    try {
+      await waitBoot(log)
+
+      tree(source)
+      source.emit(perm("perm-root", "root"))
+      source.emit(perm("perm-grand", "grand"))
+
+      await wait(() => (sync.data.permission.root?.length ?? 0) === 1 && (sync.data.permission.grand?.length ?? 0) === 1)
+
+      const req = sessionPermissionRequest(sync.data.session, sync.data.permission, sync.session.get("root"))
+      expect(req?.id).toBe("perm-root")
     } finally {
       app.renderer.destroy()
     }
