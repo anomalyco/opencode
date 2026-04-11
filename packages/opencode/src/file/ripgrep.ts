@@ -3,7 +3,7 @@ import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import * as Stream from "effect/Stream"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -291,7 +291,7 @@ export namespace Ripgrep {
     }) => Stream.Stream<string, PlatformError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Ripgrep") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
 
   export const layer: Layer.Layer<Service, never, ChildProcessSpawner | AppFileSystem.Service> = Layer.effect(
     Service,

@@ -1,7 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -49,7 +49,7 @@ export namespace McpAuth {
     readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/McpAuth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/McpAuth") {}
 
   export const layer = Layer.effect(
     Service,

@@ -22,7 +22,7 @@ export namespace Tool {
     callID?: string
     extra?: { [key: string]: any }
     messages: MessageV2.WithParts[]
-    metadata(input: { title?: string; metadata?: M }): void
+    metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
     ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
   }
 

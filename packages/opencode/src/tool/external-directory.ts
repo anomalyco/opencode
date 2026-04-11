@@ -1,5 +1,6 @@
 import path from "path"
 import { Effect } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { AppFileSystem } from "../filesystem"
@@ -42,5 +43,5 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
 })
 
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
-  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options))
+  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options).pipe(Effect.provide(EffectLogger.layer)))
 }

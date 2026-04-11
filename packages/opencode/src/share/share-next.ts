@@ -1,5 +1,5 @@
 import type * as SDK from "@opencode-ai/sdk/v2"
-import { Effect, Exit, Layer, Option, Schema, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account"
 import { Bus } from "@/bus"
@@ -73,7 +73,7 @@ export namespace ShareNext {
     readonly remove: (sessionID: SessionID) => Effect.Effect<void, unknown>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ShareNext") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
 
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))

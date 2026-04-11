@@ -43,7 +43,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -76,7 +76,7 @@ export namespace SessionPrompt {
     readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionPrompt") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
   export const layer = Layer.effect(
     Service,
@@ -364,21 +364,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
-            run.promise(
-              input.processor.updateToolCall(options.toolCallId, (match) => {
-                if (!["running", "pending"].includes(match.state.status)) return match
-                return {
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: { start: Date.now() },
-                  },
-                }
-              }),
-            ),
+            input.processor.updateToolCall(options.toolCallId, (match) => {
+              if (!["running", "pending"].includes(match.state.status)) return match
+              return {
+                ...match,
+                state: {
+                  title: val.title,
+                  metadata: val.metadata,
+                  status: "running",
+                  input: args,
+                  time: { start: Date.now() },
+                },
+              }
+            }),
           ask: (req) =>
             permission
               .ask({
@@ -592,17 +590,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             callID: part.callID,
             extra: { bypassAgentCheck: true, promptOps },
             messages: msgs,
-            metadata(val: { title?: string; metadata?: Record<string, any> }) {
-              return run.promise(
-                Effect.gen(function* () {
-                  part = yield* sessions.updatePart({
-                    ...part,
-                    type: "tool",
-                    state: { ...part.state, ...val },
-                  } satisfies MessageV2.ToolPart)
-                }),
-              )
-            },
+            metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
+              Effect.gen(function* () {
+                part = yield* sessions.updatePart({
+                  ...part,
+                  type: "tool",
+                  state: { ...part.state, ...val },
+                } satisfies MessageV2.ToolPart)
+              }),
             ask: (req: any) =>
               permission
                 .ask({
@@ -907,12 +902,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
-        const model = yield* Effect.promise(async () => {
-          for await (const item of MessageV2.stream(sessionID)) {
-            if (item.info.role === "user" && item.info.model) return item.info.model
-          }
-        })
-        if (model) return model
+        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+        if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
         return yield* provider.defaultModel()
       })
 
@@ -1054,7 +1045,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, ...extra },
                       messages: [],
-                      metadata: () => {},
+                      metadata: () => Effect.void,
                       ask: () => Effect.void,
                     })
                     .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
@@ -1295,16 +1286,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
 
-      const lastAssistant = (sessionID: SessionID) =>
-        Effect.promise(async () => {
-          let latest: MessageV2.WithParts | undefined
-          for await (const item of MessageV2.stream(sessionID)) {
-            latest ??= item
-            if (item.info.role !== "user") return item
-          }
-          if (latest) return latest
-          throw new Error("Impossible")
-        })
+      const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
+        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
+        if (Option.isSome(match)) return match.value
+        const msgs = yield* sessions.messages({ sessionID, limit: 1 })
+        if (msgs.length > 0) return msgs[0]
+        throw new Error("Impossible")
+      })
 
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
@@ -1665,8 +1653,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const promptOps: TaskPromptOps = {
         cancel: (sessionID) => run.fork(cancel(sessionID)),
-        resolvePromptParts: (template) => run.promise(resolvePromptParts(template)),
-        prompt: (input) => run.promise(prompt(input)),
+        resolvePromptParts: (template) => resolvePromptParts(template),
+        prompt: (input) => prompt(input),
       }
 
       return Service.of({
