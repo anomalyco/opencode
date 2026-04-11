@@ -362,7 +362,17 @@ export namespace SessionProcessor {
               })
               ctx.assistantMessage.finish = value.finishReason
               ctx.assistantMessage.cost += usage.cost
-              ctx.assistantMessage.tokens = usage.tokens
+              const prev = ctx.assistantMessage.tokens
+              ctx.assistantMessage.tokens = {
+                total: usage.total,
+                input: usage.tokens.input,
+                output: (prev?.output ?? 0) + usage.tokens.output,
+                reasoning: (prev?.reasoning ?? 0) + usage.tokens.reasoning,
+                cache: {
+                  read: usage.tokens.cache.read,
+                  write: (prev?.cache?.write ?? 0) + usage.tokens.cache.write,
+                },
+              }
               yield* session.updatePart({
                 id: PartID.ascending(),
                 reason: value.finishReason,

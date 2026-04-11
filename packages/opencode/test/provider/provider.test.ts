@@ -1709,7 +1709,7 @@ test("closest checks multiple query terms in order", async () => {
   })
 })
 
-test("model limit defaults to zero when not specified", async () => {
+test("model limit defaults to 128000 context and 4096 output when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -1740,8 +1740,8 @@ test("model limit defaults to zero when not specified", async () => {
     fn: async () => {
       const providers = await list()
       const model = providers[ProviderID.make("no-limit")].models["model"]
-      expect(model.limit.context).toBe(0)
-      expect(model.limit.output).toBe(0)
+      expect(model.limit.context).toBe(128_000)
+      expect(model.limit.output).toBe(4_096)
     },
   })
 })

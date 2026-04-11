@@ -24,6 +24,7 @@ import type { Provider } from "../../src/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
+import { isOverflow } from "../../src/session/overflow"
 
 Log.init({ print: false })
 
@@ -375,24 +376,24 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
-  test("BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it", async () => {
+  test("overflow uses total conversation size (input + output + reasoning + cache)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        // Two models with identical context/output limits, differing only in limit.input
         const withInputLimit = createModel({ context: 200_000, input: 200_000, output: 32_000 })
         const withoutInputLimit = createModel({ context: 200_000, output: 32_000 })
 
-        // 170K total tokens — well above context-output (168K) but below input limit (200K)
-        const tokens = { input: 166_000, output: 10_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
+        // Total size = 100K + 70K + 0 + 5K + 0 = 175K
+        const tokens = { input: 100_000, output: 70_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
 
         const withLimit = await SessionCompaction.isOverflow({ tokens, model: withInputLimit })
         const withoutLimit = await SessionCompaction.isOverflow({ tokens, model: withoutInputLimit })
 
-        // Both models have identical real capacity — they should agree:
-        expect(withLimit).toBe(true) // should compact (170K leaves no room for 32K output)
-        expect(withoutLimit).toBe(true) // correctly compacts (170K > 168K)
+        // withInputLimit: usable = 200K - 20K = 180K. totalSize=175K < 180K. No overflow.
+        expect(withLimit).toBe(false)
+        // withoutInputLimit: usable = 200K - 32K = 168K. totalSize=175K > 168K. Overflow.
+        expect(withoutLimit).toBe(true)
       },
     })
   })
@@ -1137,7 +1138,7 @@ describe("session.getUsage", () => {
     expect(result.tokens.input).toBe(1000)
     expect(result.tokens.output).toBe(400)
     expect(result.tokens.reasoning).toBe(100)
-    expect(result.tokens.total).toBe(1500)
+    expect(result.total).toBe(1000 + 400 + 100 + 0 + 0)
   })
 
   test("does not double count reasoning tokens in cost", () => {
@@ -1268,8 +1269,7 @@ describe("session.getUsage", () => {
         expect(result.tokens.input).toBe(500)
         expect(result.tokens.cache.read).toBe(200)
         expect(result.tokens.cache.write).toBe(300)
-        // total = adjusted (500) + output (500) + cacheRead (200) + cacheWrite (300)
-        expect(result.tokens.total).toBe(1500)
+        expect(result.total).toBe(500 + 500 + 0 + 200 + 300)
         return
       }
 
@@ -1287,8 +1287,7 @@ describe("session.getUsage", () => {
       expect(result.tokens.input).toBe(500)
       expect(result.tokens.cache.read).toBe(200)
       expect(result.tokens.cache.write).toBe(300)
-      // total = adjusted (500) + output (500) + cacheRead (200) + cacheWrite (300)
-      expect(result.tokens.total).toBe(1500)
+      expect(result.total).toBe(500 + 500 + 0 + 200 + 300)
     },
   )
 
@@ -1320,5 +1319,196 @@ describe("session.getUsage", () => {
     expect(result.tokens.input).toBe(500)
     expect(result.tokens.cache.read).toBe(200)
     expect(result.tokens.cache.write).toBe(300)
+  })
+
+  test("total is derived from token components", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      },
+    })
+    expect(result.total).toBe(1000 + 500 + 0 + 0 + 0)
+    expect(result.tokens.input).toBe(1000)
+    expect(result.tokens.output).toBe(500)
+  })
+})
+
+describe("MessageV2.token helpers", () => {
+  test("promptSize returns input + cache read + cache write", () => {
+    const tokens = { input: 5000, output: 2000, reasoning: 500, cache: { read: 3000, write: 1000 } }
+    expect(MessageV2.promptSize(tokens)).toBe(5000 + 3000 + 1000)
+  })
+
+  test("promptSize works with zero cache", () => {
+    const tokens = { input: 5000, output: 2000, reasoning: 0, cache: { read: 0, write: 0 } }
+    expect(MessageV2.promptSize(tokens)).toBe(5000)
+  })
+
+  test("totalSize returns sum of all token fields", () => {
+    const tokens = { input: 5000, output: 2000, reasoning: 500, cache: { read: 3000, write: 1000 } }
+    expect(MessageV2.totalSize(tokens)).toBe(5000 + 2000 + 500 + 3000 + 1000)
+  })
+})
+
+describe("isOverflow", () => {
+  function makeConfig(opts?: { auto?: boolean; reserved?: number }): Config.Info {
+    return {
+      compaction: {
+        auto: opts?.auto ?? true,
+        reserved: opts?.reserved,
+      },
+    } as Config.Info
+  }
+
+  test("returns false when auto compaction is disabled", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    const tokens = { input: 90_000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } }
+    expect(isOverflow({ cfg: makeConfig({ auto: false }), tokens, model })).toBe(false)
+  })
+
+  test("returns false when context limit is 0", () => {
+    const model = {
+      ...createModel({ context: 100_000, output: 32_000 }),
+      limit: { ...createModel({ context: 100_000, output: 32_000 }).limit, context: 0 },
+    }
+    const tokens = { input: 90_000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } }
+    expect(isOverflow({ cfg: makeConfig(), tokens, model })).toBe(false)
+  })
+
+  test("uses total size (all token fields) for overflow check", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    // Total size = 50_000 + 30_000 + 5_000 + 10_000 + 5_000 = 100_000
+    // With context=100k and output=32k, usable = 100k - 20k = 80k
+    // 100k >= 80k => overflowing
+    const tokens = { input: 50_000, output: 30_000, reasoning: 5_000, cache: { read: 10_000, write: 5_000 } }
+    expect(isOverflow({ cfg: makeConfig(), tokens, model })).toBe(true)
+  })
+
+  test("does not overflow when total size fits in usable context", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    // Total size = 40_000 + 10_000 + 5_000 + 5_000 + 0 = 60_000
+    // usable = 100k - 20k = 80k
+    // 60k < 80k => not overflowing
+    const tokens = { input: 40_000, output: 10_000, reasoning: 5_000, cache: { read: 5_000, write: 0 } }
+    expect(isOverflow({ cfg: makeConfig(), tokens, model })).toBe(false)
+  })
+
+  test("overflows when total size exceeds usable context", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    // Total size = 70_000 + 1_000 + 0 + 10_000 + 5_000 = 86_000
+    // usable = 100k - 20k = 80k
+    // 86k >= 80k => overflowing
+    const tokens = { input: 70_000, output: 1_000, reasoning: 0, cache: { read: 10_000, write: 5_000 } }
+    expect(isOverflow({ cfg: makeConfig(), tokens, model })).toBe(true)
+  })
+
+  test("respects custom reserved value", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    // Total size = 70_000 + 1_000 + 0 + 10_000 + 5_000 = 86_000
+    // reserved=50k, usable=100k-50k=50k
+    // 86k >= 50k => overflow
+    const tokens = { input: 70_000, output: 1_000, reasoning: 0, cache: { read: 10_000, write: 5_000 } }
+    expect(isOverflow({ cfg: makeConfig({ reserved: 50_000 }), tokens, model })).toBe(true)
+  })
+})
+
+describe("token accumulation across steps", () => {
+  test("accumulates output, reasoning, and cache.write across steps; replaces input and cache.read", () => {
+    // Step 1: initial request
+    const step1Tokens = Session.getUsage({
+      model: createModel({ context: 100_000, output: 32_000 }),
+      usage: { inputTokens: 10000, outputTokens: 500, totalTokens: 10500 },
+    }).tokens
+    expect(step1Tokens.input).toBe(10000)
+    expect(step1Tokens.output).toBe(500)
+    expect(step1Tokens.reasoning).toBe(0)
+    expect(step1Tokens.cache.read).toBe(0)
+    expect(step1Tokens.cache.write).toBe(0)
+
+    // After step 1: assistantMessage.tokens = step1Tokens (no prev)
+    let accumulated = { ...step1Tokens, cache: { ...step1Tokens.cache } }
+
+    // Step 2: tool result, conversation has grown
+    const step2Tokens = Session.getUsage({
+      model: createModel({ context: 100_000, output: 32_000 }),
+      usage: {
+        inputTokens: 15000,
+        outputTokens: 800,
+        reasoningTokens: 200,
+        cachedInputTokens: 5000,
+        totalTokens: 16000,
+      },
+    }).tokens
+    expect(step2Tokens.input).toBe(10000) // 15000 - 5000 (cached)
+    expect(step2Tokens.output).toBe(600) // 800 - 200 (reasoning)
+    expect(step2Tokens.reasoning).toBe(200)
+    expect(step2Tokens.cache.read).toBe(5000)
+    expect(step2Tokens.cache.write).toBe(0)
+
+    // Simulate what processor.ts does: accumulate additive fields, replace snapshot fields
+    accumulated = {
+      input: step2Tokens.input,
+      output: (accumulated.output ?? 0) + step2Tokens.output,
+      reasoning: (accumulated.reasoning ?? 0) + step2Tokens.reasoning,
+      cache: {
+        read: step2Tokens.cache.read,
+        write: (accumulated.cache?.write ?? 0) + step2Tokens.cache.write,
+      },
+    }
+
+    // After two steps:
+    expect(accumulated.input).toBe(10000) // replaced: last step's input
+    expect(accumulated.output).toBe(500 + 600) // accumulated: 1100
+    expect(accumulated.reasoning).toBe(0 + 200) // accumulated: 200
+    expect(accumulated.cache.read).toBe(5000) // replaced: last step's cache read
+    expect(accumulated.cache.write).toBe(0 + 0) // accumulated: 0
+
+    // Step 3: more tool calls, cache hits
+    const step3Tokens = Session.getUsage({
+      model: createModel({ context: 100_000, output: 32_000 }),
+      usage: {
+        inputTokens: 20000,
+        outputTokens: 1200,
+        reasoningTokens: 300,
+        cachedInputTokens: 12000,
+        totalTokens: 21200,
+      },
+      metadata: { anthropic: { cacheCreationInputTokens: 500 } },
+    }).tokens
+    expect(step3Tokens.input).toBe(7500) // 20000 - 12000 - 500
+    expect(step3Tokens.output).toBe(900) // 1200 - 300
+    expect(step3Tokens.reasoning).toBe(300)
+    expect(step3Tokens.cache.read).toBe(12000)
+    expect(step3Tokens.cache.write).toBe(500)
+
+    accumulated = {
+      input: step3Tokens.input,
+      output: accumulated.output + step3Tokens.output,
+      reasoning: accumulated.reasoning + step3Tokens.reasoning,
+      cache: {
+        read: step3Tokens.cache.read,
+        write: accumulated.cache.write + step3Tokens.cache.write,
+      },
+    }
+
+    // After three steps:
+    expect(accumulated.input).toBe(7500) // replaced: latest step
+    expect(accumulated.output).toBe(500 + 600 + 900) // accumulated: 2000
+    expect(accumulated.reasoning).toBe(0 + 200 + 300) // accumulated: 500
+    expect(accumulated.cache.read).toBe(12000) // replaced: latest step
+    expect(accumulated.cache.write).toBe(0 + 0 + 500) // accumulated: 500
+
+    // promptSize = input tokens sent to the LLM (current prompt footprint)
+    const promptSize = MessageV2.promptSize(accumulated)
+    expect(promptSize).toBe(7500 + 12000 + 500) // 20_000
+
+    // totalSize = full conversation size (used for context overflow and display %)
+    // includes output because the next turn's prompt will include this response
+    const totalSize = MessageV2.totalSize(accumulated)
+    expect(totalSize).toBe(7500 + 2000 + 500 + 12000 + 500) // 22_500
   })
 })

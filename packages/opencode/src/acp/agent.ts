@@ -109,7 +109,7 @@ export namespace ACP {
       return
     }
 
-    const used = msg.tokens.input + (msg.tokens.cache?.read ?? 0)
+    const used = msg.tokens.input + (msg.tokens.cache?.read ?? 0) + (msg.tokens.cache?.write ?? 0)
     const totalCost = assistantMessages.reduce((sum, m) => sum + m.info.cost, 0)
 
     await connection

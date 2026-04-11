@@ -452,6 +452,14 @@ export namespace MessageV2 {
   })
   export type Assistant = z.infer<typeof Assistant>
 
+  export function promptSize(tokens: Assistant["tokens"]): number {
+    return tokens.input + tokens.cache.read + tokens.cache.write
+  }
+
+  export function totalSize(tokens: Assistant["tokens"]): number {
+    return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+  }
+
   export const Info = z.discriminatedUnion("role", [User, Assistant]).meta({
     ref: "Message",
   })

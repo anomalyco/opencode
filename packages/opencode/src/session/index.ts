@@ -271,10 +271,7 @@ export namespace Session {
     // tokens to get the non-cached input count for separate cost calculation.
     const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
 
-    const total = input.usage.totalTokens
-
     const tokens = {
-      total,
       input: adjustedInputTokens,
       output: safe(outputTokens - reasoningTokens),
       reasoning: reasoningTokens,
@@ -300,6 +297,7 @@ export namespace Session {
           .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
           .toNumber(),
       ),
+      total: tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write,
       tokens,
     }
   }

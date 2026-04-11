@@ -13,6 +13,9 @@ import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
+
+const DEFAULT_CONTEXT_LIMIT = 128_000
+const DEFAULT_OUTPUT_LIMIT = 4_096
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
@@ -1170,9 +1173,9 @@ export namespace Provider {
                   },
                   options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
                   limit: {
-                    context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+                    context: model.limit?.context ?? existingModel?.limit?.context ?? DEFAULT_CONTEXT_LIMIT,
                     input: model.limit?.input ?? existingModel?.limit?.input,
-                    output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+                    output: model.limit?.output ?? existingModel?.limit?.output ?? DEFAULT_OUTPUT_LIMIT,
                   },
                   headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
                   family: model.family ?? existingModel?.family ?? "",
