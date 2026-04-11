@@ -61,7 +61,7 @@ export const ExperimentalRoutes = lazy(() =>
           Effect.gen(function* () {
             const config = yield* Config.Service
             const account = yield* Account.Service
-            const [state, groups] = yield* Effect.all([config.getConsoleState(), account.orgsByAccount()])
+            const [state, groups] = yield* Effect.all([config.getConsoleState(), account.orgsByAccount()], { concurrency: "unbounded" })
             return {
               ...state,
               switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
@@ -92,7 +92,7 @@ export const ExperimentalRoutes = lazy(() =>
         const orgs = await AppRuntime.runPromise(
           Effect.gen(function* () {
             const account = yield* Account.Service
-            const [groups, active] = yield* Effect.all([account.orgsByAccount(), account.active()])
+            const [groups, active] = yield* Effect.all([account.orgsByAccount(), account.active()], { concurrency: "unbounded" })
             const info = Option.getOrUndefined(active)
             return groups.flatMap((group) =>
               group.orgs.map((org) => ({
