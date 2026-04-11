@@ -31,12 +31,14 @@ export namespace Observability {
 
   export const layer = !base
     ? EffectLogger.layer
-    : Otlp.layerJson({
-        baseUrl: base,
-        loggerExportInterval: Duration.seconds(1),
-        // Disable console logger - only export to OTLP
-        loggerMergeWithExisting: false,
-        resource,
-        headers,
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+    : Layer.mergeAll(
+        EffectLogger.layer,
+        Otlp.layerJson({
+          baseUrl: base,
+          loggerExportInterval: Duration.seconds(1),
+          loggerMergeWithExisting: true,
+          resource,
+          headers,
+        }),
+      ).pipe(Layer.provide(FetchHttpClient.layer))
 }
