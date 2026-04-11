@@ -10,7 +10,8 @@ import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
+import { EffectLogger } from "@/effect/logger"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -112,7 +113,7 @@ export namespace Pty {
     ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Pty") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
   export const layer = Layer.effect(
     Service,
@@ -256,8 +257,8 @@ export namespace Pty {
             if (session.info.status === "exited") return
             log.info("session exited", { id, exitCode })
             session.info.status = "exited"
-            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }))
-            Effect.runFork(remove(id))
+            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }).pipe(Effect.provide(EffectLogger.layer)))
+            Effect.runFork(remove(id).pipe(Effect.provide(EffectLogger.layer)))
           }),
         )
         yield* bus.publish(Event.Created, { info })
@@ -359,7 +360,7 @@ export namespace Pty {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

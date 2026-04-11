@@ -2,7 +2,7 @@ import { $ } from "bun"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Effect, ServiceMap } from "effect"
+import { Effect, Context } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as Scope from "effect/Scope"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -123,7 +123,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
 export const provideInstance =
   (directory: string) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.servicesWith((services: ServiceMap.ServiceMap<R>) =>
+    Effect.contextWith((services: Context.Context<R>) =>
       Effect.promise<A>(async () =>
         Instance.provide({
           directory,
