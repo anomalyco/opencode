@@ -13,6 +13,7 @@ import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Command } from "../../command"
@@ -185,7 +186,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const todos = await Todo.get(sessionID)
+        const todos = await AppRuntime.runPromise(Todo.Service.use((svc) => svc.get(sessionID)))
         return c.json(todos)
       },
     )
