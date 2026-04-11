@@ -7,6 +7,7 @@ import { Flag } from "@/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
+import { Platform } from "../util/platform"
 import { ProjectID } from "./schema"
 import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -149,6 +150,11 @@ export namespace Project {
         if (!name) return cwd
         name = name.replace(/[\r\n]+$/, "")
         if (!name) return cwd
+        // Don't convert WSL UNC paths through windowsPath — they're already valid
+        if (Platform.isWslUncPath(cwd)) {
+          if (pathSvc.isAbsolute(name)) return pathSvc.normalize(name)
+          return pathSvc.resolve(cwd, name)
+        }
         name = AppFileSystem.windowsPath(name)
         if (pathSvc.isAbsolute(name)) return pathSvc.normalize(name)
         return pathSvc.resolve(cwd, name)
