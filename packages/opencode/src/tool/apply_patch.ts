@@ -258,20 +258,13 @@ export const ApplyPatchTool = Tool.defineEffect(
       })
       let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
-      // Report LSP errors for changed files
-      const MAX_DIAGNOSTICS_PER_FILE = 20
       for (const change of fileChanges) {
         if (change.type === "delete") continue
         const target = change.movePath ?? change.filePath
-        const normalized = AppFileSystem.normalizePath(target)
-        const issues = diagnostics[normalized] ?? []
-        const errors = issues.filter((item) => item.severity === 1)
-        if (errors.length > 0) {
-          const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
-          const suffix =
-            errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-          output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target).replaceAll("\\", "/")}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
-        }
+        const block = LSP.Diagnostic.report(target, diagnostics[AppFileSystem.normalizePath(target)] ?? [])
+        if (!block) continue
+        const rel = path.relative(Instance.worktree, target).replaceAll("\\", "/")
+        output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
       }
 
       return {

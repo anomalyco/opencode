@@ -15,7 +15,6 @@ import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 
-const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
 export const WriteTool = Tool.defineEffect(
@@ -72,20 +71,16 @@ export const WriteTool = Tool.defineEffect(
           const normalizedFilepath = AppFileSystem.normalizePath(filepath)
           let projectDiagnosticsCount = 0
           for (const [file, issues] of Object.entries(diagnostics)) {
-            const errors = issues.filter((item) => item.severity === 1)
-            if (errors.length === 0) continue
-            const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
-            const suffix =
-              errors.length > MAX_DIAGNOSTICS_PER_FILE
-                ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more`
-                : ""
-            if (file === normalizedFilepath) {
-              output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+            const current = file === normalizedFilepath
+            if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
+            const block = LSP.Diagnostic.report(current ? filepath : file, issues)
+            if (!block) continue
+            if (current) {
+              output += `\n\nLSP errors detected in this file, please fix:\n${block}`
               continue
             }
-            if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
             projectDiagnosticsCount++
-            output += `\n\nLSP errors detected in other files:\n<diagnostics file="${file}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+            output += `\n\nLSP errors detected in other files:\n${block}`
           }
 
           return {
