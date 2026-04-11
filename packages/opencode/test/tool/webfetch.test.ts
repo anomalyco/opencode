@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -13,13 +15,21 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
 async function withFetch(fetch: (req: Request) => Response | Promise<Response>, fn: (url: URL) => Promise<void>) {
   using server = Bun.serve({ port: 0, fetch })
   await fn(server.url)
+}
+
+function initTool() {
+  return WebFetchTool.pipe(
+    Effect.flatMap((info) => Effect.promise(() => info.init())),
+    Effect.provide(FetchHttpClient.layer),
+    Effect.runPromise,
+  )
 }
 
 describe("tool.webfetch", () => {
@@ -31,10 +41,9 @@ describe("tool.webfetch", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
-            const result = await webfetch.execute(
-              { url: new URL("/image.png", url).toString(), format: "markdown" },
-              ctx,
+            const webfetch = await initTool()
+            const result = await Effect.runPromise(
+              webfetch.execute({ url: new URL("/image.png", url).toString(), format: "markdown" }, ctx),
             )
             expect(result.output).toBe("Image fetched successfully")
             expect(result.attachments).toBeDefined()
@@ -63,8 +72,10 @@ describe("tool.webfetch", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
-            const result = await webfetch.execute({ url: new URL("/image.svg", url).toString(), format: "html" }, ctx)
+            const webfetch = await initTool()
+            const result = await Effect.runPromise(
+              webfetch.execute({ url: new URL("/image.svg", url).toString(), format: "html" }, ctx),
+            )
             expect(result.output).toContain("<svg")
             expect(result.attachments).toBeUndefined()
           },
@@ -84,8 +95,10 @@ describe("tool.webfetch", () => {
         await Instance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
-            const result = await webfetch.execute({ url: new URL("/file.txt", url).toString(), format: "text" }, ctx)
+            const webfetch = await initTool()
+            const result = await Effect.runPromise(
+              webfetch.execute({ url: new URL("/file.txt", url).toString(), format: "text" }, ctx),
+            )
             expect(result.output).toBe("hello from webfetch")
             expect(result.attachments).toBeUndefined()
           },

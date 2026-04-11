@@ -1,6 +1,6 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Record, Context } from "effect"
 import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
@@ -51,7 +51,7 @@ export namespace LLM {
     readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LLM") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
   export const layer = Layer.effect(
     Service,
@@ -234,7 +234,11 @@ export namespace LLM {
     // from the workflow service are executed via opencode's tool system
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
-      const workflowModel = language
+      const workflowModel = language as GitLabWorkflowLanguageModel & {
+        sessionID?: string
+        sessionPreapprovedTools?: string[]
+        approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
+      }
       workflowModel.sessionID = input.sessionID
       workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
@@ -301,7 +305,7 @@ export namespace LLM {
             ruleset: [],
           })
           for (const name of uniqueNames) approvedToolsForSession.add(name)
-          workflowModel.sessionPreapprovedTools = [...workflowModel.sessionPreapprovedTools, ...uniqueNames]
+          workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
           return { approved: true }
         } catch {
           return { approved: false }
