@@ -220,12 +220,26 @@ export function Session() {
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
-  const bind = (r: PromptRef | undefined) => {
-    prompt = r
-    promptRef.set(r)
-    if (seeded || !route.initialPrompt || !r) return
+  let savedPrompt: PromptInfo | undefined
+  const bind = (promptRefParam: PromptRef | undefined) => {
+    if (!promptRefParam) {
+      if (prompt?.current) {
+        savedPrompt = prompt.current
+      }
+      prompt = undefined
+      promptRef.set(undefined)
+      return
+    }
+    prompt = promptRefParam
+    promptRef.set(promptRefParam)
+    if (savedPrompt) {
+      promptRefParam.set(savedPrompt)
+      savedPrompt = undefined
+      return
+    }
+    if (seeded || !route.initialPrompt) return
     seeded = true
-    r.set(route.initialPrompt)
+    promptRefParam.set(route.initialPrompt)
   }
   const keybind = useKeybind()
   const dialog = useDialog()
