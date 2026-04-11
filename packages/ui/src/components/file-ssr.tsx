@@ -1,4 +1,4 @@
-import { DIFFS_TAG_NAME, FileDiff, VirtualizedFileDiff } from "@pierre/diffs"
+import { DIFFS_TAG_NAME, FileDiff } from "@pierre/diffs"
 import { type PreloadFileDiffResult, type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
@@ -13,7 +13,6 @@ import {
   notifyShadowReady,
   observeViewerScheme,
 } from "../pierre/file-runtime"
-import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { File, type DiffFileProps, type FileProps } from "./file"
 
 type DiffPreload<T> = PreloadMultiFileDiffResult<T> | PreloadFileDiffResult<T>
@@ -26,7 +25,6 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
   let container!: HTMLDivElement
   let fileDiffRef!: HTMLElement
   let fileDiffInstance: FileDiff<T> | undefined
-  let sharedVirtualizer: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
 
   const ready = createReadyWatcher()
   const workerPool = useWorkerPool(props.diffStyle)
@@ -50,14 +48,6 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
   ])
 
   const getRoot = () => fileDiffRef?.shadowRoot ?? undefined
-
-  const getVirtualizer = () => {
-    if (sharedVirtualizer) return sharedVirtualizer.virtualizer
-    const result = acquireVirtualizer(container)
-    if (!result) return
-    sharedVirtualizer = result
-    return result.virtualizer
-  }
 
   const setSelectedLines = (range: DiffFileProps<T>["selectedLines"], attempt = 0) => {
     const diff = fileDiffInstance
@@ -92,27 +82,15 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
 
     onCleanup(observeViewerScheme(() => fileDiffRef))
 
-    const virtualizer = getVirtualizer()
     const annotations = local.annotations ?? local.preloadedDiff.annotations ?? []
-    fileDiffInstance = virtualizer
-      ? new VirtualizedFileDiff<T>(
-          {
-            ...createDefaultOptions(props.diffStyle),
-            ...others,
-            ...(local.preloadedDiff.options ?? {}),
-          },
-          virtualizer,
-          virtualMetrics,
-          workerPool,
-        )
-      : new FileDiff<T>(
-          {
-            ...createDefaultOptions(props.diffStyle),
-            ...others,
-            ...(local.preloadedDiff.options ?? {}),
-          },
-          workerPool,
-        )
+    fileDiffInstance = new FileDiff<T>(
+      {
+        ...createDefaultOptions(props.diffStyle),
+        ...others,
+        ...(local.preloadedDiff.options ?? {}),
+      },
+      workerPool,
+    )
 
     applyViewerScheme(fileDiffRef)
 
@@ -163,8 +141,6 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
   onCleanup(() => {
     clearReadyWatcher(ready)
     fileDiffInstance?.cleanUp()
-    sharedVirtualizer?.release()
-    sharedVirtualizer = undefined
   })
 
   return (

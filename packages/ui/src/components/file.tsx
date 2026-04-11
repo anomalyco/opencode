@@ -1,6 +1,5 @@
 import { sampledChecksum } from "@opencode-ai/util/encode"
 import {
-  DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,
   type FileContents,
   type FileDiffMetadata,
@@ -10,10 +9,6 @@ import {
   type FileOptions,
   type LineAnnotation,
   type SelectedLineRange,
-  type VirtualFileMetrics,
-  VirtualizedFile,
-  VirtualizedFileDiff,
-  Virtualizer,
 } from "@pierre/diffs"
 import { type PreloadFileDiffResult, type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -40,18 +35,9 @@ import {
   readShadowLineSelection,
 } from "../pierre/file-selection"
 import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
-import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
-
-const VIRTUALIZE_BYTES = 500_000
-
-const codeMetrics = {
-  ...DEFAULT_VIRTUAL_FILE_METRICS,
-  lineHeight: 24,
-  fileGap: 0,
-} satisfies Partial<VirtualFileMetrics>
 
 type SharedProps<T> = {
   annotations?: LineAnnotation<T>[] | DiffLineAnnotation<T>[]
@@ -386,11 +372,6 @@ type AnnotationTarget<A> = {
   rerender: () => void
 }
 
-type VirtualStrategy = {
-  get: () => Virtualizer | undefined
-  cleanup: () => void
-}
-
 function useModeViewer(config: ModeConfig, adapter: ModeAdapter) {
   return useFileViewer({
     enableLineSelection: config.enableLineSelection,
@@ -532,64 +513,6 @@ function scrollParent(el: HTMLElement): HTMLElement | undefined {
   }
 }
 
-function createLocalVirtualStrategy(host: () => HTMLDivElement | undefined, enabled: () => boolean): VirtualStrategy {
-  let virtualizer: Virtualizer | undefined
-  let root: Document | HTMLElement | undefined
-
-  const release = () => {
-    virtualizer?.cleanUp()
-    virtualizer = undefined
-    root = undefined
-  }
-
-  return {
-    get: () => {
-      if (!enabled()) {
-        release()
-        return
-      }
-      if (typeof document === "undefined") return
-
-      const wrapper = host()
-      if (!wrapper) return
-
-      const next = scrollParent(wrapper) ?? document
-      if (virtualizer && root === next) return virtualizer
-
-      release()
-      virtualizer = new Virtualizer()
-      root = next
-      virtualizer.setup(next, next instanceof Document ? undefined : wrapper)
-      return virtualizer
-    },
-    cleanup: release,
-  }
-}
-
-function createSharedVirtualStrategy(host: () => HTMLDivElement | undefined): VirtualStrategy {
-  let shared: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
-
-  const release = () => {
-    shared?.release()
-    shared = undefined
-  }
-
-  return {
-    get: () => {
-      if (shared) return shared.virtualizer
-
-      const container = host()
-      if (!container) return
-
-      const result = acquireVirtualizer(container)
-      if (!result) return
-      shared = result
-      return result.virtualizer
-    },
-    cleanup: release,
-  }
-}
-
 function parseLine(node: HTMLElement) {
   if (!node.dataset.line) return
   const value = parseInt(node.dataset.line, 10)
@@ -688,7 +611,7 @@ function ViewerShell(props: {
 // ---------------------------------------------------------------------------
 
 function TextViewer<T>(props: TextFileProps<T>) {
-  let instance: PierreFile<T> | VirtualizedFile<T> | undefined
+  let instance: PierreFile<T> | undefined
   let viewer!: Viewer
 
   const [local, others] = splitProps(props, textKeys)
@@ -707,33 +630,11 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return Math.max(1, total)
   }
 
-  const bytes = createMemo(() => {
-    const value = local.file.contents as unknown
-    if (typeof value === "string") return value.length
-    if (Array.isArray(value)) {
-      return value.reduce(
-        (sum, part) => sum + (typeof part === "string" ? part.length + 1 : String(part).length + 1),
-        0,
-      )
-    }
-    if (value == null) return 0
-    return String(value).length
-  })
-
-  const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
-
-  const virtuals = createLocalVirtualStrategy(() => viewer.wrapper, virtual)
-
   const lineFromMouseEvent = (event: MouseEvent): MouseHit => mouseHit(event, parseLine)
 
   const applySelection = (range: SelectedLineRange | null) => {
     const current = instance
     if (!current) return false
-
-    if (virtual()) {
-      current.setSelectedLines(range)
-      return true
-    }
 
     const root = viewer.getRoot()
     if (!root) return false
@@ -833,10 +734,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   const notify = () => {
     notifyRendered({
       viewer,
-      isReady: (root) => {
-        if (virtual()) return root.querySelector("[data-line]") != null
-        return root.querySelectorAll("[data-line]").length >= lineCount()
-      },
+      isReady: (root) => root.querySelectorAll("[data-line]").length >= lineCount(),
       onReady: () => {
         applySelection(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
@@ -855,17 +753,11 @@ function TextViewer<T>(props: TextFileProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = getWorkerPool("unified")
-    const isVirtual = virtual()
-
-    const virtualizer = virtuals.get()
 
     renderViewer({
       viewer,
       current: instance,
-      create: () =>
-        isVirtual && virtualizer
-          ? new VirtualizedFile<T>(opts, virtualizer, codeMetrics, workerPool)
-          : new PierreFile<T>(opts, workerPool),
+      create: () => new PierreFile<T>(opts, workerPool),
       assign: (value) => {
         instance = value
       },
@@ -892,7 +784,6 @@ function TextViewer<T>(props: TextFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
-    virtuals.cleanup()
   })
 
   return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
@@ -988,8 +879,6 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     adapter,
   )
 
-  const virtuals = createSharedVirtualStrategy(() => viewer.container)
-
   const large = createMemo(() => {
     if (local.fileDiff) {
       const before = local.fileDiff.deletionLines.join("")
@@ -1052,7 +941,6 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   createEffect(() => {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
-    const virtualizer = virtuals.get()
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
     const done = preserve(viewer)
@@ -1067,10 +955,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     renderViewer({
       viewer,
       current: instance,
-      create: () =>
-        virtualizer
-          ? new VirtualizedFileDiff<T>(opts, virtualizer, virtualMetrics, workerPool)
-          : new FileDiff<T>(opts, workerPool),
+      create: () => new FileDiff<T>(opts, workerPool),
       assign: (value) => {
         instance = value
       },
@@ -1108,7 +993,6 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
-    virtuals.cleanup()
     dragSide = undefined
     dragEndSide = undefined
   })
