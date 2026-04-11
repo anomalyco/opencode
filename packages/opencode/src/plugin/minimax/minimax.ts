@@ -17,7 +17,7 @@ const CLIENT_ID = "d38bdbee-2b8c-4c74-9a9c-5875fabe6317"
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:user_code"
 
 // Extra buffer before expiry to trigger proactive refresh (ms)
-const REFRESH_BUFFER_MS = 60_000
+const REFRESH_BUFFER_MS = 5 * 60 * 1000
 
 // Safety margin added to polling interval to avoid clock skew
 const POLL_SAFETY_MARGIN_MS = 1_000
@@ -139,7 +139,7 @@ export async function MinimaxAuthPlugin(_input: PluginInput): Promise<Hooks> {
               throw new Error("OAuth state mismatch: possible CSRF attack")
             }
 
-            const pollIntervalMs = (data.interval ?? 5) * 1000
+            const pollIntervalMs = data.interval ?? 5000
 
             return {
               url: data.verification_uri,
