@@ -144,13 +144,22 @@ export namespace Config {
     waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
   }
 
+  function installRoot(dir: string) {
+    if (Filesystem.resolve(dir) !== Filesystem.resolve(Global.Path.config)) return dir
+    return path.join(Global.Path.cache, "config", "deps")
+  }
+
   export async function installDependencies(dir: string, input?: InstallInput) {
-    if (!(await isWritable(dir))) return
-    await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
+    const root = installRoot(dir)
+    if (!(await isWritable(root))) {
+      await fsNode.mkdir(root, { recursive: true }).catch(() => undefined)
+    }
+    if (!(await isWritable(root))) return
+    await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(root)}`, {
       signal: input?.signal,
       onWait: (tick) =>
         input?.waitTick?.({
-          dir,
+          dir: root,
           attempt: tick.attempt,
           delay: tick.delay,
           waited: tick.waited,
@@ -158,7 +167,7 @@ export namespace Config {
     })
     input?.signal?.throwIfAborted()
 
-    const pkg = path.join(dir, "package.json")
+    const pkg = path.join(root, "package.json")
     const target = Installation.isLocal() ? "*" : Installation.VERSION
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
@@ -169,7 +178,7 @@ export namespace Config {
     }
     await Filesystem.writeJson(pkg, json)
 
-    const gitignore = path.join(dir, ".gitignore")
+    const gitignore = path.join(root, ".gitignore") //seems like useless patch for package managers. 
     const ignore = await Filesystem.exists(gitignore)
     if (!ignore) {
       await Filesystem.write(
@@ -177,7 +186,7 @@ export namespace Config {
         ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
       )
     }
-    await Npm.install(dir)
+    await Npm.install(root)
   }
 
   async function isWritable(dir: string) {

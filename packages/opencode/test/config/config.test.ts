@@ -817,6 +817,57 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   }
 })
 
+test("installs global config dependencies in cache instead of config", async () => {
+  const root = path.join(Global.Path.cache, "config", "deps")
+  await fs.rm(root, { recursive: true, force: true }).catch(() => {})
+  await fs.rm(path.join(Global.Path.config, "package.json"), { force: true }).catch(() => {})
+  await fs.rm(path.join(Global.Path.config, ".gitignore"), { force: true }).catch(() => {})
+
+  const run = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+  })
+
+  try {
+    await Config.installDependencies(Global.Path.config)
+    expect(run).toHaveBeenCalledWith(root)
+    expect(await Filesystem.exists(path.join(root, "package.json"))).toBe(true)
+    expect(await Filesystem.exists(path.join(root, ".gitignore"))).toBe(true)
+    expect(await Filesystem.exists(path.join(Global.Path.config, "package.json"))).toBe(false)
+    expect(await Filesystem.exists(path.join(Global.Path.config, ".gitignore"))).toBe(false)
+  } finally {
+    run.mockRestore()
+  }
+})
+
+test("installs non-global config dependencies in place", async () => {
+  await using tmp = await tmpdir()
+  const dir = path.join(tmp.path, "custom")
+  await fs.mkdir(dir, { recursive: true })
+
+  const run = spyOn(Npm, "install").mockImplementation(async (cwd: string) => {
+    const mod = path.join(cwd, "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+  })
+
+  try {
+    await Config.installDependencies(dir)
+    expect(run).toHaveBeenCalledWith(dir)
+    expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
+    expect(await Filesystem.exists(path.join(dir, ".gitignore"))).toBe(true)
+  } finally {
+    run.mockRestore()
+  }
+})
+
 test("dedupes concurrent config dependency installs for the same dir", async () => {
   await using tmp = await tmpdir()
   const dir = path.join(tmp.path, "a")
