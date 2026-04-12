@@ -78,6 +78,7 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
+  let clearTimer: ReturnType<typeof setTimeout> | undefined
 
   const keybind = useKeybind()
   const local = useLocal()
@@ -166,6 +167,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    clearCount: number
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -176,6 +178,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    clearCount: 0,
   })
 
   createEffect(
@@ -251,6 +254,31 @@ export function Prompt(props: PromptProps) {
               content: content.data,
             })
           }
+        },
+        },
+      {
+        title: "Clear input",
+        value: "prompt.clear_input",
+        keybind: "input_clear_prompt",
+        category: "Prompt",
+        hidden: true,
+        enabled: status().type === "idle" && !!store.prompt.input,
+        onSelect: () => {
+          if (!store.prompt.input) return
+          if (store.clearCount === 0) {
+            setStore("clearCount", 1)
+            clearTimer = setTimeout(() => {
+              setStore("clearCount", 0)
+            }, 2000)
+            return
+          }
+          clearTimeout(clearTimer)
+          clearTimer = undefined
+          input.clear()
+          input.extmarks.clear()
+          setStore("prompt", { input: "", parts: [] })
+          setStore("extmarkToPartIndex", new Map())
+          setStore("clearCount", 0)
         },
       },
       {
@@ -431,6 +459,7 @@ export function Prompt(props: PromptProps) {
   }
 
   onCleanup(() => {
+    clearTimeout(clearTimer)
     props.ref?.(undefined)
   })
 
@@ -1157,7 +1186,19 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
+          <Show
+            when={status().type !== "idle"}
+            fallback={
+              store.clearCount > 0 ? (
+                <text fg={theme.primary}>
+                  esc{" "}
+                  <span style={{ fg: theme.primary }}>again to clear</span>
+                </text>
+              ) : (
+                props.hint ?? <text />
+              )
+            }
+          >
             <box
               flexDirection="row"
               gap={1}
