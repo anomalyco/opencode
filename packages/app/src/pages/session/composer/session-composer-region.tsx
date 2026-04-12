@@ -249,7 +249,12 @@ export function SessionComposerRegion(props: {
               <Show
                 when={child()}
                 fallback={
-                  <Show when={!props.state.blocked()}>
+                  <div
+                    aria-hidden={props.state.blocked() ? "true" : undefined}
+                    classList={{
+                      hidden: props.state.blocked(),
+                    }}
+                  >
                     <PromptInput
                       ref={props.inputRef}
                       newSessionWorktree={props.newSessionWorktree}
@@ -261,7 +266,7 @@ export function SessionComposerRegion(props: {
                       onAbort={props.followup?.onAbort}
                       onSubmit={props.onSubmit}
                     />
-                  </Show>
+                  </div>
                 }
               >
                 <div

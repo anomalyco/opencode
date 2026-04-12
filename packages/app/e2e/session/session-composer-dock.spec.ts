@@ -77,7 +77,7 @@ async function setAutoAccept(page: any, enabled: boolean) {
 
 async function expectQuestionBlocked(page: any) {
   await expect(page.locator(questionDockSelector)).toBeVisible()
-  await expect(page.locator(promptSelector)).toHaveCount(0)
+  await expect(page.locator(promptSelector)).toBeHidden()
 }
 
 async function expectQuestionOpen(page: any) {
@@ -87,7 +87,7 @@ async function expectQuestionOpen(page: any) {
 
 async function expectPermissionBlocked(page: any) {
   await expect(page.locator(permissionDockSelector)).toBeVisible()
-  await expect(page.locator(promptSelector)).toHaveCount(0)
+  await expect(page.locator(promptSelector)).toBeHidden()
 }
 
 async function expectPermissionOpen(page: any) {
@@ -268,6 +268,9 @@ async function withMockPermission<T>(
     if (sessionList) await page.unroute("**/session?*", sessionList)
   }
 }
+
+const promptText = async (page: any) =>
+  ((await page.locator(promptSelector).textContent()) ?? "").replace(/\u200B/g, "").trim()
 
 test("default dock shows prompt input", async ({ page, project }) => {
   await project.open()
@@ -486,6 +489,49 @@ test("blocked permission flow supports allow always", async ({ page, project }) 
   )
 })
 
+test("blocked permission flow preserves typed draft", async ({ page, project }) => {
+  await project.open()
+  await withDockSession(
+    project.sdk,
+    "e2e composer dock permission preserves draft",
+    async (session) => {
+      await project.gotoSession(session.id)
+      await setAutoAccept(page, false)
+
+      const value = `followup ${Date.now()}`
+      const prompt = page.locator(promptSelector)
+
+      await prompt.click()
+      await page.keyboard.type(value)
+      await expect.poll(() => promptText(page)).toBe(value)
+
+      await withMockPermission(
+        page,
+        {
+          id: "per_e2e_preserve_draft",
+          sessionID: session.id,
+          permission: "bash",
+          patterns: ["/tmp/opencode-e2e-preserve-draft"],
+          metadata: { description: "Need permission while draft exists" },
+        },
+        undefined,
+        async (state) => {
+          await page.goto(page.url())
+          await expectPermissionBlocked(page)
+
+          await clearPermissionDock(page, /allow once/i)
+          await state.resolved()
+          await page.goto(page.url())
+
+          await expectPermissionOpen(page)
+          await expect.poll(() => promptText(page)).toBe(value)
+        },
+      )
+    },
+    { trackSession: project.trackSession },
+  )
+})
+
 test("child session question request blocks parent dock and unblocks after submit", async ({ page, llm, project }) => {
   const questions = [
     {
@@ -647,7 +693,7 @@ test("keyboard focus stays off prompt while blocked", async ({ page, llm, projec
 
         await page.locator("main").click({ position: { x: 5, y: 5 } })
         await page.keyboard.type("abc")
-        await expect(page.locator(promptSelector)).toHaveCount(0)
+        await expect(page.locator(promptSelector)).toBeHidden()
       })
     },
     { trackSession: project.trackSession },
