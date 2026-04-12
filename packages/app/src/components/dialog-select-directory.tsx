@@ -226,7 +226,7 @@ function useDirectorySearch(args: {
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
     if (!active()) return []
     const deduped = Array.from(new Set(out))
-    const base = raw.startsWith("~") ? trimTrailing(scopedInput.directory) : ""
+    const base = raw.startsWith("~") || !!rootOf(raw) ? trimTrailing(scopedInput.directory) : ""
     const expand = !raw.endsWith("/")
     if (!expand || !tail) {
       const items = base ? Array.from(new Set([base, ...deduped])) : deduped
