@@ -19,6 +19,7 @@ const DRIFT = 1.45
 const LIFE = 1020
 const CHARGE = 2000
 const HOLD = 90
+const SINK = 40
 const ARC = 2.2
 const FORK = 1.2
 const DIM = 1.04
@@ -285,12 +286,13 @@ function field(x: number, y: number, frame: Frame) {
   const level = held ? push(rise) : rest!.level
   const body = rise
   const storm = level * level
+  const sink = held ? ramp(frame.t - held.at, SINK, CHARGE) : rest!.rise
   const dx = x + 0.5 - item.x - 0.5
   const dy = y * 2 + 1 - item.y * 2 - 1
   const dist = Math.hypot(dx, dy)
   const angle = Math.atan2(dy, dx)
   const spin = frame.t * lerp(0.008, 0.018, storm)
-  const sink = lerp(0, DIM, body) * lerp(0.99, 1.01, 0.5 + 0.5 * Math.sin(frame.t * 0.014))
+  const dim = lerp(0, DIM, sink) * lerp(0.99, 1.01, 0.5 + 0.5 * Math.sin(frame.t * 0.014))
   const core = Math.exp(-(dist * dist) / Math.max(0.22, lerp(0.22, 3.2, body))) * lerp(0.42, 2.45, body)
   const shell =
     Math.exp(-(((dist - lerp(0.16, 2.05, body)) / Math.max(0.18, lerp(0.18, 0.82, body))) ** 2)) * lerp(0.1, 0.95, body)
@@ -310,7 +312,7 @@ function field(x: number, y: number, frame: Frame) {
     Math.exp(-(dist * dist) / 0.15) *
     lerp(0.08, 0.42, body)
   const fade = frame.release && !frame.hold ? remain(x, y, frame.release, frame.t) : 1
-  return (core + shell + ember + ring + fork + glitch + lash + flicker - sink) * fade
+  return (core + shell + ember + ring + fork + glitch + lash + flicker - dim) * fade
 }
 
 function pick(x: number, y: number, frame: Frame) {
@@ -364,6 +366,7 @@ export function Logo() {
   const [now, setNow] = createSignal(0)
   let box: BoxRenderable | undefined
   let timer: ReturnType<typeof setInterval> | undefined
+  let hum = false
 
   const stop = () => {
     if (!timer) return
@@ -375,6 +378,10 @@ export function Logo() {
     const t = performance.now()
     setNow(t)
     const item = hold()
+    if (item && !hum && t - item.at >= HOLD) {
+      hum = true
+      Sound.start()
+    }
     if (item && t - item.at >= CHARGE) {
       burst(item.x, item.y)
     }
@@ -402,6 +409,7 @@ export function Logo() {
   const burst = (x: number, y: number) => {
     const item = hold()
     if (!item) return
+    hum = false
     const t = performance.now()
     const age = t - item.at
     const rise = ramp(age, HOLD, CHARGE)
@@ -520,6 +528,7 @@ export function Logo() {
 
   onCleanup(() => {
     stop()
+    hum = false
     Sound.stop()
   })
 
@@ -536,8 +545,8 @@ export function Logo() {
       setNow(t)
       setRelease(undefined)
       setHold({ x, y, at: t, glyph: select(x, y) })
+      hum = false
       start()
-      Sound.start()
       return
     }
 
