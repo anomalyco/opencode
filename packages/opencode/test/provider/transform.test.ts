@@ -156,6 +156,55 @@ describe("ProviderTransform.options - zai/zhipuai thinking", () => {
   }
 })
 
+describe("ProviderTransform.options - serviceTier passthrough", () => {
+  const sessionID = "test-session-123"
+
+  const openaiModel = {
+    id: "openai/gpt-4",
+    providerID: "openai",
+    api: {
+      id: "gpt-4",
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+    name: "gpt-4",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+    limit: { context: 128000, output: 4096 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("should preserve serviceTier when providerOptions.serviceTier is set", () => {
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: { serviceTier: "auto" },
+    })
+
+    expect(result.serviceTier).toBe("auto")
+  })
+
+  test("should not invent serviceTier when providerOptions.serviceTier is absent", () => {
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.serviceTier).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 

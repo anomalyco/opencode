@@ -758,6 +758,10 @@ export namespace ProviderTransform {
       result["store"] = false
     }
 
+    if (input.providerOptions?.serviceTier !== undefined) {
+      result["serviceTier"] = input.providerOptions.serviceTier
+    }
+
     if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
       result["usage"] = {
         include: true,
