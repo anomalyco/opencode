@@ -25,6 +25,8 @@ interface FetchDecompressionError extends Error {
 }
 
 export namespace MessageV2 {
+  export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
+
   export function isMedia(mime: string) {
     return mime.startsWith("image/") || mime === "application/pdf"
   }
@@ -808,7 +810,7 @@ export namespace MessageV2 {
               parts: [
                 {
                   type: "text" as const,
-                  text: "Attached image(s) from tool result:",
+                  text: SYNTHETIC_ATTACHMENT_PROMPT,
                 },
                 ...media.map((attachment) => ({
                   type: "file" as const,
