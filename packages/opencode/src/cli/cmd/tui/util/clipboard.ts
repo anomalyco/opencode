@@ -26,6 +26,7 @@ export namespace Clipboard {
   export interface Content {
     data: string
     mime: string
+    filepath?: string
   }
 
   // Checks clipboard for images first, then falls back to text.
@@ -40,7 +41,7 @@ export namespace Clipboard {
     const os = platform()
 
     if (os === "darwin") {
-      const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
+      const tmpfile = path.join(tmpdir(), `opencode-clipboard-${Date.now()}.png`)
       try {
         await Process.run(
           [
@@ -59,10 +60,8 @@ export namespace Clipboard {
           { nothrow: true },
         )
         const buffer = await Filesystem.readBytes(tmpfile)
-        return { data: buffer.toString("base64"), mime: "image/png" }
+        return { data: buffer.toString("base64"), mime: "image/png", filepath: tmpfile }
       } catch {
-      } finally {
-        await fs.rm(tmpfile, { force: true }).catch(() => {})
       }
     }
 
@@ -77,7 +76,9 @@ export namespace Clipboard {
       if (base64.text) {
         const imageBuffer = Buffer.from(base64.text.trim(), "base64")
         if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64"), mime: "image/png" }
+          const tmpfile = path.join(tmpdir(), `opencode-clipboard-${Date.now()}.png`)
+          await fs.writeFile(tmpfile, imageBuffer).catch(() => {})
+          return { data: imageBuffer.toString("base64"), mime: "image/png", filepath: tmpfile }
         }
       }
     }
@@ -85,13 +86,17 @@ export namespace Clipboard {
     if (os === "linux") {
       const wayland = await Process.run(["wl-paste", "-t", "image/png"], { nothrow: true })
       if (wayland.stdout.byteLength > 0) {
-        return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
+        const tmpfile = path.join(tmpdir(), `opencode-clipboard-${Date.now()}.png`)
+        await fs.writeFile(tmpfile, Buffer.from(wayland.stdout)).catch(() => {})
+        return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png", filepath: tmpfile }
       }
       const x11 = await Process.run(["xclip", "-selection", "clipboard", "-t", "image/png", "-o"], {
         nothrow: true,
       })
       if (x11.stdout.byteLength > 0) {
-        return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
+        const tmpfile = path.join(tmpdir(), `opencode-clipboard-${Date.now()}.png`)
+        await fs.writeFile(tmpfile, Buffer.from(x11.stdout)).catch(() => {})
+        return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png", filepath: tmpfile }
       }
     }
 

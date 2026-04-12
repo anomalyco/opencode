@@ -16,6 +16,8 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect } from "effect"
 import { EffectLogger } from "@/effect/logger"
+import { fileURLToPath } from "url"
+import { readFileSync } from "fs"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -617,26 +619,33 @@ export namespace MessageV2 {
       }
 
       if (typeof output === "object") {
-        const outputObject = output as {
+        const obj = output as {
           text: string
           attachments?: Array<{ mime: string; url: string }>
         }
-        const attachments = (outputObject.attachments ?? []).filter((attachment) => {
-          return attachment.url.startsWith("data:") && attachment.url.includes(",")
-        })
+        const attachments = (obj.attachments ?? []).filter(
+          (a) => a.url.startsWith("data:") || a.url.startsWith("file://"),
+        )
 
         return {
           type: "content",
           value: [
-            { type: "text", text: outputObject.text },
-            ...attachments.map((attachment) => ({
-              type: "media",
-              mediaType: attachment.mime,
-              data: iife(() => {
-                const commaIndex = attachment.url.indexOf(",")
-                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-              }),
-            })),
+            { type: "text", text: obj.text },
+            ...attachments.map((attachment) => {
+              if (attachment.url.startsWith("file://")) {
+                return {
+                  type: "media" as const,
+                  mediaType: attachment.mime,
+                  data: readFileSync(fileURLToPath(attachment.url)).toString("base64"),
+                }
+              }
+              const comma = attachment.url.indexOf(",")
+              return {
+                type: "media" as const,
+                mediaType: attachment.mime,
+                data: comma === -1 ? attachment.url : attachment.url.slice(comma + 1),
+              }
+            }),
           ],
         }
       }
@@ -826,14 +835,30 @@ export namespace MessageV2 {
 
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-    return yield* Effect.promise(() =>
-      convertToModelMessages(
-        result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-        {
-          //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
-          tools,
-        },
+    const filtered = result.filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+    const resolved = yield* Effect.promise(() =>
+      Promise.all(
+        filtered.map((msg) =>
+          Promise.all(
+            msg.parts.map((part) => {
+              if (part.type === "file" && part.url.startsWith("file://")) {
+                return {
+                  ...part,
+                  url: `data:${(part as any).mediaType};base64,${readFileSync(fileURLToPath(part.url)).toString("base64")}`,
+                }
+              }
+              return part
+            }),
+          ).then((parts) => ({ ...msg, parts })),
+        ),
       ),
+    )
+
+    return yield* Effect.promise(() =>
+      convertToModelMessages(resolved, {
+        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
+        tools,
+      }),
     )
   })
 

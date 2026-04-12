@@ -1191,9 +1191,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "file",
-                    url:
-                      `data:${part.mime};base64,` +
-                      Buffer.from(yield* fsys.readFile(filepath).pipe(Effect.catch(Effect.die))).toString("base64"),
+                    url: part.url,
                     mime: part.mime,
                     filename: part.filename!,
                     source: part.source,

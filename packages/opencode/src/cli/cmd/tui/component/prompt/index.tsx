@@ -247,6 +247,7 @@ export function Prompt(props: PromptProps) {
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
               filename: "clipboard",
+              filepath: content.filepath,
               mime: content.mime,
               content: content.data,
             })
@@ -802,7 +803,7 @@ export function Prompt(props: PromptProps) {
       type: "file" as const,
       mime: file.mime,
       filename: file.filename,
-      url: `data:${file.mime};base64,${file.content}`,
+      url: file.filepath ? `file://${file.filepath}` : `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
         path: file.filepath ?? file.filename ?? "",
@@ -937,6 +938,7 @@ export function Prompt(props: PromptProps) {
                     e.preventDefault()
                     await pasteAttachment({
                       filename: "clipboard",
+                      filepath: content.filepath,
                       mime: content.mime,
                       content: content.data,
                     })
