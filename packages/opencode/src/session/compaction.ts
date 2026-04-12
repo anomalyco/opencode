@@ -366,6 +366,7 @@ When constructing the summary, try to stick to this template:
           auto: input.auto,
           overflow: input.overflow,
         })
+        MessageV2.invalidateCompactionBoundary(input.sessionID)
       })
 
       return Service.of({
