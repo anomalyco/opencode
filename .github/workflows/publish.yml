@@ -114,7 +114,7 @@ jobs:
       - build-cli
       - version
     runs-on: blacksmith-4vcpu-windows-2025
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    if: github.repository == 'anomalyco/opencode'
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -591,7 +591,6 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4
-        if: github.ref_name != 'beta'
         with:
           name: opencode-cli-signed-windows
           path: packages/opencode/dist

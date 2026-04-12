@@ -5,6 +5,7 @@ import { iife } from "@/util/iife"
 import { Log } from "../../util/log"
 import { setTimeout as sleep } from "node:timers/promises"
 import { CopilotModels } from "./models"
+import { MessageV2 } from "@/session/message-v2"
 
 const log = Log.create({ service: "plugin.copilot" })
 
@@ -25,6 +26,21 @@ function getUrls(domain: string) {
 
 function base(enterpriseUrl?: string) {
   return enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : "https://api.githubcopilot.com"
+}
+
+// Check if a message is a synthetic user msg used to attach an image from a tool call
+function imgMsg(msg: any): boolean {
+  if (msg?.role !== "user") return false
+
+  // Handle the 3 api formats
+
+  const content = msg.content
+  if (typeof content === "string") return content === MessageV2.SYNTHETIC_ATTACHMENT_PROMPT
+  if (!Array.isArray(content)) return false
+  return content.some(
+    (part: any) =>
+      (part?.type === "text" || part?.type === "input_text") && part.text === MessageV2.SYNTHETIC_ATTACHMENT_PROMPT,
+  )
 }
 
 function fix(model: Model, url: string): Model {
@@ -90,7 +106,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       (msg: any) =>
                         Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: last?.role !== "user" || imgMsg(last),
                   }
                 }
 
@@ -102,7 +118,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       (item: any) =>
                         Array.isArray(item?.content) && item.content.some((part: any) => part.type === "input_image"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: last?.role !== "user" || imgMsg(last),
                   }
                 }
 
@@ -124,7 +140,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                               part.content.some((nested: any) => nested?.type === "image")),
                         ),
                     ),
-                    isAgent: !(last?.role === "user" && hasNonToolCalls),
+                    isAgent: !(last?.role === "user" && hasNonToolCalls) || imgMsg(last),
                   }
                 }
               } catch {}
