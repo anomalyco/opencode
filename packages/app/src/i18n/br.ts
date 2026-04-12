@@ -398,6 +398,7 @@ export const dict = {
   "toast.update.title": "Atualização disponível",
   "toast.update.description": "Uma nova versão do OpenCode ({{version}}) está disponível para instalação.",
   "toast.update.action.installRestart": "Instalar e reiniciar",
+  "toast.update.action.viewRelease": "Ver lançamento",
   "toast.update.action.notYet": "Agora não",
   "error.page.title": "Algo deu errado",
   "error.page.description": "Ocorreu um erro ao carregar a aplicação.",

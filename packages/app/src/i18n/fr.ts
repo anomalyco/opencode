@@ -401,6 +401,7 @@ export const dict = {
   "toast.update.description":
     "Une nouvelle version d'OpenCode ({{version}}) est maintenant disponible pour installation.",
   "toast.update.action.installRestart": "Installer et redémarrer",
+  "toast.update.action.viewRelease": "Voir la version",
   "toast.update.action.notYet": "Pas encore",
   "error.page.title": "Quelque chose s'est mal passé",
   "error.page.description": "Une erreur s'est produite lors du chargement de l'application.",

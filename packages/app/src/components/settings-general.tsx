@@ -135,14 +135,14 @@ export const SettingsGeneral: Component = () => {
                   },
                 },
                 {
-                  label: language.t("toast.update.action.notYet"),
-                  onClick: "dismiss" as const,
+                  label: language.t("toast.update.action.viewRelease"),
+                  onClick: () => platform.openLink(`https://github.com/sst/opencode/releases/tag/v${result.version}`),
                 },
               ]
             : [
                 {
-                  label: language.t("toast.update.action.notYet"),
-                  onClick: "dismiss" as const,
+                  label: language.t("toast.update.action.viewRelease"),
+                  onClick: () => platform.openLink(`https://github.com/sst/opencode/releases/tag/v${result.version}`),
                 },
               ]
 

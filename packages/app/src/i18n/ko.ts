@@ -400,6 +400,7 @@ export const dict = {
   "toast.update.title": "업데이트 가능",
   "toast.update.description": "OpenCode의 새 버전({{version}})을 설치할 수 있습니다.",
   "toast.update.action.installRestart": "설치 및 다시 시작",
+  "toast.update.action.viewRelease": "릴리스 보기",
   "toast.update.action.notYet": "나중에",
   "error.page.title": "문제가 발생했습니다",
   "error.page.description": "애플리케이션을 로드하는 동안 오류가 발생했습니다.",

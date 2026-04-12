@@ -440,6 +440,7 @@ export const dict = {
   "toast.update.title": "Opdatering tilgængelig",
   "toast.update.description": "En ny version af OpenCode ({{version}}) er nu tilgængelig til installation.",
   "toast.update.action.installRestart": "Installer og genstart",
+  "toast.update.action.viewRelease": "Se udgivelse",
   "toast.update.action.notYet": "Ikke endnu",
 
   "error.page.title": "Noget gik galt",

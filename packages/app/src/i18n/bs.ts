@@ -443,6 +443,7 @@ export const dict = {
   "toast.update.title": "Dostupno ažuriranje",
   "toast.update.description": "Nova verzija OpenCode-a ({{version}}) je dostupna za instalaciju.",
   "toast.update.action.installRestart": "Instaliraj i restartuj",
+  "toast.update.action.viewRelease": "Pogledaj izdanje",
   "toast.update.action.notYet": "Ne još",
 
   "error.page.title": "Nešto je pošlo po zlu",

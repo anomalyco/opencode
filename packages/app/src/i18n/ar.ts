@@ -397,6 +397,7 @@ export const dict = {
   "toast.update.title": "تحديث متاح",
   "toast.update.description": "نسخة جديدة من OpenCode ({{version}}) متاحة الآن للتثبيت.",
   "toast.update.action.installRestart": "تثبيت وإعادة تشغيل",
+  "toast.update.action.viewRelease": "عرض الإصدار",
   "toast.update.action.notYet": "ليس الآن",
   "error.page.title": "حدث خطأ ما",
   "error.page.description": "حدث خطأ أثناء تحميل التطبيق.",

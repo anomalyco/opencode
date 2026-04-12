@@ -386,8 +386,8 @@ export default function Layout(props: ParentProps) {
                 },
               },
               {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss",
+                label: language.t("toast.update.action.viewRelease"),
+                onClick: () => platform.openLink(`https://github.com/sst/opencode/releases/tag/v${version}`),
               },
             ],
           })

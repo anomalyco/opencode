@@ -397,6 +397,7 @@ export const dict = {
   "toast.update.title": "アップデートが利用可能です",
   "toast.update.description": "OpenCodeの新しいバージョン ({{version}}) がインストール可能です。",
   "toast.update.action.installRestart": "インストールして再起動",
+  "toast.update.action.viewRelease": "リリースを見る",
   "toast.update.action.notYet": "今はしない",
   "error.page.title": "問題が発生しました",
   "error.page.description": "アプリケーションの読み込み中にエラーが発生しました。",

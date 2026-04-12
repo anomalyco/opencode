@@ -446,6 +446,7 @@ export const dict = {
   "toast.update.title": "Güncelleme mevcut",
   "toast.update.description": "OpenCode'un yeni bir sürümü ({{version}}) yüklemeye hazır.",
   "toast.update.action.installRestart": "Yükle ve yeniden başlat",
+  "toast.update.action.viewRelease": "Sürümü görüntüle",
   "toast.update.action.notYet": "Şimdi değil",
 
   "error.page.title": "Bir şeyler yanlış gitti",

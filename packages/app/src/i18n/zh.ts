@@ -446,6 +446,7 @@ export const dict = {
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安装。",
   "toast.update.action.installRestart": "安装并重启",
+  "toast.update.action.viewRelease": "查看版本",
   "toast.update.action.notYet": "稍后",
 
   "error.page.title": "出了点问题",
