@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
+import { Glob } from "./glob"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -15,7 +16,6 @@ export namespace Log {
     ERROR: 3,
   }
   const keep = 10
-  const rx = /^\d{4}-\d{2}-\d{2}T\d{6}\.log$/
 
   let level: Level = "INFO"
 
@@ -79,7 +79,15 @@ export namespace Log {
   }
 
   async function cleanup(dir: string) {
-    const files = (await fs.readdir(dir).catch(() => [])).filter((file) => rx.test(file)).sort()
+    const files = (
+      await Glob.scan("????-??-??T??????.log", {
+        cwd: dir,
+        absolute: false,
+        include: "file",
+      }).catch(() => [])
+    )
+      .filter((file) => path.basename(file) === file)
+      .sort()
     if (files.length <= keep) return
 
     const doomed = files.slice(0, -keep)
