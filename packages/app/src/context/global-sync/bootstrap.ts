@@ -248,7 +248,7 @@ export async function bootstrapDirectory(input: {
         input.sdk.vcs.get().then((x) => {
           const next = x.data ?? input.store.vcs
           input.setStore("vcs", next)
-          if (next?.branch) input.vcsCache.setStore("value", next)
+          if (next) input.vcsCache.setStore("value", next)
         }),
       ),
     () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),

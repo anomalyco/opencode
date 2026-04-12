@@ -13,6 +13,23 @@ export function SubagentFooter() {
   const route = useRouteData("session")
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const session = createMemo(() => sync.session.get(route.sessionID))
+
+  const subagentInfo = createMemo(() => {
+    const s = session()
+    if (!s) return { label: "Subagent", index: 0, total: 0 }
+    const agentMatch = s.title.match(/@(\w+) subagent/)
+    const label = agentMatch ? Locale.titlecase(agentMatch[1]) : "Subagent"
+
+    if (!s.parentID) return { label, index: 0, total: 0 }
+
+    const siblings = sync.data.session
+      .filter((x) => x.parentID === s.parentID)
+      .toSorted((a, b) => a.time.created - b.time.created)
+    const index = siblings.findIndex((x) => x.id === s.id)
+
+    return { label, index: index + 1, total: siblings.length }
+  })
 
   const usage = createMemo(() => {
     const msg = messages()
@@ -58,10 +75,15 @@ export function SubagentFooter() {
         backgroundColor={theme.backgroundPanel}
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <box flexDirection="row" gap={2}>
+          <box flexDirection="row" gap={1}>
             <text fg={theme.text}>
-              <b>Subagent session</b>
+              <b>{subagentInfo().label}</b>
             </text>
+            <Show when={subagentInfo().total > 0}>
+              <text style={{ fg: theme.textMuted }}>
+                ({subagentInfo().index} of {subagentInfo().total})
+              </text>
+            </Show>
             <Show when={usage()}>
               {(item) => (
                 <text fg={theme.textMuted} wrapMode="none">

@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { RGBA, VignetteEffect } from "@opentui/core"
 import type {
   TuiKeybindSet,
@@ -615,7 +615,7 @@ const Modal = (props: {
   )
 }
 
-const home = (input: Cfg): TuiSlotPlugin => ({
+const home = (api: TuiPluginApi, input: Cfg) => ({
   slots: {
     home_logo(ctx) {
       const map = ctx.theme.current
@@ -647,6 +647,82 @@ const home = (input: Cfg): TuiSlotPlugin => ({
             <text fg={fill[i]}>{line}</text>
           ))}
         </box>
+      )
+    },
+    home_prompt(ctx, value) {
+      const skin = look(ctx.theme.current)
+      type Prompt = (props: {
+        workspaceID?: string
+        visible?: boolean
+        disabled?: boolean
+        onSubmit?: () => void
+        hint?: JSX.Element
+        right?: JSX.Element
+        showPlaceholder?: boolean
+        placeholders?: {
+          normal?: string[]
+          shell?: string[]
+        }
+      }) => JSX.Element
+      type Slot = (
+        props: { name: string; mode?: unknown; children?: JSX.Element } & Record<string, unknown>,
+      ) => JSX.Element | null
+      const ui = api.ui as TuiPluginApi["ui"] & { Prompt: Prompt; Slot: Slot }
+      const Prompt = ui.Prompt
+      const Slot = ui.Slot
+      const normal = [
+        `[SMOKE] route check for ${input.label}`,
+        "[SMOKE] confirm home_prompt slot override",
+        "[SMOKE] verify prompt-right slot passthrough",
+      ]
+      const shell = ["printf '[SMOKE] home prompt\n'", "git status --short", "bun --version"]
+      const hint = (
+        <box flexShrink={0} flexDirection="row" gap={1}>
+          <text fg={skin.muted}>
+            <span style={{ fg: skin.accent }}>•</span> smoke home prompt
+          </text>
+        </box>
+      )
+
+      return (
+        <Prompt
+          workspaceID={value.workspace_id}
+          hint={hint}
+          right={
+            <box flexDirection="row" gap={1}>
+              <Slot name="home_prompt_right" workspace_id={value.workspace_id} />
+              <Slot name="smoke_prompt_right" workspace_id={value.workspace_id} label={input.label} />
+            </box>
+          }
+          placeholders={{ normal, shell }}
+        />
+      )
+    },
+    home_prompt_right(ctx, value) {
+      const skin = look(ctx.theme.current)
+      const id = value.workspace_id?.slice(0, 8) ?? "none"
+      return (
+        <text fg={skin.muted}>
+          <span style={{ fg: skin.accent }}>{input.label}</span> home:{id}
+        </text>
+      )
+    },
+    session_prompt_right(ctx, value) {
+      const skin = look(ctx.theme.current)
+      return (
+        <text fg={skin.muted}>
+          <span style={{ fg: skin.accent }}>{input.label}</span> session:{value.session_id.slice(0, 8)}
+        </text>
+      )
+    },
+    smoke_prompt_right(ctx, value) {
+      const skin = look(ctx.theme.current)
+      const id = typeof value.workspace_id === "string" ? value.workspace_id.slice(0, 8) : "none"
+      const label = typeof value.label === "string" ? value.label : input.label
+      return (
+        <text fg={skin.muted}>
+          <span style={{ fg: skin.accent }}>{label}</span> custom:{id}
+        </text>
       )
     },
     home_bottom(ctx) {
@@ -706,8 +782,8 @@ const block = (input: Cfg, order: number, title: string, text: string): TuiSlotP
   },
 })
 
-const slot = (input: Cfg): TuiSlotPlugin[] => [
-  home(input),
+const slot = (api: TuiPluginApi, input: Cfg): TuiSlotPlugin[] => [
+  home(api, input),
   block(input, 50, "Smoke above", "renders above internal sidebar blocks"),
   block(input, 250, "Smoke between", "renders between internal sidebar blocks"),
   block(input, 650, "Smoke below", "renders below internal sidebar blocks"),
@@ -848,7 +924,7 @@ const tui: TuiPlugin = async (api, options, meta) => {
   ])
 
   reg(api, value, keys)
-  for (const item of slot(value)) {
+  for (const item of slot(api, value)) {
     api.slots.register(item)
   }
 }
