@@ -25,7 +25,8 @@ trap cleanup EXIT INT TERM
 for _ in $(seq 1 30); do
   if curl -fsS -u "$backend_username:$backend_password" http://127.0.0.1:4096/global/health >/dev/null 2>&1 \
     && curl -fsS "http://127.0.0.1:${relay_port}/health" >/dev/null 2>&1; then
-    exec bun /usr/local/bin/serve-custom-app.mjs
+    # Must run from /app tree so `bun` resolves workspace deps (e.g. `@veritly/telemetry-veritly`).
+    exec bun /app/railway/serve-custom-app.mjs
   fi
   sleep 1
 done
