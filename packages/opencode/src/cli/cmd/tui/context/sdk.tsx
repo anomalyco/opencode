@@ -2,7 +2,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { GlobalEvent, Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
@@ -31,6 +31,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     let sdk = createSDK()
+    const [connectionState, setConnectionState] = createSignal<"connected" | "reconnecting">("connected")
+    const [reconnectToken, setReconnectToken] = createSignal(0)
+    let disconnected = false
 
     const emitter = createGlobalEmitter<{
       event: GlobalEvent
@@ -68,6 +71,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       flush()
     }
 
+    const markDisconnected = () => {
+      if (abort.signal.aborted || sse?.signal.aborted) return
+      disconnected = true
+      setConnectionState("reconnecting")
+    }
+
     function startSSE() {
       sse?.abort()
       const ctrl = new AbortController()
@@ -75,15 +84,49 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       ;(async () => {
         while (true) {
           if (abort.signal.aborted || ctrl.signal.aborted) break
-          const events = await sdk.global.event({ signal: ctrl.signal })
 
-          for await (const event of events.stream) {
-            if (ctrl.signal.aborted) break
-            handleEvent(event)
+          let heartbeatTimer: ReturnType<typeof setTimeout> | undefined
+          const resetHeartbeat = () => {
+            if (heartbeatTimer) clearTimeout(heartbeatTimer)
+            heartbeatTimer = setTimeout(() => {
+              markDisconnected()
+            }, 20000)
+          }
+
+          try {
+            const events = await sdk.global.event({
+              signal: ctrl.signal,
+              onSseError() {
+                markDisconnected()
+              },
+            })
+
+            resetHeartbeat()
+            for await (const event of events.stream) {
+              resetHeartbeat()
+              if (ctrl.signal.aborted) break
+              if ((event.payload.type as string) === "server.heartbeat") continue
+
+              if (connectionState() !== "connected") {
+                setConnectionState("connected")
+                if (disconnected) {
+                  disconnected = false
+                  setReconnectToken((value) => value + 1)
+                }
+              }
+              handleEvent(event)
+            }
+          } catch {
+            markDisconnected()
+          } finally {
+            if (heartbeatTimer) clearTimeout(heartbeatTimer)
           }
 
           if (timer) clearTimeout(timer)
           if (queue.length > 0) flush()
+
+          // Small delay before reconnecting to avoid tight loops
+          await new Promise((resolve) => setTimeout(resolve, 250))
         }
       })().catch(() => {})
     }
@@ -110,6 +153,14 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       directory: props.directory,
       event: emitter,
       fetch: props.fetch ?? fetch,
+      connection: {
+        get state() {
+          return connectionState()
+        },
+        get reconnectToken() {
+          return reconnectToken()
+        },
+      },
       url: props.url,
     }
   },

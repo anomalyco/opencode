@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Layer, Context } from "effect"
+import { Cause, Deferred, Effect, Layer, Context, Schedule } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -530,12 +530,12 @@ export namespace SessionProcessor {
           yield* status.set(ctx.sessionID, { type: "idle" })
         })
 
-        const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-          yield* slog.info("process")
-          ctx.needsCompaction = false
-          ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const process = (streamInput: LLM.StreamInput): Effect.Effect<Result, never, never> => {
+          return Effect.gen(function* () {
+            yield* slog.info("process")
+            ctx.needsCompaction = false
+            ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
-          return yield* Effect.gen(function* () {
             yield* Effect.gen(function* () {
               ctx.currentText = undefined
               ctx.reasoningMap = {}
@@ -569,9 +569,21 @@ export namespace SessionProcessor {
                       message: info.message,
                       next: info.next,
                     }),
-                }),
+                }).pipe(Schedule.recurs(SessionRetry.RETRY_MAX_ATTEMPTS)),
               ),
-              Effect.catch(halt),
+              Effect.catchAll((e) => {
+                const error = parse(e)
+                if (MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
+                  return halt(
+                    new MessageV2.AbortedError(
+                      { message: "Retry limit reached. Please check your network and continue." },
+                      { cause: e },
+                    ),
+                  )
+                }
+                return Effect.fail(e)
+              }),
+              Effect.catchAll((e) => halt(e)),
               Effect.ensuring(cleanup()),
             )
 
@@ -579,7 +591,7 @@ export namespace SessionProcessor {
             if (ctx.blocked || ctx.assistantMessage.error) return "stop"
             return "continue"
           })
-        })
+        }
 
         return {
           get message() {
@@ -589,9 +601,11 @@ export namespace SessionProcessor {
           completeToolCall,
           process,
         } satisfies Handle
-      })
+        })
 
-      return Service.of({ create })
+        return Service.of({
+        create: (input: Input) => create(input) as Effect.Effect<Handle, never, never>,
+        })
     }),
   )
 

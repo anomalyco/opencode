@@ -110,6 +110,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     event.subscribe((event) => {
       switch (event.type) {
+        case "server.connected":
         case "server.instance.disposed":
           bootstrap()
           break
@@ -444,6 +445,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await exit(e)
         })
     }
+
+    createEffect(
+      on(
+        () => sdk.connection.reconnectToken,
+        (token) => {
+          if (token > 0) {
+            void bootstrap()
+          }
+        },
+      ),
+    )
 
     const fullSyncedSessions = new Set<string>()
     createEffect(

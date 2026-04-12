@@ -14,6 +14,7 @@ export namespace SessionRetry {
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
   export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+  export const RETRY_MAX_ATTEMPTS = 10 // maximum number of retries before giving up
 
   function cap(ms: number) {
     return Math.min(ms, RETRY_MAX_DELAY)
