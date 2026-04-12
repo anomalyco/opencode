@@ -9,7 +9,6 @@ import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
-import { AppRuntime } from "@/effect/app-runtime"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
@@ -21,7 +20,7 @@ export async function InstanceBootstrap() {
   void BootstrapRuntime.runPromise(Format.Service.use((svc) => svc.init()))
   await LSP.init()
   File.init()
-  void AppRuntime.runPromise(FileWatcher.Service.use((svc) => svc.init()))
+  void BootstrapRuntime.runPromise(FileWatcher.Service.use((svc) => svc.init()))
   Vcs.init()
   Snapshot.init()
 
