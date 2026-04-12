@@ -131,7 +131,7 @@ export namespace Plugin {
                   Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
                 }
               : undefined,
-            fetch: async (...args) => (await Server.Default()).app.fetch(...args),
+            fetch: async (...args) => Server.Default().app.fetch(...args),
           })
           const cfg = yield* config.get()
           const input: PluginInput = {
@@ -293,7 +293,10 @@ export namespace Plugin {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Bus.layer),
+    Layer.provide(Config.defaultLayer),
+  ) as Layer.Layer<Service>
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function trigger<

@@ -7,6 +7,7 @@ import { NamedError } from "@opencode-ai/shared/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
@@ -238,7 +239,12 @@ export namespace Skill {
     Layer.provide(Config.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(AppFileSystem.defaultLayer),
-  )
+  ) as Layer.Layer<Service>
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function all() {
+    return runPromise((svc) => svc.all())
+  }
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) return "No skills are currently available."
