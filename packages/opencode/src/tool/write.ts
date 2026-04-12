@@ -29,7 +29,9 @@ export const WriteTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: z.object({
-        content: z.string().describe("The content to write to the file"),
+        content: z
+          .preprocess((v) => (typeof v === "object" && v !== null ? JSON.stringify(v, null, 2) : v), z.string())
+          .describe("The content to write to the file"),
         filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
       }),
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
