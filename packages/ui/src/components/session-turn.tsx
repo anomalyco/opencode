@@ -346,6 +346,7 @@ export function SessionTurn(
   const assistantDerived = createMemo(() => {
     let visible = 0
     let reason: string | undefined
+    let bash = false
     const show = showReasoningSummaries()
     for (const message of assistantMessages()) {
       for (const part of list(data.store.part?.[message.id], emptyParts)) {
@@ -356,12 +357,20 @@ export function SessionTurn(
           const h = heading(part.text)
           if (h) reason = h
         }
+        if (
+          part.type === "tool" &&
+          part.tool === "bash" &&
+          (part.state.status === "running" || part.state.status === "pending")
+        ) {
+          bash = true
+        }
       }
     }
-    return { visible, reason }
+    return { visible, reason, bash }
   })
   const assistantVisible = createMemo(() => assistantDerived().visible)
   const reasoningHeading = createMemo(() => assistantDerived().reason)
+  const bashRunning = createMemo(() => assistantDerived().bash)
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
     if (status().type === "retry") return false
@@ -414,7 +423,11 @@ export function SessionTurn(
               </Show>
               <Show when={showThinking()}>
                 <div data-slot="session-turn-thinking">
-                  <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                  <TextShimmer
+                    text={i18n.t(
+                      bashRunning() ? "ui.sessionTurn.status.runningCommands" : "ui.sessionTurn.status.thinking",
+                    )}
+                  />
                   <Show when={!showReasoningSummaries()}>
                     <TextReveal
                       text={reasoningHeading()}
