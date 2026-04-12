@@ -87,21 +87,29 @@ function isUniverSdkRelayPath(url) {
 
 /** Browser WebSockets cannot send Authorization; inject OpenCode Basic for relay path only. */
 proxy.on("proxyReq", (proxyReq, req) => {
+	const p = (req?.url || "").split("?")[0];
+	const isRelay = p.startsWith("/univer-sdk-relay") || p.startsWith("/api/univer-sdk-relay");
+	if (isRelay) {
+		const auth = backendBasicAuthHeader();
+		if (auth) proxyReq.setHeader("authorization", auth);
+		dbg("proxyReq relay http", { path: p, hasAuthorization: Boolean(auth) });
+		return;
+	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
-	const p = (req?.url || "").split("?")[0];
-	if (p.startsWith("/univer-sdk-relay")) {
-		dbg("proxyReq relay http", { path: p, hasAuthorization: Boolean(proxyReq.getHeader("authorization")) });
-	}
 });
 
 proxy.on("proxyReqWs", (proxyReq, req) => {
+	const p = (req?.url || "").split("?")[0];
+	const isRelay = p.startsWith("/univer-sdk-relay") || p.startsWith("/api/univer-sdk-relay");
+	if (isRelay) {
+		const auth = backendBasicAuthHeader();
+		if (auth) proxyReq.setHeader("authorization", auth);
+		dbg("proxyReq relay ws", { path: p, hasAuthorization: Boolean(auth) });
+		return;
+	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
-	const p = (req?.url || "").split("?")[0];
-	if (p.startsWith("/univer-sdk-relay")) {
-		dbg("proxyReq relay ws", { path: p, hasAuthorization: Boolean(proxyReq.getHeader("authorization")) });
-	}
 });
 
 proxy.on("error", async (_err, req, res) => {
@@ -187,8 +195,52 @@ async function handleHttpRequest(req, res) {
 	res.end(html);
 }
 
+/** Default: only trace `/api/*`. Otherwise every JS/CSS chunk emits a span. Set `VERITLY_OTEL_EDGE_HTTP=all` to trace static + SPA. */
+function shouldTraceEdgeHttp(url) {
+	const pathOnly = (url || "").split("?")[0];
+	if (pathOnly === "/healthz") return false;
+	if (process.env.VERITLY_OTEL_EDGE_HTTP === "all") return true;
+	return pathOnly.startsWith("/api/");
+}
+
+function handleWsUpgrade(req, socket, head) {
+	if (!req.url?.startsWith("/api/")) {
+		socket.destroy();
+		return;
+	}
+	if (!isUniverSdkRelayPath(req.url || "") && !isAuthorized(req)) {
+		socket.write("HTTP/1.1 401 Unauthorized\r\n");
+		socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`);
+		socket.write("Connection: close\r\n\r\n");
+		socket.destroy();
+		return;
+	}
+	const relay = isUniverSdkRelayPath(req.url || "");
+	const authHeader = relay ? backendBasicAuthHeader() : null;
+	dbg("ws upgrade accepted", {
+		url: req.url || "",
+		relay,
+		injectedBasicAuth: Boolean(authHeader),
+		hadClientAuth: isAuthorized(req),
+	});
+	req.url = req.url.slice(4) || "/";
+	const extra = /** @type {Record<string, string>} */ ({});
+	if (authHeader) extra.authorization = authHeader;
+	proxy.ws(req, socket, head, proxyOptsWithTrace(extra));
+}
+
 const server = createServer((req, res) => {
 	const url = req.url || "/";
+	if (!shouldTraceEdgeHttp(url)) {
+		void handleHttpRequest(req, res).catch((e) => {
+			console.error("[serve-custom-app]", e);
+			if (!res.headersSent) {
+				res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+				res.end("Internal Server Error");
+			}
+		});
+		return;
+	}
 	const carrier = headersToCarrier(req.headers);
 	const parentCtx = propagation.extract(context.active(), carrier);
 	context.with(parentCtx, () => {
@@ -223,6 +275,10 @@ const server = createServer((req, res) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
+	if (process.env.VERITLY_OTEL_EDGE_WS !== "1") {
+		handleWsUpgrade(req, socket, head);
+		return;
+	}
 	const carrier = headersToCarrier(req.headers);
 	const parentCtx = propagation.extract(context.active(), carrier);
 	context.with(parentCtx, () => {
@@ -238,33 +294,8 @@ server.on("upgrade", (req, socket, head) => {
 		};
 		socket.once("close", endWs);
 		socket.once("error", endWs);
-
 		context.with(active, () => {
-			if (!req.url?.startsWith("/api/")) {
-				socket.destroy();
-				endWs();
-				return;
-			}
-			if (!isUniverSdkRelayPath(req.url || "") && !isAuthorized(req)) {
-				socket.write("HTTP/1.1 401 Unauthorized\r\n");
-				socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`);
-				socket.write("Connection: close\r\n\r\n");
-				socket.destroy();
-				endWs();
-				return;
-			}
-			const relay = isUniverSdkRelayPath(req.url || "");
-			const authHeader = relay ? backendBasicAuthHeader() : null;
-			dbg("ws upgrade accepted", {
-				url: req.url || "",
-				relay,
-				injectedBasicAuth: Boolean(authHeader),
-				hadClientAuth: isAuthorized(req),
-			});
-			req.url = req.url.slice(4) || "/";
-			const extra = /** @type {Record<string, string>} */ ({});
-			if (authHeader) extra.authorization = authHeader;
-			proxy.ws(req, socket, head, proxyOptsWithTrace(extra));
+			handleWsUpgrade(req, socket, head);
 		});
 	});
 });

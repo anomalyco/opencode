@@ -199,8 +199,12 @@ export function SpreadsheetViewer(props: Props) {
 
     relaySocket?.close(1000, "reconnect")
     const join = wsBase.includes("?") ? "&" : "?"
-    const ws = new WebSocket(`${wsBase}${join}role=browser`)
+    const wsUrl = `${wsBase}${join}role=browser`
+    const ws = new WebSocket(wsUrl)
     relaySocket = ws
+    if (import.meta.env.DEV) {
+      console.info("[veritly] univer sdk relay connecting", wsUrl)
+    }
     const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
 
     ws.onopen = () => {
@@ -362,7 +366,9 @@ export function SpreadsheetViewer(props: Props) {
     }
 
     ws.onerror = () => {
-      if (import.meta.env.DEV) console.error("univer sdk relay websocket error")
+      if (import.meta.env.DEV) {
+        console.error("[veritly] univer sdk relay websocket error", { url: wsUrl })
+      }
       browserTracer().startActiveSpan(
         "spreadsheet.relay.error",
         {
@@ -379,6 +385,14 @@ export function SpreadsheetViewer(props: Props) {
       )
     }
     ws.onclose = (ev) => {
+      if (import.meta.env.DEV) {
+        console.warn("[veritly] univer sdk relay closed", {
+          url: wsUrl,
+          code: ev.code,
+          reason: ev.reason || "",
+          wasClean: ev.wasClean,
+        })
+      }
       browserTracer().startActiveSpan(
         "spreadsheet.relay.disconnect",
         {

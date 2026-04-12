@@ -91,6 +91,12 @@ export namespace Server {
 				if (c.req.method === "OPTIONS") return next();
 				const password = Flag.OPENCODE_SERVER_PASSWORD;
 				if (!password) return next();
+				// Hosted: edge injects Basic on `/api`→OpenCode; some proxies drop it on WS upgrade.
+				// Relay is only reachable from loopback in production (`serve --hostname 127.0.0.1`).
+				const wsUpgrade = c.req.header("upgrade")?.toLowerCase() === "websocket";
+				if (wsUpgrade && c.req.path.startsWith("/univer-sdk-relay/")) {
+					return next();
+				}
 				const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode";
 				return basicAuth({ username, password })(c, next);
 			})
@@ -127,6 +133,10 @@ export namespace Server {
 
 						// *.opencode.ai (https only, adjust if needed)
 						if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
+							return input;
+						}
+						// Veritly hosted app + dev (e.g. test1.veritly.co.uk)
+						if (/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/.test(input)) {
 							return input;
 						}
 						if (opts?.cors?.includes(input)) {

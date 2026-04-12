@@ -1,9 +1,25 @@
 import { context, propagation, trace, SpanStatusCode } from "@opentelemetry/api"
 import type { MiddlewareHandler } from "hono"
 
+/** High-frequency routes that pollute Axiom; extend with `VERITLY_OTEL_HTTP_SKIP_PATHS=/a,/b` (exact path match). */
+function veritlySkipHonoHttpSpan(c: { req: { method: string; path: string } }): boolean {
+  if (c.req.method === "OPTIONS") return true
+  if (c.req.path === "/global/health") return true
+  const raw = process.env.VERITLY_OTEL_HTTP_SKIP_PATHS?.trim()
+  if (!raw) return false
+  for (const p of raw.split(",")) {
+    const t = p.trim()
+    if (t && c.req.path === t) return true
+  }
+  return false
+}
+
 export function veritlyHonoOtelMiddleware(tracerName: string): MiddlewareHandler {
   const tracer = trace.getTracer(tracerName)
   return async (c, next) => {
+    if (veritlySkipHonoHttpSpan(c)) {
+      return next()
+    }
     const carrier: Record<string, string> = {}
     c.req.raw.headers.forEach((value, key) => {
       carrier[key] = value
