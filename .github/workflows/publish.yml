@@ -213,7 +213,6 @@ jobs:
     needs:
       - build-cli
       - version
-    if: github.ref_name != 'beta'
     continue-on-error: false
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -390,7 +389,7 @@ jobs:
     needs:
       - build-cli
       - version
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    if: github.repository == 'anomalyco/opencode'
     continue-on-error: false
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -596,7 +595,7 @@ jobs:
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@v4
-        if: needs.version.outputs.release && github.ref_name != 'beta'
+        if: needs.version.outputs.release
         with:
           pattern: latest-yml-*
           path: /tmp/latest-yml
