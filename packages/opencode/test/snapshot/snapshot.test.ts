@@ -583,6 +583,40 @@ test("files tracked in snapshot but now gitignored are filtered out", async () =
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      // First, create a file and snapshot it
+      await Filesystem.write(`${tmp.path}/later-ignored.txt`, "initial content")
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      // Modify the file (so it appears in diff-files)
+      await Filesystem.write(`${tmp.path}/later-ignored.txt`, "modified content")
+
+      // Now add gitignore that would exclude this file
+      await Filesystem.write(`${tmp.path}/.gitignore`, "later-ignored.txt\n")
+
+      // Also create another tracked file
+      await Filesystem.write(`${tmp.path}/still-tracked.txt`, "new tracked file")
+
+      const patch = await Snapshot.patch(before!)
+
+      // The file that is now gitignored should NOT appear, even though it was
+      // previously tracked and modified
+      expect(patch.files).not.toContain(fwd(tmp.path, "later-ignored.txt"))
+
+      // The gitignore file itself should appear
+      expect(patch.files).toContain(fwd(tmp.path, ".gitignore"))
+
+      // Other tracked files should appear
+      expect(patch.files).toContain(fwd(tmp.path, "still-tracked.txt"))
+    },
+  })
+})
+
+test("gitignore updated between track calls filters from diff", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
       // a.txt is already committed from bootstrap - track it in snapshot
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -596,35 +630,6 @@ test("files tracked in snapshot but now gitignored are filtered out", async () =
       // Also modify b.txt which is not gitignored
       await Filesystem.write(`${tmp.path}/b.txt`, "also modified")
 
-      const patch = await Snapshot.patch(before!)
-
-      // a.txt is now gitignored and should NOT appear in patch
-      expect(patch.files).not.toContain(fwd(tmp.path, "a.txt"))
-
-      // .gitignore itself should appear (it's a new file)
-      expect(patch.files).toContain(fwd(tmp.path, ".gitignore"))
-
-      // b.txt should appear (not gitignored)
-      expect(patch.files).toContain(fwd(tmp.path, "b.txt"))
-    },
-  })
-})
-
-test("gitignore updated between track calls filters from diff", async () => {
-  await using tmp = await bootstrap()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      // First track - a.txt is tracked in snapshot
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-
-      // Modify a.txt
-      await Filesystem.write(`${tmp.path}/a.txt`, "modified content")
-
-      // Now add a.txt to gitignore
-      await Filesystem.write(`${tmp.path}/.gitignore`, "a.txt\n")
-
       // Second track - should not include a.txt even though it changed
       const after = await Snapshot.track()
       expect(after).toBeTruthy()
@@ -635,6 +640,9 @@ test("gitignore updated between track calls filters from diff", async () => {
 
       // But .gitignore should be in the diff
       expect(diffs.some((x) => x.file === ".gitignore")).toBe(true)
+
+      // b.txt should be in the diff (not gitignored)
+      expect(diffs.some((x) => x.file === "b.txt")).toBe(true)
     },
   })
 })
