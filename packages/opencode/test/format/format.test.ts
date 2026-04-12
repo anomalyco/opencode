@@ -64,6 +64,46 @@ describe("Format", () => {
     ),
   )
 
+  it.live("status() excludes uv when ruff is disabled", () =>
+    provideTmpdirInstance(
+      () =>
+        Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            const statuses = yield* fmt.status()
+            expect(statuses.find((item) => item.name === "ruff")).toBeUndefined()
+            expect(statuses.find((item) => item.name === "uv")).toBeUndefined()
+          }),
+        ),
+      {
+        config: {
+          formatter: {
+            ruff: { disabled: true },
+          },
+        },
+      },
+    ),
+  )
+
+  it.live("status() excludes ruff when uv is disabled", () =>
+    provideTmpdirInstance(
+      () =>
+        Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            const statuses = yield* fmt.status()
+            expect(statuses.find((item) => item.name === "ruff")).toBeUndefined()
+            expect(statuses.find((item) => item.name === "uv")).toBeUndefined()
+          }),
+        ),
+      {
+        config: {
+          formatter: {
+            uv: { disabled: true },
+          },
+        },
+      },
+    ),
+  )
+
   it.live("service initializes without error", () => provideTmpdirInstance(() => Format.Service.use(() => Effect.void)))
 
   it.live("status() initializes formatter state per directory", () =>

@@ -21,7 +21,7 @@ describe("tui.selectSession endpoint", () => {
         const session = await Session.create({})
 
         // #when
-        const app = Server.Default()
+        const app = Server.Default().app
         const response = await app.request("/tui/select-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -47,7 +47,7 @@ describe("tui.selectSession endpoint", () => {
         const nonExistentSessionID = "ses_nonexistent123"
 
         // #when
-        const app = Server.Default()
+        const app = Server.Default().app
         const response = await app.request("/tui/select-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -69,7 +69,7 @@ describe("tui.selectSession endpoint", () => {
         const invalidSessionID = "invalid_session_id"
 
         // #when
-        const app = Server.Default()
+        const app = Server.Default().app
         const response = await app.request("/tui/select-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

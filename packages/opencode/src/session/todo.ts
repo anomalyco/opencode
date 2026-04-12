@@ -1,8 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { makeRuntime } from "@/effect/run-service"
 import { SessionID } from "./schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import z from "zod"
 import { Database, eq, asc } from "../storage/db"
 import { TodoTable } from "./session.sql"
@@ -32,7 +31,7 @@ export namespace Todo {
     readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionTodo") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTodo") {}
 
   export const layer = Layer.effect(
     Service,
@@ -82,14 +81,5 @@ export namespace Todo {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function update(input: { sessionID: SessionID; todos: Info[] }) {
-    return runPromise((svc) => svc.update(input))
-  }
-
-  export async function get(sessionID: SessionID) {
-    return runPromise((svc) => svc.get(sessionID))
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 }
