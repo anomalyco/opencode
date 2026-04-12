@@ -16,8 +16,9 @@ const TRAIL = 0.28
 const SWELL = 0.24
 const WIDE = 1.85
 const DRIFT = 1.45
+const EXPAND = 1.62
 const LIFE = 1020
-const CHARGE = 2000
+const CHARGE = 3000
 const HOLD = 90
 const SINK = 40
 const ARC = 2.2
@@ -30,6 +31,7 @@ const SHIMMER_IN = 60
 const SHIMMER_OUT = 2.8
 const TRACE = 0.033
 const TAIL = 1.8
+const TRACE_IN = 200
 const PEAK = RGBA.fromInts(255, 255, 255)
 
 type Ring = {
@@ -232,7 +234,7 @@ function shimmer(x: number, y: number, frame: Frame) {
     const dy = y * 2 + 1 - item.y
     const dist = Math.hypot(dx, dy)
     const p = age / LIFE
-    const r = SPAN * (1 - (1 - p) ** 1.42)
+    const r = SPAN * (1 - (1 - p) ** EXPAND)
     const lag = r - dist
     if (lag < 0.18 || lag > SHIMMER_OUT) return best
     const band = Math.exp(-(((lag - 1.05) / 0.68) ** 2))
@@ -250,7 +252,7 @@ function remain(x: number, y: number, item: Release, t: number) {
   const dx = x + 0.5 - item.x - 0.5
   const dy = y * 2 + 1 - item.y * 2 - 1
   const dist = Math.hypot(dx, dy)
-  const r = SPAN * (1 - (1 - p) ** 1.42)
+  const r = SPAN * (1 - (1 - p) ** EXPAND)
   if (dist > r) return 1
   return clamp((r - dist) / 1.35 < 1 ? 1 - (r - dist) / 1.35 : 0)
 }
@@ -263,7 +265,7 @@ function wave(x: number, y: number, frame: Frame, live: boolean) {
     const dx = x + 0.5 - item.x
     const dy = y * 2 + 1 - item.y
     const dist = Math.hypot(dx, dy)
-    const r = SPAN * (1 - (1 - p) ** 1.42)
+    const r = SPAN * (1 - (1 - p) ** EXPAND)
     const fade = (1 - p) ** 1.32
     const j = 1.02 + noise(x + item.x * 0.7, y + item.y * 0.7, item.at * 0.002 + age * 0.06) * 0.52
     const edge = Math.exp(-(((dist - r) / WIDTH) ** 2)) * GAIN * fade * item.force * j
@@ -347,7 +349,9 @@ function trace(x: number, y: number, frame: Frame) {
   if (!step || step.glyph !== item.glyph || step.l < 2) return 0
   const age = frame.t - item.at
   const rise = held ? ramp(age, HOLD, CHARGE) : rest!.rise
-  const head = (age * TRACE) % step.l
+  const appear = held ? ramp(age, 0, TRACE_IN) : 1
+  const speed = lerp(TRACE * 0.48, TRACE * 0.88, rise)
+  const head = (age * speed) % step.l
   const dist = Math.min(Math.abs(step.i - head), step.l - Math.abs(step.i - head))
   const tail = (head - TAIL + step.l) % step.l
   const lag = Math.min(Math.abs(step.i - tail), step.l - Math.abs(step.i - tail))
@@ -355,7 +359,7 @@ function trace(x: number, y: number, frame: Frame) {
   const core = Math.exp(-((dist / 1.05) ** 2)) * lerp(0.8, 2.35, rise)
   const glow = Math.exp(-((dist / 1.85) ** 2)) * lerp(0.08, 0.34, rise)
   const trail = Math.exp(-((lag / 1.45) ** 2)) * lerp(0.04, 0.42, rise)
-  return (core + glow + trail) * fade
+  return (core + glow + trail) * appear * fade
 }
 
 export function Logo() {
@@ -529,7 +533,7 @@ export function Logo() {
   onCleanup(() => {
     stop()
     hum = false
-    Sound.stop()
+    Sound.dispose()
   })
 
   const mouse = (evt: MouseEvent) => {
