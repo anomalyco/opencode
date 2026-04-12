@@ -6,7 +6,7 @@ import {
 } from "@ai-sdk/provider"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types"
+import type { OpenAIResponsesInput, OpenAIResponsesInputItem, OpenAIResponsesReasoning } from "./openai-responses-api-types"
 import { localShellInputSchema, localShellOutputSchema } from "./tool/local-shell"
 
 /**
@@ -118,13 +118,58 @@ export async function convertToOpenAIResponsesInput({
       }
 
       case "assistant": {
+        const assistantInput: OpenAIResponsesInput = []
         const reasoningMessages: Record<string, OpenAIResponsesReasoning> = {}
         const toolCallParts: Record<string, LanguageModelV3ToolCallPart> = {}
+        let pendingOutput: OpenAIResponsesInputItem | undefined
+        let pendingReasoning: OpenAIResponsesInputItem | undefined
+
+        const pushAssistantOutput = (item: OpenAIResponsesInputItem) => {
+          if (pendingReasoning !== undefined) {
+            assistantInput.push(pendingReasoning)
+            pendingReasoning = undefined
+            assistantInput.push(item)
+            return
+          }
+
+          if (pendingOutput !== undefined) {
+            assistantInput.push(pendingOutput)
+          }
+
+          pendingOutput = item
+        }
+
+        const pushAssistantReasoning = (item: OpenAIResponsesInputItem) => {
+          if (pendingOutput !== undefined) {
+            assistantInput.push(item)
+            assistantInput.push(pendingOutput)
+            pendingOutput = undefined
+            return
+          }
+
+          if (pendingReasoning !== undefined) {
+            assistantInput.push(pendingReasoning)
+          }
+
+          pendingReasoning = item
+        }
+
+        const flushAssistantPending = () => {
+          if (pendingReasoning !== undefined) {
+            assistantInput.push(pendingReasoning)
+            pendingReasoning = undefined
+          }
+
+          if (pendingOutput !== undefined) {
+            assistantInput.push(pendingOutput)
+            pendingOutput = undefined
+          }
+        }
 
         for (const part of content) {
           switch (part.type) {
             case "text": {
-              input.push({
+              pushAssistantOutput({
                 role: "assistant",
                 content: [{ type: "output_text", text: part.text }],
                 id: (part.providerOptions?.openai?.itemId as string) ?? undefined,
@@ -140,7 +185,7 @@ export async function convertToOpenAIResponsesInput({
 
               if (hasLocalShellTool && part.toolName === "local_shell") {
                 const parsedInput = localShellInputSchema.parse(part.input)
-                input.push({
+                pushAssistantOutput({
                   type: "local_shell_call",
                   call_id: part.toolCallId,
                   id: (part.providerOptions?.openai?.itemId as string) ?? undefined,
@@ -157,7 +202,7 @@ export async function convertToOpenAIResponsesInput({
                 break
               }
 
-              input.push({
+              pushAssistantOutput({
                 type: "function_call",
                 call_id: part.toolCallId,
                 name: part.toolName,
@@ -171,7 +216,7 @@ export async function convertToOpenAIResponsesInput({
             case "tool-result": {
               if (store) {
                 // use item references to refer to tool results from built-in tools
-                input.push({ type: "item_reference", id: part.toolCallId })
+                pushAssistantOutput({ type: "item_reference", id: part.toolCallId })
               } else {
                 warnings.push({
                   type: "other",
@@ -197,7 +242,7 @@ export async function convertToOpenAIResponsesInput({
                 if (store) {
                   if (reasoningMessage === undefined) {
                     // use item references to refer to reasoning (single reference)
-                    input.push({ type: "item_reference", id: reasoningId })
+                    pushAssistantReasoning({ type: "item_reference", id: reasoningId })
 
                     // store unused reasoning message to mark id as used
                     reasoningMessages[reasoningId] = {
@@ -231,7 +276,7 @@ export async function convertToOpenAIResponsesInput({
                       encrypted_content: providerOptions?.reasoningEncryptedContent,
                       summary: summaryParts,
                     }
-                    input.push(reasoningMessages[reasoningId])
+                    pushAssistantReasoning(reasoningMessages[reasoningId])
                   } else {
                     reasoningMessage.summary.push(...summaryParts)
                   }
@@ -246,6 +291,9 @@ export async function convertToOpenAIResponsesInput({
             }
           }
         }
+
+        flushAssistantPending()
+        input.push(...assistantInput)
 
         break
       }
