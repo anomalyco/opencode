@@ -90,6 +90,7 @@
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.933.0",
+		"@opentelemetry/api": "^1.9.0",
 		"@veritly/telemetry-veritly": "workspace:*",
 		"@opencode-ai/plugin": "workspace:*",
 		"@opencode-ai/script": "workspace:*",

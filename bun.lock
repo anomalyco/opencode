@@ -9,6 +9,7 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
+        "@opentelemetry/api": "^1.9.0",
         "@veritly/telemetry-veritly": "workspace:*",
         "http-proxy": "^1.18.1",
         "typescript": "catalog:",
