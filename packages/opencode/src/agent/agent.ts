@@ -9,6 +9,7 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_ASK from "./prompt/ask.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
@@ -117,6 +118,34 @@ export namespace Agent {
                 }),
                 user,
               ),
+              mode: "primary",
+              native: true,
+            },
+            ask: {
+              name: "ask",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  grep: "allow",
+                  glob: "allow",
+                  list: "allow",
+                  bash: "allow",
+                  webfetch: "allow",
+                  websearch: "allow",
+                  codesearch: "allow",
+                  read: "allow",
+                  external_directory: {
+                    "*": "ask",
+                    ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+                  },
+                }),
+                user,
+              ),
+              description:
+                "Use this agent when the user asks questions about how something works in the codebase, requests explanations of code functionality, asks about project architecture, or wants to understand relationships between components. This agent is for read-only exploration and explanation - never for making changes.",
+              prompt: PROMPT_ASK,
+              options: {},
               mode: "primary",
               native: true,
             },

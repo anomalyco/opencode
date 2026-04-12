@@ -22,6 +22,7 @@ test("returns default native agents when no config", async () => {
     fn: async () => {
       const agents = await Agent.list()
       const names = agents.map((a) => a.name)
+      expect(names).toContain("ask")
       expect(names).toContain("build")
       expect(names).toContain("plan")
       expect(names).toContain("general")
@@ -88,6 +89,47 @@ test("explore agent asks for external directories and allows Truncate.GLOB", asy
       expect(explore).toBeDefined()
       expect(Permission.evaluate("external_directory", "/some/other/path", explore!.permission).action).toBe("ask")
       expect(Permission.evaluate("external_directory", Truncate.GLOB, explore!.permission).action).toBe("allow")
+    },
+  })
+})
+
+test("ask agent has correct primary properties and read-only permissions", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = await Agent.get("ask")
+      expect(ask).toBeDefined()
+      expect(ask?.mode).toBe("primary")
+      expect(ask?.native).toBe(true)
+      expect(ask?.prompt).toBeDefined()
+      // Read-only: these should be denied
+      expect(evalPerm(ask, "edit")).toBe("deny")
+      expect(evalPerm(ask, "write")).toBe("deny")
+      expect(evalPerm(ask, "todowrite")).toBe("deny")
+      // Read operations should be allowed
+      expect(evalPerm(ask, "grep")).toBe("allow")
+      expect(evalPerm(ask, "glob")).toBe("allow")
+      expect(evalPerm(ask, "list")).toBe("allow")
+      expect(evalPerm(ask, "bash")).toBe("allow")
+      expect(evalPerm(ask, "webfetch")).toBe("allow")
+      expect(evalPerm(ask, "websearch")).toBe("allow")
+      expect(evalPerm(ask, "codesearch")).toBe("allow")
+      expect(evalPerm(ask, "read")).toBe("allow")
+    },
+  })
+})
+
+test("ask agent asks for external directories and allows Truncate.GLOB", async () => {
+  const { Truncate } = await import("../../src/tool/truncate")
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = await Agent.get("ask")
+      expect(ask).toBeDefined()
+      expect(Permission.evaluate("external_directory", "/some/other/path", ask!.permission).action).toBe("ask")
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, ask!.permission).action).toBe("allow")
     },
   })
 })
@@ -680,7 +722,7 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
-test("defaultAgent returns plan when build is disabled and default_agent not set", async () => {
+test("defaultAgent returns ask when build is disabled and default_agent not set", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -692,8 +734,8 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.defaultAgent()
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      // build is disabled, so it should return ask (next primary agent in definition order)
+      expect(agent).toBe("ask")
     },
   })
 })
@@ -702,6 +744,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
+        ask: { disable: true },
         build: { disable: true },
         plan: { disable: true },
       },
