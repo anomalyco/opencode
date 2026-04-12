@@ -165,7 +165,7 @@ export namespace SyncEvent {
   //   and it validets all the sequence ids
   // * when loading events from db, apply zod validation to ensure shape
 
-  export function replay(event: SerializedEvent, options?: { republish: boolean }) {
+  export function replay(event: SerializedEvent, options?: { publish: boolean }) {
     const def = registry.get(event.type)
     if (!def) {
       throw new Error(`Unknown event type: ${event.type}`)
@@ -189,10 +189,10 @@ export namespace SyncEvent {
       throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
-    process(def, event, { publish: !!options?.republish })
+    process(def, event, { publish: !!options?.publish })
   }
 
-  export function run<Def extends Definition>(def: Def, data: Event<Def>["data"]) {
+  export function run<Def extends Definition>(def: Def, data: Event<Def>["data"], options?: { publish?: boolean }) {
     const agg = (data as Record<string, string>)[def.aggregate]
     // This should never happen: we've enforced it via typescript in
     // the definition
@@ -203,6 +203,8 @@ export namespace SyncEvent {
     if (def.version !== versions.get(def.type)) {
       throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
     }
+
+    const { publish = true } = options || {}
 
     // Note that this is an "immediate" transaction which is critical.
     // We need to make sure we can safely read and write with nothing
@@ -218,7 +220,7 @@ export namespace SyncEvent {
         const seq = row?.seq != null ? row.seq + 1 : 0
 
         const event = { id, seq, aggregateID: agg, data }
-        process(def, event, { publish: true })
+        process(def, event, { publish })
       },
       {
         behavior: "immediate",

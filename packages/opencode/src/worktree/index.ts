@@ -12,7 +12,8 @@ import { Slug } from "@opencode-ai/util/slug"
 import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Git } from "@/git"
+import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
@@ -163,14 +164,14 @@ export namespace Worktree {
     readonly reset: (input: ResetInput) => Effect.Effect<boolean>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Worktree") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Worktree") {}
 
   type GitResult = { code: number; text: string; stderr: string }
 
   export const layer: Layer.Layer<
     Service,
     never,
-    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Project.Service
+    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Git.Service | Project.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -178,6 +179,7 @@ export namespace Worktree {
       const fs = yield* AppFileSystem.Service
       const pathSvc = yield* Path.Path
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const gitSvc = yield* Git.Service
       const project = yield* Project.Service
 
       const git = Effect.fnUntraced(
@@ -244,6 +246,7 @@ export namespace Worktree {
 
       const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
         const ctx = yield* InstanceState.context
+        const workspaceID = yield* InstanceState.workspaceID
         const projectID = ctx.project.id
         const extra = startCommand?.trim()
 
@@ -253,6 +256,8 @@ export namespace Worktree {
           log.error("worktree checkout failed", { directory: info.directory, message })
           GlobalBus.emit("event", {
             directory: info.directory,
+            project: ctx.project.id,
+            workspace: workspaceID,
             payload: { type: Event.Failed.type, properties: { message } },
           })
           return
@@ -270,6 +275,8 @@ export namespace Worktree {
               log.error("worktree bootstrap failed", { directory: info.directory, message })
               GlobalBus.emit("event", {
                 directory: info.directory,
+                project: ctx.project.id,
+                workspace: workspaceID,
                 payload: { type: Event.Failed.type, properties: { message } },
               })
               return false
@@ -279,6 +286,8 @@ export namespace Worktree {
 
         GlobalBus.emit("event", {
           directory: info.directory,
+          project: ctx.project.id,
+          workspace: workspaceID,
           payload: {
             type: Event.Ready.type,
             properties: { name: info.name, branch: info.branch },
@@ -515,56 +524,24 @@ export namespace Worktree {
 
         const worktreePath = entry.path
 
-        const remoteList = yield* git(["remote"], { cwd: Instance.worktree })
-        if (remoteList.code !== 0) {
-          throw new ResetFailedError({ message: remoteList.stderr || remoteList.text || "Failed to list git remotes" })
-        }
-
-        const remotes = remoteList.text
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean)
-        const remote = remotes.includes("origin")
-          ? "origin"
-          : remotes.length === 1
-            ? remotes[0]
-            : remotes.includes("upstream")
-              ? "upstream"
-              : ""
-
-        const remoteHead = remote
-          ? yield* git(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd: Instance.worktree })
-          : { code: 1, text: "", stderr: "" }
-
-        const remoteRef = remoteHead.code === 0 ? remoteHead.text.trim() : ""
-        const remoteTarget = remoteRef ? remoteRef.replace(/^refs\/remotes\//, "") : ""
-        const remoteBranch =
-          remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
-
-        const [mainCheck, masterCheck] = yield* Effect.all(
-          [
-            git(["show-ref", "--verify", "--quiet", "refs/heads/main"], { cwd: Instance.worktree }),
-            git(["show-ref", "--verify", "--quiet", "refs/heads/master"], { cwd: Instance.worktree }),
-          ],
-          { concurrency: 2 },
-        )
-        const localBranch = mainCheck.code === 0 ? "main" : masterCheck.code === 0 ? "master" : ""
-
-        const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
-        if (!target) {
+        const base = yield* gitSvc.defaultBranch(Instance.worktree)
+        if (!base) {
           throw new ResetFailedError({ message: "Default branch not found" })
         }
 
-        if (remoteBranch) {
+        const sep = base.ref.indexOf("/")
+        if (base.ref !== base.name && sep > 0) {
+          const remote = base.ref.slice(0, sep)
+          const branch = base.ref.slice(sep + 1)
           yield* gitExpect(
-            ["fetch", remote, remoteBranch],
+            ["fetch", remote, branch],
             { cwd: Instance.worktree },
-            (r) => new ResetFailedError({ message: r.stderr || r.text || `Failed to fetch ${target}` }),
+            (r) => new ResetFailedError({ message: r.stderr || r.text || `Failed to fetch ${base.ref}` }),
           )
         }
 
         yield* gitExpect(
-          ["reset", "--hard", target],
+          ["reset", "--hard", base.ref],
           { cwd: worktreePath },
           (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset worktree to target" }),
         )
@@ -613,7 +590,8 @@ export namespace Worktree {
     }),
   )
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Git.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Project.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
