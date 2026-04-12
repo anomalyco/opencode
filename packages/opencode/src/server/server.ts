@@ -9,6 +9,7 @@ import { initProjectors } from "./projectors"
 import { Log } from "@/util/log"
 import { ControlPlaneRoutes } from "./control"
 import { UIRoutes } from "./ui"
+import { Flag } from "@/flag/flag"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -17,6 +18,7 @@ initProjectors()
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  let warnedUnsecured = false
 
   export type Listener = {
     hostname: string
@@ -72,6 +74,12 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }): Promise<Listener> {
+    if (!Flag.OPENCODE_SERVER_PASSWORD && !warnedUnsecured) {
+      warnedUnsecured = true
+      process.stderr.write("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\n")
+      log.warn("OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+    }
+
     const built = create(opts)
     const server = await built.runtime.listen(opts)
 
