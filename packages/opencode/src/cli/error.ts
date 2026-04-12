@@ -1,3 +1,4 @@
+import { AccountServiceError, AccountTransportError } from "@/account"
 import { ConfigMarkdown } from "@/config/markdown"
 import { errorFormat } from "@/util/error"
 import { Config } from "../config/config"
@@ -8,6 +9,9 @@ import { UI } from "./ui"
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
     return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
+  if (input instanceof AccountTransportError || input instanceof AccountServiceError) {
+    return input.message
+  }
   if (Provider.ModelNotFoundError.isInstance(input)) {
     const { providerID, modelID, suggestions } = input.data
     return [

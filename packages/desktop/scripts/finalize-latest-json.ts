@@ -21,7 +21,7 @@ const releaseId = process.env.OPENCODE_RELEASE
 if (!releaseId) throw new Error("OPENCODE_RELEASE is required")
 
 const version = process.env.OPENCODE_VERSION
-if (!releaseId) throw new Error("OPENCODE_VERSION is required")
+if (!version) throw new Error("OPENCODE_VERSION is required")
 
 const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
 if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required")
@@ -54,7 +54,10 @@ const assets = release.assets ?? []
 const assetByName = new Map(assets.map((asset) => [asset.name, asset]))
 
 const latestAsset = assetByName.get("latest.json")
-if (!latestAsset) throw new Error("latest.json asset not found")
+if (!latestAsset) {
+  console.log("latest.json not found, skipping tauri finalization")
+  process.exit(0)
+}
 
 const latestRes = await fetch(latestAsset.url, {
   headers: {

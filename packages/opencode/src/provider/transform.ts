@@ -375,8 +375,9 @@ export namespace ProviderTransform {
       id.includes("glm") ||
       id.includes("mistral") ||
       id.includes("kimi") ||
-      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
-      id.includes("k2p5")
+      id.includes("k2p5") ||
+      id.includes("qwen") ||
+      id.includes("big-pickle")
     )
       return {}
 
@@ -465,9 +466,7 @@ export namespace ProviderTransform {
           return {}
         }
         if (model.id.includes("claude")) {
-          return {
-            thinking: { thinking_budget: 4000 },
-          }
+          return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
         }
         const copilotEfforts = iife(() => {
           if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))
@@ -775,7 +774,10 @@ export namespace ProviderTransform {
       result["chat_template_args"] = { enable_thinking: true }
     }
 
-    if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    if (
+      ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
+      input.model.api.npm === "@ai-sdk/openai-compatible"
+    ) {
       result["thinking"] = {
         type: "enabled",
         clear_thinking: false,
@@ -936,6 +938,12 @@ export namespace ProviderTransform {
     }
 
     const key = sdkKey(model.api.npm) ?? model.providerID
+    // @ai-sdk/azure delegates to OpenAIChatLanguageModel which reads from
+    // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
+    // "azure" first. Pass both so model options work on either code path.
+    if (model.api.npm === "@ai-sdk/azure") {
+      return { openai: options, azure: options }
+    }
     return { [key]: options }
   }
 
