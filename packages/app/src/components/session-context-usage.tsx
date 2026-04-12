@@ -1,46 +1,64 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
+import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js"
 import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { type ProgressCircleProps, ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
+import { Popover } from "@opencode-ai/ui/popover"
 
-import { useFile } from "@/context/file"
-import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { createSessionTabs } from "@/pages/session/helpers"
+import { createSessionContextFormatter } from "@/components/session/session-context-format"
+import {
+  estimateSessionContextBreakdown,
+  type SessionContextBreakdownKey,
+} from "@/components/session/session-context-breakdown"
+import { findLast } from "@opencode-ai/util/array"
+import type { Message, UserMessage } from "@opencode-ai/sdk/v2/client"
+import { same } from "@/utils/same"
+
+const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
+  system: "var(--syntax-info)",
+  user: "var(--syntax-success)",
+  assistant: "var(--syntax-property)",
+  tool: "var(--syntax-warning)",
+  other: "var(--syntax-comment)",
+}
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
   placement?: TooltipProps["placement"]
 }
 
-function openSessionContext(args: {
-  view: ReturnType<ReturnType<typeof useLayout>["view"]>
-  layout: ReturnType<typeof useLayout>
-  tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
-}) {
-  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
-  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
-  args.tabs.open("context")
-  args.tabs.setActive("context")
-}
+const emptyMessages: Message[] = []
+const emptyUserMessages: UserMessage[] = []
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
-  const file = useFile()
-  const layout = useLayout()
   const language = useLanguage()
-  const { params, tabs, view } = useSessionLayout()
+  const platform = usePlatform()
+  const { params } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
-  const tabState = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
-  })
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const [shown, setShown] = createSignal(false)
+  const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
+
+  const messages = createMemo(
+    () => {
+      const id = params.id
+      if (!id) return emptyMessages
+      return (sync.data.message[id] ?? []) as Message[]
+    },
+    emptyMessages,
+    { equals: same },
+  )
+
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
+  )
 
   const usd = createMemo(
     () =>
@@ -52,22 +70,42 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
   const context = createMemo(() => metrics().context)
-  const cost = createMemo(() => {
-    return usd().format(metrics().totalCost)
+  const cost = createMemo(() => usd().format(metrics().totalCost))
+  const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
+
+  const counts = createMemo(() => {
+    const all = messages()
+    const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
+    const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
+    return { all: all.length, user, assistant }
   })
 
-  const openContext = () => {
-    if (!params.id) return
+  const systemPrompt = createMemo(() => {
+    const msg = findLast(userMessages(), (m) => !!m.system)
+    const system = msg?.system
+    if (!system) return
+    const trimmed = system.trim()
+    if (!trimmed) return
+    return trimmed
+  })
 
-    if (tabState.activeTab() === "context") {
-      tabs().close("context")
-      return
-    }
-    openSessionContext({
-      view: view(),
-      layout,
-      tabs: tabs(),
+  const breakdown = createMemo(() => {
+    const c = context()
+    if (!c?.input) return []
+    return estimateSessionContextBreakdown({
+      messages: messages(),
+      parts: sync.data.part as Record<string, import("@opencode-ai/sdk/v2/client").Part[] | undefined>,
+      input: c.input,
+      systemPrompt: systemPrompt(),
     })
+  })
+
+  const breakdownLabel = (key: SessionContextBreakdownKey) => {
+    if (key === "system") return language.t("context.breakdown.system")
+    if (key === "user") return language.t("context.breakdown.user")
+    if (key === "assistant") return language.t("context.breakdown.assistant")
+    if (key === "tool") return language.t("context.breakdown.tool")
+    return language.t("context.breakdown.other")
   }
 
   const status = createMemo((): ProgressCircleProps["status"] => {
@@ -107,24 +145,111 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     </div>
   )
 
+  const stats = createMemo(() => [
+    { label: "context.stats.provider", value: context()?.providerLabel ?? "—" },
+    { label: "context.stats.model", value: context()?.modelLabel ?? "—" },
+    { label: "context.stats.limit", value: formatter().number(context()?.limit) },
+    { label: "context.stats.totalTokens", value: formatter().number(context()?.total) },
+    { label: "context.stats.usage", value: formatter().percent(context()?.usage) },
+    { label: "context.stats.inputTokens", value: formatter().number(context()?.input) },
+    { label: "context.stats.outputTokens", value: formatter().number(context()?.output) },
+    { label: "context.stats.reasoningTokens", value: formatter().number(context()?.reasoning) },
+    {
+      label: "context.stats.cacheTokens",
+      value: `${formatter().number(context()?.cacheRead)} / ${formatter().number(context()?.cacheWrite)}`,
+    },
+    { label: "context.stats.messages", value: counts().all.toLocaleString(language.intl()) },
+    { label: "context.stats.totalCost", value: cost() },
+  ])
+
+  const popoverContent = () => (
+    <div class="flex flex-col gap-4">
+      <div class="grid grid-cols-2 gap-x-5 gap-y-2.5">
+        <For each={stats()}>
+          {(stat) => (
+            <>
+              <div class="text-13-regular text-text-weak">{language.t(stat.label as Parameters<typeof language.t>[0])}</div>
+              <div class="text-13-medium text-text-strong text-right truncate">{stat.value}</div>
+            </>
+          )}
+        </For>
+      </div>
+
+      <Show when={breakdown().length > 0}>
+        <div class="flex flex-col gap-2 pt-3 border-t border-border-weak-base">
+          <div class="text-13-regular text-text-weak">{language.t("context.breakdown.title")}</div>
+          <div class="h-2.5 w-full rounded-full bg-surface-base/60 overflow-hidden flex">
+            <For each={breakdown()}>
+              {(segment) => (
+                <div
+                  class="h-full"
+                  style={{
+                    width: `${segment.width}%`,
+                    "background-color": BREAKDOWN_COLOR[segment.key],
+                  }}
+                />
+              )}
+            </For>
+          </div>
+          <div class="flex flex-wrap gap-x-3 gap-y-1">
+            <For each={breakdown()}>
+              {(segment) => (
+                <div class="flex items-center gap-1.5 text-12-regular text-text-weak">
+                  <div class="size-2 rounded-sm" style={{ "background-color": BREAKDOWN_COLOR[segment.key] }} />
+                  <div>{breakdownLabel(segment.key)}</div>
+                  <div class="text-text-weaker">{segment.percent.toLocaleString(language.intl())}%</div>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </div>
+  )
+
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
-        <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
-          <Match when={true}>
-            <Button
-              type="button"
-              variant="ghost"
-              class="size-6"
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
+      <Switch>
+        <Match when={variant() === "indicator"}>
+          <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
+            {circle()}
+          </Tooltip>
+        </Match>
+        <Match when={true}>
+          <Popover
+            open={shown()}
+            onOpenChange={setShown}
+            triggerAs={Button}
+            triggerProps={{
+              variant: "ghost",
+              class: "size-6",
+              "aria-label": language.t("context.usage.view"),
+            }}
+            trigger={circle()}
+            class="[&_[data-slot=popover-body]]:p-0 w-[min(380px,calc(100vw-40px))] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
+            gutter={4}
+            placement={props.placement === "bottom" ? "bottom-end" : "top-end"}
+          >
+            <div
+              class="w-[min(380px,calc(100vw-40px))] rounded-xl overflow-hidden border border-border-weak-base shadow-[var(--shadow-lg-border-base)]"
+              classList={{
+                "bg-background-stronger/70 backdrop-blur-xl": !win(),
+                "bg-background-stronger": win(),
+              }}
+              style={{
+                "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+                "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+              }}
             >
-              {circle()}
-            </Button>
-          </Match>
-        </Switch>
-      </Tooltip>
+              <div class="px-4 py-3 border-b border-border-weak-base flex items-center gap-2">
+                {circle()}
+                <span class="text-14-medium text-text-strong">{language.t("context.usage.view")}</span>
+              </div>
+              <div class="px-4 py-4">{popoverContent()}</div>
+            </div>
+          </Popover>
+        </Match>
+      </Switch>
     </Show>
   )
 }
