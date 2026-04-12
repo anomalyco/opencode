@@ -159,9 +159,22 @@ export namespace ToolRegistry {
           const matches = dirs.flatMap((dir) =>
             Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
           )
+          const cfg = yield* config.get()
+          const rules = Permission.fromConfig(cfg.permission ?? {})
           if (matches.length) yield* config.waitForDependencies()
           for (const match of matches) {
             const namespace = path.basename(match, path.extname(match))
+            const text = yield* Effect.promise(() => Bun.file(match).text())
+            const named = Array.from(
+              text.matchAll(/export\s+(?:const|let|var|async function|function)\s+([A-Za-z_$][\w$]*)/g),
+              (item) => `${namespace}_${item[1]}`,
+            )
+            const ids = [...(text.includes("export default") ? [namespace] : []), ...named]
+            const disabled = new Set([
+              ...ids.filter((id) => cfg.tools?.[id] === false),
+              ...Permission.disabled(ids, rules),
+            ])
+            if (ids.length && ids.every((id) => disabled.has(id))) continue
             const mod = yield* Effect.promise(
               () => import(process.platform === "win32" ? match : pathToFileURL(match).href),
             )
@@ -177,7 +190,6 @@ export namespace ToolRegistry {
             }
           }
 
-          const cfg = yield* config.get()
           const questionEnabled =
             ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 

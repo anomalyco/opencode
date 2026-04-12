@@ -154,4 +154,116 @@ describe("tool.registry", () => {
       },
     })
   })
+
+  test("skips disabled tools before importing them", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolDir = path.join(opencodeDir, "tool")
+        await fs.mkdir(toolDir, { recursive: true })
+
+        await Bun.write(
+          path.join(opencodeDir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            tools: {
+              boom: false,
+            },
+          }),
+        )
+
+        await Bun.write(
+          path.join(toolDir, "boom.ts"),
+          ['throw new Error("disabled tool imported")', "export default {}", ""].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const ids = await ToolRegistry.ids()
+        expect(ids).not.toContain("boom")
+      },
+    })
+  })
+
+  test("skips disabled named-export tools before importing them", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolDir = path.join(opencodeDir, "tool")
+        await fs.mkdir(toolDir, { recursive: true })
+
+        await Bun.write(
+          path.join(opencodeDir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            tools: {
+              math_add: false,
+              math_multiply: false,
+            },
+          }),
+        )
+
+        await Bun.write(
+          path.join(toolDir, "math.ts"),
+          [
+            'throw new Error("disabled named tool imported")',
+            "export const add = {}",
+            "export const multiply = {}",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const ids = await ToolRegistry.ids()
+        expect(ids).not.toContain("math_add")
+        expect(ids).not.toContain("math_multiply")
+      },
+    })
+  })
+
+  test("skips permission-disabled tools before importing them", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolDir = path.join(opencodeDir, "tool")
+        await fs.mkdir(toolDir, { recursive: true })
+
+        await Bun.write(
+          path.join(opencodeDir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            permission: {
+              boom: "deny",
+            },
+          }),
+        )
+
+        await Bun.write(
+          path.join(toolDir, "boom.ts"),
+          ['throw new Error("permission disabled tool imported")', "export default {}", ""].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const ids = await ToolRegistry.ids()
+        expect(ids).not.toContain("boom")
+      },
+    })
+  })
 })
