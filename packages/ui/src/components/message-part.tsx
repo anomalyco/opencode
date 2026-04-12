@@ -1843,6 +1843,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
+        forceOpen={props.status === "running"}
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
