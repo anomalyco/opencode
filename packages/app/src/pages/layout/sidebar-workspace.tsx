@@ -17,7 +17,7 @@ import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
-import { childMapByParent, sortedRootSessions, workspaceKey } from "./helpers"
+import { sortedRootSessions, workspaceKey } from "./helpers"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -35,9 +35,6 @@ export type WorkspaceSidebarContext = {
   navList: Accessor<Session[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
-  nav: Accessor<HTMLElement | undefined>
-  hoverSession: Accessor<string | undefined>
-  setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
@@ -152,7 +149,6 @@ const WorkspaceActions = (props: {
   showResetWorkspaceDialog: WorkspaceSidebarContext["showResetWorkspaceDialog"]
   showDeleteWorkspaceDialog: WorkspaceSidebarContext["showDeleteWorkspaceDialog"]
   root: string
-  setHoverSession: WorkspaceSidebarContext["setHoverSession"]
   clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
   navigateToNewSession: () => void
 }): JSX.Element => (
@@ -226,7 +222,6 @@ const WorkspaceActions = (props: {
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
-            props.setHoverSession(undefined)
             props.clearHoverProjectSoon()
             props.navigateToNewSession()
           }}
@@ -239,12 +234,10 @@ const WorkspaceActions = (props: {
 const WorkspaceSessionList = (props: {
   slug: Accessor<string>
   mobile?: boolean
-  popover?: boolean
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
   sessions: Accessor<Session[]>
-  children: Accessor<Map<string, string[]>>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
@@ -256,7 +249,6 @@ const WorkspaceSessionList = (props: {
         mobile={props.mobile}
         sidebarExpanded={props.ctx.sidebarExpanded}
         clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-        setHoverSession={props.ctx.setHoverSession}
       />
     </Show>
     <Show when={props.loading()}>
@@ -270,13 +262,8 @@ const WorkspaceSessionList = (props: {
           navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}
-          popover={props.popover}
-          children={props.children()}
+          showChild
           sidebarExpanded={props.ctx.sidebarExpanded}
-          sidebarHovering={props.ctx.sidebarHovering}
-          nav={props.ctx.nav}
-          hoverSession={props.ctx.hoverSession}
-          setHoverSession={props.ctx.setHoverSession}
           clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
           prefetchSession={props.ctx.prefetchSession}
           archiveSession={props.ctx.archiveSession}
@@ -307,7 +294,6 @@ export const SortableWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
-  popover?: boolean
 }): JSX.Element => {
   const navigate = useNavigate()
   const params = useParams()
@@ -321,7 +307,6 @@ export const SortableWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
-  const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
@@ -428,7 +413,6 @@ export const SortableWorkspace = (props: {
                 showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
                 showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
                 root={props.project.worktree}
-                setHoverSession={props.ctx.setHoverSession}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
                 navigateToNewSession={() => navigate(`/${slug()}/session`)}
               />
@@ -440,12 +424,10 @@ export const SortableWorkspace = (props: {
           <WorkspaceSessionList
             slug={slug}
             mobile={props.mobile}
-            popover={props.popover}
             ctx={props.ctx}
             showNew={showNew}
             loading={loading}
             sessions={sessions}
-            children={children}
             hasMore={hasMore}
             loadMore={loadMore}
             language={language}
@@ -461,7 +443,6 @@ export const LocalWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
-  popover?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -471,7 +452,6 @@ export const LocalWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
-  const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
   const loading = createMemo(() => !booted() && count() === 0)
@@ -489,12 +469,10 @@ export const LocalWorkspace = (props: {
       <WorkspaceSessionList
         slug={slug}
         mobile={props.mobile}
-        popover={props.popover}
         ctx={props.ctx}
         showNew={() => false}
         loading={loading}
         sessions={sessions}
-        children={children}
         hasMore={hasMore}
         loadMore={loadMore}
         language={language}

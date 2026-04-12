@@ -2,7 +2,7 @@ import { $ } from "bun"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Effect, ServiceMap } from "effect"
+import { Effect, Context } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as Scope from "effect/Scope"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -49,6 +49,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   if (options?.git) {
     await $`git init`.cwd(dirpath).quiet()
     await $`git config core.fsmonitor false`.cwd(dirpath).quiet()
+    await $`git config commit.gpgsign false`.cwd(dirpath).quiet()
     await $`git config user.email "test@opencode.test"`.cwd(dirpath).quiet()
     await $`git config user.name "Test"`.cwd(dirpath).quiet()
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
@@ -100,6 +101,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     if (options?.git) {
       yield* git("init")
       yield* git("config", "core.fsmonitor", "false")
+      yield* git("config", "commit.gpgsign", "false")
       yield* git("config", "user.email", "test@opencode.test")
       yield* git("config", "user.name", "Test")
       yield* git("commit", "--allow-empty", "-m", "root commit")
@@ -121,7 +123,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
 export const provideInstance =
   (directory: string) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.servicesWith((services: ServiceMap.ServiceMap<R>) =>
+    Effect.contextWith((services: Context.Context<R>) =>
       Effect.promise<A>(async () =>
         Instance.provide({
           directory,
