@@ -27,6 +27,7 @@ function mockSpawner(handler: (cmd: string, args: readonly string[]) => string =
         all: Stream.empty,
         getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
         getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void),
       }),
     )
   })

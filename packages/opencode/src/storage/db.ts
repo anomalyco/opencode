@@ -2,7 +2,7 @@ import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
-import { Context } from "../util/context"
+import { LocalContext } from "../util/local-context"
 import { lazy } from "../util/lazy"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -122,7 +122,7 @@ export namespace Database {
 
   export type TxOrDb = Transaction | Client
 
-  const ctx = Context.create<{
+  const ctx = LocalContext.create<{
     tx: TxOrDb
     effects: (() => void | Promise<void>)[]
   }>("database")
@@ -131,7 +131,7 @@ export namespace Database {
     try {
       return callback(ctx.use().tx)
     } catch (err) {
-      if (err instanceof Context.NotFound) {
+      if (err instanceof LocalContext.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
         const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
         for (const effect of effects) effect()
@@ -161,7 +161,7 @@ export namespace Database {
     try {
       return callback(ctx.use().tx)
     } catch (err) {
-      if (err instanceof Context.NotFound) {
+      if (err instanceof LocalContext.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
         const txCallback = InstanceState.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
         const result = Client().transaction(txCallback, { behavior: options?.behavior })

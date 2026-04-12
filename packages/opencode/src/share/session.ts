@@ -3,7 +3,7 @@ import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { SyncEvent } from "@/sync"
 import { fn } from "@/util/fn"
-import { Effect, Layer, Scope, ServiceMap } from "effect"
+import { Effect, Layer, Scope, Context } from "effect"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { ShareNext } from "./share-next"
@@ -15,7 +15,7 @@ export namespace SessionShare {
     readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionShare") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionShare") {}
 
   export const layer = Layer.effect(
     Service,
