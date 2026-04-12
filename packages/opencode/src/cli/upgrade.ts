@@ -1,12 +1,13 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Flag } from "@/flag/flag"
 import { Installation } from "@/installation"
 
 export async function upgrade() {
   const config = await Config.getGlobal()
-  const method = await Installation.method()
-  const latest = await Installation.latest(method).catch(() => {})
+  const method = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
+  const latest = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.latest(method))).catch(() => {})
   if (!latest) return
 
   if (Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) {
@@ -25,7 +26,7 @@ export async function upgrade() {
   }
 
   if (method === "unknown") return
-  await Installation.upgrade(method, latest)
+  await AppRuntime.runPromise(Installation.Service.use((svc) => svc.upgrade(method, latest)))
     .then(() => Bus.publish(Installation.Event.Updated, { version: latest }))
     .catch(() => {})
 }

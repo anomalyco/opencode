@@ -5,7 +5,7 @@ import {
   type ComposerProbeState,
   type ComposerWindow,
 } from "../../src/testing/session-composer"
-import { cleanupSession, clearSessionDockSeed, seedSessionQuestion } from "../actions"
+import { cleanupSession, clearSessionDockSeed, closeDialog, openSettings, seedSessionQuestion } from "../actions"
 import {
   permissionDockSelector,
   promptSelector,
@@ -65,12 +65,14 @@ async function clearPermissionDock(page: any, label: RegExp) {
 }
 
 async function setAutoAccept(page: any, enabled: boolean) {
-  const button = page.locator('[data-action="prompt-permissions"]').first()
-  await expect(button).toBeVisible()
-  const pressed = (await button.getAttribute("aria-pressed")) === "true"
-  if (pressed === enabled) return
-  await button.click()
-  await expect(button).toHaveAttribute("aria-pressed", enabled ? "true" : "false")
+  const dialog = await openSettings(page)
+  const toggle = dialog.locator('[data-action="settings-auto-accept-permissions"]').first()
+  const input = toggle.locator('[data-slot="switch-input"]').first()
+  await expect(toggle).toBeVisible()
+  const checked = (await input.getAttribute("aria-checked")) === "true"
+  if (checked !== enabled) await toggle.locator('[data-slot="switch-control"]').click()
+  await expect(input).toHaveAttribute("aria-checked", enabled ? "true" : "false")
+  await closeDialog(page, dialog)
 }
 
 async function expectQuestionBlocked(page: any) {
@@ -277,6 +279,7 @@ test("default dock shows prompt input", async ({ page, project }) => {
 
       await expect(page.locator(sessionComposerDockSelector)).toBeVisible()
       await expect(page.locator(promptSelector)).toBeVisible()
+      await expect(page.locator('[data-action="prompt-permissions"]')).toHaveCount(0)
       await expect(page.locator(questionDockSelector)).toHaveCount(0)
       await expect(page.locator(permissionDockSelector)).toHaveCount(0)
 
@@ -289,10 +292,6 @@ test("default dock shows prompt input", async ({ page, project }) => {
 
 test("auto-accept toggle works before first submit", async ({ page, project }) => {
   await project.open()
-
-  const button = page.locator('[data-action="prompt-permissions"]').first()
-  await expect(button).toBeVisible()
-  await expect(button).toHaveAttribute("aria-pressed", "false")
 
   await setAutoAccept(page, true)
   await setAutoAccept(page, false)
