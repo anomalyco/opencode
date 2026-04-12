@@ -32,6 +32,7 @@ export namespace LLM {
     user: MessageV2.User
     sessionID: string
     parentSessionID?: string
+    previousResponseId?: string
     model: Provider.Model
     agent: Agent.Info
     permission?: Permission.Ruleset
@@ -129,14 +130,14 @@ export namespace LLM {
                 sessionID: input.sessionID,
                 providerOptions: item.options,
               })
-          const options: Record<string, any> = pipe(
+          const baseOptions: Record<string, any> = pipe(
             base,
             mergeDeep(input.model.options),
             mergeDeep(input.agent.options),
             mergeDeep(variant),
           )
           if (isOpenaiOauth) {
-            options.instructions = system.join("\n")
+            baseOptions.instructions = system.join("\n")
           }
 
           const isWorkflow = language instanceof GitLabWorkflowLanguageModel
@@ -170,9 +171,14 @@ export namespace LLM {
               topP: input.agent.topP ?? ProviderTransform.topP(input.model),
               topK: ProviderTransform.topK(input.model),
               maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
-              options,
+              options: baseOptions,
             },
           )
+
+          const options =
+            input.previousResponseId && input.model.api.npm === "@ai-sdk/openai"
+              ? mergeDeep(params.options, { previousResponseId: input.previousResponseId })
+              : params.options
 
           const { headers } = yield* plugin.trigger(
             "chat.headers",
@@ -338,7 +344,7 @@ export namespace LLM {
             temperature: params.temperature,
             topP: params.topP,
             topK: params.topK,
-            providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+            providerOptions: ProviderTransform.providerOptions(input.model, options),
             activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
             tools,
             toolChoice: input.toolChoice,

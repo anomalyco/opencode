@@ -1478,6 +1478,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               ])
               const system = [...env, ...(skills ? [skills] : []), ...instructions]
               const format = lastUser.format ?? { type: "text" as const }
+              const previousResponseId = MessageV2.previousResponseId(msgs, model)
               if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
               const result = yield* handle.process({
                 user: lastUser,
@@ -1485,6 +1486,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 permission: session.permission,
                 sessionID,
                 parentSessionID: session.parentID,
+                previousResponseId,
                 system,
                 messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                 tools,

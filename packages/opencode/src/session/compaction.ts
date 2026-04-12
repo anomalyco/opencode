@@ -257,6 +257,7 @@ When constructing the summary, try to stick to this template:
           user: userMessage,
           agent,
           sessionID: input.sessionID,
+          previousResponseId: MessageV2.previousResponseId(input.messages, model),
           tools: {},
           system: [],
           messages: [
