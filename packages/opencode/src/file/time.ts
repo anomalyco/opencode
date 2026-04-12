@@ -1,6 +1,5 @@
-import { DateTime, Effect, Layer, Option, Semaphore, ServiceMap } from "effect"
+import { DateTime, Effect, Layer, Option, Semaphore, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
@@ -34,10 +33,10 @@ export namespace FileTime {
     readonly read: (sessionID: SessionID, file: string) => Effect.Effect<void>
     readonly get: (sessionID: SessionID, file: string) => Effect.Effect<Date | undefined>
     readonly assert: (sessionID: SessionID, filepath: string) => Effect.Effect<void>
-    readonly withLock: <T>(filepath: string, fn: () => Promise<T>) => Effect.Effect<T>
+    readonly withLock: <T>(filepath: string, fn: () => Effect.Effect<T>) => Effect.Effect<T>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileTime") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/FileTime") {}
 
   export const layer = Layer.effect(
     Service,
@@ -103,8 +102,8 @@ export namespace FileTime {
         )
       })
 
-      const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Promise<T>) {
-        return yield* Effect.promise(fn).pipe((yield* getLock(filepath)).withPermits(1))
+      const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Effect.Effect<T>) {
+        return yield* fn().pipe((yield* getLock(filepath)).withPermits(1))
       })
 
       return Service.of({ read, get, assert, withLock })
@@ -112,22 +111,4 @@ export namespace FileTime {
   ).pipe(Layer.orDie)
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export function read(sessionID: SessionID, file: string) {
-    return runPromise((s) => s.read(sessionID, file))
-  }
-
-  export function get(sessionID: SessionID, file: string) {
-    return runPromise((s) => s.get(sessionID, file))
-  }
-
-  export async function assert(sessionID: SessionID, filepath: string) {
-    return runPromise((s) => s.assert(sessionID, filepath))
-  }
-
-  export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromise((s) => s.withLock(filepath, fn))
-  }
 }

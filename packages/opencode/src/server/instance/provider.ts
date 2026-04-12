@@ -6,6 +6,7 @@ import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
 import { ProviderID } from "../../provider/schema"
+import { AppRuntime } from "../../effect/app-runtime"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -81,7 +82,7 @@ export const ProviderRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await ProviderAuth.methods())
+        return c.json(await AppRuntime.runPromise(ProviderAuth.Service.use((svc) => svc.methods())))
       },
     )
     .post(
@@ -118,11 +119,15 @@ export const ProviderRoutes = lazy(() =>
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, inputs } = c.req.valid("json")
-        const result = await ProviderAuth.authorize({
-          providerID,
-          method,
-          inputs,
-        })
+        const result = await AppRuntime.runPromise(
+          ProviderAuth.Service.use((svc) =>
+            svc.authorize({
+              providerID,
+              method,
+              inputs,
+            }),
+          ),
+        )
         return c.json(result)
       },
     )
@@ -160,11 +165,15 @@ export const ProviderRoutes = lazy(() =>
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, code } = c.req.valid("json")
-        await ProviderAuth.callback({
-          providerID,
-          method,
-          code,
-        })
+        await AppRuntime.runPromise(
+          ProviderAuth.Service.use((svc) =>
+            svc.callback({
+              providerID,
+              method,
+              code,
+            }),
+          ),
+        )
         return c.json(true)
       },
     ),

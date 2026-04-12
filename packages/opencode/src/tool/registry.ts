@@ -1,4 +1,5 @@
 import { PlanExitTool } from "./plan"
+import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
@@ -16,6 +17,7 @@ import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { Provider } from "../provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
@@ -27,7 +29,12 @@ import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Ripgrep } from "../file/ripgrep"
+import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
@@ -37,6 +44,7 @@ import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "../filesystem"
+import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
@@ -65,7 +73,7 @@ export namespace ToolRegistry {
     }) => Effect.Effect<Tool.Def[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
   export const layer: Layer.Layer<
     Service,
@@ -76,10 +84,18 @@ export namespace ToolRegistry {
     | Todo.Service
     | Agent.Service
     | Skill.Service
+    | Session.Service
+    | Provider.Service
     | LSP.Service
     | FileTime.Service
     | Instruction.Service
     | AppFileSystem.Service
+    | Bus.Service
+    | HttpClient.HttpClient
+    | ChildProcessSpawner
+    | Ripgrep.Service
+    | Format.Service
+    | Truncate.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -87,11 +103,25 @@ export namespace ToolRegistry {
       const plugin = yield* Plugin.Service
       const agents = yield* Agent.Service
       const skill = yield* Skill.Service
+      const truncate = yield* Truncate.Service
 
+      const invalid = yield* InvalidTool
       const task = yield* TaskTool
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
+      const lsptool = yield* LspTool
+      const plan = yield* PlanExitTool
+      const webfetch = yield* WebFetchTool
+      const websearch = yield* WebSearchTool
+      const bash = yield* BashTool
+      const codesearch = yield* CodeSearchTool
+      const globtool = yield* GlobTool
+      const writetool = yield* WriteTool
+      const edit = yield* EditTool
+      const greptool = yield* GrepTool
+      const patchtool = yield* ApplyPatchTool
+      const skilltool = yield* SkillTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -102,23 +132,26 @@ export namespace ToolRegistry {
               id,
               parameters: z.object(def.args),
               description: def.description,
-              execute: async (args, toolCtx) => {
-                const pluginCtx: PluginToolContext = {
-                  ...toolCtx,
-                  directory: ctx.directory,
-                  worktree: ctx.worktree,
-                }
-                const result = await def.execute(args as any, pluginCtx)
-                const out = await Truncate.output(result, {}, await Agent.get(toolCtx.agent))
-                return {
-                  title: "",
-                  output: out.truncated ? out.content : result,
-                  metadata: {
-                    truncated: out.truncated,
-                    outputPath: out.truncated ? out.outputPath : undefined,
-                  },
-                }
-              },
+              execute: (args, toolCtx) =>
+                Effect.gen(function* () {
+                  const pluginCtx: PluginToolContext = {
+                    ...toolCtx,
+                    ask: (req) => toolCtx.ask(req),
+                    directory: ctx.directory,
+                    worktree: ctx.worktree,
+                  }
+                  const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                  const agent = yield* Effect.promise(() => Agent.get(toolCtx.agent))
+                  const out = yield* truncate.output(result, {}, agent)
+                  return {
+                    title: "",
+                    output: out.truncated ? out.content : result,
+                    metadata: {
+                      truncated: out.truncated,
+                      outputPath: out.truncated ? out.outputPath : undefined,
+                    },
+                  }
+                }),
             }
           }
 
@@ -149,23 +182,23 @@ export namespace ToolRegistry {
             ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
           const tool = yield* Effect.all({
-            invalid: Tool.init(InvalidTool),
-            bash: Tool.init(BashTool),
+            invalid: Tool.init(invalid),
+            bash: Tool.init(bash),
             read: Tool.init(read),
-            glob: Tool.init(GlobTool),
-            grep: Tool.init(GrepTool),
-            edit: Tool.init(EditTool),
-            write: Tool.init(WriteTool),
+            glob: Tool.init(globtool),
+            grep: Tool.init(greptool),
+            edit: Tool.init(edit),
+            write: Tool.init(writetool),
             task: Tool.init(task),
-            fetch: Tool.init(WebFetchTool),
+            fetch: Tool.init(webfetch),
             todo: Tool.init(todo),
-            search: Tool.init(WebSearchTool),
-            code: Tool.init(CodeSearchTool),
-            skill: Tool.init(SkillTool),
-            patch: Tool.init(ApplyPatchTool),
+            search: Tool.init(websearch),
+            code: Tool.init(codesearch),
+            skill: Tool.init(skilltool),
+            patch: Tool.init(patchtool),
             question: Tool.init(question),
-            lsp: Tool.init(LspTool),
-            plan: Tool.init(PlanExitTool),
+            lsp: Tool.init(lsptool),
+            plan: Tool.init(plan),
           })
 
           return {
@@ -297,10 +330,18 @@ export namespace ToolRegistry {
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
       Layer.provide(Agent.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(FileTime.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Bus.layer),
+      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(Format.defaultLayer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Truncate.defaultLayer),
     ),
   )
 
