@@ -111,7 +111,7 @@ test("ask agent has correct primary properties and read-only permissions", async
       expect(evalPerm(ask, "grep")).toBe("allow")
       expect(evalPerm(ask, "glob")).toBe("allow")
       expect(evalPerm(ask, "list")).toBe("allow")
-      expect(evalPerm(ask, "bash")).toBe("allow")
+      expect(evalPerm(ask, "bash")).toBe("ask")
       expect(evalPerm(ask, "webfetch")).toBe("allow")
       expect(evalPerm(ask, "websearch")).toBe("allow")
       expect(evalPerm(ask, "codesearch")).toBe("allow")
