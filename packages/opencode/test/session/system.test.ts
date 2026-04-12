@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { SystemPrompt } from "../../src/session/system"
@@ -38,8 +39,13 @@ description: ${description}
         directory: tmp.path,
         fn: async () => {
           const build = await Agent.get("build")
-          const first = await SystemPrompt.skills(build!)
-          const second = await SystemPrompt.skills(build!)
+          const runSkills = Effect.gen(function* () {
+            const svc = yield* SystemPrompt.Service
+            return yield* svc.skills(build!)
+          }).pipe(Effect.provide(SystemPrompt.defaultLayer))
+
+          const first = await Effect.runPromise(runSkills)
+          const second = await Effect.runPromise(runSkills)
 
           expect(first).toBe(second)
 
