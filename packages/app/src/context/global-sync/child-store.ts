@@ -198,6 +198,8 @@ export function createChildStoreManager(input: {
           onPersistedInit(vcs[2], () => {
             const cached = vcsStore.value
             if (!cached?.branch) return
+            // Only use cached VCS if bootstrap hasn't run yet (status is still "loading")
+            if (child[0].status !== "loading") return
             child[1]("vcs", (value) => value ?? cached)
           })
 

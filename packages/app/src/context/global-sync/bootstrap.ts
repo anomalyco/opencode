@@ -185,9 +185,9 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.vcs.get().then((x) => {
-          const next = x.data ?? input.store.vcs
+          const next = x.data
           input.setStore("vcs", next)
-          if (next) input.vcsCache.setStore("value", next)
+          input.vcsCache.setStore("value", next)
         }),
       ),
   ]
