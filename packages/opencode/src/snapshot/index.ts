@@ -177,8 +177,37 @@ export namespace Snapshot {
             const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
+            // Filter out files that are now gitignored even if previously tracked
+            // Files may have been tracked before being gitignored, so we need to check
+            // against the source project's current gitignore rules
+            const checkArgs = [
+              ...quote,
+              "--git-dir",
+              path.join(state.worktree, ".git"),
+              "--work-tree",
+              state.worktree,
+              "check-ignore",
+              "--",
+              ...all,
+            ]
+            const check = yield* git(checkArgs, { cwd: state.directory })
+            const ignored =
+              check.code === 0 ? new Set(check.text.trim().split("\n").filter(Boolean)) : new Set<string>()
+            const filtered = all.filter((item) => !ignored.has(item))
+
+            // Remove newly-ignored files from snapshot index to prevent re-adding
+            if (ignored.size > 0) {
+              const ignoredFiles = Array.from(ignored)
+              log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
+              yield* git([...cfg, ...args(["rm", "--cached", "-f", "--", ...ignoredFiles])], {
+                cwd: state.directory,
+              })
+            }
+
+            if (!filtered.length) return
+
             const large = (yield* Effect.all(
-              all.map((item) =>
+              filtered.map((item) =>
                 fs
                   .stat(path.join(state.directory, item))
                   .pipe(Effect.catch(() => Effect.void))
@@ -259,14 +288,38 @@ export namespace Snapshot {
                   log.warn("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
+                const files = result.text
+                  .trim()
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+
+                // Filter out files that are now gitignored
+                if (files.length > 0) {
+                  const checkArgs = [
+                    ...quote,
+                    "--git-dir",
+                    path.join(state.worktree, ".git"),
+                    "--work-tree",
+                    state.worktree,
+                    "check-ignore",
+                    "--",
+                    ...files,
+                  ]
+                  const check = yield* git(checkArgs, { cwd: state.directory })
+                  if (check.code === 0) {
+                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                    const filtered = files.filter((item) => !ignored.has(item))
+                    return {
+                      hash,
+                      files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                    }
+                  }
+                }
+
                 return {
                   hash,
-                  files: result.text
-                    .trim()
-                    .split("\n")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                 }
               }),
             )
