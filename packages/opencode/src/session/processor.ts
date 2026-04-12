@@ -132,6 +132,13 @@ export namespace SessionProcessor {
             aborted,
           })
 
+        const responseId = (metadata: Record<string, any> | undefined) => {
+          if (!metadata) return
+          const openai = metadata.openai
+          if (!isRecord(openai)) return
+          return typeof openai.responseId === "string" ? openai.responseId : undefined
+        }
+
         const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
           const done = ctx.toolcalls[toolCallID]?.done
           delete ctx.toolcalls[toolCallID]
@@ -256,7 +263,7 @@ export namespace SessionProcessor {
               delete ctx.reasoningMap[value.id]
               return
 
-            case "tool-input-start":
+            case "tool-input-start": {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
@@ -277,6 +284,7 @@ export namespace SessionProcessor {
                 sessionID: part.sessionID,
               }
               return
+            }
 
             case "tool-input-delta":
               return
@@ -360,6 +368,8 @@ export namespace SessionProcessor {
                 usage: value.usage,
                 metadata: value.providerMetadata,
               })
+              const id = responseId(value.providerMetadata)
+              if (id) ctx.assistantMessage.responseId = id
               ctx.assistantMessage.finish = value.finishReason
               ctx.assistantMessage.cost += usage.cost
               ctx.assistantMessage.tokens = usage.tokens
@@ -431,7 +441,6 @@ export namespace SessionProcessor {
 
             case "text-end":
               if (!ctx.currentText) return
-              ctx.currentText.text = ctx.currentText.text
               ctx.currentText.text = (yield* plugin.trigger(
                 "experimental.text.complete",
                 {

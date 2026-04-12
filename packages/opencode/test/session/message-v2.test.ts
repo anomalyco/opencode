@@ -107,6 +107,55 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+describe("session.message-v2.previousResponseId", () => {
+  test("returns the last matching assistant response id", () => {
+    const msgs: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [],
+      },
+      {
+        info: {
+          ...assistantInfo("a1", "u1"),
+          responseId: "resp_1",
+        },
+        parts: [],
+      },
+      {
+        info: {
+          ...assistantInfo("a2", "u1", undefined, { providerID: "other", modelID: "test-model" }),
+          responseId: "resp_other",
+        },
+        parts: [],
+      },
+      {
+        info: {
+          ...assistantInfo("a3", "u1"),
+          responseId: "resp_2",
+        },
+        parts: [],
+      },
+    ]
+
+    expect(MessageV2.previousResponseId(msgs, model)).toBe("resp_2")
+  })
+
+  test("ignores assistants without a response id", () => {
+    const msgs: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [],
+      },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [],
+      },
+    ]
+
+    expect(MessageV2.previousResponseId(msgs, model)).toBeUndefined()
+  })
+})
+
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", async () => {
     const input: MessageV2.WithParts[] = [

@@ -447,6 +447,7 @@ export namespace MessageV2 {
     structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),
+    responseId: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
   })
@@ -580,6 +581,20 @@ export namespace MessageV2 {
     if (!metadata) return undefined
     const { providerExecuted: _, ...rest } = metadata
     return Object.keys(rest).length > 0 ? rest : undefined
+  }
+
+  export function previousResponseId(msgs: WithParts[], model: Provider.Model) {
+    const msg = msgs.findLast((item) => {
+      const info = item.info
+      if (info.role !== "assistant") return false
+      if (!info.responseId) return false
+      if (info.providerID !== model.providerID) return false
+      return info.modelID === model.id || info.modelID === model.api.id
+    })
+    if (!msg) return
+    const info = msg.info
+    if (info.role !== "assistant") return
+    return info.responseId
   }
 
   export const toModelMessagesEffect = Effect.fnUntraced(function* (
@@ -945,7 +960,7 @@ export namespace MessageV2 {
   }
 
   export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
-    return filterCompacted(stream(sessionID))
+    return yield* Effect.succeed(filterCompacted(stream(sessionID)))
   })
 
   export function fromError(
@@ -998,7 +1013,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case APICallError.isInstance(e):
+      case APICallError.isInstance(e): {
         const parsed = ProviderError.parseAPICallError({
           providerID: ctx.providerID,
           error: e,
@@ -1024,6 +1039,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      }
       case e instanceof Error:
         return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
       default:
