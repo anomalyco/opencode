@@ -15,6 +15,7 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect } from "effect"
+import { EffectLogger } from "@/effect/logger"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -839,7 +840,7 @@ export namespace MessageV2 {
     model: Provider.Model,
     options?: { stripMedia?: boolean },
   ): Promise<ModelMessage[]> {
-    return Effect.runPromise(toModelMessagesEffect(input, model, options))
+    return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
   }
 
   export function page(input: { sessionID: SessionID; limit: number; before?: string }) {

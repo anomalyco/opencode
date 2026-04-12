@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
@@ -19,7 +20,7 @@ async function withVcs(directory: string, body: () => Promise<void>) {
   return Instance.provide({
     directory,
     fn: async () => {
-      FileWatcher.init()
+      void AppRuntime.runPromise(FileWatcher.Service.use((svc) => svc.init()))
       Vcs.init()
       await Bun.sleep(500)
       await body()
