@@ -11,6 +11,8 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   tool: string
   error: string
   defaultOpen?: boolean
+  metaText?: string
+  metaInterrupted?: boolean
   subtitle?: string
   href?: string
 }
@@ -23,7 +25,15 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
   const open = () => state.open
   const copied = () => state.copied
-  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen", "subtitle", "href"])
+  const [split, rest] = splitProps(props, [
+    "tool",
+    "error",
+    "defaultOpen",
+    "metaText",
+    "metaInterrupted",
+    "subtitle",
+    "href",
+  ])
   const name = createMemo(() => {
     const map: Record<string, string> = {
       read: "ui.tool.read",
@@ -92,6 +102,14 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
                     <span data-slot="basic-tool-tool-title">{name()}</span>
+                    <Show when={split.metaText}>
+                      <span
+                        data-slot="basic-tool-tool-meta"
+                        style={split.metaInterrupted ? { color: "var(--text-error)" } : undefined}
+                      >
+                        {split.metaText}
+                      </span>
+                    </Show>
                     <Show
                       when={split.href && split.subtitle}
                       fallback={<span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}

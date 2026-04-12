@@ -55,6 +55,7 @@ import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
+import { createToolTimingMeta, createToolInterrupted } from "./tool-timing"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
@@ -89,6 +90,16 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
         </span>
       </span>
     </span>
+  )
+}
+
+function ToolTimingMeta(props: { value?: string; interrupted?: boolean }) {
+  return (
+    <Show when={props.value}>
+      <span data-slot="basic-tool-tool-meta" style={props.interrupted ? { color: "var(--text-error)" } : undefined}>
+        {props.value}
+      </span>
+    </Show>
   )
 }
 
@@ -958,6 +969,8 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
           <Index each={props.parts}>
             {(partAccessor) => {
               const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
+              const timeMeta = createToolTimingMeta(partAccessor, () => i18n.locale())
+              const interrupted = createToolInterrupted(partAccessor)
               const running = createMemo(
                 () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
               )
@@ -971,6 +984,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                             <span data-slot="basic-tool-tool-title">
                               <TextShimmer text={trigger().title} active={running()} />
                             </span>
+                            <ToolTimingMeta value={timeMeta()} interrupted={interrupted()} />
                             <Show when={!running() && trigger().subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
                             </Show>
@@ -1233,6 +1247,7 @@ export interface ToolProps {
   tool: string
   output?: string
   status?: string
+  metaText?: string
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -1303,6 +1318,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
+  const timeMeta = createToolTimingMeta(part, () => i18n.locale())
+  const interrupted = createToolInterrupted(part)
   if (part().tool === "todowrite") return null
 
   const hideQuestion = createMemo(
@@ -1354,6 +1371,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   tool={part().tool}
                   error={error()}
                   defaultOpen={props.defaultOpen}
+                  metaText={timeMeta()}
+                  metaInterrupted={interrupted()}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
                 />
@@ -1369,6 +1388,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}
+              metaText={timeMeta()}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
             />
@@ -1549,6 +1569,7 @@ ToolRegistry.register({
           icon="glasses"
           trigger={{
             title: i18n.t("ui.tool.read"),
+            meta: props.metaText,
             subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
             args,
           }}
@@ -1576,7 +1597,11 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="bullet-list"
-        trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
+        trigger={{
+          title: i18n.t("ui.tool.list"),
+          meta: props.metaText,
+          subtitle: getDirectory(props.input.path || "/"),
+        }}
       >
         <Show when={props.output}>
           <div data-component="tool-output" data-scrollable>
@@ -1598,6 +1623,7 @@ ToolRegistry.register({
         icon="magnifying-glass-menu"
         trigger={{
           title: i18n.t("ui.tool.glob"),
+          meta: props.metaText,
           subtitle: getDirectory(props.input.path || "/"),
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
@@ -1625,6 +1651,7 @@ ToolRegistry.register({
         icon="magnifying-glass-menu"
         trigger={{
           title: i18n.t("ui.tool.grep"),
+          meta: props.metaText,
           subtitle: getDirectory(props.input.path || "/"),
           args,
         }}
@@ -1660,6 +1687,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
               </span>
+              <ToolTimingMeta value={props.metaText} />
               <Show when={!pending() && url()}>
                 <a
                   data-slot="basic-tool-tool-subtitle"
@@ -1701,6 +1729,7 @@ ToolRegistry.register({
         icon="window-cursor"
         trigger={{
           title: i18n.t("ui.tool.websearch"),
+          meta: props.metaText,
           subtitle: query(),
           subtitleClass: "exa-tool-query",
         }}
@@ -1727,6 +1756,7 @@ ToolRegistry.register({
         icon="code"
         trigger={{
           title: i18n.t("ui.tool.codesearch"),
+          meta: props.metaText,
           subtitle: query(),
           subtitleClass: "exa-tool-query",
         }}
@@ -1791,6 +1821,7 @@ ToolRegistry.register({
             <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
               {title()}
             </span>
+            <ToolTimingMeta value={props.metaText} />
             <Show when={subtitle()}>
               <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
             </Show>
@@ -1849,6 +1880,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
+              <ToolTimingMeta value={props.metaText} />
               <Show when={!pending() && props.input.description}>
                 <ShellSubmessage text={props.input.description} animate={sawPending} />
               </Show>
@@ -1906,6 +1938,7 @@ ToolRegistry.register({
                   <span data-slot="message-part-title-text">
                     <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
                   </span>
+                  <ToolTimingMeta value={props.metaText} />
                   <Show when={!pending()}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
@@ -1978,6 +2011,7 @@ ToolRegistry.register({
                   <span data-slot="message-part-title-text">
                     <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
                   </span>
+                  <ToolTimingMeta value={props.metaText} />
                   <Show when={!pending()}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
@@ -2055,6 +2089,7 @@ ToolRegistry.register({
               defer
               trigger={{
                 title: i18n.t("ui.tool.patch"),
+                meta: props.metaText,
                 subtitle: subtitle(),
               }}
             >
@@ -2152,6 +2187,7 @@ ToolRegistry.register({
                     <span data-slot="message-part-title-text">
                       <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
                     </span>
+                    <ToolTimingMeta value={props.metaText} />
                     <Show when={!pending()}>
                       <span data-slot="message-part-title-filename">{getFilename(single()!.relativePath)}</span>
                     </Show>
@@ -2233,6 +2269,7 @@ ToolRegistry.register({
         icon="checklist"
         trigger={{
           title: i18n.t("ui.tool.todos"),
+          meta: props.metaText,
           subtitle: subtitle(),
         }}
       >
@@ -2279,6 +2316,7 @@ ToolRegistry.register({
         icon="bubble-5"
         trigger={{
           title: i18n.t("ui.tool.questions"),
+          meta: props.metaText,
           subtitle: subtitle(),
         }}
       >
@@ -2317,6 +2355,7 @@ ToolRegistry.register({
           <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
             {titleContent()}
           </span>
+          <ToolTimingMeta value={props.metaText} />
         </div>
       </div>
     )

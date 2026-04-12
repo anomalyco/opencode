@@ -9,6 +9,8 @@ import { TextShimmer } from "./text-shimmer"
 export type TriggerTitle = {
   title: string
   titleClass?: string
+  meta?: string
+  metaClass?: string
   subtitle?: string
   subtitleClass?: string
   args?: string[]
@@ -145,6 +147,16 @@ export function BasicTool(props: BasicToolProps) {
                     >
                       <TextShimmer text={title().title} active={pending()} />
                     </span>
+                    <Show when={title().meta}>
+                      <span
+                        data-slot="basic-tool-tool-meta"
+                        classList={{
+                          [title().metaClass ?? ""]: !!title().metaClass,
+                        }}
+                      >
+                        {title().meta}
+                      </span>
+                    </Show>
                     <Show when={!pending()}>
                       <Show when={title().subtitle}>
                         <span
@@ -265,6 +277,7 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  metaText?: string
 }) {
   const i18n = useI18n()
 
@@ -274,6 +287,7 @@ export function GenericTool(props: {
       status={props.status}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
+        meta: props.metaText,
         subtitle: label(props.input),
         args: args(props.input),
       }}

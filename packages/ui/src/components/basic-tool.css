@@ -158,6 +158,19 @@
     }
   }
 
+  [data-slot="basic-tool-tool-meta"] {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weak);
+  }
+
   [data-slot="basic-tool-tool-arg"] {
     flex-shrink: 1;
     min-width: 0;

@@ -371,6 +371,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           metadata: (val) =>
             input.processor.updateToolCall(options.toolCallId, (match) => {
               if (!["running", "pending"].includes(match.state.status)) return match
+              const start = match.state.status === "running" ? match.state.time.start : Date.now()
               return {
                 ...match,
                 state: {
@@ -378,7 +379,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   metadata: val.metadata,
                   status: "running",
                   input: args,
-                  time: { start: Date.now() },
+                  time: { start },
                 },
               }
             }),
@@ -632,7 +633,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       status: "error",
                       error: "Cancelled",
                       time: { start: part.state.time.start, end: Date.now() },
-                      metadata: part.state.metadata,
+                      metadata: { ...part.state.metadata, interrupted: true },
                       input: part.state.input,
                     },
                   } satisfies MessageV2.ToolPart)

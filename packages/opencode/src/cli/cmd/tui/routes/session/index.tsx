@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -1682,6 +1683,9 @@ function InlineTool(props: {
       error()?.includes("user dismissed"),
   )
 
+  const timing = createTiming(() => props.part)
+  const interrupted = createMemo(() => isToolInterrupted(props.part))
+
   return (
     <box
       marginTop={margin()}
@@ -1717,12 +1721,20 @@ function InlineTool(props: {
     >
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={fg()} children={props.children} />
+          <Spinner color={fg()}>
+            {props.children}
+            <Show when={timing()}>
+              <span style={{ fg: interrupted() ? theme.error : theme.textMuted }}> · {timing()}</span>
+            </Show>
+          </Spinner>
         </Match>
         <Match when={true}>
           <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
             <Show fallback={<>~ {props.pending}</>} when={props.complete}>
               <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+            </Show>
+            <Show when={timing()}>
+              <span style={{ fg: interrupted() ? theme.error : theme.textMuted }}> · {timing()}</span>
             </Show>
           </text>
         </Match>
@@ -1732,6 +1744,65 @@ function InlineTool(props: {
       </Show>
     </box>
   )
+}
+
+function createTiming(part: () => ToolPart | undefined) {
+  const [now, setNow] = createSignal(Date.now())
+  const [displayMs, setDisplayMs] = createSignal(0)
+  const running = createMemo(() => part()?.state.status === "running")
+
+  createEffect(
+    on(
+      () => part()?.id,
+      () => {
+        setDisplayMs(0)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (!running()) return
+    setNow(Date.now())
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  createEffect(() => {
+    const p = part()
+    if (!p) return
+    const start = toolStartTime(p)
+    if (typeof start !== "number") return
+    const end = toolEndTime(p)
+    const finish = typeof end === "number" ? end : running() ? now() : undefined
+    if (typeof finish !== "number") return
+    setDisplayMs((prev) => Math.max(prev, finish - start))
+  })
+
+  return createMemo(() => {
+    const p = part()
+    if (!p) return ""
+    const start = toolStartTime(p)
+    if (typeof start !== "number") return ""
+
+    if (isToolInterrupted(p)) {
+      return formatToolClock(start) + " · Interrupted"
+    }
+
+    const parts = [formatToolClock(start)]
+    if (displayMs() > 0) {
+      parts.push(formatToolRuntime(displayMs()))
+      return parts.join(" · ")
+    }
+
+    const end = toolEndTime(p)
+    if (typeof end === "number") {
+      parts.push(formatToolRuntime(Math.max(1, end - start)))
+      return parts.join(" · ")
+    }
+
+    return parts.join(" · ")
+  })
 }
 
 function BlockTool(props: {
@@ -1745,6 +1816,9 @@ function BlockTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const timing = createTiming(() => props.part)
+  const interrupted = createMemo(() => (props.part ? isToolInterrupted(props.part) : false))
+
   return (
     <box
       border={["left"]}
@@ -1768,10 +1842,18 @@ function BlockTool(props: {
         fallback={
           <text paddingLeft={3} fg={theme.textMuted}>
             {props.title}
+            <Show when={timing()}>
+              <span style={{ fg: interrupted() ? theme.error : theme.textMuted }}> · {timing()}</span>
+            </Show>
           </text>
         }
       >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+        <Spinner color={theme.textMuted}>
+          {props.title.replace(/^# /, "")}
+          <Show when={timing()}>
+            <span style={{ fg: interrupted() ? theme.error : theme.textMuted }}> · {timing()}</span>
+          </Show>
+        </Spinner>
       </Show>
       {props.children}
       <Show when={error()}>
@@ -1779,6 +1861,49 @@ function BlockTool(props: {
       </Show>
     </box>
   )
+}
+
+function toolStartTime(part: ToolPart): number | undefined {
+  switch (part.state.status) {
+    case "running":
+    case "completed":
+    case "error":
+      return part.state.time.start
+    default:
+      return undefined
+  }
+}
+
+function toolEndTime(part: ToolPart): number | undefined {
+  switch (part.state.status) {
+    case "completed":
+    case "error":
+      return part.state.time.end
+    default:
+      return undefined
+  }
+}
+
+function isToolInterrupted(part: ToolPart): boolean {
+  if (part.state.status !== "error") return false
+  return part.state.metadata?.interrupted === true
+}
+
+function formatToolClock(input: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(input)
+}
+
+function formatToolRuntime(input: number) {
+  const total = input <= 0 ? 0 : Math.max(1, Math.round(input / 1000))
+  if (total < 60) return `${total}s`
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  return `${minutes}m ${seconds}s`
 }
 
 function Bash(props: ToolProps<typeof BashTool>) {
