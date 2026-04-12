@@ -507,17 +507,24 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
-    await bootstrapGlobal({
-      globalSDK: globalSDK.client,
-      connectErrorTitle: language.t("dialog.server.add.error"),
-      connectErrorDescription: language.t("error.globalSync.connectFailed", {
-        url: globalSDK.url,
-      }),
-      requestFailedTitle: language.t("common.requestFailed"),
-      translate: language.t,
-      formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-      setGlobalStore: setBootStore,
-    })
+    bootingRoot = true
+    try {
+      await bootstrapGlobal({
+        globalSDK: globalSDK.client,
+        requestFailedTitle: language.t("common.requestFailed"),
+        translate: language.t,
+        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+        setGlobalStore: setBootStore,
+      })
+      await Promise.allSettled(
+        Object.keys(children.children)
+          .filter((directory) => loaded.dir[directory])
+          .map((directory) => bootstrapInstance(directory)),
+      )
+      bootedAt = Date.now()
+    } finally {
+      bootingRoot = false
+    }
   }
 
   createEffect(
