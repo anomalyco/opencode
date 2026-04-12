@@ -1,11 +1,11 @@
-import { Context } from "../util/context"
+import { LocalContext } from "../util/local-context"
 import type { WorkspaceID } from "../control-plane/schema"
 
 export interface WorkspaceContext {
   workspaceID: string
 }
 
-const context = Context.create<WorkspaceContext>("instance")
+const context = LocalContext.create<WorkspaceContext>("instance")
 
 export const WorkspaceContext = {
   async provide<R>(input: { workspaceID: WorkspaceID; fn: () => R }): Promise<R> {

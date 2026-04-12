@@ -2,10 +2,9 @@ import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, Context } from "effect"
 import z from "zod"
 
 export namespace ProviderAuth {
@@ -109,7 +108,7 @@ export namespace ProviderAuth {
     pending: Map<ProviderID, AuthOAuthResult>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
   export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
     Service,
@@ -232,22 +231,4 @@ export namespace ProviderAuth {
   export const defaultLayer = Layer.suspend(() =>
     layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function methods() {
-    return runPromise((svc) => svc.methods())
-  }
-
-  export async function authorize(input: {
-    providerID: ProviderID
-    method: number
-    inputs?: Record<string, string>
-  }): Promise<Authorization | undefined> {
-    return runPromise((svc) => svc.authorize(input))
-  }
-
-  export async function callback(input: { providerID: ProviderID; method: number; code?: string }) {
-    return runPromise((svc) => svc.callback(input))
-  }
 }

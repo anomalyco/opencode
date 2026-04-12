@@ -7,7 +7,11 @@ import { Instance } from "../../src/project/instance"
 import { LSP } from "../../src/lsp"
 import { AppFileSystem } from "../../src/filesystem"
 import { FileTime } from "../../src/file/time"
+import { Bus } from "../../src/bus"
+import { Format } from "../../src/format"
+import { Truncate } from "../../src/tool/truncate"
 import { Tool } from "../../src/tool/tool"
+import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -20,8 +24,8 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
 afterEach(async () => {
@@ -29,12 +33,21 @@ afterEach(async () => {
 })
 
 const it = testEffect(
-  Layer.mergeAll(LSP.defaultLayer, AppFileSystem.defaultLayer, FileTime.defaultLayer, CrossSpawnSpawner.defaultLayer),
+  Layer.mergeAll(
+    LSP.defaultLayer,
+    AppFileSystem.defaultLayer,
+    FileTime.defaultLayer,
+    Bus.layer,
+    Format.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
 )
 
 const init = Effect.fn("WriteToolTest.init")(function* () {
   const info = yield* WriteTool
-  return yield* Effect.promise(() => info.init())
+  return yield* info.init()
 })
 
 const run = Effect.fn("WriteToolTest.run")(function* (
@@ -42,7 +55,7 @@ const run = Effect.fn("WriteToolTest.run")(function* (
   next: Tool.Context = ctx,
 ) {
   const tool = yield* init()
-  return yield* Effect.promise(() => tool.execute(args, next))
+  return yield* tool.execute(args, next)
 })
 
 const markRead = Effect.fn("WriteToolTest.markRead")(function* (sessionID: string, filepath: string) {

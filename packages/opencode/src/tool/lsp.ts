@@ -21,7 +21,7 @@ const operations = [
   "outgoingCalls",
 ] as const
 
-export const LspTool = Tool.defineEffect(
+export const LspTool = Tool.define(
   "lsp",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
@@ -42,7 +42,7 @@ export const LspTool = Tool.defineEffect(
         Effect.gen(function* () {
           const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
-          yield* Effect.promise(() => ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} }))
+          yield* ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} })
 
           const uri = pathToFileURL(file).href
           const position = { file, line: args.line - 1, character: args.character - 1 }
@@ -85,7 +85,7 @@ export const LspTool = Tool.defineEffect(
             metadata: { result },
             output: result.length === 0 ? `No results found for ${args.operation}` : JSON.stringify(result, null, 2),
           }
-        }).pipe(Effect.runPromise),
+        }),
     }
   }),
 )

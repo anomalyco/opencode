@@ -37,7 +37,7 @@ export const IGNORE_PATTERNS = [
 
 const LIMIT = 100
 
-export const ListTool = Tool.defineEffect(
+export const ListTool = Tool.define(
   "list",
   Effect.gen(function* () {
     const rg = yield* Ripgrep.Service
@@ -56,16 +56,14 @@ export const ListTool = Tool.defineEffect(
           const searchPath = path.resolve(Instance.directory, params.path || ".")
           yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
 
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "list",
-              patterns: [searchPath],
-              always: ["*"],
-              metadata: {
-                path: searchPath,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "list",
+            patterns: [searchPath],
+            always: ["*"],
+            metadata: {
+              path: searchPath,
+            },
+          })
 
           const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
           const files = yield* rg.files({ cwd: searchPath, glob: ignoreGlobs }).pipe(
@@ -130,7 +128,7 @@ export const ListTool = Tool.defineEffect(
             },
             output,
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

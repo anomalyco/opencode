@@ -9,7 +9,7 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "../filesystem"
 
-export const GlobTool = Tool.defineEffect(
+export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
     const rg = yield* Ripgrep.Service
@@ -28,17 +28,15 @@ export const GlobTool = Tool.defineEffect(
       }),
       execute: (params: { pattern: string; path?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "glob",
-              patterns: [params.pattern],
-              always: ["*"],
-              metadata: {
-                pattern: params.pattern,
-                path: params.path,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "glob",
+            patterns: [params.pattern],
+            always: ["*"],
+            metadata: {
+              pattern: params.pattern,
+              path: params.path,
+            },
+          })
 
           let search = params.path ?? Instance.directory
           search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
@@ -90,7 +88,7 @@ export const GlobTool = Tool.defineEffect(
             },
             output: output.join("\n"),
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )
