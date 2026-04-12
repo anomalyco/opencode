@@ -464,7 +464,7 @@ export namespace ProviderTransform {
         }
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
-      case "@ai-sdk/github-copilot":
+      case "@ai-sdk/github-copilot": {
         if (model.id.includes("gemini")) {
           // currently github copilot only returns thinking
           return {}
@@ -489,7 +489,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
-
+      }
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
       case "@ai-sdk/togetherai":
@@ -503,7 +503,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/openai-compatible":
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
-      case "@ai-sdk/azure":
+      case "@ai-sdk/azure": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
@@ -520,7 +520,8 @@ export namespace ProviderTransform {
             },
           ]),
         )
-      case "@ai-sdk/openai":
+      }
+      case "@ai-sdk/openai": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
@@ -550,7 +551,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
-
+      }
       case "@ai-sdk/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
       case "@ai-sdk/google-vertex/anthropic":
@@ -633,7 +634,7 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/google-vertex":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
-      case "@ai-sdk/google":
+      case "@ai-sdk/google": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
         if (id.includes("2.5")) {
           return {
@@ -667,7 +668,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
-
+      }
       case "@ai-sdk/mistral":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
         return {}
@@ -676,7 +677,7 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
         return {}
 
-      case "@ai-sdk/groq":
+      case "@ai-sdk/groq": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/groq
         const groqEffort = ["none", ...WIDELY_SUPPORTED_EFFORTS]
         return Object.fromEntries(
@@ -687,7 +688,7 @@ export namespace ProviderTransform {
             },
           ]),
         )
-
+      }
       case "@ai-sdk/perplexity":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
         return {}
@@ -753,12 +754,7 @@ export namespace ProviderTransform {
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
-    // openai and providers using openai package should set store to false by default.
-    if (
-      input.model.providerID === "openai" ||
-      input.model.api.npm === "@ai-sdk/openai" ||
-      input.model.api.npm === "@ai-sdk/github-copilot"
-    ) {
+    if (input.model.api.npm === "@ai-sdk/github-copilot") {
       result["store"] = false
     }
 
@@ -788,7 +784,11 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+    if (
+      input.model.providerID === "openai" ||
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.providerOptions?.setCacheKey
+    ) {
       result["promptCacheKey"] = input.sessionID
     }
 

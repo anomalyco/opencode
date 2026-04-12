@@ -85,7 +85,21 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
-  test("should set store=false for openai provider", () => {
+  test("should set promptCacheKey for @ai-sdk/openai custom providers", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "custom-openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({ model: openaiModel, sessionID, providerOptions: {} })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not force store=false for openai provider", () => {
     const openaiModel = {
       ...mockModel,
       providerID: "openai",
@@ -97,6 +111,24 @@ describe("ProviderTransform.options - setCacheKey", () => {
     }
     const result = ProviderTransform.options({
       model: openaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBeUndefined()
+  })
+
+  test("should keep store=false for github copilot sdk models", () => {
+    const copilotModel = {
+      ...mockModel,
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5-codex",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: copilotModel,
       sessionID,
       providerOptions: {},
     })
@@ -642,11 +674,15 @@ describe("ProviderTransform.schema - gemini combiner nodes", () => {
       return
     }
     if (Array.isArray(node)) {
-      node.forEach((item, i) => walk(item, cb, [...path, i]))
+      node.forEach((item, i) => {
+        walk(item, cb, [...path, i])
+      })
       return
     }
     cb(node, path)
-    Object.entries(node).forEach(([key, value]) => walk(value, cb, [...path, key]))
+    Object.entries(node).forEach(([key, value]) => {
+      walk(value, cb, [...path, key])
+    })
   }
 
   test("keeps edits.items.anyOf without adding type", () => {
