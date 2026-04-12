@@ -420,7 +420,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data!))),
-            sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
             sdk.client.experimental.resource
               .list({ workspace })
               .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
