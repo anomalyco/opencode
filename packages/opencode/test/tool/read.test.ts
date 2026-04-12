@@ -11,6 +11,7 @@ import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
+import { Truncate } from "../../src/tool/truncate"
 import { Tool } from "../../src/tool/tool"
 import { Filesystem } from "../../src/util/filesystem"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
@@ -41,6 +42,7 @@ const it = testEffect(
     FileTime.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
+    Truncate.defaultLayer,
   ),
 )
 

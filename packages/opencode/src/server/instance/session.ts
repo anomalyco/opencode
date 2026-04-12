@@ -13,6 +13,7 @@ import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { Effect } from "effect"
 import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
@@ -273,6 +274,7 @@ export const SessionRoutes = lazy(() =>
         "json",
         z.object({
           title: z.string().optional(),
+          permission: Permission.Ruleset.optional(),
           time: z
             .object({
               archived: z.number().optional(),
@@ -283,9 +285,16 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
+        const current = await Session.get(sessionID)
 
         if (updates.title !== undefined) {
           await Session.setTitle({ sessionID, title: updates.title })
+        }
+        if (updates.permission !== undefined) {
+          await Session.setPermission({
+            sessionID,
+            permission: Permission.merge(current.permission ?? [], updates.permission),
+          })
         }
         if (updates.time?.archived !== undefined) {
           await Session.setArchived({ sessionID, time: updates.time.archived })
@@ -716,11 +725,17 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        await SessionRunState.assertNotBusy(params.sessionID)
-        await Session.removeMessage({
-          sessionID: params.sessionID,
-          messageID: params.messageID,
-        })
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const state = yield* SessionRunState.Service
+            const session = yield* Session.Service
+            yield* state.assertNotBusy(params.sessionID)
+            yield* session.removeMessage({
+              sessionID: params.sessionID,
+              messageID: params.messageID,
+            })
+          }),
+        )
         return c.json(true)
       },
     )
