@@ -13,7 +13,7 @@ import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
@@ -164,14 +164,14 @@ export namespace Worktree {
     readonly reset: (input: ResetInput) => Effect.Effect<boolean>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Worktree") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Worktree") {}
 
   type GitResult = { code: number; text: string; stderr: string }
 
   export const layer: Layer.Layer<
     Service,
     never,
-    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Project.Service
+    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Git.Service | Project.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -179,6 +179,7 @@ export namespace Worktree {
       const fs = yield* AppFileSystem.Service
       const pathSvc = yield* Path.Path
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const gitSvc = yield* Git.Service
       const project = yield* Project.Service
 
       const git = Effect.fnUntraced(
@@ -245,6 +246,7 @@ export namespace Worktree {
 
       const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
         const ctx = yield* InstanceState.context
+        const workspaceID = yield* InstanceState.workspaceID
         const projectID = ctx.project.id
         const extra = startCommand?.trim()
 
@@ -254,6 +256,8 @@ export namespace Worktree {
           log.error("worktree checkout failed", { directory: info.directory, message })
           GlobalBus.emit("event", {
             directory: info.directory,
+            project: ctx.project.id,
+            workspace: workspaceID,
             payload: { type: Event.Failed.type, properties: { message } },
           })
           return
@@ -271,6 +275,8 @@ export namespace Worktree {
               log.error("worktree bootstrap failed", { directory: info.directory, message })
               GlobalBus.emit("event", {
                 directory: info.directory,
+                project: ctx.project.id,
+                workspace: workspaceID,
                 payload: { type: Event.Failed.type, properties: { message } },
               })
               return false
@@ -280,6 +286,8 @@ export namespace Worktree {
 
         GlobalBus.emit("event", {
           directory: info.directory,
+          project: ctx.project.id,
+          workspace: workspaceID,
           payload: {
             type: Event.Ready.type,
             properties: { name: info.name, branch: info.branch },
@@ -516,7 +524,7 @@ export namespace Worktree {
 
         const worktreePath = entry.path
 
-        const base = yield* Effect.promise(() => Git.defaultBranch(Instance.worktree))
+        const base = yield* gitSvc.defaultBranch(Instance.worktree)
         if (!base) {
           throw new ResetFailedError({ message: "Default branch not found" })
         }
@@ -582,7 +590,8 @@ export namespace Worktree {
     }),
   )
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Git.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Project.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),

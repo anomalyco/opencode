@@ -1,6 +1,6 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Record, Context } from "effect"
 import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
@@ -51,7 +51,7 @@ export namespace LLM {
     readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LLM") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
   export const layer = Layer.effect(
     Service,
