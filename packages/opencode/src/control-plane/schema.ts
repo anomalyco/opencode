@@ -10,8 +10,7 @@ export type WorkspaceID = typeof workspaceIdSchema.Type
 
 export const WorkspaceID = workspaceIdSchema.pipe(
   withStatics((schema: typeof workspaceIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("workspace", id)),
+    ascending: (id?: string) => schema.make(Identifier.ascending("workspace", id)),
     zod: Identifier.schema("workspace").pipe(z.custom<WorkspaceID>()),
   })),
 )

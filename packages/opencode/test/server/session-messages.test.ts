@@ -60,7 +60,7 @@ describe("session messages endpoint", () => {
         fn: async () => {
           const session = await Session.create({})
           const ids = await fill(session.id, 5)
-          const app = Server.Default()
+          const app = Server.Default().app
 
           const a = await app.request(`/session/${session.id}/message?limit=2`)
           expect(a.status).toBe(200)
@@ -89,7 +89,7 @@ describe("session messages endpoint", () => {
         fn: async () => {
           const session = await Session.create({})
           const ids = await fill(session.id, 3)
-          const app = Server.Default()
+          const app = Server.Default().app
 
           const res = await app.request(`/session/${session.id}/message`)
           expect(res.status).toBe(200)
@@ -109,7 +109,7 @@ describe("session messages endpoint", () => {
         directory: tmp.path,
         fn: async () => {
           const session = await Session.create({})
-          const app = Server.Default()
+          const app = Server.Default().app
 
           const bad = await app.request(`/session/${session.id}/message?limit=2&before=bad`)
           expect(bad.status).toBe(400)
@@ -131,7 +131,7 @@ describe("session messages endpoint", () => {
         fn: async () => {
           const session = await Session.create({})
           await fill(session.id, 520)
-          const app = Server.Default()
+          const app = Server.Default().app
 
           const res = await app.request(`/session/${session.id}/message?limit=510`)
           expect(res.status).toBe(200)
@@ -147,7 +147,7 @@ describe("session messages endpoint", () => {
 
 describe("session.prompt_async error handling", () => {
   test("prompt_async route has error handler for detached prompt call", async () => {
-    const src = await Bun.file(new URL("../../src/server/routes/session.ts", import.meta.url)).text()
+    const src = await Bun.file(new URL("../../src/server/instance/session.ts", import.meta.url)).text()
     const start = src.indexOf('"/:sessionID/prompt_async"')
     const end = src.indexOf('"/:sessionID/command"', start)
     expect(start).toBeGreaterThan(-1)
