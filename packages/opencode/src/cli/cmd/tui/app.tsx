@@ -404,7 +404,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     if (continued || sync.status === "loading" || !args.continue) return
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
-      .find((x) => x.parentID === undefined)?.id
+      .find((x) => x.parentID === undefined && !x.time.archived)?.id
     if (match) {
       continued = true
       if (args.fork) {

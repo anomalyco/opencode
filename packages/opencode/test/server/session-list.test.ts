@@ -81,6 +81,24 @@ describe("Session.list", () => {
     })
   })
 
+  test("includes archived sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const active = await Session.create({ title: "active-session" })
+        const archived = await Session.create({ title: "archived-session" })
+        await Session.setArchived({ sessionID: archived.id, time: Date.now() })
+
+        const sessions = [...Session.list()]
+        const ids = sessions.map((s) => s.id)
+
+        expect(ids).toContain(active.id)
+        expect(ids).toContain(archived.id)
+      },
+    })
+  })
+
   test("respects limit parameter", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
