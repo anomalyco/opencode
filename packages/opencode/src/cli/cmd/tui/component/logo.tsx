@@ -65,6 +65,10 @@ export function Logo() {
   const tick = () => {
     const t = performance.now()
     setNow(t)
+    const hold = charge()
+    if (hold && t - hold.at >= CHARGE) {
+      burst(hold.x, hold.y)
+    }
     let alive = false
     setRings((list) => {
       const next = list.filter((item) => t - item.at < LIFE)
@@ -208,6 +212,11 @@ export function Logo() {
         burst(item.x, item.y)
       }}
       onMouseDrop={() => {
+        const item = charge()
+        if (!item) return
+        burst(item.x, item.y)
+      }}
+      onMouseOut={() => {
         const item = charge()
         if (!item) return
         burst(item.x, item.y)
