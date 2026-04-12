@@ -53,7 +53,8 @@ function safeJsonParse(text: string): unknown | null {
 }
 
 function relayPort(): number {
-	return Number(process.env.UNIVER_SDK_PORT ?? "18766")
+	const raw = process.env.UNIVER_SDK_PORT?.trim()
+	return raw ? Number(raw) : 18766
 }
 
 const wsDebug = process.env.VERITLY_WS_DEBUG === "1"

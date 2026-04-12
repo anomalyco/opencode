@@ -113,9 +113,18 @@ const getCurrentUrl = () => {
 }
 
 const getDefaultUrl = () => {
+  const current = getCurrentUrl()
   const lsDefault = readDefaultServerUrl()
-  if (lsDefault) return lsDefault
-  return getCurrentUrl()
+  if (!lsDefault) return current
+  try {
+    const pageOrigin = new URL(location.href).origin
+    const storedOrigin = new URL(lsDefault, location.href).origin
+    /** Stale entry from another tunnel tab (e.g. saved `local-4096…` while UI is `local-4444…`) → cross-origin + CORS. Prefer env/current origin. */
+    if (storedOrigin !== pageOrigin) return current
+  } catch {
+    return current
+  }
+  return lsDefault
 }
 
 const platform: Platform = {

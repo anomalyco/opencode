@@ -60,7 +60,7 @@ log(`generated=${managedInstructionsPath}`);
 log(`opencode_projects_root=${process.env.OPENCODE_PROJECTS_ROOT}`);
 log(`skills.paths[0]=${vendoredSkillDir}`);
 
-const relayPort = Number(process.env.UNIVER_SDK_PORT ?? "18766");
+const relayPort = process.env.UNIVER_SDK_PORT?.trim() ? Number(process.env.UNIVER_SDK_PORT.trim()) : 18766;
 const relayHealthUrl = `http://127.0.0.1:${relayPort}/health`;
 
 async function relayHealthy(): Promise<boolean> {

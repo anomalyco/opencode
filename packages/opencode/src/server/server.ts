@@ -54,7 +54,9 @@ initVeritlyTracer({
 	serviceName: "veritly-opencode",
 	useAsyncLocalStorage: false,
 	bootstrapAttributes: {
-		"veritly.opencode.univer_sdk_port": Number(process.env.UNIVER_SDK_PORT ?? "18766"),
+		"veritly.opencode.univer_sdk_port": process.env.UNIVER_SDK_PORT?.trim()
+			? Number(process.env.UNIVER_SDK_PORT.trim())
+			: 18766,
 	},
 });
 
@@ -85,6 +87,39 @@ export namespace Server {
 					status: 500,
 				});
 			})
+			// CORS must run before basicAuth: otherwise 401/403 responses omit ACAO and the browser blames CORS
+			// (e.g. UI on https://local-4444… fetching https://local-4096…/global/health with Basic).
+			.use(
+				cors({
+					credentials: true,
+					origin(input) {
+						if (!input) return;
+
+						if (input.startsWith("http://localhost:")) return input;
+						if (input.startsWith("http://127.0.0.1:")) return input;
+						if (
+							input === "tauri://localhost" ||
+							input === "http://tauri.localhost" ||
+							input === "https://tauri.localhost"
+						)
+							return input;
+
+						// *.opencode.ai (https only, adjust if needed)
+						if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
+							return input;
+						}
+						// Veritly hosted + tunnel dev (local-4444…, local-4096…, test1…, etc.)
+						if (/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/.test(input)) {
+							return input;
+						}
+						if (opts?.cors?.includes(input)) {
+							return input;
+						}
+
+						return;
+					},
+				}),
+			)
 			.use((c, next) => {
 				// Allow CORS preflight requests to succeed without auth.
 				// Browser clients sending Authorization headers will preflight with OPTIONS.
@@ -117,36 +152,6 @@ export namespace Server {
 					timer.stop();
 				}
 			})
-			.use(
-				cors({
-					origin(input) {
-						if (!input) return;
-
-						if (input.startsWith("http://localhost:")) return input;
-						if (input.startsWith("http://127.0.0.1:")) return input;
-						if (
-							input === "tauri://localhost" ||
-							input === "http://tauri.localhost" ||
-							input === "https://tauri.localhost"
-						)
-							return input;
-
-						// *.opencode.ai (https only, adjust if needed)
-						if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-							return input;
-						}
-						// Veritly hosted app + dev (e.g. test1.veritly.co.uk)
-						if (/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/.test(input)) {
-							return input;
-						}
-						if (opts?.cors?.includes(input)) {
-							return input;
-						}
-
-						return;
-					},
-				}),
-			)
 			.route("/global", GlobalRoutes())
 			.route("/univer-sdk-relay", UniverSdkRelayRoutes())
 			.put(
@@ -653,7 +658,9 @@ export namespace Server {
 		const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port);
 		if (!server) throw new Error(`Failed to start server on port ${opts.port}`);
 
-		const relayP = Number(process.env.UNIVER_SDK_PORT ?? "18766");
+		const relayP = process.env.UNIVER_SDK_PORT?.trim()
+			? Number(process.env.UNIVER_SDK_PORT.trim())
+			: 18766;
 		log.info("univer-sdk-relay bridge listening with OpenCode", {
 			bridgePath: "/univer-sdk-relay/ws",
 			upstreamRelay: `ws://127.0.0.1:${relayP}/ws`,

@@ -1,0 +1,19 @@
+# Copy to cloudflared.config.yml and fill tunnel UUID + credentials path.
+# Create tunnel: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/
+#
+# Routes HTTPS (and WebSocket) from your Cloudflare hostname to local HTTP.
+# Point hostname DNS (CNAME) to the tunnel in Cloudflare dashboard.
+
+tunnel: YOUR_TUNNEL_UUID
+credentials-file: /path/to/YOUR_TUNNEL_UUID.json
+
+ingress:
+  # Full Veritly hosted stack listening on PORT (e.g. Docker CMD start-hosted-opencode → 3000)
+  - hostname: dev-univer.yourdomain.com
+    service: http://127.0.0.1:3000
+    originRequest:
+      noHappyEyeballs: true
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+  # Catch-all
+  - service: http_status:404
