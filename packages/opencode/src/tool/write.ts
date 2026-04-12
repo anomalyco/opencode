@@ -26,10 +26,6 @@ export const WriteTool = Tool.define(
     const bus = yield* Bus.Service
     const format = yield* Format.Service
 
-    if (output) {
-      output = `Write applied\n${output.trimStart()}`
-    }
-
     return {
       description: DESCRIPTION,
       parameters: z.object({

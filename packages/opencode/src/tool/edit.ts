@@ -50,10 +50,6 @@ export const EditTool = Tool.define(
     const format = yield* Format.Service
     const bus = yield* Bus.Service
 
-    if (output) {
-      output = `Edit applied\n${output.trimStart()}`
-    }
-
     return {
       description: DESCRIPTION,
       parameters: Parameters,
