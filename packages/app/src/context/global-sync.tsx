@@ -33,7 +33,7 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { sanitizeProject } from "./global-sync/utils"
+import { sanitizeProject, stripProvider } from "./global-sync/utils"
 import { formatServerError, permissionNotice } from "@/utils/server-errors"
 import { useServer } from "./server"
 
@@ -570,19 +570,33 @@ function createGlobalSync() {
     },
   }
 
-  const updateConfigMutation = useMutation(() => ({
-    mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
-    onSuccess: () => {
-      bootstrap.refetch()
-      // Invalidate all provider queries so newly configured custom providers
-      // appear immediately in the available provider list across all directories.
-      queryClient.invalidateQueries({ queryKey: [null, "providers"] })
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
+  const providerApi = {
+    remove(id: string) {
+      if (!id) return
+      setGlobalStore("provider", (prev) => stripProvider(prev, id))
+      for (const directory of Object.keys(children.children)) {
+        const child = children.children[directory]
+        if (!child) continue
+        child[1]("provider", (prev) => stripProvider(prev, id))
+      }
     },
-  }))
+  }
 
-  const dirSyncContexts = new Map<string, ReturnType<typeof createDirSyncContext>>()
-  const dirSyncContextRefCounts = new Map<string, number>()
+  const updateConfig = async (config: Config) => {
+    setGlobalStore("reload", "pending")
+    return globalSDK.client.global.config
+      .update({ config })
+      .then(bootstrap)
+      .then(() => {
+        queue.refresh()
+        setGlobalStore("reload", undefined)
+        queue.refresh()
+      })
+      .catch((error) => {
+        setGlobalStore("reload", undefined)
+        throw error
+      })
+  }
 
   return {
     data: globalStore,
@@ -601,9 +615,9 @@ function createGlobalSync() {
     },
     child: children.child,
     peek: children.peek,
-    queryOptions: queryOptionsApi,
-    // bootstrap,
-    updateConfig: updateConfigMutation.mutateAsync,
+    bootstrap,
+    updateConfig,
+    provider: providerApi,
     project: projectApi,
     todo: {
       set: setSessionTodo,

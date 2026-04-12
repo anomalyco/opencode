@@ -61,10 +61,9 @@ export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function copyBinaryToSidecarFolder(source: string) {
-  const dir = `resources`
-  await $`mkdir -p ${dir}`
-  const dest = windowsify(`${dir}/opencode-cli`)
+export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET ?? nativeTarget()) {
+  await $`mkdir -p src-tauri/sidecars`
+  const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
   await $`cp ${source} ${dest}`
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`

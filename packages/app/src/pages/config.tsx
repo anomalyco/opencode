@@ -2554,6 +2554,7 @@ export default function ConfigPage() {
       .then(() => {
         batch(() => {
           setConfig(next)
+          if (prev && prev !== id) globalSync.provider.remove(prev)
           setState("pick", `provider:${id}`)
           setState("customID", id)
           setState("customApiDirty", false)
@@ -2586,6 +2587,7 @@ export default function ConfigPage() {
       .then(() => {
         batch(() => {
           setConfig(next)
+          globalSync.provider.remove(id)
           createCustomProvider()
         })
         showToast({ variant: "success", title: t("config.action.delete"), description: id })
