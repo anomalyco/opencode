@@ -3,8 +3,9 @@ import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
-import { Context } from "../util/context"
+import { LocalContext } from "../util/local-context"
 import { Project } from "./project"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { State } from "./state"
 
 export interface InstanceContext {
@@ -13,26 +14,16 @@ export interface InstanceContext {
   project: Project.Info
 }
 
-const context = Context.create<InstanceContext>("instance")
+const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-function emit(directory: string) {
-  GlobalBus.emit("event", {
-    directory,
-    payload: {
-      type: "server.instance.disposed",
-      properties: {
-        directory,
-      },
-    },
-  })
-}
+function emitDisposed(directory: string) {}
 
-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+function boot(input: { directory: string; init?: () => Promise<any>; worktree?: string; project?: Project.Info }) {
   return iife(async () => {
     const ctx =
       input.project && input.worktree
@@ -93,17 +84,19 @@ export const Instance = {
   get project() {
     return context.use().project
   },
+
   /**
    * Check if a path is within the project boundary.
    * Returns true if path is inside Instance.directory OR Instance.worktree.
    * Paths within the worktree but outside the working directory should not trigger external_directory permission.
    */
-  containsPath(filepath: string) {
-    if (Filesystem.contains(Instance.directory, filepath)) return true
+  containsPath(filepath: string, ctx?: InstanceContext) {
+    const instance = ctx ?? Instance
+    if (Filesystem.contains(instance.directory, filepath)) return true
     // Non-git projects set worktree to "/" which would match ANY absolute path.
     // Skip worktree check in this case to preserve external_directory permissions.
     if (Instance.worktree === "/") return false
-    return Filesystem.contains(Instance.worktree, filepath)
+    return Filesystem.contains(instance.worktree, filepath)
   },
   /**
    * Captures the current instance ALS context and returns a wrapper that
@@ -131,15 +124,39 @@ export const Instance = {
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
-    emit(directory)
+
+    GlobalBus.emit("event", {
+      directory,
+      project: input.project?.id,
+      workspace: WorkspaceContext.workspaceID,
+      payload: {
+        type: "server.instance.disposed",
+        properties: {
+          directory,
+        },
+      },
+    })
+
     return await next
   },
   async dispose() {
     const directory = Instance.directory
+    const project = Instance.project
     Log.Default.info("disposing instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
-    emit(directory)
+
+    GlobalBus.emit("event", {
+      directory,
+      project: project.id,
+      workspace: WorkspaceContext.workspaceID,
+      payload: {
+        type: "server.instance.disposed",
+        properties: {
+          directory,
+        },
+      },
+    })
   },
   async disposeAll() {
     if (disposal.all) return disposal.all
