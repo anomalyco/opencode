@@ -14,6 +14,7 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { captureVeritly } from "@/lib/telemetry/posthog"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -63,6 +64,9 @@ const ModelList: Component<{
         </Tooltip>
       )}
       onSelect={(x) => {
+        if (x) {
+          captureVeritly("model_selected", { provider_id: x.provider.id, model_id: x.id })
+        }
         local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
         })

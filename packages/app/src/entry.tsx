@@ -3,12 +3,17 @@
 import { iife } from "@opencode-ai/util/iife"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
+import { initBrowserOtel } from "@/lib/telemetry/browser-otel"
+import { initPosthog } from "@/lib/telemetry/posthog"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
+
+initPosthog()
+initBrowserOtel()
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 

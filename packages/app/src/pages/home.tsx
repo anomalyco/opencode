@@ -12,6 +12,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { captureVeritly } from "@/lib/telemetry/posthog"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -35,14 +36,16 @@ export default function Home() {
     return "bg-border-weak-base"
   })
 
-  function openProject(directory: string) {
+  function openProject(directory: string, source: "recent" | "create_dialog" | "empty_state") {
+    captureVeritly("project_opened", { source })
     layout.projects.open(directory)
     server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
   }
 
-  function chooseProject() {
-    dialog.show(() => <DialogCreateProject onCreate={openProject} />)
+  function chooseProject(from: "toolbar" | "empty_state") {
+    const source = from === "empty_state" ? "empty_state" : "create_dialog"
+    dialog.show(() => <DialogCreateProject onCreate={(dir) => openProject(dir, source)} />)
   }
 
   return (
@@ -67,7 +70,7 @@ export default function Home() {
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={() => chooseProject("toolbar")}>
                 New project
               </Button>
             </div>
@@ -78,7 +81,7 @@ export default function Home() {
                     size="large"
                     variant="ghost"
                     class="text-14-mono text-left justify-between px-3"
-                    onClick={() => openProject(project.worktree)}
+                    onClick={() => openProject(project.worktree, "recent")}
                   >
                     {project.worktree.replace(homedir(), "~")}
                     <div class="text-14-regular text-text-weak">
@@ -97,7 +100,7 @@ export default function Home() {
               <div class="text-14-medium text-text-strong">No projects yet</div>
               <div class="text-12-regular text-text-weak">Create your first project to start working.</div>
             </div>
-            <Button class="px-3 mt-1" onClick={chooseProject}>
+            <Button class="px-3 mt-1" onClick={() => chooseProject("empty_state")}>
               Create project
             </Button>
           </div>

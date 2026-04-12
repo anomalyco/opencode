@@ -17,6 +17,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { captureVeritly } from "@/lib/telemetry/posthog"
 
 type PendingPrompt = {
   abort: AbortController
@@ -202,6 +203,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           return undefined
         })
       if (session) {
+        captureVeritly("session_created", { session_id: session.id })
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
@@ -244,6 +246,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     if (mode === "shell") {
+      captureVeritly("message_sent", { mode: "shell", session_id: session.id })
       clearInput()
       client.session
         .shell({
@@ -267,6 +270,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
+        captureVeritly("message_sent", { mode: "command", session_id: session.id, command: commandName })
         clearInput()
         client.session
           .command({
@@ -396,6 +400,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const send = async () => {
       const ok = await waitForWorktree()
       if (!ok) return
+      captureVeritly("message_sent", { mode: "prompt", session_id: session.id })
       await client.session.promptAsync({
         sessionID: session.id,
         agent,

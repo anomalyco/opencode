@@ -27,10 +27,27 @@ import {
 } from "@opencode-ai/univer-sdk"
 import { registerOfficeUnit } from "@/lib/veritly-univer-files"
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
+import { browserTracer } from "@/lib/telemetry/browser-otel"
+import { context, propagation, SpanStatusCode, type TextMapGetter } from "@opentelemetry/api"
 
 type PendingImport = { base64: string; mimeType?: string }
-type RelayRequest = { id: string; op: string; params?: unknown }
-type RelayResponse = { id: string; ok: boolean; result?: unknown; error?: string }
+type RelayRequest = { id: string; op: string; params?: unknown; traceparent?: string }
+type RelayResponse = { id: string; ok: boolean; result?: unknown; error?: string; traceparent?: string }
+
+const relayTextMapSetter = {
+  set(carrier: Record<string, string>, key: string, value: string) {
+    carrier[key] = value
+  },
+}
+
+const relayTextMapGetter: TextMapGetter<Record<string, string>> = {
+  get(carrier, key) {
+    return carrier[key]
+  },
+  keys(carrier) {
+    return Object.keys(carrier)
+  },
+}
 type GetRangeInput = { sheetId?: string; range: RangeRect }
 
 type Props = {
@@ -123,7 +140,33 @@ export function SpreadsheetViewer(props: Props) {
       w.__veritlyUniverSdk = () => createUniverSdk({ univerAPI: instance.univerAPI, univer: instance.univer })
     }
 
+    browserTracer().startActiveSpan(
+      "spreadsheet.viewer.univer_init",
+      {
+        attributes: {
+          "veritly.project_id": props.projectId ?? "",
+          "veritly.unit_id": props.unitId ?? "",
+          "veritly.has_office_path": Boolean(props.officePath),
+        },
+      },
+      (span) => {
+        span.end()
+      },
+    )
+
     onCleanup(() => {
+      browserTracer().startActiveSpan(
+        "spreadsheet.viewer.univer_dispose",
+        {
+          attributes: {
+            "veritly.project_id": props.projectId ?? "",
+            "veritly.unit_id": props.unitId ?? "",
+          },
+        },
+        (span) => {
+          span.end()
+        },
+      )
       relaySocket?.close(1000, "viewer disposed")
       relaySocket = null
       runtime = null
@@ -160,89 +203,199 @@ export function SpreadsheetViewer(props: Props) {
     relaySocket = ws
     const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
 
+    ws.onopen = () => {
+      browserTracer().startActiveSpan(
+        "spreadsheet.relay.connect",
+        {
+          attributes: {
+            "veritly.relay.role": "browser",
+            "veritly.project_id": props.projectId ?? "",
+          },
+        },
+        (span) => {
+          span.end()
+        },
+      )
+    }
+
     const respond = (payload: RelayResponse) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+      if (ws.readyState !== WebSocket.OPEN) return
+      const carrier: Record<string, string> = {}
+      propagation.inject(context.active(), carrier, relayTextMapSetter)
+      const tp = carrier.traceparent
+      ws.send(JSON.stringify(tp ? { ...payload, traceparent: tp } : payload))
     }
 
     ws.onmessage = async (evt) => {
-      let req: RelayRequest
+      let parsed: RelayRequest
       try {
-        req = JSON.parse(String(evt.data)) as RelayRequest
+        parsed = JSON.parse(String(evt.data)) as RelayRequest
       } catch {
-        respond({ id: "relay", ok: false, error: "invalid json payload" })
-        return
-      }
-      if (!req?.id || !req?.op) {
-        respond({ id: "relay", ok: false, error: "request must include id and op" })
+        await browserTracer().startActiveSpan(
+          "relay.browser.message",
+          {
+            attributes: {
+              "messaging.system": "veritly_univer_relay",
+              "network.transport": "websocket",
+              "messaging.operation": "receive",
+              "veritly.relay.role": "browser",
+              error: true,
+              "messaging.message_payload_size_bytes": String(evt.data).length,
+            },
+          },
+          async (span) => {
+            try {
+              span.setStatus({ code: SpanStatusCode.ERROR, message: "invalid json" })
+              respond({ id: "relay", ok: false, error: "invalid json payload" })
+            } finally {
+              span.end()
+            }
+          },
+        )
         return
       }
 
-      try {
-        switch (req.op) {
-          case "get_active_document":
-            respond({ id: req.id, ok: true, result: sdk.getActiveDocument() })
-            return
-          case "list_sheets":
-            respond({ id: req.id, ok: true, result: sdk.listSheets() })
-            return
-          case "get_range":
-            respond({ id: req.id, ok: true, result: sdk.getSheetRange(req.params as GetRangeInput) })
-            return
-          case "set_range":
-            sdk.setRangeValues(req.params as SetRangeValuesInput)
-            respond({ id: req.id, ok: true, result: true })
-            return
-          case "add_chart":
-            respond({ id: req.id, ok: true, result: await sdk.addChart(req.params as AddChartInput) })
-            return
-          case "sdk_introspect":
-            respond({
-              id: req.id,
-              ok: true,
-              result: sdk.inspectFacadeCapabilities(
-                req.params as { sheetId?: string; range?: { startRow: number; endRow: number; startColumn: number; endColumn: number } } | undefined,
-              ),
+      const tp = typeof parsed.traceparent === "string" ? parsed.traceparent.trim() : ""
+      const parentCtx = tp
+        ? propagation.extract(context.active(), { traceparent: tp }, relayTextMapGetter)
+        : context.active()
+
+      await browserTracer().startActiveSpan(
+        "relay.browser.message",
+        {
+          attributes: {
+            "messaging.system": "veritly_univer_relay",
+            "network.transport": "websocket",
+            "messaging.operation": "receive",
+            "veritly.relay.role": "browser",
+            "messaging.message_payload_size_bytes": String(evt.data).length,
+          },
+        },
+        parentCtx,
+        async (span) => {
+          try {
+            if (!parsed?.id || !parsed?.op) {
+              span.setStatus({ code: SpanStatusCode.ERROR, message: "missing id or op" })
+              respond({ id: "relay", ok: false, error: "request must include id and op" })
+              return
+            }
+            const req = parsed
+            span.setAttributes({
+              "messaging.message_id": req.id,
+              "messaging.destination.name": req.op,
             })
-            return
-          case "execute_command": {
-            const raw = req.params
-            if (raw === null || typeof raw !== "object") {
-              respond({ id: req.id, ok: false, error: "execute_command requires params object" })
-              return
+
+            try {
+              switch (req.op) {
+                case "get_active_document":
+                  respond({ id: req.id, ok: true, result: sdk.getActiveDocument() })
+                  return
+                case "list_sheets":
+                  respond({ id: req.id, ok: true, result: sdk.listSheets() })
+                  return
+                case "get_range":
+                  respond({ id: req.id, ok: true, result: sdk.getSheetRange(req.params as GetRangeInput) })
+                  return
+                case "set_range":
+                  sdk.setRangeValues(req.params as SetRangeValuesInput)
+                  respond({ id: req.id, ok: true, result: true })
+                  return
+                case "add_chart":
+                  respond({ id: req.id, ok: true, result: await sdk.addChart(req.params as AddChartInput) })
+                  return
+                case "sdk_introspect":
+                  respond({
+                    id: req.id,
+                    ok: true,
+                    result: sdk.inspectFacadeCapabilities(
+                      req.params as { sheetId?: string; range?: { startRow: number; endRow: number; startColumn: number; endColumn: number } } | undefined,
+                    ),
+                  })
+                  return
+                case "execute_command": {
+                  const raw = req.params
+                  if (raw === null || typeof raw !== "object") {
+                    span.setStatus({ code: SpanStatusCode.ERROR, message: "execute_command params" })
+                    respond({ id: req.id, ok: false, error: "execute_command requires params object" })
+                    return
+                  }
+                  const cmdId = Reflect.get(raw, "id")
+                  if (typeof cmdId !== "string") {
+                    span.setStatus({ code: SpanStatusCode.ERROR, message: "execute_command cmd id" })
+                    respond({ id: req.id, ok: false, error: "execute_command requires params.id (string)" })
+                    return
+                  }
+                  const cmdParams = Reflect.get(raw, "params")
+                  if (cmdParams !== undefined && (cmdParams === null || typeof cmdParams !== "object")) {
+                    span.setStatus({ code: SpanStatusCode.ERROR, message: "execute_command nested params" })
+                    respond({ id: req.id, ok: false, error: "execute_command params.params must be an object when set" })
+                    return
+                  }
+                  const result = await cur.univerAPI.executeCommand(
+                    cmdId,
+                    cmdParams === undefined ? undefined : cmdParams,
+                  )
+                  respond({ id: req.id, ok: true, result })
+                  return
+                }
+                default:
+                  span.setStatus({ code: SpanStatusCode.ERROR, message: "unsupported op" })
+                  respond({ id: req.id, ok: false, error: `unsupported op: ${req.op}` })
+              }
+            } catch (err) {
+              if (req.op === "add_chart") {
+                const info = sdk.inspectFacadeCapabilities()
+                console.warn("univer-sdk add_chart failed; facade capabilities:", info)
+              }
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: err instanceof Error ? err.message : "sdk operation failed",
+              })
+              span.recordException(err instanceof Error ? err : new Error(String(err)))
+              respond({ id: req.id, ok: false, error: err instanceof Error ? err.message : "sdk operation failed" })
             }
-            const cmdId = Reflect.get(raw, "id")
-            if (typeof cmdId !== "string") {
-              respond({ id: req.id, ok: false, error: "execute_command requires params.id (string)" })
-              return
-            }
-            const cmdParams = Reflect.get(raw, "params")
-            if (cmdParams !== undefined && (cmdParams === null || typeof cmdParams !== "object")) {
-              respond({ id: req.id, ok: false, error: "execute_command params.params must be an object when set" })
-              return
-            }
-            const result = await cur.univerAPI.executeCommand(
-              cmdId,
-              cmdParams === undefined ? undefined : cmdParams,
-            )
-            respond({ id: req.id, ok: true, result })
-            return
+          } finally {
+            span.end()
           }
-          default:
-            respond({ id: req.id, ok: false, error: `unsupported op: ${req.op}` })
-        }
-      } catch (err) {
-        if (req.op === "add_chart") {
-          const info = sdk.inspectFacadeCapabilities()
-          console.warn("univer-sdk add_chart failed; facade capabilities:", info)
-        }
-        respond({ id: req.id, ok: false, error: err instanceof Error ? err.message : "sdk operation failed" })
-      }
+        },
+      )
     }
 
     ws.onerror = () => {
       if (import.meta.env.DEV) console.error("univer sdk relay websocket error")
+      browserTracer().startActiveSpan(
+        "spreadsheet.relay.error",
+        {
+          attributes: {
+            "veritly.relay.role": "browser",
+            "veritly.project_id": props.projectId ?? "",
+            error: true,
+          },
+        },
+        (span) => {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: "websocket error" })
+          span.end()
+        },
+      )
     }
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      browserTracer().startActiveSpan(
+        "spreadsheet.relay.disconnect",
+        {
+          attributes: {
+            "veritly.relay.role": "browser",
+            "veritly.project_id": props.projectId ?? "",
+            "relay.close_code": ev.code,
+            "relay.close_reason_length": (ev.reason || "").length,
+          },
+        },
+        (span) => {
+          if (ev.code !== 1000 && ev.code !== 1005) {
+            span.setStatus({ code: SpanStatusCode.ERROR, message: `ws closed code=${ev.code}` })
+          }
+          span.end()
+        },
+      )
       if (relaySocket === ws) relaySocket = null
     }
 
@@ -276,35 +429,58 @@ export function SpreadsheetViewer(props: Props) {
 
         const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
 
-        try {
-          if (stale()) return
+        await browserTracer().startActiveSpan(
+          "spreadsheet.workbook.load",
+          {
+            attributes: {
+              "veritly.unit_id": unitId,
+              "veritly.load_kind": unitId.startsWith("pending-") ? "import" : "server",
+              "veritly.unit_type": unitType,
+              "veritly.project_id": projectId ?? "",
+              "veritly.office_path": officePath ?? "",
+            },
+          },
+          async (span) => {
+            try {
+              if (stale()) return
 
-          if (unitId.startsWith("pending-")) {
-            if (!officePath || !pendingB64) {
-              setError("Spreadsheet is not imported yet (missing file payload). Reload the file or re-upload.")
-              return
-            }
-            const name = officePath.split("/").pop() || "workbook.xlsx"
-            const file = base64ToFile(pendingB64, name, pendingMime)
-            const realId = await sdk.importXlsxToUnit(file)
-            if (stale()) return
-            if (!realId) {
-              setError("Univer import returned no unit id")
-              return
-            }
-            await registerOfficeUnit(officePath, realId, { projectId })
-            if (stale()) return
-            props.onUnitRegistered?.()
-            return
-          }
+              if (unitId.startsWith("pending-")) {
+                if (!officePath || !pendingB64) {
+                  span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message: "missing file payload for pending import",
+                  })
+                  setError("Spreadsheet is not imported yet (missing file payload). Reload the file or re-upload.")
+                  return
+                }
+                const name = officePath.split("/").pop() || "workbook.xlsx"
+                const file = base64ToFile(pendingB64, name, pendingMime)
+                const realId = await sdk.importXlsxToUnit(file)
+                if (stale()) return
+                if (!realId) {
+                  span.setStatus({ code: SpanStatusCode.ERROR, message: "import returned no unit id" })
+                  setError("Univer import returned no unit id")
+                  return
+                }
+                await registerOfficeUnit(officePath, realId, { projectId })
+                if (stale()) return
+                props.onUnitRegistered?.()
+                return
+              }
 
-          sdk.loadServerUnit(unitId, unitType)
-        } catch (e) {
-          if (stale()) return
-          setError(e instanceof Error ? e.message : "Failed to load sheet")
-        } finally {
-          if (!stale()) setLoading(false)
-        }
+              sdk.loadServerUnit(unitId, unitType)
+            } catch (e) {
+              if (stale()) return
+              const msg = e instanceof Error ? e.message : "Failed to load sheet"
+              span.setStatus({ code: SpanStatusCode.ERROR, message: msg })
+              if (e instanceof Error) span.recordException(e)
+              setError(msg)
+            } finally {
+              if (!stale()) setLoading(false)
+              span.end()
+            }
+          },
+        )
       },
     ),
   )

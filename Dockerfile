@@ -25,10 +25,14 @@ RUN bun install
 ARG VITE_UNIVER_BACKEND_URL
 ARG VITE_UNIVER_SDK_WS
 ARG VITE_UNIVER_LICENSE
+ARG VITE_PUBLIC_POSTHOG_KEY
+ARG VITE_PUBLIC_POSTHOG_HOST
 RUN set -e; \
   if [ -n "${VITE_UNIVER_BACKEND_URL}" ]; then export VITE_UNIVER_BACKEND_URL="${VITE_UNIVER_BACKEND_URL}"; fi; \
   if [ -n "${VITE_UNIVER_SDK_WS}" ]; then export VITE_UNIVER_SDK_WS="${VITE_UNIVER_SDK_WS}"; fi; \
   if [ -n "${VITE_UNIVER_LICENSE}" ]; then export VITE_UNIVER_LICENSE="${VITE_UNIVER_LICENSE}"; fi; \
+  if [ -n "${VITE_PUBLIC_POSTHOG_KEY}" ]; then export VITE_PUBLIC_POSTHOG_KEY="${VITE_PUBLIC_POSTHOG_KEY}"; fi; \
+  if [ -n "${VITE_PUBLIC_POSTHOG_HOST}" ]; then export VITE_PUBLIC_POSTHOG_HOST="${VITE_PUBLIC_POSTHOG_HOST}"; fi; \
   bun run build:veritly-hosted
 
 RUN python3 -m venv /opt/veritly-univer-sdk \

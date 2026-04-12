@@ -45,6 +45,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { trace } from "@opentelemetry/api"
 import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
@@ -157,32 +158,39 @@ export namespace SessionPrompt {
   export type PromptInput = z.infer<typeof PromptInput>
 
   export const prompt = fn(PromptInput, async (input) => {
-    const session = await Session.get(input.sessionID)
-    await SessionRevert.cleanup(session)
+    const tracer = trace.getTracer("veritly-session")
+    return tracer.startActiveSpan(
+      "session.prompt",
+      { attributes: { "veritly.session.id": input.sessionID } },
+      async () => {
+        const session = await Session.get(input.sessionID)
+        await SessionRevert.cleanup(session)
 
-    const message = await createUserMessage(input)
-    await Session.touch(input.sessionID)
+        const message = await createUserMessage(input)
+        await Session.touch(input.sessionID)
 
-    // this is backwards compatibility for allowing `tools` to be specified when
-    // prompting
-    const permissions: PermissionNext.Ruleset = []
-    for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
-      permissions.push({
-        permission: tool,
-        action: enabled ? "allow" : "deny",
-        pattern: "*",
-      })
-    }
-    if (permissions.length > 0) {
-      session.permission = permissions
-      await Session.setPermission({ sessionID: session.id, permission: permissions })
-    }
+        // this is backwards compatibility for allowing `tools` to be specified when
+        // prompting
+        const permissions: PermissionNext.Ruleset = []
+        for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
+          permissions.push({
+            permission: tool,
+            action: enabled ? "allow" : "deny",
+            pattern: "*",
+          })
+        }
+        if (permissions.length > 0) {
+          session.permission = permissions
+          await Session.setPermission({ sessionID: session.id, permission: permissions })
+        }
 
-    if (input.noReply === true) {
-      return message
-    }
+        if (input.noReply === true) {
+          return message
+        }
 
-    return loop({ sessionID: input.sessionID })
+        return loop({ sessionID: input.sessionID })
+      },
+    )
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -1751,6 +1759,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
    */
 
   export async function command(input: CommandInput) {
+    const tracer = trace.getTracer("veritly-session")
+    return tracer.startActiveSpan(
+      "session.command",
+      {
+        attributes: {
+          "veritly.session.id": input.sessionID,
+          "veritly.command.name": input.command,
+        },
+      },
+      async () => {
     log.info("command", input)
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
@@ -1892,6 +1910,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     })
 
     return result
+      },
+    )
   }
 
   async function ensureTitle(input: {

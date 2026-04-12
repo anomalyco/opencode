@@ -18,6 +18,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { DialogSelectModel } from "./dialog-select-model"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { captureVeritly } from "@/lib/telemetry/posthog"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
@@ -83,6 +84,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           return
         }
         if (action.type === "auth.complete") {
+          captureVeritly("provider_connected", { provider_id: props.provider })
           draft.state = "complete"
           draft.authorization = action.authorization
           draft.error = undefined

@@ -1,8 +1,13 @@
+import { context, propagation, trace } from "@opentelemetry/api";
 import { createProxyServer } from "http-proxy";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
+import { initVeritlyTracer, injectTraceHeaders } from "@veritly/telemetry-veritly";
+
+initVeritlyTracer({ serviceName: "veritly-edge", useAsyncLocalStorage: true });
+const tracer = trace.getTracer("veritly-edge");
 
 const port = Number(process.env.PORT || "3000");
 const apiBase = "http://127.0.0.1:4096";
@@ -55,6 +60,23 @@ function backendBasicAuthHeader() {
 function dbg(message, meta) {
 	if (!wsDebug) return;
 	console.log(`[serve-custom-app] ${message}`, meta ?? {});
+}
+
+/** @param {import("node:http").IncomingHttpHeaders} h */
+function headersToCarrier(h) {
+	/** @type {Record<string, string>} */
+	const c = {};
+	for (const [k, v] of Object.entries(h)) {
+		if (v === undefined) continue;
+		c[k] = Array.isArray(v) ? v[0] : v;
+	}
+	return c;
+}
+
+function proxyOptsWithTrace(/** @type {Record<string, string>} */ extra) {
+	const headers = { ...extra };
+	injectTraceHeaders(headers);
+	return { headers };
 }
 
 /** Public URL still has `/api/`; after strip, forwarded path is `/univer-sdk-relay/...`. */
@@ -112,7 +134,11 @@ function staticPath(urlPath) {
 	return null;
 }
 
-const server = createServer(async (req, res) => {
+/**
+ * @param {import("node:http").IncomingMessage} req
+ * @param {import("node:http").ServerResponse} res
+ */
+async function handleHttpRequest(req, res) {
 	const url = req.url || "/";
 	if (url === "/healthz") {
 		const ok = await backendHealthy();
@@ -142,7 +168,9 @@ const server = createServer(async (req, res) => {
 			hadClientAuth: isAuthorized(req),
 		});
 		req.url = url.slice(4) || "/";
-		proxy.web(req, res, authHeader ? { headers: { authorization: authHeader } } : undefined);
+		const extra = /** @type {Record<string, string>} */ ({});
+		if (authHeader) extra.authorization = authHeader;
+		proxy.web(req, res, proxyOptsWithTrace(extra));
 		return;
 	}
 
@@ -157,30 +185,88 @@ const server = createServer(async (req, res) => {
 	const html = await readFile(indexFile);
 	res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
 	res.end(html);
+}
+
+const server = createServer((req, res) => {
+	const url = req.url || "/";
+	const carrier = headersToCarrier(req.headers);
+	const parentCtx = propagation.extract(context.active(), carrier);
+	context.with(parentCtx, () => {
+		const span = tracer.startSpan(`HTTP ${req.method || "GET"}`, {
+			attributes: {
+				"http.target": url,
+				"edge.route": url.startsWith("/api/") ? "api" : "static",
+			},
+		});
+		const active = trace.setSpan(context.active(), span);
+		let ended = false;
+		const safeEnd = () => {
+			if (ended) return;
+			ended = true;
+			span.setAttribute("http.status_code", res.statusCode);
+			span.end();
+		};
+		res.on("finish", safeEnd);
+		void context.with(active, async () => {
+			try {
+				await handleHttpRequest(req, res);
+			} catch (e) {
+				span.recordException(/** @type {Error} */ (e));
+				if (!res.headersSent) {
+					res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+					res.end("Internal Server Error");
+				}
+				safeEnd();
+			}
+		});
+	});
 });
 
 server.on("upgrade", (req, socket, head) => {
-	if (!req.url?.startsWith("/api/")) {
-		socket.destroy();
-		return;
-	}
-	if (!isUniverSdkRelayPath(req.url || "") && !isAuthorized(req)) {
-		socket.write("HTTP/1.1 401 Unauthorized\r\n");
-		socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`);
-		socket.write("Connection: close\r\n\r\n");
-		socket.destroy();
-		return;
-	}
-	const relay = isUniverSdkRelayPath(req.url || "");
-	const authHeader = relay ? backendBasicAuthHeader() : null;
-	dbg("ws upgrade accepted", {
-		url: req.url || "",
-		relay,
-		injectedBasicAuth: Boolean(authHeader),
-		hadClientAuth: isAuthorized(req),
+	const carrier = headersToCarrier(req.headers);
+	const parentCtx = propagation.extract(context.active(), carrier);
+	context.with(parentCtx, () => {
+		const span = tracer.startSpan("WS upgrade", {
+			attributes: { "http.target": req.url || "" },
+		});
+		const active = trace.setSpan(context.active(), span);
+		let wsEnded = false;
+		const endWs = () => {
+			if (wsEnded) return;
+			wsEnded = true;
+			span.end();
+		};
+		socket.once("close", endWs);
+		socket.once("error", endWs);
+
+		context.with(active, () => {
+			if (!req.url?.startsWith("/api/")) {
+				socket.destroy();
+				endWs();
+				return;
+			}
+			if (!isUniverSdkRelayPath(req.url || "") && !isAuthorized(req)) {
+				socket.write("HTTP/1.1 401 Unauthorized\r\n");
+				socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`);
+				socket.write("Connection: close\r\n\r\n");
+				socket.destroy();
+				endWs();
+				return;
+			}
+			const relay = isUniverSdkRelayPath(req.url || "");
+			const authHeader = relay ? backendBasicAuthHeader() : null;
+			dbg("ws upgrade accepted", {
+				url: req.url || "",
+				relay,
+				injectedBasicAuth: Boolean(authHeader),
+				hadClientAuth: isAuthorized(req),
+			});
+			req.url = req.url.slice(4) || "/";
+			const extra = /** @type {Record<string, string>} */ ({});
+			if (authHeader) extra.authorization = authHeader;
+			proxy.ws(req, socket, head, proxyOptsWithTrace(extra));
+		});
 	});
-	req.url = req.url.slice(4) || "/";
-	proxy.ws(req, socket, head, authHeader ? { headers: { authorization: authHeader } } : undefined);
 });
 
 server.listen(port, "0.0.0.0", () => {

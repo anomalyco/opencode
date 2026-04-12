@@ -11,6 +11,7 @@ import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { type Duration, Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createResource,
   createSignal,
   ErrorBoundary,
@@ -43,6 +44,7 @@ import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { VeritlyFile } from "@/components/veritly-file"
 import { ErrorPage } from "./pages/error"
+import { identifyVeritly, registerPosthogDeploymentFromOpenCodeServer } from "@/lib/telemetry/posthog"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const Home = lazy(() => import("@/pages/home"))
@@ -159,6 +161,19 @@ const effectMinDuration =
   <A, E, R>(e: Effect.Effect<A, E, R>) =>
     Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
 
+function PosthogServerIdentify() {
+  const server = useServer()
+  createEffect(() => {
+    const id = server.key
+    if (!id) return
+    identifyVeritly(id, { server_name: server.name })
+    const conn = server.current
+    const http = conn && "http" in conn ? conn.http : undefined
+    if (http) void registerPosthogDeploymentFromOpenCodeServer(http)
+  })
+  return null
+}
+
 function ConnectionGate(props: ParentProps) {
   const server = useServer()
   const checkServerHealth = useCheckServerHealth()
@@ -264,6 +279,7 @@ export function AppInterface(props: {
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+      <PosthogServerIdentify />
       <ConnectionGate>
         <GlobalSDKProvider>
           <GlobalSyncProvider>

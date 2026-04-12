@@ -45,9 +45,18 @@ import { GlobalRoutes } from "./routes/global";
 import { UniverSdkRelayRoutes } from "./routes/univer-sdk-relay";
 import { MDNS } from "./mdns";
 import { lazy } from "@/util/lazy";
+import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly";
 
 // This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false;
+
+initVeritlyTracer({
+	serviceName: "veritly-opencode",
+	useAsyncLocalStorage: false,
+	bootstrapAttributes: {
+		"veritly.opencode.univer_sdk_port": Number(process.env.UNIVER_SDK_PORT ?? "18766"),
+	},
+});
 
 export namespace Server {
 	const log = Log.create({ service: "server" });
@@ -57,6 +66,7 @@ export namespace Server {
 	export const createApp = (opts: { cors?: string[] }): Hono => {
 		const app = new Hono();
 		return app
+			.use("*", veritlyHonoOtelMiddleware("veritly-opencode"))
 			.onError((err, c) => {
 				log.error("failed", {
 					error: err,

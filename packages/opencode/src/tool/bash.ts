@@ -1,5 +1,7 @@
 import z from "zod"
+import { createHash } from "node:crypto"
 import { spawn } from "child_process"
+import { trace, SpanStatusCode } from "@opentelemetry/api"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -76,7 +78,14 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      const tracer = trace.getTracer("veritly-session")
+      return tracer.startActiveSpan("bash.execute", async (span) => {
+        const t0 = Date.now()
+        const hash = createHash("sha256").update(params.command).digest("hex").slice(0, 16)
+        span.setAttribute("veritly.tool.name", "bash")
+        span.setAttribute("veritly.tool.command_sha256_prefix", hash)
+        try {
+        const cwd = params.workdir || Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -256,6 +265,7 @@ export const BashTool = Tool.define("bash", async () => {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
 
+      span.setAttribute("process.exit_code", proc.exitCode ?? -1)
       return {
         title: params.description,
         metadata: {
@@ -265,6 +275,14 @@ export const BashTool = Tool.define("bash", async () => {
         },
         output,
       }
+        } catch (e) {
+          span.recordException(e as Error)
+          span.setStatus({ code: SpanStatusCode.ERROR })
+          throw e
+        } finally {
+          span.setAttribute("veritly.tool.duration_ms", Date.now() - t0)
+        }
+      })
     },
   }
 })

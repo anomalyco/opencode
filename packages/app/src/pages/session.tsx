@@ -28,6 +28,7 @@ import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { captureVeritly } from "@/lib/telemetry/posthog"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
@@ -1229,6 +1230,11 @@ export default function Page() {
           return
         }
         navigate(`/${base64Encode(sdk.directory)}/session/${next.id}`)
+        captureVeritly("session_forked", {
+          from_session_id: input.sessionID,
+          message_id: input.messageID,
+          session_id: next.id,
+        })
         requestAnimationFrame(() => {
           prompt.set(value)
         })

@@ -71,7 +71,8 @@
 			"remark-gfm": "4.0.1",
 			"solid-js": "1.9.10",
 			"vfile": "6.0.3",
-			"vite-plugin-solid": "2.11.10"
+			"vite-plugin-solid": "2.11.10",
+			"posthog-js": "1.297.2"
 		}
 	},
 	"devDependencies": {
@@ -89,6 +90,7 @@
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.933.0",
+		"@veritly/telemetry-veritly": "workspace:*",
 		"@opencode-ai/plugin": "workspace:*",
 		"@opencode-ai/script": "workspace:*",
 		"@opencode-ai/sdk": "workspace:*",

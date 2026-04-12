@@ -10,6 +10,7 @@ import { Log } from "../../util/log";
 import { lazy } from "../../util/lazy";
 import { Config } from "../../config/config";
 import { errors } from "../error";
+import { railwayDeploymentFlat } from "@veritly/telemetry-veritly";
 
 const log = Log.create({ service: "server" });
 
@@ -38,6 +39,9 @@ export const GlobalRoutes = lazy(() =>
 				return c.json({ healthy: true, version: Installation.VERSION });
 			},
 		)
+		.get("/veritly-deployment", async (c) => {
+			return c.json(railwayDeploymentFlat());
+		})
 		.get(
 			"/event",
 			describeRoute({

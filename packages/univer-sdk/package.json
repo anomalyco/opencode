@@ -9,11 +9,15 @@
   "scripts": {
     "typecheck": "tsgo --noEmit -p .",
     "test": "bun test ./src",
-    "sdk-relay": "bun ./script/sdk-relay.ts"
+    "sdk-relay": "bun --env-file=../app/.env ./script/sdk-relay.ts"
   },
   "peerDependencies": {
     "@univerjs/core": "0.18.0",
     "@univerjs/sheets": "0.18.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@veritly/telemetry-veritly": "workspace:*"
   },
   "devDependencies": {
     "@typescript/native-preview": "catalog:",

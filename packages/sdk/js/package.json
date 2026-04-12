@@ -27,5 +27,7 @@
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  }
 }
