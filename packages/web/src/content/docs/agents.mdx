@@ -6,7 +6,7 @@ description: Configure and use specialized agents.
 Agents are specialized AI assistants that can be configured for specific tasks and workflows. They allow you to create focused tools with custom prompts, models, and tool access.
 
 :::tip
-Use the plan agent to analyze code and review suggestions without making any code changes.
+Use the ask or plan agent to analyze code and review suggestions without making any code changes.
 :::
 
 You can switch between agents during a session or invoke them with the `@` mention.
@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
+OpenCode comes with three built-in primary agents, **Build**, **Ask**, and **Plan**. We'll
 look at these below.
 
 ---
@@ -42,7 +42,7 @@ OpenCode comes with two built-in subagents, **General** and **Explore**. We'll l
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and two built-in subagents.
+OpenCode comes with three built-in primary agents and two built-in subagents.
 
 ---
 
@@ -54,17 +54,25 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 
 ---
 
+### Use ask
+
+_Mode_: `primary`
+
+A read-only agent for exploring and understanding codebases. Cannot modify files. Use this when you want to ask questions about how something works, understand code functionality, explore project architecture, or brainstorm and assess an idea without making any changes.
+
+---
+
 ### Use plan
 
 _Mode_: `primary`
 
-A restricted agent designed for planning and analysis. We use a permission system to give you more control and prevent unintended changes.
+A restricted agent designed for creating implementation plans. Use this when you want to plan out work before switching to the Build agent to execute it. We use a permission system to give you more control and prevent unintended changes.
 By default, all of the following are set to `ask`:
 
 - `file edits`: All writes, patches, and edits
 - `bash`: All bash commands
 
-This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
+This agent is useful when you want the LLM to analyze code, suggest changes, or create detailed implementation plans that you can review before executing with the Build agent.
 
 ---
 
@@ -690,6 +698,7 @@ This interactive command will:
 Here are some common use cases for different agents.
 
 - **Build agent**: Full development work with all tools enabled
+- **Ask agent**: Read-only exploration, answering questions, and brainstorming ideas about the codebase
 - **Plan agent**: Analysis and planning without making changes
 - **Review agent**: Code review with read-only access plus documentation tools
 - **Debug agent**: Focused on investigation with bash and read tools enabled

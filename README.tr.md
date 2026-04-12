@@ -99,13 +99,16 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Ajanlar
 
-OpenCode, `Tab` tuşuyla aralarında geçiş yapabileceğiniz iki yerleşik (built-in) ajan içerir.
+OpenCode, `Tab` tuşuyla aralarında geçiş yapabileceğiniz üç yerleşik (built-in) ajan içerir.
 
 - **build** - Varsayılan, geliştirme çalışmaları için tam erişimli ajan
-- **plan** - Analiz ve kod keşfi için salt okunur ajan
+- **ask** - Soru sormak, kodu anlamak ve fikirleri beyin fırtınası/değerlendirme yapmak için salt okunur ajan
+  - Dosyaları değiştiremez
+  - Tanımadığınız kod tabanlarını keşfetmek ve çalışma şekillerini anlamak için ideal
+- **plan** - Uygulama planları oluşturmak için salt okunur ajan
   - Varsayılan olarak dosya düzenlemelerini reddeder
   - Bash komutlarını çalıştırmadan önce izin ister
-  - Tanımadığınız kod tabanlarını keşfetmek veya değişiklikleri planlamak için ideal
+  - Build ajanının yürüteceği ayrıntılı uygulama planları oluşturur
 
 Ayrıca, karmaşık aramalar ve çok adımlı görevler için bir **genel** alt ajan bulunmaktadır.
 Bu dahili olarak kullanılır ve mesajlarda `@general` ile çağrılabilir.

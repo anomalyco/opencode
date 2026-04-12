@@ -99,13 +99,16 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode har to indbyggede agents, som du kan skifte mellem med `Tab`-tasten.
+OpenCode har tre indbyggede agents, som du kan skifte mellem med `Tab`-tasten.
 
 - **build** - Standard, agent med fuld adgang til udviklingsarbejde
-- **plan** - Skrivebeskyttet agent til analyse og kodeudforskning
+- **ask** - Skrivebeskyttet agent til at stille spørgsmål, forstå kode, og brainstorming/vurdering af ideer
+  - Kan ikke modificere filer
+  - Ideel til at udforske ukendte kodebaser og forstå hvordan ting fungerer
+- **plan** - Skrivebeskyttet agent til at skabe implementeringsplaner
   - Afviser filredigering som standard
   - Spørger om tilladelse før bash-kommandoer
-  - Ideel til at udforske ukendte kodebaser eller planlægge ændringer
+  - Skaber detaljerede implementeringsplaner som Build agenten vil udføre
 
 Derudover findes der en **general**-subagent til komplekse søgninger og flertrinsopgaver.
 Den bruges internt og kan kaldes via `@general` i beskeder.

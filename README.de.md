@@ -99,13 +99,16 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode enthält zwei eingebaute Agents, zwischen denen du mit der `Tab`-Taste wechseln kannst.
+OpenCode enthält drei eingebaute Agents, zwischen denen du mit der `Tab`-Taste wechseln kannst.
 
 - **build** - Standard-Agent mit vollem Zugriff für Entwicklungsarbeit
-- **plan** - Nur-Lese-Agent für Analyse und Code-Exploration
+- **ask** - Nur-Lese-Agent zum Fragen stellen, Code verstehen, und Brainstorming/Bewertung von Ideen
+  - Kann Dateien nicht modifizieren
+  - Ideal zum Erkunden unbekannter Codebases und Verstehen der Funktionsweise
+- **plan** - Nur-Lese-Agent zum Erstellen von Implementierungsplänen
   - Verweigert Datei-Edits standardmäßig
   - Fragt vor dem Ausführen von bash-Befehlen nach
-  - Ideal zum Erkunden unbekannter Codebases oder zum Planen von Änderungen
+  - Erstellt detaillierte Implementierungspläne, die der Build-Agent ausführen wird
 
 Außerdem ist ein **general**-Subagent für komplexe Suchen und mehrstufige Aufgaben enthalten.
 Dieser wird intern genutzt und kann in Nachrichten mit `@general` aufgerufen werden.

@@ -99,13 +99,16 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode には組み込みの Agent が2つあり、`Tab` キーで切り替えられます。
+OpenCode には組み込みの Agent が3つあり、`Tab` キーで切り替えられます。
 
 - **build** - デフォルト。開発向けのフルアクセス Agent
-- **plan** - 分析とコード探索向けの読み取り専用 Agent
+- **ask** - 質問、コード理解、アイデアのブレインストーミング/評価向けの読み取り専用 Agent
+  - ファイルを変更できない
+  - 未知のコードベースの探索や仕組みの理解に最適
+- **plan** - 実装プラン作成向けの読み取り専用 Agent
   - デフォルトでファイル編集を拒否
   - bash コマンド実行前に確認
-  - 未知のコードベース探索や変更計画に最適
+  - Build Agent が実行する詳細な実装プランを作成
 
 また、複雑な検索やマルチステップのタスク向けに **general** サブ Agent も含まれています。
 内部的に使用されており、メッセージで `@general` と入力して呼び出せます。
