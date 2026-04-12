@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -38,6 +38,15 @@ async function port() {
     },
   )
   await proc.exited
+}
+
+function linker(root: string) {
+  const dir = path.join(root, "VC", "Tools", "MSVC")
+  if (!existsSync(dir)) return
+  return readdirSync(dir)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+    .map((v) => path.join(dir, v, "bin", "Hostx64", "x64", "link.exe"))
+    .find(existsSync)
 }
 
 function run(env?: Record<string, string>) {
@@ -82,7 +91,10 @@ async function install() {
   if (!root) return
   const bat = path.join(root, "VC", "Auxiliary", "Build", "vcvars64.bat")
   if (!existsSync(bat)) return
-  return bat
+  return {
+    bat,
+    link: linker(root),
+  }
 }
 
 function runWin(file: string, env?: Record<string, string>) {
@@ -112,10 +124,15 @@ if (process.platform !== "win32") {
 const env = cfg()
 await port()
 
-const file = await install()
-if (!file) {
+const tool = await install()
+if (!tool) {
   console.warn("MSVC environment not found, starting tauri without vcvars64")
   process.exit(await run(env).exited)
 }
 
-process.exit(await runWin(file, env).exited)
+process.exit(
+  await runWin(tool.bat, {
+    ...env,
+    ...(tool.link ? { CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: tool.link } : {}),
+  }).exited,
+)
