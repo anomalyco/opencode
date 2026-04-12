@@ -44,7 +44,6 @@ Tài liệu tham khảo đầy đủ về events, hooks, và API để xây dự
   - [App API](#app-api)
   - [Client API](#client-api)
   - [TUI Config](#tui-config)
-  - [Workspace API](#workspace-api)
   - [Event Bus](#event-bus)
   - [Renderer](#renderer)
   - [Slots API](#slots-api)
@@ -62,7 +61,7 @@ OpenCode có hai loại plugin:
 ### Server Plugin (`@opencode-ai/plugin`)
 
 - Chạy trên server runtime
-- Export dạng function hoặc `{ id?, server }` module
+- Export dạng function hoặc `{ id?, server }` module (`PluginModule`)
 - Có thể hook vào chat, tool, permission, shell, auth, provider...
 - Cấu hình trong `opencode.json`:
 
@@ -75,7 +74,7 @@ OpenCode có hai loại plugin:
 ### TUI Plugin (`@opencode-ai/plugin/tui`)
 
 - Chạy trên TUI (Terminal UI) runtime
-- Export dạng `{ id?, tui }` module
+- Export dạng `{ id?, tui }` module (`TuiPluginModule`)
 - Có thể đăng ký commands, routes, UI slots, keybinds, themes...
 - Cấu hình trong `tui.json`:
 
@@ -101,7 +100,7 @@ Server plugin là một function nhận `PluginInput` và trả về object `Hoo
 ```ts
 import type { Plugin } from "@opencode-ai/plugin"
 
-export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }, options) => {
   return {
     // Hooks implementations
   }
@@ -118,6 +117,67 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 | `worktree`  | `string`         | Git worktree path              |
 | `serverUrl` | `URL`            | URL của server                 |
 | `$`         | `BunShell`       | Bun shell API                  |
+
+**BunShell** API:
+
+```ts
+interface BunShell {
+  (strings: TemplateStringsArray, ...expressions: ShellExpression[]): BunShellPromise
+  braces(pattern: string): string[] // Brace expansion
+  escape(input: string): string // Escape cho shell input
+  env(newEnv?: Record<string, string | undefined>): BunShell // Set env vars
+  cwd(newCwd?: string): BunShell // Set working directory
+  nothrow(): BunShell // Không throw khi exit code != 0
+  throws(shouldThrow: boolean): BunShell // Toggle throw behavior
+}
+```
+
+**BunShellPromise** (kết quả từ tagged template):
+
+```ts
+interface BunShellPromise extends Promise<BunShellOutput> {
+  readonly stdin: WritableStream
+  cwd(newCwd: string): this
+  env(newEnv: Record<string, string> | undefined): this
+  quiet(): this // Chỉ buffer, không echo ra stdout
+  lines(): AsyncIterable<string> // Đọc stdout line by line
+  text(encoding?: BufferEncoding): Promise<string>
+  json(): Promise<any>
+  arrayBuffer(): Promise<ArrayBuffer>
+  blob(): Promise<Blob>
+  nothrow(): this
+  throws(shouldThrow: boolean): this
+}
+```
+
+**BunShellOutput** (kết quả khi promise resolve):
+
+```ts
+interface BunShellOutput {
+  readonly stdout: Buffer
+  readonly stderr: Buffer
+  readonly exitCode: number
+  text(encoding?: BufferEncoding): string
+  json(): any
+  arrayBuffer(): ArrayBuffer
+  bytes(): Uint8Array
+  blob(): Blob
+}
+```
+
+> `BunShellError` extends `Error & BunShellOutput` — dùng để catch shell errors.
+
+> Hàm plugin nhận thêm tham số thứ hai `options?: Record<string, unknown>` khi plugin được cấu hình kèm options (ví dụ `["./plugin.ts", { label: "demo" }]`).
+
+**PluginModule** type (export dạng object):
+
+```ts
+type PluginModule = {
+  id?: string
+  server: Plugin
+  tui?: never // TUI plugin không thể dùng chung Server plugin trong cùng module
+}
+```
 
 ---
 
@@ -296,16 +356,29 @@ import { tool } from "@opencode-ai/plugin"
 
 **ToolContext** bao gồm:
 
-| Field       | Type                       | Mô tả                       |
-| ----------- | -------------------------- | --------------------------- |
-| `sessionID` | `string`                   | Session ID                  |
-| `messageID` | `string`                   | Message ID                  |
-| `agent`     | `string`                   | Agent name                  |
-| `directory` | `string`                   | Project directory           |
-| `worktree`  | `string`                   | Project worktree root       |
-| `abort`     | `AbortSignal`              | Signal để cancel            |
-| `metadata`  | `(input) => void`          | Set title/metadata cho tool |
-| `ask`       | `(input) => Promise<void>` | Yêu cầu permission          |
+| Field       | Type                                                                     | Mô tả                       |
+| ----------- | ------------------------------------------------------------------------ | --------------------------- |
+| `sessionID` | `string`                                                                 | Session ID                  |
+| `messageID` | `string`                                                                 | Message ID                  |
+| `agent`     | `string`                                                                 | Agent name                  |
+| `directory` | `string`                                                                 | Project directory           |
+| `worktree`  | `string`                                                                 | Project worktree root       |
+| `abort`     | `AbortSignal`                                                            | Signal để cancel            |
+| `metadata`  | `(input: { title?: string; metadata?: { [key: string]: any } }) => void` | Set title/metadata cho tool |
+| `ask`       | `(input: AskInput) => Effect.Effect<void>`                               | Yêu cầu permission          |
+
+**AskInput** type:
+
+```ts
+type AskInput = {
+  permission: string
+  patterns: string[]
+  always: string[]
+  metadata: { [key: string]: any }
+}
+```
+
+> `tool.schema` là [zod](https://zod.dev) — dùng `tool.schema.string()`, `tool.schema.number()`, v.v. để định nghĩa args.
 
 #### `tool.execute.before`
 
@@ -434,6 +507,8 @@ type TextPrompt = {
   message: string
   placeholder?: string
   validate?: (value: string) => string | undefined
+  /** @deprecated Use `when` instead */
+  condition?: (inputs: Record<string, string>) => boolean
   when?: Rule
 }
 
@@ -442,6 +517,8 @@ type SelectPrompt = {
   key: string
   message: string
   options: Array<{ label: string; value: string; hint?: string }>
+  /** @deprecated Use `when` instead */
+  condition?: (inputs: Record<string, string>) => boolean
   when?: Rule
 }
 ```
@@ -474,6 +551,8 @@ type AuthOAuthResult = { url: string; instructions: string } & (
     }
 )
 ```
+
+> `AuthOuathResult` là alias đã lỗi thời của `AuthOAuthResult` — không nên sử dụng.
 
 #### `provider`
 
@@ -582,7 +661,7 @@ Sửa text completion output.
 
 ## Toàn bộ Events
 
-Danh sách đầy đủ 45 event types có thể subscribe qua hook `event` (server) hoặc `api.event.on` (TUI).
+Danh sách đầy đủ 46 event types có thể subscribe qua hook `event` (server) hoặc `api.event.on` (TUI).
 
 ### Project Events
 
@@ -639,16 +718,40 @@ Danh sách đầy đủ 45 event types có thể subscribe qua hook `event` (ser
 
 ### Session Events
 
-| Event Type          | Properties                             |
-| ------------------- | -------------------------------------- |
-| `session.created`   | `{ sessionID, info: Session }`         |
-| `session.updated`   | `{ sessionID, info: Session }`         |
-| `session.deleted`   | `{ sessionID, info: Session }`         |
-| `session.status`    | `{ sessionID, status: SessionStatus }` |
-| `session.idle`      | `{ sessionID }`                        |
-| `session.compacted` | `{ sessionID }`                        |
-| `session.diff`      | `{ sessionID, diff: FileDiff[] }`      |
-| `session.error`     | `{ sessionID?, error? }`               |
+| Event Type          | Properties                                |
+| ------------------- | ----------------------------------------- |
+| `session.created`   | `{ sessionID, info: Session }`            |
+| `session.updated`   | `{ sessionID, info: Session }`            |
+| `session.deleted`   | `{ sessionID, info: Session }`            |
+| `session.status`    | `{ sessionID, status: SessionStatus }`    |
+| `session.idle`      | `{ sessionID }`                           |
+| `session.compacted` | `{ sessionID }`                           |
+| `session.diff`      | `{ sessionID, diff: SnapshotFileDiff[] }` |
+| `session.error`     | `{ sessionID?, error? }`                  |
+
+**SnapshotFileDiff** type:
+
+```ts
+type SnapshotFileDiff = {
+  file: string
+  patch: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
+```
+
+**Session error** types — `error` field là union của:
+
+| Error Type                 | Data                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| `ProviderAuthError`        | `{ providerID, message }`                                                           |
+| `UnknownError`             | `{ message }`                                                                       |
+| `MessageOutputLengthError` | `{ [key: string]: unknown }`                                                        |
+| `MessageAbortedError`      | `{ message }`                                                                       |
+| `StructuredOutputError`    | `{ message, retries }`                                                              |
+| `ContextOverflowError`     | `{ message, responseBody? }`                                                        |
+| `ApiError`                 | `{ message, statusCode?, isRetryable, responseHeaders?, responseBody?, metadata? }` |
 
 ### File Events
 
@@ -684,10 +787,11 @@ Danh sách đầy đủ 45 event types có thể subscribe qua hook `event` (ser
 
 ### Workspace Events
 
-| Event Type         | Properties            |
-| ------------------ | --------------------- |
-| `workspace.ready`  | `{ name: string }`    |
-| `workspace.failed` | `{ message: string }` |
+| Event Type         | Properties                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `workspace.ready`  | `{ name: string }`                                                                                    |
+| `workspace.failed` | `{ message: string }`                                                                                 |
+| `workspace.status` | `{ workspaceID: string, status: "connected"\|"connecting"\|"disconnected"\|"error", error?: string }` |
 
 ### Worktree Events
 
@@ -737,6 +841,16 @@ const plugin: TuiPluginModule = {
 }
 
 export default plugin
+```
+
+**TuiPluginModule** type:
+
+```ts
+type TuiPluginModule = {
+  id?: string
+  tui: TuiPlugin
+  server?: never // Server plugin không thể dùng chung TUI plugin trong cùng module
+}
 ```
 
 ### Command API
@@ -850,6 +964,136 @@ api.ui.dialog.depth    // readonly stack depth
 api.ui.dialog.open     // readonly boolean
 ```
 
+**Dialog Components:**
+
+**TuiDialogProps** (base dialog wrapper):
+
+```ts
+type TuiDialogProps = {
+  size?: "medium" | "large" | "xlarge"
+  onClose: () => void
+  children?: JSX.Element
+}
+```
+
+**TuiDialogAlertProps:**
+
+```ts
+type TuiDialogAlertProps = {
+  title: string
+  message: string
+  onConfirm?: () => void
+}
+```
+
+**TuiDialogConfirmProps:**
+
+```ts
+type TuiDialogConfirmProps = {
+  title: string
+  message: string
+  onConfirm?: () => void
+  onCancel?: () => void
+}
+```
+
+**TuiDialogPromptProps:**
+
+```ts
+type TuiDialogPromptProps = {
+  title: string
+  description?: () => JSX.Element
+  placeholder?: string
+  value?: string
+  busy?: boolean
+  busyText?: string
+  onConfirm?: (value: string) => void
+  onCancel?: () => void
+}
+```
+
+**TuiDialogSelectProps:**
+
+```ts
+type TuiDialogSelectProps<Value = unknown> = {
+  title: string
+  placeholder?: string
+  options: TuiDialogSelectOption<Value>[]
+  flat?: boolean
+  onMove?: (option: TuiDialogSelectOption<Value>) => void
+  onFilter?: (query: string) => void
+  onSelect?: (option: TuiDialogSelectOption<Value>) => void
+  skipFilter?: boolean
+  current?: Value
+}
+```
+
+**TuiDialogSelectOption:**
+
+```ts
+type TuiDialogSelectOption<Value = unknown> = {
+  title: string
+  value: Value
+  description?: string
+  footer?: JSX.Element | string
+  category?: string
+  disabled?: boolean
+  onSelect?: () => void
+}
+```
+
+**Prompt Component:**
+
+`api.ui.Prompt` nhận `TuiPromptProps`:
+
+```ts
+type TuiPromptProps = {
+  sessionID?: string
+  workspaceID?: string
+  visible?: boolean
+  disabled?: boolean
+  onSubmit?: () => void
+  ref?: (ref: TuiPromptRef | undefined) => void
+  hint?: JSX.Element
+  right?: JSX.Element
+  showPlaceholder?: boolean
+  placeholders?: {
+    normal?: string[]
+    shell?: string[]
+  }
+}
+```
+
+**TuiPromptRef** (truy cập qua `ref` callback):
+
+```ts
+type TuiPromptRef = {
+  focused: boolean
+  current: TuiPromptInfo
+  set(prompt: TuiPromptInfo): void
+  reset(): void
+  blur(): void
+  focus(): void
+  submit(): void
+}
+```
+
+**TuiPromptInfo:**
+
+```ts
+type TuiPromptInfo = {
+  input: string
+  mode?: "normal" | "shell"
+  parts: (
+    | Omit<FilePart, "id" | "messageID" | "sessionID">
+    | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
+        source?: { text: { start: number; end: number; value: string } }
+      })
+  )[]
+}
+```
+
 ### Keybind API
 
 Quản lý phím tắt cho plugin.
@@ -858,6 +1102,19 @@ Quản lý phím tắt cho plugin.
 api.keybind.match(key: string, evt: ParsedKey): boolean
 api.keybind.print(key: string): string
 api.keybind.create(defaults: TuiKeybindMap, overrides?: Record<string, unknown>): TuiKeybindSet
+```
+
+**TuiKeybind** type:
+
+```ts
+type TuiKeybind = {
+  name: string
+  ctrl: boolean
+  meta: boolean
+  shift: boolean
+  super?: boolean
+  leader: boolean
+}
 ```
 
 **TuiKeybindSet:**
@@ -894,13 +1151,6 @@ api.state.path.config // string
 api.state.path.worktree // string
 api.state.path.directory // string
 api.state.vcs?.branch // string | undefined
-```
-
-**Workspace:**
-
-```ts
-api.state.workspace.list(): ReadonlyArray<Workspace>
-api.state.workspace.get(workspaceID: string): Workspace | undefined
 ```
 
 **Session:**
@@ -948,8 +1198,7 @@ api.app // { readonly version: string }
 ### Client API
 
 ```ts
-api.client            // OpencodeClient - runtime hiện tại
-api.scopedClient(workspaceID?: string) // Client bound đến workspace
+api.client // OpencodeClient (from @opencode-ai/sdk/v2) - runtime hiện tại
 ```
 
 ### TUI Config
@@ -958,14 +1207,13 @@ api.scopedClient(workspaceID?: string) // Client bound đến workspace
 api.tuiConfig // Frozen<TuiConfigView> - frozen TUI-specific config
 ```
 
-Fields bao gồm: `$schema`, `theme`, `keybinds`, `plugin`, `plugin_enabled` (Record<string, boolean>), và các TUI config fields.
+Fields bao gồm: `$schema`, `theme`, `keybinds`, `plugin`, `plugin_enabled` (`Record<string, boolean>`), cùng các fields TUI-specific từ `PluginConfig["tui"]`:
 
-### Workspace API
-
-```ts
-api.workspace.current(): string | undefined
-api.workspace.set(workspaceID?: string): void
-```
+| Field                 | Type                    | Mô tả                                                                            |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `scroll_speed`        | `number?`               | TUI scroll speed                                                                 |
+| `scroll_acceleration` | `{ enabled: boolean }?` | Cấu hình scroll acceleration                                                     |
+| `diff_style`          | `"auto" \| "stacked"?`  | Render style cho diff (`"auto"` adapt terminal width, `"stacked"` single column) |
 
 ### Event Bus
 
@@ -1033,6 +1281,14 @@ api.plugins.install(spec: string, options?: { global?: boolean }): Promise<TuiPl
   enabled: boolean
   active: boolean
 }
+```
+
+**TuiPluginInstallResult:**
+
+```ts
+type TuiPluginInstallResult =
+  | { ok: true; dir: string; tui: boolean }
+  | { ok: false; message: string; missing?: boolean }
 ```
 
 ### Lifecycle API
@@ -1282,7 +1538,7 @@ export default { id: "my.events", tui }
 | Render vào slots       | `api.slots.register`                        | TUI         |
 | KV store               | `api.kv.*`                                  | TUI         |
 | Truy cập state         | `api.state.*`                               | TUI         |
-| SDK client             | `api.client`, `api.scopedClient`            | TUI         |
+| SDK client             | `api.client`                                | TUI         |
 | App info               | `api.app`                                   | TUI         |
 | TUI config             | `api.tuiConfig`                             | TUI         |
 | Subscribe events       | `api.event.on`                              | TUI         |
