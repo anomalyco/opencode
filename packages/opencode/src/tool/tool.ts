@@ -70,7 +70,12 @@ export namespace Tool {
         ? Def<P, M>
         : never
 
-  function wrap<Parameters extends z.ZodType, Result extends Metadata>(id: string, init: Init<Parameters, Result>) {
+  function wrap<Parameters extends z.ZodType, Result extends Metadata>(
+    id: string,
+    init: Init<Parameters, Result>,
+    truncate: Truncate.Interface,
+    agents: Agent.Interface,
+  ) {
     return () =>
       Effect.gen(function* () {
         const toolInfo = init instanceof Function ? { ...(yield* init()) } : { ...init }
@@ -93,8 +98,8 @@ export namespace Tool {
             if (result.metadata.truncated !== undefined) {
               return result
             }
-            const agent = yield* Effect.promise(() => Agent.get(ctx.agent))
-            const truncated = yield* Effect.promise(() => Truncate.output(result.output, {}, agent))
+            const agent = yield* agents.get(ctx.agent)
+            const truncated = yield* truncate.output(result.output, {}, agent)
             return {
               ...result,
               output: truncated.content,
@@ -112,9 +117,14 @@ export namespace Tool {
   export function define<Parameters extends z.ZodType, Result extends Metadata, R, ID extends string = string>(
     id: ID,
     init: Effect.Effect<Init<Parameters, Result>, never, R>,
-  ): Effect.Effect<Info<Parameters, Result>, never, R> & { id: ID } {
+  ): Effect.Effect<Info<Parameters, Result>, never, R | Truncate.Service | Agent.Service> & { id: ID } {
     return Object.assign(
-      Effect.map(init, (init) => ({ id, init: wrap(id, init) })),
+      Effect.gen(function* () {
+        const resolved = yield* init
+        const truncate = yield* Truncate.Service
+        const agents = yield* Agent.Service
+        return { id, init: wrap(id, resolved, truncate, agents) }
+      }),
       { id },
     )
   }

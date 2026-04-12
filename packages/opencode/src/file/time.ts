@@ -1,6 +1,5 @@
 import { DateTime, Effect, Layer, Option, Semaphore, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
@@ -112,22 +111,4 @@ export namespace FileTime {
   ).pipe(Layer.orDie)
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export function read(sessionID: SessionID, file: string) {
-    return runPromise((s) => s.read(sessionID, file))
-  }
-
-  export function get(sessionID: SessionID, file: string) {
-    return runPromise((s) => s.get(sessionID, file))
-  }
-
-  export async function assert(sessionID: SessionID, filepath: string) {
-    return runPromise((s) => s.assert(sessionID, filepath))
-  }
-
-  export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromise((s) => s.withLock(filepath, () => Effect.promise(fn)))
-  }
 }

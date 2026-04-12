@@ -2,7 +2,6 @@ import { NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Schedule, Context } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { evaluate } from "@/permission/evaluate"
 import { Identifier } from "../id/id"
@@ -135,10 +134,4 @@ export namespace Truncate {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(NodePath.layer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return runPromise((s) => s.output(text, options, agent))
-  }
 }
