@@ -1,5 +1,5 @@
 import { NodePath } from "@effect/platform-node"
-import { Effect, Layer, Path, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Path, Schema, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { AppFileSystem } from "@/filesystem"
@@ -23,7 +23,7 @@ export namespace Discovery {
     readonly pull: (url: string) => Effect.Effect<string[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SkillDiscovery") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SkillDiscovery") {}
 
   export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Path | HttpClient.HttpClient> =
     Layer.effect(

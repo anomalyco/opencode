@@ -13,6 +13,7 @@ import { Provider } from "../../src/provider/provider"
 import { Session } from "../../src/session"
 import type { SessionID } from "../../src/session/schema"
 import { ShareNext } from "../../src/share/share-next"
+import { Storage } from "../../src/storage/storage"
 import { SessionShareTable } from "../../src/share/share.sql"
 import { Database, eq } from "../../src/storage/db"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -55,7 +56,7 @@ function wired(client: HttpClient.HttpClient) {
   return Layer.mergeAll(
     Bus.layer,
     ShareNext.layer,
-    Session.layer,
+    Session.defaultLayer,
     AccountRepo.layer,
     NodeFileSystem.layer,
     CrossSpawnSpawner.defaultLayer,
@@ -272,8 +273,8 @@ describe("ShareNext", () => {
             diff: [
               {
                 file: "a.ts",
-                before: "one",
-                after: "two",
+                patch:
+                  "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,1 +1,1 @@\n-one\n\\ No newline at end of file\n+two\n\\ No newline at end of file\n",
                 additions: 1,
                 deletions: 1,
                 status: "modified",
@@ -285,8 +286,8 @@ describe("ShareNext", () => {
             diff: [
               {
                 file: "b.ts",
-                before: "old",
-                after: "new",
+                patch:
+                  "Index: b.ts\n===================================================================\n--- b.ts\t\n+++ b.ts\t\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n",
                 additions: 2,
                 deletions: 0,
                 status: "modified",
@@ -304,8 +305,7 @@ describe("ShareNext", () => {
               type: string
               data: Array<{
                 file: string
-                before: string
-                after: string
+                patch: string
                 additions: number
                 deletions: number
                 status?: string
@@ -318,8 +318,8 @@ describe("ShareNext", () => {
           expect(body.data[0].data).toEqual([
             {
               file: "b.ts",
-              before: "old",
-              after: "new",
+              patch:
+                "Index: b.ts\n===================================================================\n--- b.ts\t\n+++ b.ts\t\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n",
               additions: 2,
               deletions: 0,
               status: "modified",

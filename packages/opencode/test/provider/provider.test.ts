@@ -1,11 +1,22 @@
 import { test, expect } from "bun:test"
+import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
+import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
+import { Plugin } from "../../src/plugin/index"
+import { ModelsDev } from "../../src/provider/models"
 import { Provider } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
+import { Filesystem } from "../../src/util/filesystem"
 import { Env } from "../../src/env"
+
+function paid(providers: Awaited<ReturnType<typeof Provider.list>>) {
+  const item = providers[ProviderID.make("opencode")]
+  expect(item).toBeDefined()
+  return Object.values(item.models).filter((model) => model.cost.input > 0).length
+}
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -1813,6 +1824,73 @@ test("custom model inherits api.url from models.dev provider", async () => {
   })
 })
 
+test("mode cost preserves over-200k pricing from base model", () => {
+  const provider = {
+    id: "openai",
+    name: "OpenAI",
+    env: [],
+    api: "https://api.openai.com/v1",
+    models: {
+      "gpt-5.4": {
+        id: "gpt-5.4",
+        name: "GPT-5.4",
+        family: "gpt",
+        release_date: "2026-03-05",
+        attachment: true,
+        reasoning: true,
+        temperature: false,
+        tool_call: true,
+        cost: {
+          input: 2.5,
+          output: 15,
+          cache_read: 0.25,
+          context_over_200k: {
+            input: 5,
+            output: 22.5,
+            cache_read: 0.5,
+          },
+        },
+        limit: {
+          context: 1_050_000,
+          input: 922_000,
+          output: 128_000,
+        },
+        experimental: {
+          modes: {
+            fast: {
+              cost: {
+                input: 5,
+                output: 30,
+                cache_read: 0.5,
+              },
+              provider: {
+                body: {
+                  service_tier: "priority",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  } as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
+  expect(model.cost.input).toEqual(5)
+  expect(model.cost.output).toEqual(30)
+  expect(model.cost.cache.read).toEqual(0.5)
+  expect(model.cost.cache.write).toEqual(0)
+  expect(model.options["serviceTier"]).toEqual("priority")
+  expect(model.cost.experimentalOver200K).toEqual({
+    input: 5,
+    output: 22.5,
+    cache: {
+      read: 0.5,
+      write: 0,
+    },
+  })
+})
+
 test("model variants are generated for reasoning models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -2281,4 +2359,204 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
       })
     },
   })
+})
+
+test("plugin config providers persist after instance dispose", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const root = path.join(dir, ".opencode", "plugin")
+      await mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, "demo-provider.ts"),
+        [
+          "export default {",
+          '  id: "demo.plugin-provider",',
+          "  server: async () => ({",
+          "    async config(cfg) {",
+          "      cfg.provider ??= {}",
+          "      cfg.provider.demo = {",
+          '        name: "Demo Provider",',
+          '        npm: "@ai-sdk/openai-compatible",',
+          '        api: "https://example.com/v1",',
+          "        models: {",
+          "          chat: {",
+          '            name: "Demo Chat",',
+          "            tool_call: true,",
+          "            limit: { context: 128000, output: 4096 },",
+          "          },",
+          "        },",
+          "      }",
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      )
+    },
+  })
+
+  const first = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Plugin.init()
+      return Provider.list()
+    },
+  })
+  expect(first[ProviderID.make("demo")]).toBeDefined()
+  expect(first[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
+
+  await Instance.disposeAll()
+
+  const second = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => Provider.list(),
+  })
+  expect(second[ProviderID.make("demo")]).toBeDefined()
+  expect(second[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
+})
+
+test("plugin config enabled and disabled providers are honored", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const root = path.join(dir, ".opencode", "plugin")
+      await mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, "provider-filter.ts"),
+        [
+          "export default {",
+          '  id: "demo.provider-filter",',
+          "  server: async () => ({",
+          "    async config(cfg) {",
+          '      cfg.enabled_providers = ["anthropic", "openai"]',
+          '      cfg.disabled_providers = ["openai"]',
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-anthropic-key")
+      Env.set("OPENAI_API_KEY", "test-openai-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      expect(providers[ProviderID.openai]).toBeUndefined()
+    },
+  })
+})
+
+test("opencode loader keeps paid models when config apiKey is present", async () => {
+  await using base = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  const none = await Instance.provide({
+    directory: base.path,
+    fn: async () => paid(await Provider.list()),
+  })
+
+  await using keyed = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            opencode: {
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  const keyedCount = await Instance.provide({
+    directory: keyed.path,
+    fn: async () => paid(await Provider.list()),
+  })
+
+  expect(none).toBe(0)
+  expect(keyedCount).toBeGreaterThan(0)
+})
+
+test("opencode loader keeps paid models when auth exists", async () => {
+  await using base = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  const none = await Instance.provide({
+    directory: base.path,
+    fn: async () => paid(await Provider.list()),
+  })
+
+  await using keyed = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  const authPath = path.join(Global.Path.data, "auth.json")
+  let prev: string | undefined
+
+  try {
+    prev = await Filesystem.readText(authPath)
+  } catch {}
+
+  try {
+    await Filesystem.write(
+      authPath,
+      JSON.stringify({
+        opencode: {
+          type: "api",
+          key: "test-key",
+        },
+      }),
+    )
+
+    const keyedCount = await Instance.provide({
+      directory: keyed.path,
+      fn: async () => paid(await Provider.list()),
+    })
+
+    expect(none).toBe(0)
+    expect(keyedCount).toBeGreaterThan(0)
+  } finally {
+    if (prev !== undefined) {
+      await Filesystem.write(authPath, prev)
+    }
+    if (prev === undefined) {
+      try {
+        await unlink(authPath)
+      } catch {}
+    }
+  }
 })
