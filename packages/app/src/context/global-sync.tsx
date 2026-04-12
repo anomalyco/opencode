@@ -34,7 +34,7 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { sanitizeProject } from "./global-sync/utils"
+import { sanitizeProject, stripProvider } from "./global-sync/utils"
 import { formatServerError, permissionNotice } from "@/utils/server-errors"
 import { useServer } from "./server"
 
@@ -495,6 +495,18 @@ function createGlobalSync() {
     },
   }
 
+  const providerApi = {
+    remove(id: string) {
+      if (!id) return
+      setGlobalStore("provider", (prev) => stripProvider(prev, id))
+      for (const directory of Object.keys(children.children)) {
+        const child = children.children[directory]
+        if (!child) continue
+        child[1]("provider", (prev) => stripProvider(prev, id))
+      }
+    },
+  }
+
   const updateConfig = async (config: Config) => {
     setGlobalStore("reload", "pending")
     return globalSDK.client.global.config
@@ -530,6 +542,7 @@ function createGlobalSync() {
     peek: children.peek,
     bootstrap,
     updateConfig,
+    provider: providerApi,
     project: projectApi,
     todo: {
       set: setSessionTodo,

@@ -12,6 +12,15 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
   }
 }
 
+export function stripProvider(input: ProviderListResponse, id: string): ProviderListResponse {
+  return {
+    ...input,
+    all: input.all.filter((item) => item.id !== id),
+    connected: input.connected.filter((item) => item !== id),
+    default: Object.fromEntries(Object.entries(input.default).filter(([key]) => key !== id)),
+  }
+}
+
 export function sanitizeProject(project: Project) {
   if (!project.icon?.url && !project.icon?.override) return project
   return {

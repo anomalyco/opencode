@@ -52,7 +52,7 @@ export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
+export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET ?? nativeTarget()) {
   await $`mkdir -p src-tauri/sidecars`
   const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
   await $`cp ${source} ${dest}`
