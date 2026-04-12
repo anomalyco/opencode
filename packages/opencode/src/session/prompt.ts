@@ -769,7 +769,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           state: {
             status: "running",
             time: { start: Date.now() },
-            input: { command: input.command },
+            input: { command: input.command, description: input.command },
           },
         }
         yield* sessions.updatePart(part)
