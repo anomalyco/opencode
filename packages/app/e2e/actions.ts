@@ -320,6 +320,7 @@ export async function createTestProject(input?: { serverUrl?: string }) {
   execSync("git init", { cwd: root, stdio: "ignore" })
   await fs.writeFile(path.join(root, ".git", "opencode"), id)
   execSync("git config core.fsmonitor false", { cwd: root, stdio: "ignore" })
+  execSync("git config commit.gpgsign false", { cwd: root, stdio: "ignore" })
   execSync("git add -A", { cwd: root, stdio: "ignore" })
   execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
     cwd: root,

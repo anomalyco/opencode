@@ -28,7 +28,7 @@ export const ModelsCommand = cmd({
   },
   handler: async (args) => {
     if (args.refresh) {
-      await ModelsDev.refresh()
+      await ModelsDev.refresh(true)
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
 

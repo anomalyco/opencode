@@ -12,6 +12,7 @@
     "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
+    "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
@@ -25,8 +26,9 @@
       "packages/slack"
     ],
     "catalog": {
-      "@effect/platform-node": "4.0.0-beta.43",
+      "@effect/platform-node": "4.0.0-beta.46",
       "@types/bun": "1.3.11",
+      "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
@@ -45,8 +47,9 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
-      "effect": "4.0.0-beta.43",
-      "ai": "6.0.138",
+      "effect": "4.0.0-beta.46",
+      "ai": "6.0.158",
+      "cross-spawn": "7.0.6",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
@@ -68,7 +71,8 @@
       "@solidjs/router": "0.15.4",
       "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
       "solid-js": "1.9.10",
-      "vite-plugin-solid": "2.11.10"
+      "vite-plugin-solid": "2.11.10",
+      "@lydell/node-pty": "1.2.0-beta.10"
     }
   },
   "devDependencies": {
@@ -88,6 +92,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "heap-snapshot-toolkit": "1.1.3",
     "typescript": "catalog:"
   },
   "repository": {
@@ -101,6 +106,7 @@
   },
   "trustedDependencies": [
     "esbuild",
+    "node-pty",
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
@@ -114,8 +120,6 @@
   },
   "patchedDependencies": {
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
-    "@ai-sdk/provider-utils@4.0.21": "patches/@ai-sdk%2Fprovider-utils@4.0.21.patch",
-    "@ai-sdk/anthropic@3.0.64": "patches/@ai-sdk%2Fanthropic@3.0.64.patch"
+    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
   }
 }
