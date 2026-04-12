@@ -16,6 +16,7 @@ const indexFile = join(distDir, "index.html");
 const backendUsername = process.env.OPENCODE_SERVER_USERNAME || "opencode";
 const backendPassword = process.env.OPENCODE_SERVER_PASSWORD || "";
 const wsDebug = process.env.VERITLY_WS_DEBUG === "1";
+let wsSeq = 0;
 
 const contentTypes = {
 	".html": "text/html; charset=utf-8",
@@ -62,6 +63,11 @@ function dbg(message, meta) {
 	console.log(`[serve-custom-app] ${message}`, meta ?? {});
 }
 
+function nextWsID() {
+	wsSeq += 1;
+	return wsSeq;
+}
+
 /** @param {import("node:http").IncomingHttpHeaders} h */
 function headersToCarrier(h) {
 	/** @type {Record<string, string>} */
@@ -105,11 +111,41 @@ proxy.on("proxyReqWs", (proxyReq, req) => {
 	if (isRelay) {
 		const auth = backendBasicAuthHeader();
 		if (auth) proxyReq.setHeader("authorization", auth);
-		dbg("proxyReq relay ws", { path: p, hasAuthorization: Boolean(auth) });
+		dbg("proxyReq relay ws", {
+			wsID: req?.__veritlyWsID ?? null,
+			path: p,
+			host: req?.headers?.host || "",
+			origin: req?.headers?.origin || "",
+			hasAuthorization: Boolean(auth),
+		});
 		return;
 	}
 	const authorization = proxyReq.getHeader("authorization");
 	if (!authorization) proxyReq.removeHeader("authorization");
+});
+
+proxy.on("open", (proxySocket) => {
+	dbg("proxy ws upstream open", {
+		localAddress: proxySocket.localAddress || "",
+		localPort: proxySocket.localPort ?? null,
+		remoteAddress: proxySocket.remoteAddress || "",
+		remotePort: proxySocket.remotePort ?? null,
+	});
+	proxySocket.on("close", (hadError) => {
+		dbg("proxy ws upstream close", { hadError });
+	});
+	proxySocket.on("error", (error) => {
+		dbg("proxy ws upstream error", {
+			name: error?.name || "Error",
+			message: error?.message || String(error),
+		});
+	});
+});
+
+proxy.on("close", (_res, socket, _head) => {
+	dbg("proxy ws downstream close", {
+		destroyed: Boolean(socket?.destroyed),
+	});
 });
 
 proxy.on("error", async (_err, req, res) => {
@@ -204,11 +240,38 @@ function shouldTraceEdgeHttp(url) {
 }
 
 function handleWsUpgrade(req, socket, head) {
+	const wsID = nextWsID();
+	req.__veritlyWsID = wsID;
+	dbg("ws upgrade received", {
+		wsID,
+		url: req.url || "",
+		host: req.headers.host || "",
+		origin: req.headers.origin || "",
+		upgrade: req.headers.upgrade || "",
+		connection: req.headers.connection || "",
+		headBytes: head?.length ?? 0,
+	});
+	socket.on("error", (error) => {
+		dbg("ws client socket error", {
+			wsID,
+			name: error?.name || "Error",
+			message: error?.message || String(error),
+		});
+	});
+	socket.on("close", (hadError) => {
+		dbg("ws client socket close", { wsID, hadError });
+	});
 	if (!req.url?.startsWith("/api/")) {
+		dbg("ws upgrade rejected: non-api path", { wsID, url: req.url || "" });
 		socket.destroy();
 		return;
 	}
 	if (!isUniverSdkRelayPath(req.url || "") && !isAuthorized(req)) {
+		dbg("ws upgrade rejected: unauthorized", {
+			wsID,
+			url: req.url || "",
+			relay: isUniverSdkRelayPath(req.url || ""),
+		});
 		socket.write("HTTP/1.1 401 Unauthorized\r\n");
 		socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`);
 		socket.write("Connection: close\r\n\r\n");
@@ -218,15 +281,31 @@ function handleWsUpgrade(req, socket, head) {
 	const relay = isUniverSdkRelayPath(req.url || "");
 	const authHeader = relay ? backendBasicAuthHeader() : null;
 	dbg("ws upgrade accepted", {
+		wsID,
 		url: req.url || "",
 		relay,
 		injectedBasicAuth: Boolean(authHeader),
 		hadClientAuth: isAuthorized(req),
 	});
 	req.url = req.url.slice(4) || "/";
+	dbg("ws upgrade forwarding", {
+		wsID,
+		target: `${apiBase}${req.url}`,
+		strippedUrl: req.url,
+	});
 	const extra = /** @type {Record<string, string>} */ ({});
 	if (authHeader) extra.authorization = authHeader;
-	proxy.ws(req, socket, head, proxyOptsWithTrace(extra));
+	try {
+		proxy.ws(req, socket, head, proxyOptsWithTrace(extra));
+		dbg("ws upgrade proxy.ws dispatched", { wsID, strippedUrl: req.url });
+	} catch (error) {
+		dbg("ws upgrade proxy.ws threw", {
+			wsID,
+			name: error?.name || "Error",
+			message: error?.message || String(error),
+		});
+		socket.destroy(error);
+	}
 }
 
 const server = createServer((req, res) => {
