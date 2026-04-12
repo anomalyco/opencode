@@ -119,7 +119,7 @@ export function BasicTool(props: BasicToolProps) {
   })
 
   const handleOpenChange = (value: boolean) => {
-    if (pending()) return
+    if (props.status === "pending") return
     if (props.locked && !value) return
     setState("open", value)
   }
@@ -189,7 +189,7 @@ export function BasicTool(props: BasicToolProps) {
           </Switch>
         </div>
       </div>
-      <Show when={props.children && !props.hideDetails && !props.locked && !pending()}>
+      <Show when={props.children && !props.hideDetails && !props.locked && props.status !== "pending"}>
         <Collapsible.Arrow />
       </Show>
     </div>
