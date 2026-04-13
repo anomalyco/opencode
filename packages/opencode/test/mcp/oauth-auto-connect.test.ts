@@ -161,8 +161,9 @@ test("state() generates a new state when none is saved", async () => {
         { onRedirect: async () => {} },
       )
 
-      // Ensure no state exists
-      const entryBefore = await McpAuth.get("test-state-gen")
+      const entryBefore = await Effect.runPromise(
+        McpAuth.Service.use((auth) => auth.get("test-state-gen")).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
       expect(entryBefore?.oauthState).toBeUndefined()
 
       // state() should generate and return a new state, not throw
@@ -171,7 +172,9 @@ test("state() generates a new state when none is saved", async () => {
       expect(state.length).toBe(64) // 32 bytes as hex
 
       // The generated state should be persisted
-      const entryAfter = await McpAuth.get("test-state-gen")
+      const entryAfter = await Effect.runPromise(
+        McpAuth.Service.use((auth) => auth.get("test-state-gen")).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
       expect(entryAfter?.oauthState).toBe(state)
     },
   })
@@ -195,7 +198,11 @@ test("state() returns existing state when one is saved", async () => {
 
       // Pre-save a state
       const existingState = "pre-saved-state-value"
-      await McpAuth.updateOAuthState("test-state-existing", existingState)
+      await Effect.runPromise(
+        McpAuth.Service.use((auth) => auth.updateOAuthState("test-state-existing", existingState)).pipe(
+          Effect.provide(McpAuth.defaultLayer),
+        ),
+      )
 
       // state() should return the existing state
       const state = await provider.state()
