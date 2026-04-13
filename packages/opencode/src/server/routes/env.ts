@@ -8,7 +8,7 @@ export const EnvRoutes = () =>
     "/",
     describeRoute({
       summary: "Get environment",
-      description: "Retrieve runtime environment values exposed to the client (JupyterHub user, serve domain).",
+      description: "Retrieve runtime environment values exposed to the client.",
       operationId: "env.get",
       responses: {
         200: {

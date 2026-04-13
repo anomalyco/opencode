@@ -985,7 +985,7 @@ export class Env extends HeyApiClient {
   /**
    * Get environment
    *
-   * Retrieve runtime environment values exposed to the client (JupyterHub user, serve domain).
+   * Retrieve runtime environment values exposed to the client.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
