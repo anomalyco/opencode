@@ -26,6 +26,7 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { errorHandler } from "./middleware"
+import { DEFAULT_CSP, csp } from "./csp"
 
 const log = Log.create({ service: "server" })
 
@@ -33,25 +34,6 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   ? Promise.resolve(null)
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
-
-const SERVE_URL = Flag.OPENCODE_SERVE_DOMAIN ?? ""
-const SERVE_WILDCARD = SERVE_URL ? `https://*.${SERVE_URL}` : ""
-const PREVIEW_HOST = SERVE_URL && Flag.JUPYTERHUB_USER ? `https://${Flag.JUPYTERHUB_USER}.${SERVE_URL}` : ""
-// `user.` is a literal subdomain (user-rails OAuth gate), unrelated to JUPYTERHUB_USER.
-const USER_RAILS_HOST = SERVE_URL ? `https://user.${SERVE_URL}` : ""
-
-// Both hosts required: preview iframe redirects through user-rails OAuth and frame-src is
-// checked at every navigation step. Narrowing to just the pod broke auth in 410f7fe.
-const FRAME_SRC_ORIGINS = ["'self'", PREVIEW_HOST, USER_RAILS_HOST].filter(Boolean).join(" ")
-// Wildcard kept until the previewReady fetch chain is measured in a browser Network tab.
-const CONNECT_SRC_ORIGINS = ["'self'", "data:", SERVE_WILDCARD].filter(Boolean).join(" ")
-const FRAME_ANCESTORS = ["'self'", SERVE_URL].filter(Boolean).join(" ")
-
-const buildCsp = (hash = "") =>
-  `frame-ancestors ${FRAME_ANCESTORS}; default-src 'self'; frame-src ${FRAME_SRC_ORIGINS}; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src ${CONNECT_SRC_ORIGINS}`
-
-const DEFAULT_CSP = buildCsp()
-const csp = (hash = "") => buildCsp(hash)
 
 export const InstanceRoutes = (app?: Hono) =>
   (app ?? new Hono())
