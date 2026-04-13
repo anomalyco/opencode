@@ -11,6 +11,7 @@ import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
+import { ProviderTransform } from "./transform"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
@@ -55,7 +56,6 @@ import {
 } from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
-import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
 
@@ -1163,7 +1163,7 @@ export namespace Provider {
                 limit: {
                   context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
                   input: model.limit?.input ?? existingModel?.limit?.input,
-                  output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+                  output: model.limit?.output ?? existingModel?.limit?.output ?? ProviderTransform.OUTPUT_TOKEN_MAX,
                 },
                 headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
                 family: model.family ?? existingModel?.family ?? "",
