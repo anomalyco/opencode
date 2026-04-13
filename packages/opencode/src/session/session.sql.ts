@@ -96,6 +96,7 @@ export const TodoTable = sqliteTable(
   ],
 )
 
+/*
 export const SessionEntryTable = sqliteTable(
   "session_entry",
   {
@@ -114,6 +115,7 @@ export const SessionEntryTable = sqliteTable(
     index("session_entry_time_created_idx").on(table.time_created),
   ],
 )
+*/
 
 export const PermissionTable = sqliteTable("permission", {
   project_id: text()
