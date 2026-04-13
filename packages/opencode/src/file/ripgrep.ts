@@ -96,6 +96,7 @@ export namespace Ripgrep {
 
   export type Result = z.infer<typeof Result>
   export type Match = z.infer<typeof Match>
+  export type Item = Match["data"]
   export type Begin = z.infer<typeof Begin>
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
@@ -289,6 +290,13 @@ export namespace Ripgrep {
       follow?: boolean
       maxDepth?: number
     }) => Stream.Stream<string, PlatformError>
+    readonly search: (input: {
+      cwd: string
+      pattern: string
+      glob?: string[]
+      limit?: number
+      follow?: boolean
+    }) => Effect.Effect<{ items: Item[]; partial: boolean }, PlatformError | Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
@@ -298,6 +306,32 @@ export namespace Ripgrep {
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner
       const afs = yield* AppFileSystem.Service
+      const bin = Effect.fn("Ripgrep.path")(function* () {
+        return yield* Effect.promise(() => filepath())
+      })
+      const args = Effect.fn("Ripgrep.args")(function* (input: {
+        mode: "files" | "search"
+        glob?: string[]
+        hidden?: boolean
+        follow?: boolean
+        maxDepth?: number
+        limit?: number
+        pattern?: string
+      }) {
+        const out = [yield* bin(), input.mode === "search" ? "--json" : "--files", "--glob=!.git/*"]
+        if (input.follow) out.push("--follow")
+        if (input.hidden !== false) out.push("--hidden")
+        if (input.maxDepth !== undefined) out.push(`--max-depth=${input.maxDepth}`)
+        if (input.glob) {
+          for (const g of input.glob) {
+            out.push(`--glob=${g}`)
+          }
+        }
+        if (input.limit) out.push(`--max-count=${input.limit}`)
+        if (input.mode === "search") out.push("--no-messages")
+        if (input.pattern) out.push("--", input.pattern)
+        return out
+      })
 
       const files = Effect.fn("Ripgrep.files")(function* (input: {
         cwd: string
@@ -306,7 +340,7 @@ export namespace Ripgrep {
         follow?: boolean
         maxDepth?: number
       }) {
-        const rgPath = yield* Effect.promise(() => filepath())
+        const rgPath = yield* bin()
         const isDir = yield* afs.isDir(input.cwd)
         if (!isDir) {
           return yield* Effect.die(
@@ -318,23 +352,76 @@ export namespace Ripgrep {
           )
         }
 
-        const args = [rgPath, "--files", "--glob=!.git/*"]
-        if (input.follow) args.push("--follow")
-        if (input.hidden !== false) args.push("--hidden")
-        if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
-        if (input.glob) {
-          for (const g of input.glob) {
-            args.push(`--glob=${g}`)
-          }
-        }
+        const cmd = yield* args({
+          mode: "files",
+          glob: input.glob,
+          hidden: input.hidden,
+          follow: input.follow,
+          maxDepth: input.maxDepth,
+        })
 
         return spawner
-          .streamLines(ChildProcess.make(args[0], args.slice(1), { cwd: input.cwd }))
+          .streamLines(ChildProcess.make(cmd[0], cmd.slice(1), { cwd: input.cwd }))
           .pipe(Stream.filter((line: string) => line.length > 0))
+      })
+
+      const search = Effect.fn("Ripgrep.search")(function* (input: {
+        cwd: string
+        pattern: string
+        glob?: string[]
+        limit?: number
+        follow?: boolean
+      }) {
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const cmd = yield* args({
+              mode: "search",
+              glob: input.glob,
+              follow: input.follow,
+              limit: input.limit,
+              pattern: input.pattern,
+            })
+
+            const handle = yield* spawner.spawn(
+              ChildProcess.make(cmd[0], cmd.slice(1), {
+                cwd: input.cwd,
+                stdin: "ignore",
+              }),
+            )
+
+            const [stdout, stderr, code] = yield* Effect.all(
+              [
+                Stream.mkString(Stream.decodeText(handle.stdout)),
+                Stream.mkString(Stream.decodeText(handle.stderr)),
+                handle.exitCode,
+              ],
+              { concurrency: "unbounded" },
+            )
+
+            if (code !== 0 && code !== 1 && code !== 2) {
+              return yield* Effect.fail(new Error(`ripgrep failed: ${stderr}`))
+            }
+
+            const items = stdout
+              .trim()
+              .split(/\r?\n/)
+              .filter(Boolean)
+              .map((line) => JSON.parse(line))
+              .map((parsed) => Result.parse(parsed))
+              .filter((row): row is Match => row.type === "match")
+              .map((row) => row.data)
+
+            return {
+              items,
+              partial: code === 2,
+            }
+          }),
+        )
       })
 
       return Service.of({
         files: (input) => Stream.unwrap(files(input)),
+        search,
       })
     }),
   )
@@ -400,47 +487,5 @@ export namespace Ripgrep {
     if (total > used) lines.push(`[${total - used} truncated]`)
 
     return lines.join("\n")
-  }
-
-  export async function search(input: {
-    cwd: string
-    pattern: string
-    glob?: string[]
-    limit?: number
-    follow?: boolean
-  }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob=!.git/*"]
-    if (input.follow) args.push("--follow")
-
-    if (input.glob) {
-      for (const g of input.glob) {
-        args.push(`--glob=${g}`)
-      }
-    }
-
-    if (input.limit) {
-      args.push(`--max-count=${input.limit}`)
-    }
-
-    args.push("--")
-    args.push(input.pattern)
-
-    const result = await Process.text(args, {
-      cwd: input.cwd,
-      nothrow: true,
-    })
-    if (result.code !== 0) {
-      return []
-    }
-
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text.trim().split(/\r?\n/).filter(Boolean)
-    // Parse JSON lines from ripgrep output
-
-    return lines
-      .map((line) => JSON.parse(line))
-      .map((parsed) => Result.parse(parsed))
-      .filter((r) => r.type === "match")
-      .map((r) => r.data)
   }
 }

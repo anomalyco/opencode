@@ -65,6 +65,18 @@ const readFileTime = (sessionID: SessionID, filepath: string) =>
 const subscribeBus = <D extends BusEvent.Definition>(def: D, callback: () => unknown) =>
   runtime.runPromise(Bus.Service.use((bus) => bus.subscribeCallback(def, callback)))
 
+async function onceBus<D extends BusEvent.Definition>(def: D) {
+  const result = Promise.withResolvers<void>()
+  const unsub = await subscribeBus(def, () => {
+    unsub()
+    result.resolve()
+  })
+  return {
+    wait: result.promise,
+    unsub,
+  }
+}
+
 describe("tool.edit", () => {
   describe("creating new files", () => {
     test("creates new file when oldString is empty", async () => {
@@ -128,23 +140,25 @@ describe("tool.edit", () => {
         fn: async () => {
           const { FileWatcher } = await import("../../src/file/watcher")
 
-          const events: string[] = []
-          const unsubUpdated = await subscribeBus(FileWatcher.Event.Updated, () => events.push("updated"))
+          const updated = await onceBus(FileWatcher.Event.Updated)
 
-          const edit = await resolve()
-          await Effect.runPromise(
-            edit.execute(
-              {
-                filePath: filepath,
-                oldString: "",
-                newString: "content",
-              },
-              ctx,
-            ),
-          )
+          try {
+            const edit = await resolve()
+            await Effect.runPromise(
+              edit.execute(
+                {
+                  filePath: filepath,
+                  oldString: "",
+                  newString: "content",
+                },
+                ctx,
+              ),
+            )
 
-          expect(events).toContain("updated")
-          unsubUpdated()
+            await updated.wait
+          } finally {
+            updated.unsub()
+          }
         },
       })
     })
@@ -359,23 +373,25 @@ describe("tool.edit", () => {
 
           const { FileWatcher } = await import("../../src/file/watcher")
 
-          const events: string[] = []
-          const unsubUpdated = await subscribeBus(FileWatcher.Event.Updated, () => events.push("updated"))
+          const updated = await onceBus(FileWatcher.Event.Updated)
 
-          const edit = await resolve()
-          await Effect.runPromise(
-            edit.execute(
-              {
-                filePath: filepath,
-                oldString: "original",
-                newString: "modified",
-              },
-              ctx,
-            ),
-          )
+          try {
+            const edit = await resolve()
+            await Effect.runPromise(
+              edit.execute(
+                {
+                  filePath: filepath,
+                  oldString: "original",
+                  newString: "modified",
+                },
+                ctx,
+              ),
+            )
 
-          expect(events).toContain("updated")
-          unsubUpdated()
+            await updated.wait
+          } finally {
+            updated.unsub()
+          }
         },
       })
     })
