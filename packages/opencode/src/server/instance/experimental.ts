@@ -408,7 +408,14 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await MCP.resources())
+        return c.json(
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const mcp = yield* MCP.Service
+              return yield* mcp.resources()
+            }),
+          ),
+        )
       },
     ),
 )

@@ -204,7 +204,7 @@ const it = testEffect(makeHttp())
 const unix = process.platform !== "win32" ? it.live : it.live.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
-// so Provider.getModel("test", "test-model") succeeds inside the loop.
+// so provider model lookup succeeds inside the loop.
 const cfg = {
   provider: {
     test: {

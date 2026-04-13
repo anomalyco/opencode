@@ -33,7 +33,6 @@ import { ConfigPaths } from "./paths"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
@@ -1661,42 +1660,4 @@ export namespace Config {
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Account.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get() {
-    return runPromise((svc) => svc.get())
-  }
-
-  export async function getGlobal() {
-    return runPromise((svc) => svc.getGlobal())
-  }
-
-  export async function getConsoleState() {
-    return runPromise((svc) => svc.getConsoleState())
-  }
-
-  export async function installDependencies(dir: string, input?: InstallInput) {
-    return runPromise((svc) => svc.installDependencies(dir, input))
-  }
-
-  export async function update(config: Info) {
-    return runPromise((svc) => svc.update(config))
-  }
-
-  export async function updateGlobal(config: Info) {
-    return runPromise((svc) => svc.updateGlobal(config))
-  }
-
-  export async function invalidate(wait = false) {
-    return runPromise((svc) => svc.invalidate(wait))
-  }
-
-  export async function directories() {
-    return runPromise((svc) => svc.directories())
-  }
-
-  export async function waitForDependencies() {
-    return runPromise((svc) => svc.waitForDependencies())
-  }
 }

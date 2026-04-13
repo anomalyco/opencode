@@ -1,7 +1,7 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Skill } from "../../src/skill"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Truncate } from "../../src/tool/truncate"
 import { afterEach, describe, expect, test } from "bun:test"
@@ -30,9 +30,7 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-const node = NodeChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
+const node = CrossSpawnSpawner.defaultLayer
 
 const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
 

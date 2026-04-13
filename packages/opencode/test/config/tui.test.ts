@@ -7,12 +7,15 @@ import { Config } from "../../src/config/config"
 import { TuiConfig } from "../../src/config/tui"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
+import { AppRuntime } from "../../src/effect/app-runtime"
 
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 const wintest = process.platform === "win32" ? test : test.skip
+const clear = (wait = false) => AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate(wait)))
+const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
 
 beforeEach(async () => {
-  await Config.invalidate(true)
+  await clear(true)
 })
 
 afterEach(async () => {
@@ -23,7 +26,7 @@ afterEach(async () => {
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.jsonc"), { force: true }).catch(() => {})
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
-  await Config.invalidate(true)
+  await clear(true)
 })
 
 test("keeps server and tui plugin merge semantics aligned", async () => {
@@ -79,7 +82,7 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const server = await Config.get()
+      const server = await load()
       const tui = await TuiConfig.get()
       const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
       const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
