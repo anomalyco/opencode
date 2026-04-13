@@ -176,7 +176,7 @@ const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, 
 
 function withInstance(
   config: Record<string, unknown>,
-  fn: (mcp: MCPNS.Interface) => Effect.Effect<void, unknown, unknown>,
+  fn: (mcp: MCPNS.Interface) => Effect.Effect<void, unknown, never>,
 ) {
   return async () => {
     await using tmp = await tmpdir({
