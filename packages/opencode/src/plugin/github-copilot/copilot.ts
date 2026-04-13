@@ -5,6 +5,7 @@ import { iife } from "@/util/iife"
 import { Log } from "../../util/log"
 import { setTimeout as sleep } from "node:timers/promises"
 import { CopilotModels } from "./models"
+import { MessageV2 } from "@/session/message-v2"
 
 const log = Log.create({ service: "plugin.copilot" })
 
@@ -27,11 +28,27 @@ function base(enterpriseUrl?: string) {
   return enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : "https://api.githubcopilot.com"
 }
 
-function fix(model: Model): Model {
+// Check if a message is a synthetic user msg used to attach an image from a tool call
+function imgMsg(msg: any): boolean {
+  if (msg?.role !== "user") return false
+
+  // Handle the 3 api formats
+
+  const content = msg.content
+  if (typeof content === "string") return content === MessageV2.SYNTHETIC_ATTACHMENT_PROMPT
+  if (!Array.isArray(content)) return false
+  return content.some(
+    (part: any) =>
+      (part?.type === "text" || part?.type === "input_text") && part.text === MessageV2.SYNTHETIC_ATTACHMENT_PROMPT,
+  )
+}
+
+function fix(model: Model, url: string): Model {
   return {
     ...model,
     api: {
       ...model.api,
+      url,
       npm: "@ai-sdk/github-copilot",
     },
   }
@@ -44,19 +61,23 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
       id: "github-copilot",
       async models(provider, ctx) {
         if (ctx.auth?.type !== "oauth") {
-          return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model)]))
+          return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model, base())]))
         }
 
+        const auth = ctx.auth
+
         return CopilotModels.get(
-          base(ctx.auth.enterpriseUrl),
+          base(auth.enterpriseUrl),
           {
-            Authorization: `Bearer ${ctx.auth.refresh}`,
+            Authorization: `Bearer ${auth.refresh}`,
             "User-Agent": `opencode/${Installation.VERSION}`,
           },
           provider.models,
         ).catch((error) => {
           log.error("failed to fetch copilot models", { error })
-          return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model)]))
+          return Object.fromEntries(
+            Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.enterpriseUrl))]),
+          )
         })
       },
     },
@@ -66,10 +87,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         const info = await getAuth()
         if (!info || info.type !== "oauth") return {}
 
-        const baseURL = base(info.enterpriseUrl)
-
         return {
-          baseURL,
           apiKey: "",
           async fetch(request: RequestInfo | URL, init?: RequestInit) {
             const info = await getAuth()
@@ -88,7 +106,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       (msg: any) =>
                         Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: last?.role !== "user" || imgMsg(last),
                   }
                 }
 
@@ -100,7 +118,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       (item: any) =>
                         Array.isArray(item?.content) && item.content.some((part: any) => part.type === "input_image"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: last?.role !== "user" || imgMsg(last),
                   }
                 }
 
@@ -122,7 +140,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                               part.content.some((nested: any) => nested?.type === "image")),
                         ),
                     ),
-                    isAgent: !(last?.role === "user" && hasNonToolCalls),
+                    isAgent: !(last?.role === "user" && hasNonToolCalls) || imgMsg(last),
                   }
                 }
               } catch {}
