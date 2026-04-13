@@ -100,10 +100,8 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { AppRuntime } = await import("../../src/effect/app-runtime")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
-const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
 test("first connect to OAuth server shows needs_auth instead of failed", async () => {
   await using tmp = await tmpdir({
@@ -126,14 +124,13 @@ test("first connect to OAuth server shows needs_auth instead of failed", async (
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const result = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const mcp = yield* service
-          return yield* mcp.add("test-oauth", {
+      const result = await Effect.runPromise(
+        MCP.Service.use((mcp) =>
+          mcp.add("test-oauth", {
             type: "remote",
             url: "https://example.com/mcp",
-          })
-        }),
+          }),
+        ).pipe(Effect.provide(MCP.defaultLayer)),
       )
 
       const serverStatus = result.status as Record<string, { status: string; error?: string }>

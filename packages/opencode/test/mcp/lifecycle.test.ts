@@ -167,10 +167,8 @@ beforeEach(() => {
 
 // Import after mocks
 const { MCP } = await import("../../src/mcp/index")
-const { AppRuntime } = await import("../../src/effect/app-runtime")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
-const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
 // --- Helper ---
 
@@ -194,11 +192,7 @@ function withInstance(
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            yield* fn(yield* service)
-          }),
-        )
+        await Effect.runPromise(MCP.Service.use(fn).pipe(Effect.provide(MCP.defaultLayer)))
         // dispose instance to clean up state between tests
         await Instance.dispose()
       },

@@ -243,13 +243,7 @@ export const McpAuthCommand = cmd({
 
         // Check if already authenticated
         const authStatus =
-          auth[serverName] ??
-          (await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const mcp = yield* MCP.Service
-              return yield* mcp.getAuthStatus(serverName)
-            }),
-          ))
+          auth[serverName] ?? (await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.getAuthStatus(serverName))))
         if (authStatus === "authenticated") {
           const confirm = await prompts.confirm({
             message: `${serverName} already has valid credentials. Re-authenticate?`,
@@ -276,12 +270,7 @@ export const McpAuthCommand = cmd({
         })
 
         try {
-          const status = await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const mcp = yield* MCP.Service
-              return yield* mcp.authenticate(serverName)
-            }),
-          )
+          const status = await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.authenticate(serverName)))
 
           if (status.status === "connected") {
             spinner.stop("Authentication successful!")
@@ -390,12 +379,7 @@ export const McpLogoutCommand = cmd({
         prompts.intro("MCP OAuth Logout")
 
         const authPath = path.join(Global.Path.data, "mcp-auth.json")
-        const credentials = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const auth = yield* McpAuth.Service
-            return yield* auth.all()
-          }),
-        )
+        const credentials = await AppRuntime.runPromise(McpAuth.Service.use((auth) => auth.all()))
         const serverNames = Object.keys(credentials)
 
         if (serverNames.length === 0) {
@@ -433,12 +417,7 @@ export const McpLogoutCommand = cmd({
           return
         }
 
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const mcp = yield* MCP.Service
-            yield* mcp.removeAuth(serverName)
-          }),
-        )
+        await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.removeAuth(serverName)))
         prompts.log.success(`Removed OAuth credentials for ${serverName}`)
         prompts.outro("Done")
       },
