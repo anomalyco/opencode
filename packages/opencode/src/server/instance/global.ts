@@ -109,7 +109,7 @@ export const GlobalRoutes = lazy(() =>
                       directory: z.string(),
                       project: z.string().optional(),
                       workspace: z.string().optional(),
-                      payload: BusEvent.payloads(),
+                      payload: z.union([...BusEvent.payloads(), ...SyncEvent.payloads()]),
                     })
                     .meta({
                       ref: "GlobalEvent",
@@ -132,52 +132,6 @@ export const GlobalRoutes = lazy(() =>
           }
           GlobalBus.on("event", handler)
           return () => GlobalBus.off("event", handler)
-        })
-      },
-    )
-    .get(
-      "/sync-event",
-      describeRoute({
-        summary: "Subscribe to global sync events",
-        description: "Get global sync events",
-        operationId: "global.sync-event.subscribe",
-        responses: {
-          200: {
-            description: "Event stream",
-            content: {
-              "text/event-stream": {
-                schema: resolver(
-                  z
-                    .object({
-                      payload: SyncEvent.payloads(),
-                    })
-                    .meta({
-                      ref: "SyncEvent",
-                    }),
-                ),
-              },
-            },
-          },
-        },
-      }),
-      async (c) => {
-        log.info("global sync event connected")
-        c.header("Cache-Control", "no-cache, no-transform")
-        c.header("X-Accel-Buffering", "no")
-        c.header("X-Content-Type-Options", "nosniff")
-        return streamEvents(c, (q) => {
-          return SyncEvent.subscribeAll(({ def, event }) => {
-            // TODO: don't pass def, just pass the type (and it should
-            // be versioned)
-            q.push(
-              JSON.stringify({
-                payload: {
-                  ...event,
-                  type: SyncEvent.versionedType(def.type, def.version),
-                },
-              }),
-            )
-          })
         })
       },
     )
