@@ -589,4 +589,38 @@ describe("request body", () => {
       },
     ])
   })
+
+  test("should strip reasoningSummary but keep reasoning effort and custom options", async () => {
+    let capturedBody: any
+    const mockFetch = mock(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: [DONE]\n\n`))
+            controller.close()
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      )
+    })
+
+    const model = createModel(mockFetch)
+
+    await model.doStream({
+      prompt: TEST_PROMPT,
+      providerOptions: {
+        copilot: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          custom_field: true,
+        },
+      },
+      includeRawChunks: false,
+    })
+
+    expect(capturedBody.reasoning_effort).toBe("high")
+    expect(capturedBody.reasoningSummary).toBeUndefined()
+    expect(capturedBody.custom_field).toBe(true)
+  })
 })

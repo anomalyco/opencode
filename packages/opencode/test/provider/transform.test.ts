@@ -251,6 +251,32 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
       headers: {},
     }) as any
 
+  const createOpenAICompatibleGpt5Model = (apiId: string) =>
+    ({
+      id: `myprovider/${apiId}`,
+      providerID: "myprovider",
+      api: {
+        id: apiId,
+        url: "https://inference.do-ai.run/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
   test("gpt-5.2 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.2")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
@@ -291,6 +317,19 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     const model = createGpt5Model("gpt-5.2-codex")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
     expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("openai gpt-5 should include reasoningSummary by default", () => {
+    const model = createGpt5Model("gpt-5")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningSummary).toBe("auto")
+  })
+
+  test("openai-compatible gpt-5 should not include reasoningSummary by default", () => {
+    const model = createOpenAICompatibleGpt5Model("openai-gpt-5")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBeUndefined()
   })
 })
 

@@ -30,6 +30,8 @@ import { defaultOpenAICompatibleErrorStructure, type ProviderErrorStructure } fr
 import type { MetadataExtractor } from "./openai-compatible-metadata-extractor"
 import { prepareTools } from "./openai-compatible-prepare-tools"
 
+const UNSUPPORTED_CHAT_COMPLETIONS_OPTIONS = new Set(["reasoningSummary"])
+
 export type OpenAICompatibleChatConfig = {
   provider: string
   headers: () => Record<string, string | undefined>
@@ -168,7 +170,9 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
         seed,
         ...Object.fromEntries(
           Object.entries(providerOptions?.[this.providerOptionsName] ?? {}).filter(
-            ([key]) => !Object.keys(openaiCompatibleProviderOptions.shape).includes(key),
+            ([key]) =>
+              !Object.keys(openaiCompatibleProviderOptions.shape).includes(key) &&
+              !UNSUPPORTED_CHAT_COMPLETIONS_OPTIONS.has(key),
           ),
         ),
 
