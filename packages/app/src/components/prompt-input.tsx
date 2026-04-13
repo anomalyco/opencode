@@ -37,6 +37,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
+import { insertAtomicPartAtSelection } from "./prompt-input/editor-insert"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
@@ -951,12 +952,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
 
       range.deleteContents()
-      range.insertNode(gap)
-      range.insertNode(pill)
-      range.setStartAfter(gap)
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
+      if (!insertAtomicPartAtSelection(part)) {
+        range.insertNode(gap)
+        range.insertNode(pill)
+        range.setStartAfter(gap)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
     }
 
     if (part.type === "text") {
