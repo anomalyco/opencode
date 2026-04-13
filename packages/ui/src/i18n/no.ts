@@ -106,6 +106,9 @@ export const dict: Record<Keys, string> = {
   "ui.tool.questions": "Spørsmål",
   "ui.tool.agent": "{{type}}-agent",
   "ui.tool.agent.default": "Agent",
+  "ui.tool.task.running": "Kjører",
+  "ui.tool.task.completed": "Fullført",
+  "ui.tool.task.elapsed": "{{duration}} forløpt",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",

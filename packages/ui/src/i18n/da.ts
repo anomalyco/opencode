@@ -102,6 +102,9 @@ export const dict = {
   "ui.tool.questions": "Spørgsmål",
   "ui.tool.agent": "{{type}} Agent",
   "ui.tool.agent.default": "Agent",
+  "ui.tool.task.running": "Kører",
+  "ui.tool.task.completed": "Fuldført",
+  "ui.tool.task.elapsed": "{{duration}} forløbet",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
