@@ -1,7 +1,4 @@
-import { BoxRenderable, MouseEvent, RGBA, TextAttributes } from "@opentui/core"
-import { appendFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { BoxRenderable, MouseButton, MouseEvent, RGBA, TextAttributes } from "@opentui/core"
 import { For, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
 import { Sound } from "@tui/util/sound"
@@ -37,7 +34,6 @@ const TAIL = 1.8
 const TRACE_IN = 200
 const GLOW_OUT = 1600
 const PEAK = RGBA.fromInts(255, 255, 255)
-const LOG = join(tmpdir(), "opencode-logo-mouse.log")
 
 type Ring = {
   x: number
@@ -404,23 +400,6 @@ export function Logo() {
   let box: BoxRenderable | undefined
   let timer: ReturnType<typeof setInterval> | undefined
   let hum = false
-  let boot = false
-
-  const note = (event: string, extra?: Record<string, unknown>) => {
-    const holdItem = hold()
-    const line = {
-      t: new Date().toISOString(),
-      event,
-      box: box ? { id: box.id, num: box.num } : null,
-      hold: holdItem ? { x: holdItem.x, y: holdItem.y, at: Math.round(holdItem.at), glyph: holdItem.glyph } : null,
-      ...extra,
-    }
-    if (!boot) {
-      boot = true
-      appendFileSync(LOG, `\n--- ${line.t} ---\n`)
-    }
-    appendFileSync(LOG, JSON.stringify(line) + "\n")
-  }
 
   const stop = () => {
     if (!timer) return
@@ -434,11 +413,9 @@ export function Logo() {
     const item = hold()
     if (item && !hum && t - item.at >= HOLD) {
       hum = true
-      note("hum-start", { age: Math.round(t - item.at) })
       Sound.start()
     }
     if (item && t - item.at >= CHARGE) {
-      note("auto-burst", { age: Math.round(t - item.at) })
       burst(item.x, item.y)
     }
     let live = false
@@ -468,15 +445,11 @@ export function Logo() {
 
   const press = (x: number, y: number, t: number) => {
     const last = hold()
-    if (last) {
-      note("press-replaces-hold", { x, y, age: Math.round(t - last.at) })
-      burst(last.x, last.y)
-    }
+    if (last) burst(last.x, last.y)
     setNow(t)
     if (!last) setRelease(undefined)
     setHold({ x, y, at: t, glyph: select(x, y) })
     hum = false
-    note("press", { x, y })
     start()
   }
 
@@ -504,7 +477,6 @@ export function Logo() {
       },
     ])
     setNow(t)
-    note("burst", { x, y, age: Math.round(age), rise: Number(rise.toFixed(3)), level: Number(level.toFixed(3)) })
     start()
     Sound.pulse(lerp(0.8, 1, level))
   }
@@ -615,16 +587,7 @@ export function Logo() {
 
   const mouse = (evt: MouseEvent) => {
     if (!box) return
-    note("mouse", {
-      type: evt.type,
-      button: evt.button,
-      x: evt.x - box.x,
-      y: evt.y - box.y,
-      target: evt.target ? { id: evt.target.id, num: evt.target.num } : null,
-      source: evt.source ? { id: evt.source.id, num: evt.source.num } : null,
-      dragging: evt.isDragging ?? false,
-    })
-    if ((evt.type === "down" || evt.type === "drag") && evt.button === 0) {
+    if ((evt.type === "down" || evt.type === "drag") && evt.button === MouseButton.LEFT) {
       const x = evt.x - box.x
       const y = evt.y - box.y
       if (!hit(x, y)) return
