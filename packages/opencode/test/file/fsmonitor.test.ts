@@ -1,10 +1,14 @@
 import { $ } from "bun"
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+
+const status = () => Effect.runPromise(File.Service.use((svc) => svc.status()))
+const read = (file: string) => Effect.runPromise(File.Service.use((svc) => svc.read(file)))
 
 const wintest = process.platform === "win32" ? test : test.skip
 
@@ -27,7 +31,7 @@ describe("file fsmonitor", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await File.status()
+        await status()
       },
     })
 
@@ -52,7 +56,7 @@ describe("file fsmonitor", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await File.read("tracked.txt")
+        await read("tracked.txt")
       },
     })
 
