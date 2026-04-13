@@ -10,10 +10,11 @@ await Bun.write("./package.json", JSON.stringify(pkg, null, 2) + "\n")
 console.log(`Updated package.json version to ${Script.version}`)
 
 const sidecarConfig = getCurrentSidecar()
+const artifact = process.env.OPENCODE_CLI_ARTIFACT ?? "opencode-cli"
 
 const dir = "src-tauri/target/opencode-binaries"
 
 await $`mkdir -p ${dir}`
-await $`gh run download ${Bun.env.GITHUB_RUN_ID} -n opencode-cli`.cwd(dir)
+await $`gh run download ${process.env.GITHUB_RUN_ID} -n ${artifact}`.cwd(dir)
 
 await copyBinaryToSidecarFolder(windowsify(`${dir}/${sidecarConfig.ocBinary}/bin/opencode`))

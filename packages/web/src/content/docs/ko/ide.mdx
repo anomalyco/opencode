@@ -1,35 +1,36 @@
 ---
 title: IDE
-description: VS Code, Cursor 및 기타 IDE용 opencode 확장 프로그램.
+description: VS Code, Cursor 및 기타 IDE용 OpenCode 확장 프로그램
 ---
 
-opencode는 VS Code, Cursor, 또는 터미널을 지원하는 IDE와 통합됩니다. 시작하려면 terminal에서 `opencode`를 실행하십시오.
+OpenCode는 VS Code, Cursor, 또는 터미널을 지원하는 모든 IDE와 통합됩니다. 시작하려면 터미널에서 `opencode`를 실행하세요.
 
 ---
 
 ## 사용법
 
--**Quick Launch**: `Cmd+Esc` (Mac) 또는 `Ctrl+Esc` (Windows/Linux)를 사용하여 통합 터미널 뷰에 opencode를 열거나 기존 terminal 세션을 이미 실행하면 됩니다. -**New Session**: `Cmd+Shift+Esc` (Mac) 또는 `Ctrl+Shift+Esc` (Windows/Linux)를 사용하여 새로운 opencode terminal 세션을 시작하려면 이미 열리면 됩니다. UI에서 opencode 버튼을 클릭합니다. -**Context Awareness**: opencode로 현재 선택 또는 탭을 자동으로 공유합니다.
-
-- **파일 참조 단축키** : 파일 참조를 삽입하려면 `Cmd+Option+K` (Mac) 또는 `Alt+Ctrl+K` (Linux / Windows)를 사용하십시오. 예를 들어, `@File#L37-42`.
+- **Quick Launch**: `Cmd+Esc` (Mac) 또는 `Ctrl+Esc` (Windows/Linux)를 사용해 분할 터미널 뷰에서 OpenCode를 열거나, 이미 실행 중인 터미널 세션으로 포커스하세요.
+- **New Session**: `Cmd+Shift+Esc` (Mac) 또는 `Ctrl+Shift+Esc` (Windows/Linux)를 사용해 기존 세션이 열려 있어도 새 OpenCode 터미널 세션을 시작하세요. UI의 OpenCode 버튼을 클릭해도 됩니다.
+- **Context Awareness**: 현재 선택 영역이나 탭을 OpenCode와 자동으로 공유합니다.
+- **File Reference Shortcuts**: `Cmd+Option+K` (Mac) 또는 `Alt+Ctrl+K` (Linux/Windows)를 사용해 파일 참조를 삽입하세요. 예: `@File#L37-42`.
 
 ---
 
 ## 설치
 
-VS Code에 opencode를 설치하고 Cursor, Windsurf, VSCodium과 같은 인기있는 포크 :
+VS Code와 Cursor, Windsurf, VSCodium 같은 인기 포크에 OpenCode를 설치하려면:
 
-1. VS Code 열기
-2. 통합 terminal을 여십시오
-3. 실행 `opencode` - 확장 자동으로 설치
+1. VS Code를 여세요.4
+2. 통합 터미널을 여세요.
+3. `opencode`를 실행하세요. 확장 프로그램이 자동으로 설치됩니다.
 
-반면에 TUI에서 `/editor` 또는 `/export`를 실행할 때, 당신은 `export EDITOR="code --wait"`를 설정할 필요가 있을 것입니다. [Learn more](/docs/tui/#editor-setup).
+반면 TUI에서 `/editor` 또는 `/export`를 실행할 때 자체 IDE를 사용하려면 `export EDITOR="code --wait"`를 설정해야 합니다. [자세히 알아보기](/docs/tui/#editor-setup).
 
 ---
 
-## 수동 설치
+### 수동 설치
 
-확장 마켓 플레이스에서 **opencode**를 검색하고 **Install**를 클릭합니다.
+Extension Marketplace에서 **OpenCode**를 검색한 다음 **Install**을 클릭하세요.
 
 ---
 
@@ -37,11 +38,11 @@ VS Code에 opencode를 설치하고 Cursor, Windsurf, VSCodium과 같은 인기�
 
 확장이 자동으로 설치되지 않는 경우:
 
-- 통합 terminal에서 `opencode`를 실행하는 것을 보장합니다.
-- IDE용 CLI가 설치됩니다.
-- VS Code : `code` 명령
-- 커서: `cursor` 명령
-- 윈드 서핑을 위해: `windsurf` 명령
-- VSCodium의 경우: `codium` 명령
-- 만약 `Cmd+Shift+P` (Mac) 또는 `Ctrl+Shift+P` (Windows/Linux)를 실행하고 "Shell Command: PATH"에서 'code' 명령을 설치하십시오 (또는 IDE에 해당)
-- Ensure VS Code는 확장을 설치하는 권한이 있습니다.
+- 통합 터미널에서 `opencode`를 실행하고 있는지 확인하세요.
+- IDE용 CLI가 설치되어 있는지 확인하세요.
+  - VS Code: `code` command
+  - Cursor: `cursor` command
+  - Windsurf: `windsurf` command
+  - VSCodium: `codium` command
+  - 설치되어 있지 않다면 `Cmd+Shift+P` (Mac) 또는 `Ctrl+Shift+P` (Windows/Linux)를 실행하고 "Shell Command: Install 'code' command in PATH"(또는 IDE에 맞는 동등한 명령)를 검색하세요.
+- VS Code에 확장 프로그램 설치 권한이 있는지 확인하세요.

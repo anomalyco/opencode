@@ -61,9 +61,15 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
   return (
     <div
       data-slot="tabs-trigger-wrapper"
+      data-value={props.value}
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
+      }}
+      onMouseDown={(e) => {
+        if (e.button === 1 && split.onMiddleClick) {
+          e.preventDefault()
+        }
       }}
       onAuxClick={(e) => {
         if (e.button === 1 && split.onMiddleClick) {
@@ -75,6 +81,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
       <Kobalte.Trigger
         {...rest}
         data-slot="tabs-trigger"
+        data-value={props.value}
         classList={{ [split.classes?.button ?? ""]: split.classes?.button }}
       >
         {split.children}

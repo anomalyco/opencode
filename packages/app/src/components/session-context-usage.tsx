@@ -1,16 +1,20 @@
 import { Match, Show, Switch, createMemo } from "solid-js"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
-import { useParams } from "@solidjs/router"
 
+import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
+import { useProviders } from "@/hooks/use-providers"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
+  placement?: TooltipProps["placement"]
 }
 
 function openSessionContext(args: {
@@ -26,25 +30,29 @@ function openSessionContext(args: {
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
-  const params = useParams()
+  const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
+  const providers = useProviders()
+  const { params, tabs, view } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+  })
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
   const usd = createMemo(
     () =>
-      new Intl.NumberFormat(language.locale(), {
+      new Intl.NumberFormat(language.intl(), {
         style: "currency",
         currency: "USD",
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
+  const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => {
     return usd().format(metrics().totalCost)
@@ -52,6 +60,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
+
+    if (tabState.activeTab() === "context") {
+      tabs().close("context")
+      return
+    }
     openSessionContext({
       view: view(),
       layout,
@@ -71,7 +84,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         {(ctx) => (
           <>
             <div class="flex items-center gap-2">
-              <span class="text-text-invert-strong">{ctx().total.toLocaleString(language.locale())}</span>
+              <span class="text-text-invert-strong">{ctx().total.toLocaleString(language.intl())}</span>
               <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">
@@ -90,7 +103,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement="top">
+      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={true}>

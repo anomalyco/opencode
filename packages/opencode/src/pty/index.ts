@@ -1,13 +1,17 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { type IPty } from "bun-pty"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
+import { Instance } from "@/project/instance"
+import type { Proc } from "#pty"
 import z from "zod"
-import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
+import { PtyID } from "./schema"
+import { Effect, Layer, Context } from "effect"
+import { EffectLogger } from "@/effect/logger"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -18,21 +22,28 @@ export namespace Pty {
 
   type Socket = {
     readyState: number
-    send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+    data?: unknown
+    send: (data: string | Uint8Array | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
   }
 
-  const sockets = new WeakMap<object, number>()
-  let socketCounter = 0
+  const sock = (ws: Socket) => (ws.data && typeof ws.data === "object" ? ws.data : ws)
 
-  const tagSocket = (ws: Socket) => {
-    if (!ws || typeof ws !== "object") return
-    const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
-    sockets.set(ws, next)
-    return next
+  type Active = {
+    info: Info
+    process: Proc
+    buffer: string
+    bufferCursor: number
+    cursor: number
+    subscribers: Map<unknown, Socket>
   }
 
-  // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+  type State = {
+    dir: string
+    sessions: Map<PtyID, Active>
+  }
+
+  // WebSocket control frame: 0x00 + UTF-8 JSON.
   const meta = (cursor: number) => {
     const json = JSON.stringify({ cursor })
     const bytes = encoder.encode(json)
@@ -42,14 +53,11 @@ export namespace Pty {
     return out
   }
 
-  const pty = lazy(async () => {
-    const { spawn } = await import("bun-pty")
-    return spawn
-  })
+  const pty = lazy(() => import("#pty"))
 
   export const Info = z
     .object({
-      id: Identifier.schema("pty"),
+      id: PtyID.zod,
       title: z.string(),
       command: z.string(),
       args: z.array(z.string()),
@@ -86,235 +94,301 @@ export namespace Pty {
   export const Event = {
     Created: BusEvent.define("pty.created", z.object({ info: Info })),
     Updated: BusEvent.define("pty.updated", z.object({ info: Info })),
-    Exited: BusEvent.define("pty.exited", z.object({ id: Identifier.schema("pty"), exitCode: z.number() })),
-    Deleted: BusEvent.define("pty.deleted", z.object({ id: Identifier.schema("pty") })),
+    Exited: BusEvent.define("pty.exited", z.object({ id: PtyID.zod, exitCode: z.number() })),
+    Deleted: BusEvent.define("pty.deleted", z.object({ id: PtyID.zod })),
   }
 
-  interface ActiveSession {
-    info: Info
-    process: IPty
-    buffer: string
-    bufferCursor: number
-    cursor: number
-    subscribers: Map<Socket, number>
+  export interface Interface {
+    readonly list: () => Effect.Effect<Info[]>
+    readonly get: (id: PtyID) => Effect.Effect<Info | undefined>
+    readonly create: (input: CreateInput) => Effect.Effect<Info>
+    readonly update: (id: PtyID, input: UpdateInput) => Effect.Effect<Info | undefined>
+    readonly remove: (id: PtyID) => Effect.Effect<void>
+    readonly resize: (id: PtyID, cols: number, rows: number) => Effect.Effect<void>
+    readonly write: (id: PtyID, data: string) => Effect.Effect<void>
+    readonly connect: (
+      id: PtyID,
+      ws: Socket,
+      cursor?: number,
+    ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
   }
 
-  const state = Instance.state(
-    () => new Map<string, ActiveSession>(),
-    async (sessions) => {
-      for (const session of sessions.values()) {
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const plugin = yield* Plugin.Service
+      function teardown(session: Active) {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers.keys()) {
+        for (const [sub, ws] of session.subscribers.entries()) {
           try {
-            ws.close()
+            if (sock(ws) === sub) ws.close()
+          } catch {}
+        }
+        session.subscribers.clear()
+      }
+
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Pty.state")(function* (ctx) {
+          const state = {
+            dir: ctx.directory,
+            sessions: new Map<PtyID, Active>(),
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              for (const session of state.sessions.values()) {
+                teardown(session)
+              }
+              state.sessions.clear()
+            }),
+          )
+
+          return state
+        }),
+      )
+
+      const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) return
+        s.sessions.delete(id)
+        log.info("removing session", { id })
+        teardown(session)
+        yield* bus.publish(Event.Deleted, { id: session.info.id })
+      })
+
+      const list = Effect.fn("Pty.list")(function* () {
+        const s = yield* InstanceState.get(state)
+        return Array.from(s.sessions.values()).map((session) => session.info)
+      })
+
+      const get = Effect.fn("Pty.get")(function* (id: PtyID) {
+        const s = yield* InstanceState.get(state)
+        return s.sessions.get(id)?.info
+      })
+
+      const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
+        const s = yield* InstanceState.get(state)
+        const id = PtyID.ascending()
+        const command = input.command || Shell.preferred()
+        const args = input.args || []
+        if (Shell.login(command)) {
+          args.push("-l")
+        }
+
+        const cwd = input.cwd || s.dir
+        const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })
+        const env = {
+          ...process.env,
+          ...input.env,
+          ...shell.env,
+          TERM: "xterm-256color",
+          OPENCODE_TERMINAL: "1",
+        } as Record<string, string>
+
+        if (process.platform === "win32") {
+          env.LC_ALL = "C.UTF-8"
+          env.LC_CTYPE = "C.UTF-8"
+          env.LANG = "C.UTF-8"
+        }
+        log.info("creating session", { id, cmd: command, args, cwd })
+
+        const { spawn } = yield* Effect.promise(() => pty())
+        const proc = yield* Effect.sync(() =>
+          spawn(command, args, {
+            name: "xterm-256color",
+            cwd,
+            env,
+          }),
+        )
+
+        const info = {
+          id,
+          title: input.title || `Terminal ${id.slice(-4)}`,
+          command,
+          args,
+          cwd,
+          status: "running",
+          pid: proc.pid,
+        } as const
+        const session: Active = {
+          info,
+          process: proc,
+          buffer: "",
+          bufferCursor: 0,
+          cursor: 0,
+          subscribers: new Map(),
+        }
+        s.sessions.set(id, session)
+        proc.onData(
+          Instance.bind((chunk) => {
+            session.cursor += chunk.length
+
+            for (const [key, ws] of session.subscribers.entries()) {
+              if (ws.readyState !== 1) {
+                session.subscribers.delete(key)
+                continue
+              }
+              if (sock(ws) !== key) {
+                session.subscribers.delete(key)
+                continue
+              }
+              try {
+                ws.send(chunk)
+              } catch {
+                session.subscribers.delete(key)
+              }
+            }
+
+            session.buffer += chunk
+            if (session.buffer.length <= BUFFER_LIMIT) return
+            const excess = session.buffer.length - BUFFER_LIMIT
+            session.buffer = session.buffer.slice(excess)
+            session.bufferCursor += excess
+          }),
+        )
+        proc.onExit(
+          Instance.bind(({ exitCode }) => {
+            if (session.info.status === "exited") return
+            log.info("session exited", { id, exitCode })
+            session.info.status = "exited"
+            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }).pipe(Effect.provide(EffectLogger.layer)))
+            Effect.runFork(remove(id).pipe(Effect.provide(EffectLogger.layer)))
+          }),
+        )
+        yield* bus.publish(Event.Created, { info })
+        return info
+      })
+
+      const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) return
+        if (input.title) {
+          session.info.title = input.title
+        }
+        if (input.size) {
+          session.process.resize(input.size.cols, input.size.rows)
+        }
+        yield* bus.publish(Event.Updated, { info: session.info })
+        return session.info
+      })
+
+      const resize = Effect.fn("Pty.resize")(function* (id: PtyID, cols: number, rows: number) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (session && session.info.status === "running") {
+          session.process.resize(cols, rows)
+        }
+      })
+
+      const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (session && session.info.status === "running") {
+          session.process.write(data)
+        }
+      })
+
+      const connect = Effect.fn("Pty.connect")(function* (id: PtyID, ws: Socket, cursor?: number) {
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
+        if (!session) {
+          ws.close()
+          return
+        }
+        log.info("client connected to session", { id })
+
+        const sub = sock(ws)
+        session.subscribers.delete(sub)
+        session.subscribers.set(sub, ws)
+
+        const cleanup = () => {
+          session.subscribers.delete(sub)
+        }
+
+        const start = session.bufferCursor
+        const end = session.cursor
+        const from =
+          cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
+
+        const data = (() => {
+          if (!session.buffer) return ""
+          if (from >= end) return ""
+          const offset = Math.max(0, from - start)
+          if (offset >= session.buffer.length) return ""
+          return session.buffer.slice(offset)
+        })()
+
+        if (data) {
+          try {
+            for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
+              ws.send(data.slice(i, i + BUFFER_CHUNK))
+            }
           } catch {
-            // ignore
+            cleanup()
+            ws.close()
+            return
           }
         }
-      }
-      sessions.clear()
-    },
+
+        try {
+          ws.send(meta(end))
+        } catch {
+          cleanup()
+          ws.close()
+          return
+        }
+
+        return {
+          onMessage: (message: string | ArrayBuffer) => {
+            session.process.write(String(message))
+          },
+          onClose: () => {
+            log.info("client disconnected from session", { id })
+            cleanup()
+          },
+        }
+      })
+
+      return Service.of({ list, get, create, update, remove, resize, write, connect })
+    }),
   )
 
-  export function list() {
-    return Array.from(state().values()).map((s) => s.info)
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function list() {
+    return runPromise((svc) => svc.list())
   }
 
-  export function get(id: string) {
-    return state().get(id)?.info
+  export async function get(id: PtyID) {
+    return runPromise((svc) => svc.get(id))
+  }
+
+  export async function write(id: PtyID, data: string) {
+    return runPromise((svc) => svc.write(id, data))
+  }
+
+  export async function connect(id: PtyID, ws: Socket, cursor?: number) {
+    return runPromise((svc) => svc.connect(id, ws, cursor))
   }
 
   export async function create(input: CreateInput) {
-    const id = Identifier.create("pty", false)
-    const command = input.command || Shell.preferred()
-    const args = input.args || []
-    if (command.endsWith("sh")) {
-      args.push("-l")
-    }
-
-    const cwd = input.cwd || Instance.directory
-    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
-    const env = {
-      ...process.env,
-      ...input.env,
-      ...shellEnv.env,
-      TERM: "xterm-256color",
-      OPENCODE_TERMINAL: "1",
-    } as Record<string, string>
-
-    if (process.platform === "win32") {
-      env.LC_ALL = "C.UTF-8"
-      env.LC_CTYPE = "C.UTF-8"
-      env.LANG = "C.UTF-8"
-    }
-    log.info("creating session", { id, cmd: command, args, cwd })
-
-    const spawn = await pty()
-    const ptyProcess = spawn(command, args, {
-      name: "xterm-256color",
-      cwd,
-      env,
-    })
-
-    const info = {
-      id,
-      title: input.title || `Terminal ${id.slice(-4)}`,
-      command,
-      args,
-      cwd,
-      status: "running",
-      pid: ptyProcess.pid,
-    } as const
-    const session: ActiveSession = {
-      info,
-      process: ptyProcess,
-      buffer: "",
-      bufferCursor: 0,
-      cursor: 0,
-      subscribers: new Map(),
-    }
-    state().set(id, session)
-    ptyProcess.onData((data) => {
-      session.cursor += data.length
-
-      for (const [ws, id] of session.subscribers) {
-        if (ws.readyState !== 1) {
-          session.subscribers.delete(ws)
-          continue
-        }
-        if (typeof ws === "object" && sockets.get(ws) !== id) {
-          session.subscribers.delete(ws)
-          continue
-        }
-        try {
-          ws.send(data)
-        } catch {
-          session.subscribers.delete(ws)
-        }
-      }
-
-      session.buffer += data
-      if (session.buffer.length <= BUFFER_LIMIT) return
-      const excess = session.buffer.length - BUFFER_LIMIT
-      session.buffer = session.buffer.slice(excess)
-      session.bufferCursor += excess
-    })
-    ptyProcess.onExit(({ exitCode }) => {
-      log.info("session exited", { id, exitCode })
-      session.info.status = "exited"
-      for (const ws of session.subscribers.keys()) {
-        try {
-          ws.close()
-        } catch {
-          // ignore
-        }
-      }
-      session.subscribers.clear()
-      Bus.publish(Event.Exited, { id, exitCode })
-      state().delete(id)
-    })
-    Bus.publish(Event.Created, { info })
-    return info
+    return runPromise((svc) => svc.create(input))
   }
 
-  export async function update(id: string, input: UpdateInput) {
-    const session = state().get(id)
-    if (!session) return
-    if (input.title) {
-      session.info.title = input.title
-    }
-    if (input.size) {
-      session.process.resize(input.size.cols, input.size.rows)
-    }
-    Bus.publish(Event.Updated, { info: session.info })
-    return session.info
+  export async function update(id: PtyID, input: UpdateInput) {
+    return runPromise((svc) => svc.update(id, input))
   }
 
-  export async function remove(id: string) {
-    const session = state().get(id)
-    if (!session) return
-    log.info("removing session", { id })
-    try {
-      session.process.kill()
-    } catch {}
-    for (const ws of session.subscribers.keys()) {
-      try {
-        ws.close()
-      } catch {
-        // ignore
-      }
-    }
-    session.subscribers.clear()
-    state().delete(id)
-    Bus.publish(Event.Deleted, { id })
-  }
-
-  export function resize(id: string, cols: number, rows: number) {
-    const session = state().get(id)
-    if (session && session.info.status === "running") {
-      session.process.resize(cols, rows)
-    }
-  }
-
-  export function write(id: string, data: string) {
-    const session = state().get(id)
-    if (session && session.info.status === "running") {
-      session.process.write(data)
-    }
-  }
-
-  export function connect(id: string, ws: Socket, cursor?: number) {
-    const session = state().get(id)
-    if (!session) {
-      ws.close()
-      return
-    }
-    log.info("client connected to session", { id })
-
-    const start = session.bufferCursor
-    const end = session.cursor
-
-    const from =
-      cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
-
-    const data = (() => {
-      if (!session.buffer) return ""
-      if (from >= end) return ""
-      const offset = Math.max(0, from - start)
-      if (offset >= session.buffer.length) return ""
-      return session.buffer.slice(offset)
-    })()
-
-    if (data) {
-      try {
-        for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
-          ws.send(data.slice(i, i + BUFFER_CHUNK))
-        }
-      } catch {
-        ws.close()
-        return
-      }
-    }
-
-    try {
-      ws.send(meta(end))
-    } catch {
-      ws.close()
-      return
-    }
-
-    const socketId = tagSocket(ws)
-    if (typeof socketId === "number") session.subscribers.set(ws, socketId)
-    return {
-      onMessage: (message: string | ArrayBuffer) => {
-        session.process.write(String(message))
-      },
-      onClose: () => {
-        log.info("client disconnected from session", { id })
-        session.subscribers.delete(ws)
-      },
-    }
+  export async function remove(id: PtyID) {
+    return runPromise((svc) => svc.remove(id))
   }
 }

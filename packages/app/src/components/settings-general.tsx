@@ -1,48 +1,111 @@
-import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
+import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
-import { useSettings, monoFontFamily } from "@/context/settings"
-import { playSound, SOUND_OPTIONS } from "@/utils/sound"
+import {
+  monoDefault,
+  monoFontFamily,
+  monoInput,
+  sansDefault,
+  sansFontFamily,
+  sansInput,
+  useSettings,
+} from "@/context/settings"
+import { decode64 } from "@/utils/base64"
+import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
+import { SettingsList } from "./settings-list"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
   timeout: undefined as NodeJS.Timeout | undefined,
+  run: 0,
+}
+
+type ThemeOption = {
+  id: string
+  name: string
 }
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
-const playDemoSound = (src: string) => {
+const stopDemoSound = () => {
+  demoSoundState.run += 1
   if (demoSoundState.cleanup) {
     demoSoundState.cleanup()
   }
-
   clearTimeout(demoSoundState.timeout)
+  demoSoundState.cleanup = undefined
+}
 
+const playDemoSound = (id: string | undefined) => {
+  stopDemoSound()
+  if (!id) return
+
+  const run = ++demoSoundState.run
   demoSoundState.timeout = setTimeout(() => {
-    demoSoundState.cleanup = playSound(src)
+    void playSoundById(id).then((cleanup) => {
+      if (demoSoundState.run !== run) {
+        cleanup?.()
+        return
+      }
+      demoSoundState.cleanup = cleanup
+    })
   }, 100)
 }
 
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
+  const permission = usePermission()
   const platform = usePlatform()
+  const params = useParams()
   const settings = useSettings()
+
+  onMount(() => {
+    void theme.loadThemes()
+  })
 
   const [store, setStore] = createStore({
     checking: false,
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
+  const dir = createMemo(() => decode64(params.dir))
+  const accepting = createMemo(() => {
+    const value = dir()
+    if (!value) return false
+    if (!params.id) return permission.isAutoAcceptingDirectory(value)
+    return permission.isAutoAccepting(params.id, value)
+  })
+
+  const toggleAccept = (checked: boolean) => {
+    const value = dir()
+    if (!value) return
+
+    if (!params.id) {
+      if (permission.isAutoAcceptingDirectory(value) === checked) return
+      permission.toggleAutoAcceptDirectory(value)
+      return
+    }
+
+    if (checked) {
+      permission.enableAutoAccept(params.id, value)
+      return
+    }
+
+    permission.disableAutoAccept(params.id, value)
+  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -98,9 +161,7 @@ export const SettingsGeneral: Component = () => {
       .finally(() => setStore("checking", false))
   }
 
-  const themeOptions = createMemo(() =>
-    Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
-  )
+  const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
     { value: "system", label: language.t("theme.scheme.system") },
@@ -115,49 +176,44 @@ export const SettingsGeneral: Component = () => {
     })),
   )
 
-  const fontOptions = [
-    { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
-    { value: "cascadia-code", label: "font.option.cascadiaCode" },
-    { value: "fira-code", label: "font.option.firaCode" },
-    { value: "hack", label: "font.option.hack" },
-    { value: "inconsolata", label: "font.option.inconsolata" },
-    { value: "intel-one-mono", label: "font.option.intelOneMono" },
-    { value: "iosevka", label: "font.option.iosevka" },
-    { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
-    { value: "meslo-lgs", label: "font.option.mesloLgs" },
-    { value: "roboto-mono", label: "font.option.robotoMono" },
-    { value: "source-code-pro", label: "font.option.sourceCodePro" },
-    { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
-    { value: "geist-mono", label: "font.option.geistMono" },
-  ] as const
-  const fontOptionsList = [...fontOptions]
+  const noneSound = { id: "none", label: "sound.option.none" } as const
+  const soundOptions = [noneSound, ...SOUND_OPTIONS]
+  const mono = () => monoInput(settings.appearance.font())
+  const sans = () => sansInput(settings.appearance.uiFont())
 
-  const soundOptions = [...SOUND_OPTIONS]
-
-  const soundSelectProps = (current: () => string, set: (id: string) => void) => ({
+  const soundSelectProps = (
+    enabled: () => boolean,
+    current: () => string,
+    setEnabled: (value: boolean) => void,
+    set: (id: string) => void,
+  ) => ({
     options: soundOptions,
-    current: soundOptions.find((o) => o.id === current()),
+    current: enabled() ? (soundOptions.find((o) => o.id === current()) ?? noneSound) : noneSound,
     value: (o: (typeof soundOptions)[number]) => o.id,
     label: (o: (typeof soundOptions)[number]) => language.t(o.label),
     onHighlight: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
-      playDemoSound(option.src)
+      playDemoSound(option.id === "none" ? undefined : option.id)
     },
     onSelect: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
+      if (option.id === "none") {
+        setEnabled(false)
+        stopDemoSound()
+        return
+      }
+      setEnabled(true)
       set(option.id)
-      playDemoSound(option.src)
+      playDemoSound(option.id)
     },
     variant: "secondary" as const,
     size: "small" as const,
     triggerVariant: "settings" as const,
   })
 
-  const AppearanceSection = () => (
+  const GeneralSection = () => (
     <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
-
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.row.language.title")}
           description={language.t("settings.general.row.language.description")}
@@ -176,8 +232,61 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.appearance.title")}
-          description={language.t("settings.general.row.appearance.description")}
+          title={language.t("command.permissions.autoaccept.enable")}
+          description={language.t("toast.permissions.autoaccept.on.description")}
+        >
+          <div data-action="settings-auto-accept-permissions">
+            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-feed-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
+          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-shell-tool-parts-expanded">
+            <Switch
+              checked={settings.general.shellToolPartsExpanded()}
+              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.editToolPartsExpanded.title")}
+          description={language.t("settings.general.row.editToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-edit-tool-parts-expanded">
+            <Switch
+              checked={settings.general.editToolPartsExpanded()}
+              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
+  const AppearanceSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.colorScheme.title")}
+          description={language.t("settings.general.row.colorScheme.description")}
         >
           <Select
             data-action="settings-color-scheme"
@@ -194,6 +303,7 @@ export const SettingsGeneral: Component = () => {
             variant="secondary"
             size="small"
             triggerVariant="settings"
+            triggerStyle={{ "min-width": "220px" }}
           />
         </SettingsRow>
 
@@ -228,29 +338,51 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.uiFont.title")}
+          description={language.t("settings.general.row.uiFont.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-ui-font"
+              label={language.t("settings.general.row.uiFont.title")}
+              hideLabel
+              type="text"
+              value={sans()}
+              onChange={(value) => settings.appearance.setUIFont(value)}
+              placeholder={sansDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.font.title")}
           description={language.t("settings.general.row.font.description")}
         >
-          <Select
-            data-action="settings-font"
-            options={fontOptionsList}
-            current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
-            value={(o) => o.value}
-            label={(o) => language.t(o.label)}
-            onSelect={(option) => option && settings.appearance.setFont(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
-          >
-            {(option) => (
-              <span style={{ "font-family": monoFontFamily(option?.value) }}>
-                {option ? language.t(option.label) : ""}
-              </span>
-            )}
-          </Select>
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-code-font"
+              label={language.t("settings.general.row.font.title")}
+              hideLabel
+              type="text"
+              value={mono()}
+              onChange={(value) => settings.appearance.setFont(value)}
+              placeholder={monoDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+            />
+          </div>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -258,7 +390,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.notifications.agent.title")}
           description={language.t("settings.general.notifications.agent.description")}
@@ -294,7 +426,7 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -302,73 +434,52 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.sounds")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
         >
-          <div class="flex items-center gap-2">
-            <div data-action="settings-sounds-agent-enabled">
-              <Switch
-                checked={settings.sounds.agentEnabled()}
-                onChange={(checked) => settings.sounds.setAgentEnabled(checked)}
-              />
-            </div>
-            <Select
-              disabled={!settings.sounds.agentEnabled()}
-              data-action="settings-sounds-agent"
-              {...soundSelectProps(
-                () => settings.sounds.agent(),
-                (id) => settings.sounds.setAgent(id),
-              )}
-            />
-          </div>
+          <Select
+            data-action="settings-sounds-agent"
+            {...soundSelectProps(
+              () => settings.sounds.agentEnabled(),
+              () => settings.sounds.agent(),
+              (value) => settings.sounds.setAgentEnabled(value),
+              (id) => settings.sounds.setAgent(id),
+            )}
+          />
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.permissions.title")}
           description={language.t("settings.general.sounds.permissions.description")}
         >
-          <div class="flex items-center gap-2">
-            <div data-action="settings-sounds-permissions-enabled">
-              <Switch
-                checked={settings.sounds.permissionsEnabled()}
-                onChange={(checked) => settings.sounds.setPermissionsEnabled(checked)}
-              />
-            </div>
-            <Select
-              disabled={!settings.sounds.permissionsEnabled()}
-              data-action="settings-sounds-permissions"
-              {...soundSelectProps(
-                () => settings.sounds.permissions(),
-                (id) => settings.sounds.setPermissions(id),
-              )}
-            />
-          </div>
+          <Select
+            data-action="settings-sounds-permissions"
+            {...soundSelectProps(
+              () => settings.sounds.permissionsEnabled(),
+              () => settings.sounds.permissions(),
+              (value) => settings.sounds.setPermissionsEnabled(value),
+              (id) => settings.sounds.setPermissions(id),
+            )}
+          />
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >
-          <div class="flex items-center gap-2">
-            <div data-action="settings-sounds-errors-enabled">
-              <Switch
-                checked={settings.sounds.errorsEnabled()}
-                onChange={(checked) => settings.sounds.setErrorsEnabled(checked)}
-              />
-            </div>
-            <Select
-              disabled={!settings.sounds.errorsEnabled()}
-              data-action="settings-sounds-errors"
-              {...soundSelectProps(
-                () => settings.sounds.errors(),
-                (id) => settings.sounds.setErrors(id),
-              )}
-            />
-          </div>
+          <Select
+            data-action="settings-sounds-errors"
+            {...soundSelectProps(
+              () => settings.sounds.errorsEnabled(),
+              () => settings.sounds.errors(),
+              (value) => settings.sounds.setErrorsEnabled(value),
+              (id) => settings.sounds.setErrors(id),
+            )}
+          />
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -376,7 +487,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.updates.row.startup.title")}
           description={language.t("settings.updates.row.startup.description")}
@@ -412,26 +523,28 @@ export const SettingsGeneral: Component = () => {
               : language.t("settings.updates.action.checkNow")}
           </Button>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
         </div>
       </div>
 
       <div class="flex flex-col gap-8 w-full">
+        <GeneralSection />
+
         <AppearanceSection />
 
         <NotificationsSection />
 
         <SoundsSection />
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
           {(_) => {
             const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
             const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
@@ -440,7 +553,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={language.t("settings.desktop.wsl.title")}
                     description={language.t("settings.desktop.wsl.description")}
@@ -453,11 +566,11 @@ export const SettingsGeneral: Component = () => {
                       />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
-        </Show>
+        </Show>*/}
 
         <UpdatesSection />
 
@@ -473,7 +586,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={
                       <div class="flex items-center gap-2">
@@ -491,7 +604,7 @@ export const SettingsGeneral: Component = () => {
                       <Switch checked={value() === "wayland"} onChange={onChange} />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
@@ -509,12 +622,12 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5 min-w-0">
+    <div class="flex flex-wrap items-center gap-4 py-3 border-b border-border-weak-base last:border-none sm:flex-nowrap">
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
-      <div class="flex-shrink-0">{props.children}</div>
+      <div class="flex w-full justify-end sm:w-auto sm:shrink-0">{props.children}</div>
     </div>
   )
 }

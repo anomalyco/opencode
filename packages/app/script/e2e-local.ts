@@ -71,8 +71,9 @@ const serverEnv = {
   OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
-  OPENCODE_E2E_MODEL: "opencode/gpt-5-nano",
+  OPENCODE_E2E_MODEL: process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano",
   OPENCODE_CLIENT: "app",
+  OPENCODE_STRICT_CONFIG_DEPS: "true",
 } satisfies Record<string, string>
 
 const runnerEnv = {
@@ -86,7 +87,7 @@ const runnerEnv = {
 
 let seed: ReturnType<typeof Bun.spawn> | undefined
 let runner: ReturnType<typeof Bun.spawn> | undefined
-let server: { stop: () => Promise<void> | void } | undefined
+let server: { stop: (close?: boolean) => Promise<void> | void } | undefined
 let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
 let cleaned = false
 
@@ -99,7 +100,7 @@ const cleanup = async () => {
 
   const jobs = [
     inst?.Instance.disposeAll(),
-    server?.stop(),
+    typeof server?.stop === "function" ? server.stop() : undefined,
     keepSandbox ? undefined : fs.rm(sandbox, { recursive: true, force: true }),
   ].filter(Boolean)
   await Promise.allSettled(jobs)
@@ -145,6 +146,7 @@ try {
     Object.assign(process.env, serverEnv)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    process.env.OPENCODE_PID = String(process.pid)
 
     const log = await import("../../opencode/src/util/log")
     const install = await import("../../opencode/src/installation")
@@ -156,7 +158,7 @@ try {
 
     const servermod = await import("../../opencode/src/server/server")
     inst = await import("../../opencode/src/project/instance")
-    server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
+    server = await servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
     console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
 
     await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)

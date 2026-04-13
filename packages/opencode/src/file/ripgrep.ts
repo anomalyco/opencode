@@ -3,9 +3,20 @@ import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
+import { Effect, Layer, Context } from "effect"
+import * as Stream from "effect/Stream"
+import { ChildProcess } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import type { PlatformError } from "effect/PlatformError"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
+
+import { Filesystem } from "../util/filesystem"
+import { AppFileSystem } from "../filesystem"
+import { Process } from "../util/process"
+import { which } from "../util/which"
+import { text } from "node:stream/consumers"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -85,6 +96,7 @@ export namespace Ripgrep {
 
   export type Result = z.infer<typeof Result>
   export type Match = z.infer<typeof Match>
+  export type Item = Match["data"]
   export type Begin = z.infer<typeof Begin>
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
@@ -96,6 +108,7 @@ export namespace Ripgrep {
     },
     "x64-darwin": { platform: "x86_64-apple-darwin", extension: "tar.gz" },
     "x64-linux": { platform: "x86_64-unknown-linux-musl", extension: "tar.gz" },
+    "arm64-win32": { platform: "aarch64-pc-windows-msvc", extension: "zip" },
     "x64-win32": { platform: "x86_64-pc-windows-msvc", extension: "zip" },
   } as const
 
@@ -123,7 +136,7 @@ export namespace Ripgrep {
   )
 
   const state = lazy(async () => {
-    const system = Bun.which("rg")
+    const system = which("rg")
     if (system) {
       const stat = await fs.stat(system).catch(() => undefined)
       if (stat?.isFile()) return { filepath: system }
@@ -131,8 +144,7 @@ export namespace Ripgrep {
     }
     const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    if (!(await Filesystem.exists(filepath))) {
       const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
       const config = PLATFORM[platformKey]
       if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
@@ -144,29 +156,31 @@ export namespace Ripgrep {
       const response = await fetch(url)
       if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
 
-      const buffer = await response.arrayBuffer()
+      const arrayBuffer = await response.arrayBuffer()
       const archivePath = path.join(Global.Path.bin, filename)
-      await Bun.write(archivePath, buffer)
+      await Filesystem.write(archivePath, Buffer.from(arrayBuffer))
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
 
         if (platformKey.endsWith("-darwin")) args.push("--include=*/rg")
         if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
 
-        const proc = Bun.spawn(args, {
+        const proc = Process.spawn(args, {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "pipe",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exit = await proc.exited
+        if (exit !== 0) {
+          const stderr = proc.stderr ? await text(proc.stderr) : ""
           throw new ExtractionFailedError({
             filepath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr,
           })
+        }
       }
       if (config.extension === "zip") {
-        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([arrayBuffer])))
         const entries = await zipFileReader.getEntries()
         let rgEntry: any
         for (const entry of entries) {
@@ -190,7 +204,7 @@ export namespace Ripgrep {
             stderr: "Failed to extract rg.exe from zip archive",
           })
         }
-        await Bun.write(filepath, await rgBlob.arrayBuffer())
+        await Filesystem.write(filepath, Buffer.from(await rgBlob.arrayBuffer()))
         await zipFileReader.close()
       }
       await fs.unlink(archivePath)
@@ -227,8 +241,7 @@ export namespace Ripgrep {
       }
     }
 
-    // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
-    // See https://github.com/oven-sh/bun/issues/24012
+    // Guard against invalid cwd to provide a consistent ENOENT error.
     if (!(await fs.stat(input.cwd).catch(() => undefined))?.isDirectory()) {
       throw Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
         code: "ENOENT",
@@ -237,43 +250,186 @@ export namespace Ripgrep {
       })
     }
 
-    const proc = Bun.spawn(args, {
+    const proc = Process.spawn(args, {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",
-      maxBuffer: 1024 * 1024 * 20,
-      signal: input.signal,
+      abort: input.signal,
     })
 
-    const reader = proc.stdout.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-
-    try {
-      while (true) {
-        input.signal?.throwIfAborted()
-
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        // Handle both Unix (\n) and Windows (\r\n) line endings
-        const lines = buffer.split(/\r?\n/)
-        buffer = lines.pop() || ""
-
-        for (const line of lines) {
-          if (line) yield line
-        }
-      }
-
-      if (buffer) yield buffer
-    } finally {
-      reader.releaseLock()
-      await proc.exited
+    if (!proc.stdout) {
+      throw new Error("Process output not available")
     }
+
+    let buffer = ""
+    const stream = proc.stdout as AsyncIterable<Buffer | string>
+    for await (const chunk of stream) {
+      input.signal?.throwIfAborted()
+
+      buffer += typeof chunk === "string" ? chunk : chunk.toString()
+      // Handle both Unix (\n) and Windows (\r\n) line endings
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() || ""
+
+      for (const line of lines) {
+        if (line) yield line
+      }
+    }
+
+    if (buffer) yield buffer
+    await proc.exited
 
     input.signal?.throwIfAborted()
   }
+
+  export interface Interface {
+    readonly files: (input: {
+      cwd: string
+      glob?: string[]
+      hidden?: boolean
+      follow?: boolean
+      maxDepth?: number
+    }) => Stream.Stream<string, PlatformError>
+    readonly search: (input: {
+      cwd: string
+      pattern: string
+      glob?: string[]
+      limit?: number
+      follow?: boolean
+    }) => Effect.Effect<{ items: Item[]; partial: boolean }, PlatformError | Error>
+  }
+
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
+
+  export const layer: Layer.Layer<Service, never, ChildProcessSpawner | AppFileSystem.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner
+      const afs = yield* AppFileSystem.Service
+      const bin = Effect.fn("Ripgrep.path")(function* () {
+        return yield* Effect.promise(() => filepath())
+      })
+      const args = Effect.fn("Ripgrep.args")(function* (input: {
+        mode: "files" | "search"
+        glob?: string[]
+        hidden?: boolean
+        follow?: boolean
+        maxDepth?: number
+        limit?: number
+        pattern?: string
+      }) {
+        const out = [yield* bin(), input.mode === "search" ? "--json" : "--files", "--glob=!.git/*"]
+        if (input.follow) out.push("--follow")
+        if (input.hidden !== false) out.push("--hidden")
+        if (input.maxDepth !== undefined) out.push(`--max-depth=${input.maxDepth}`)
+        if (input.glob) {
+          for (const g of input.glob) {
+            out.push(`--glob=${g}`)
+          }
+        }
+        if (input.limit) out.push(`--max-count=${input.limit}`)
+        if (input.mode === "search") out.push("--no-messages")
+        if (input.pattern) out.push("--", input.pattern)
+        return out
+      })
+
+      const files = Effect.fn("Ripgrep.files")(function* (input: {
+        cwd: string
+        glob?: string[]
+        hidden?: boolean
+        follow?: boolean
+        maxDepth?: number
+      }) {
+        const rgPath = yield* bin()
+        const isDir = yield* afs.isDir(input.cwd)
+        if (!isDir) {
+          return yield* Effect.die(
+            Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
+              code: "ENOENT" as const,
+              errno: -2,
+              path: input.cwd,
+            }),
+          )
+        }
+
+        const cmd = yield* args({
+          mode: "files",
+          glob: input.glob,
+          hidden: input.hidden,
+          follow: input.follow,
+          maxDepth: input.maxDepth,
+        })
+
+        return spawner
+          .streamLines(ChildProcess.make(cmd[0], cmd.slice(1), { cwd: input.cwd }))
+          .pipe(Stream.filter((line: string) => line.length > 0))
+      })
+
+      const search = Effect.fn("Ripgrep.search")(function* (input: {
+        cwd: string
+        pattern: string
+        glob?: string[]
+        limit?: number
+        follow?: boolean
+      }) {
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const cmd = yield* args({
+              mode: "search",
+              glob: input.glob,
+              follow: input.follow,
+              limit: input.limit,
+              pattern: input.pattern,
+            })
+
+            const handle = yield* spawner.spawn(
+              ChildProcess.make(cmd[0], cmd.slice(1), {
+                cwd: input.cwd,
+                stdin: "ignore",
+              }),
+            )
+
+            const [stdout, stderr, code] = yield* Effect.all(
+              [
+                Stream.mkString(Stream.decodeText(handle.stdout)),
+                Stream.mkString(Stream.decodeText(handle.stderr)),
+                handle.exitCode,
+              ],
+              { concurrency: "unbounded" },
+            )
+
+            if (code !== 0 && code !== 1 && code !== 2) {
+              return yield* Effect.fail(new Error(`ripgrep failed: ${stderr}`))
+            }
+
+            const items = stdout
+              .trim()
+              .split(/\r?\n/)
+              .filter(Boolean)
+              .map((line) => JSON.parse(line))
+              .map((parsed) => Result.parse(parsed))
+              .filter((row): row is Match => row.type === "match")
+              .map((row) => row.data)
+
+            return {
+              items,
+              partial: code === 2,
+            }
+          }),
+        )
+      })
+
+      return Service.of({
+        files: (input) => Stream.unwrap(files(input)),
+        search,
+      })
+    }),
+  )
+
+  export const defaultLayer = layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+  )
 
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     log.info("tree", input)
@@ -331,45 +487,5 @@ export namespace Ripgrep {
     if (total > used) lines.push(`[${total - used} truncated]`)
 
     return lines.join("\n")
-  }
-
-  export async function search(input: {
-    cwd: string
-    pattern: string
-    glob?: string[]
-    limit?: number
-    follow?: boolean
-  }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
-    if (input.follow) args.push("--follow")
-
-    if (input.glob) {
-      for (const g of input.glob) {
-        args.push(`--glob=${g}`)
-      }
-    }
-
-    if (input.limit) {
-      args.push(`--max-count=${input.limit}`)
-    }
-
-    args.push("--")
-    args.push(input.pattern)
-
-    const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
-    if (result.exitCode !== 0) {
-      return []
-    }
-
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
-    // Parse JSON lines from ripgrep output
-
-    return lines
-      .map((line) => JSON.parse(line))
-      .map((parsed) => Result.parse(parsed))
-      .filter((r) => r.type === "match")
-      .map((r) => r.data)
   }
 }
