@@ -58,6 +58,7 @@ import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { elapsed as runtimeElapsed, formatDuration, type Runtime, taskState } from "./runtime"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1233,6 +1234,7 @@ export interface ToolProps {
   tool: string
   output?: string
   status?: string
+  time?: Runtime
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -1330,6 +1332,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     if (typeof value === "string" && value) return value
     return taskId()
   })
+  const partTime = createMemo(() => {
+    const state = part().state
+    if (state.status === "pending") return undefined
+    return state.time
+  })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
 
@@ -1366,6 +1373,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               input={input()}
               tool={part().tool}
               metadata={partMetadata()}
+              time={partTime()}
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}
@@ -1401,7 +1409,6 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
-  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
   const part = () => props.part as TextPart
   const interrupted = createMemo(
     () =>
@@ -1425,15 +1432,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         : typeof completed === "number"
           ? completed - message.time.created
           : -1
-    if (!(ms >= 0)) return ""
-    const total = Math.round(ms / 1000)
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
-    const minutes = Math.floor(total / 60)
-    const seconds = total % 60
-    return i18n.t("ui.message.duration.minutesSeconds", {
-      minutes: numfmt().format(minutes),
-      seconds: numfmt().format(seconds),
-    })
+    return formatDuration(i18n, ms)
   })
 
   const meta = createMemo(() => {
@@ -1743,6 +1742,7 @@ ToolRegistry.register({
     const data = useData()
     const i18n = useI18n()
     const location = useLocation()
+    const [clock, setClock] = createStore({ now: Date.now() })
     const childSessionId = createMemo(() => {
       const value = props.metadata.sessionId
       if (typeof value === "string" && value) return value
@@ -1757,9 +1757,22 @@ ToolRegistry.register({
       return childSessionId()
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const label = createMemo(() => taskState(i18n, props.status))
+    const timer = createMemo(() => {
+      const ms = runtimeElapsed(props.time, clock.now)
+      if (ms === undefined) return
+      return i18n.t("ui.tool.task.elapsed", { duration: formatDuration(i18n, ms) })
+    })
 
     const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
+
+    createEffect(() => {
+      if (!running()) return
+      setClock("now", Date.now())
+      const id = setInterval(() => setClock("now", Date.now()), 1000)
+      onCleanup(() => clearInterval(id))
+    })
 
     const open = () => {
       const id = childSessionId()
@@ -1782,17 +1795,34 @@ ToolRegistry.register({
     const trigger = () => (
       <div data-component="task-tool-card">
         <div data-slot="basic-tool-tool-info-structured">
-          <div data-slot="basic-tool-tool-info-main">
-            <Show when={running()}>
-              <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                <Spinner />
+          <div data-component="task-tool-body">
+            <div data-slot="basic-tool-tool-info-main">
+              <Show when={running()}>
+                <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
+                  <Spinner />
+                </span>
+              </Show>
+              <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
+                {title()}
               </span>
-            </Show>
-            <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
-              {title()}
-            </span>
-            <Show when={subtitle()}>
-              <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+              <Show when={subtitle()}>
+                <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+              </Show>
+            </div>
+            <Show when={label() || timer()}>
+              <div data-component="task-tool-meta">
+                <Show when={label()}>
+                  <span data-component="task-tool-state" data-status={props.status}>
+                    {label()}
+                  </span>
+                </Show>
+                <Show when={label() && timer()}>
+                  <span data-component="task-tool-dot">&middot;</span>
+                </Show>
+                <Show when={timer()}>
+                  <span data-component="task-tool-elapsed">{timer()}</span>
+                </Show>
+              </div>
             </Show>
           </div>
         </div>

@@ -201,10 +201,58 @@
     min-width: 0;
   }
 
+  [data-component="task-tool-body"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   [data-slot="basic-tool-tool-info-main"] {
     flex: 1 1 auto;
     min-width: 0;
     align-items: center;
+  }
+
+  [data-component="task-tool-meta"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--font-family-sans);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-normal);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weak);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-component="task-tool-state"],
+  [data-component="task-tool-elapsed"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-component="task-tool-state"] {
+    color: var(--text-base);
+  }
+
+  [data-component="task-tool-state"][data-status="completed"] {
+    color: var(--text-weak);
+  }
+
+  [data-component="task-tool-state"][data-status="pending"],
+  [data-component="task-tool-state"][data-status="running"] {
+    color: var(--text-strong);
+  }
+
+  [data-component="task-tool-dot"] {
+    flex: none;
+    color: var(--text-dim);
   }
 
   [data-component="task-tool-spinner"] {
