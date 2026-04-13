@@ -15,4 +15,5 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  "plugin": [["/Users/ryanho/Dev/opencode/packages/agent-comms-plugin", { "max_depth": 5, "max_retry": 2 }]],
 }

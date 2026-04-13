@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "opencode-agent-comms",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Agent-to-agent communication plugin for OpenCode",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "agent",
+    "communication"
+  ],
+  "exports": {
+    "./server": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "bun test --timeout 30000",
+    "typecheck": "tsgo --noEmit",
+    "build": "bun run src/build.ts"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.0.0",
+    "@opencode-ai/sdk": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "opencode": ">=1.0.0"
+  }
+}
