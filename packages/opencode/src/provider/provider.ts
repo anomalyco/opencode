@@ -19,7 +19,8 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -574,6 +575,7 @@ export namespace Provider {
               const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
               const model = sdk.workflowChat(sdkModelID, {
                 featureFlags,
+                workflowDefinition: options?.workflowDefinition as string | undefined,
               })
               if (workflowRef) {
                 model.selectedModelRef = workflowRef
@@ -923,7 +925,29 @@ export namespace Provider {
     varsLoaders: Record<string, CustomVarsLoader>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Provider") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+
+  function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
+    const result: Model["cost"] = {
+      input: c?.input ?? 0,
+      output: c?.output ?? 0,
+      cache: {
+        read: c?.cache_read ?? 0,
+        write: c?.cache_write ?? 0,
+      },
+    }
+    if (c?.context_over_200k) {
+      result.experimentalOver200K = {
+        cache: {
+          read: c.context_over_200k.cache_read ?? 0,
+          write: c.context_over_200k.cache_write ?? 0,
+        },
+        input: c.context_over_200k.input,
+        output: c.context_over_200k.output,
+      }
+    }
+    return result
+  }
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
@@ -937,26 +961,9 @@ export namespace Provider {
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
-      headers: model.headers ?? {},
-      options: model.options ?? {},
-      cost: {
-        input: model.cost?.input ?? 0,
-        output: model.cost?.output ?? 0,
-        cache: {
-          read: model.cost?.cache_read ?? 0,
-          write: model.cost?.cache_write ?? 0,
-        },
-        experimentalOver200K: model.cost?.context_over_200k
-          ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
-          : undefined,
-      },
+      headers: {},
+      options: {},
+      cost: cost(model.cost),
       limit: {
         context: model.limit.context,
         input: model.limit.input,
@@ -993,13 +1000,31 @@ export namespace Provider {
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const models: Record<string, Model> = {}
+    for (const [key, model] of Object.entries(provider.models)) {
+      models[key] = fromModelsDevModel(provider, model)
+      for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
+        const id = `${model.id}-${mode}`
+        const m = fromModelsDevModel(provider, model)
+        m.id = ModelID.make(id)
+        m.name = `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`
+        if (opts.cost) m.cost = mergeDeep(m.cost, cost(opts.cost))
+        // convert body params to camelCase for ai sdk compatibility
+        if (opts.provider?.body)
+          m.options = Object.fromEntries(
+            Object.entries(opts.provider.body).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]),
+          )
+        if (opts.provider?.headers) m.headers = opts.provider.headers
+        models[id] = m
+      }
+    }
     return {
       id: ProviderID.make(provider.id),
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
       options: {},
-      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+      models,
     }
   }
 
@@ -1191,7 +1216,8 @@ export namespace Provider {
 
             const options = yield* Effect.promise(() =>
               plugin.auth!.loader!(
-                () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie)) as any,
+                () =>
+                  Effect.runPromise(auth.get(providerID).pipe(Effect.orDie, Effect.provide(EffectLogger.layer))) as any,
                 database[plugin.auth!.provider],
               ),
             )

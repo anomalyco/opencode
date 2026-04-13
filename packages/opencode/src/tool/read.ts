@@ -25,7 +25,7 @@ const parameters = z.object({
   limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
 })
 
-export const ReadTool = Tool.defineEffect(
+export const ReadTool = Tool.define(
   "read",
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
@@ -67,9 +67,7 @@ export const ReadTool = Tool.defineEffect(
           if (item.type === "directory") return item.name + "/"
           if (item.type !== "symlink") return item.name
 
-          const target = yield* fs
-            .stat(path.join(filepath, item.name))
-            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const target = yield* fs.stat(path.join(filepath, item.name)).pipe(Effect.catch(() => Effect.void))
           if (target?.type === "Directory") return item.name + "/"
           return item.name
         }),
@@ -108,14 +106,12 @@ export const ReadTool = Tool.defineEffect(
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
-      yield* Effect.promise(() =>
-        ctx.ask({
-          permission: "read",
-          patterns: [filepath],
-          always: ["*"],
-          metadata: {},
-        }),
-      )
+      yield* ctx.ask({
+        permission: "read",
+        patterns: [filepath],
+        always: ["*"],
+        metadata: {},
+      })
 
       if (!stat) return yield* miss(filepath)
 
@@ -220,9 +216,7 @@ export const ReadTool = Tool.defineEffect(
     return {
       description: DESCRIPTION,
       parameters,
-      async execute(params: z.infer<typeof parameters>, ctx) {
-        return Effect.runPromise(run(params, ctx).pipe(Effect.orDie))
-      },
+      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

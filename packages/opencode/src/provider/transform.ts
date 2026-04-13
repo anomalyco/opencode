@@ -376,7 +376,8 @@ export namespace ProviderTransform {
       id.includes("mistral") ||
       id.includes("kimi") ||
       id.includes("k2p5") ||
-      id.includes("qwen")
+      id.includes("qwen") ||
+      id.includes("big-pickle")
     )
       return {}
 
@@ -773,7 +774,10 @@ export namespace ProviderTransform {
       result["chat_template_args"] = { enable_thinking: true }
     }
 
-    if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    if (
+      ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
+      input.model.api.npm === "@ai-sdk/openai-compatible"
+    ) {
       result["thinking"] = {
         type: "enabled",
         clear_thinking: false,

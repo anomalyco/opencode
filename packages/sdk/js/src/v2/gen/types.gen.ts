@@ -123,230 +123,6 @@ export type EventPermissionReplied = {
   }
 }
 
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-      next: number
-    }
-  | {
-      type: "busy"
-    }
-
-export type EventSessionStatus = {
-  type: "session.status"
-  properties: {
-    sessionID: string
-    status: SessionStatus
-  }
-}
-
-export type EventSessionIdle = {
-  type: "session.idle"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type QuestionOption = {
-  /**
-   * Display text (1-5 words, concise)
-   */
-  label: string
-  /**
-   * Explanation of choice
-   */
-  description: string
-}
-
-export type QuestionInfo = {
-  /**
-   * Complete question
-   */
-  question: string
-  /**
-   * Very short label (max 30 chars)
-   */
-  header: string
-  /**
-   * Available choices
-   */
-  options: Array<QuestionOption>
-  /**
-   * Allow selecting multiple choices
-   */
-  multiple?: boolean
-  /**
-   * Allow typing a custom answer (default: true)
-   */
-  custom?: boolean
-}
-
-export type QuestionRequest = {
-  id: string
-  sessionID: string
-  /**
-   * Questions to ask
-   */
-  questions: Array<QuestionInfo>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventQuestionAsked = {
-  type: "question.asked"
-  properties: QuestionRequest
-}
-
-export type QuestionAnswer = Array<string>
-
-export type EventQuestionReplied = {
-  type: "question.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    answers: Array<QuestionAnswer>
-  }
-}
-
-export type EventQuestionRejected = {
-  type: "question.rejected"
-  properties: {
-    sessionID: string
-    requestID: string
-  }
-}
-
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-}
-
-export type EventTodoUpdated = {
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
-}
-
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
-
-export type EventMcpToolsChanged = {
-  type: "mcp.tools.changed"
-  properties: {
-    server: string
-  }
-}
-
-export type EventMcpBrowserOpenFailed = {
-  type: "mcp.browser.open.failed"
-  properties: {
-    mcpName: string
-    url: string
-  }
-}
-
-export type EventCommandExecuted = {
-  type: "command.executed"
-  properties: {
-    name: string
-    sessionID: string
-    arguments: string
-    messageID: string
-  }
-}
-
 export type SnapshotFileDiff = {
   file: string
   patch: string
@@ -439,6 +215,21 @@ export type EventSessionError = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -446,15 +237,225 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventWorkspaceReady = {
-  type: "workspace.ready"
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
   properties: {
-    name: string
+    text: string
   }
 }
 
-export type EventWorkspaceFailed = {
-  type: "workspace.failed"
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
+export type EventCommandExecuted = {
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
+export type QuestionOption = {
+  /**
+   * Display text (1-5 words, concise)
+   */
+  label: string
+  /**
+   * Explanation of choice
+   */
+  description: string
+}
+
+export type QuestionInfo = {
+  /**
+   * Complete question
+   */
+  question: string
+  /**
+   * Very short label (max 30 chars)
+   */
+  header: string
+  /**
+   * Available choices
+   */
+  options: Array<QuestionOption>
+  /**
+   * Allow selecting multiple choices
+   */
+  multiple?: boolean
+  /**
+   * Allow typing a custom answer (default: true)
+   */
+  custom?: boolean
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionInfo>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventQuestionAsked = {
+  type: "question.asked"
+  properties: QuestionRequest
+}
+
+export type QuestionAnswer = Array<string>
+
+export type EventQuestionReplied = {
+  type: "question.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type EventQuestionRejected = {
+  type: "question.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
   properties: {
     message: string
   }
@@ -499,18 +500,26 @@ export type EventPtyDeleted = {
   }
 }
 
-export type EventWorktreeReady = {
-  type: "worktree.ready"
+export type EventWorkspaceReady = {
+  type: "workspace.ready"
   properties: {
     name: string
-    branch: string
   }
 }
 
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
+export type EventWorkspaceFailed = {
+  type: "workspace.failed"
   properties: {
     message: string
+  }
+}
+
+export type EventWorkspaceStatus = {
+  type: "workspace.status"
+  properties: {
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+    error?: string
   }
 }
 
@@ -974,15 +983,11 @@ export type Event =
   | EventMessagePartDelta
   | EventPermissionAsked
   | EventPermissionReplied
-  | EventSessionStatus
-  | EventSessionIdle
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
-  | EventSessionCompacted
+  | EventSessionDiff
+  | EventSessionError
   | EventFileEdited
   | EventFileWatcherUpdated
-  | EventTodoUpdated
+  | EventVcsBranchUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -990,17 +995,22 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
-  | EventSessionDiff
-  | EventSessionError
-  | EventVcsBranchUpdated
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
+  | EventQuestionAsked
+  | EventQuestionReplied
+  | EventQuestionRejected
+  | EventTodoUpdated
+  | EventSessionStatus
+  | EventSessionIdle
+  | EventSessionCompacted
+  | EventWorktreeReady
+  | EventWorktreeFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventWorktreeReady
-  | EventWorktreeFailed
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
+  | EventWorkspaceStatus
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1011,6 +1021,8 @@ export type Event =
 
 export type GlobalEvent = {
   directory: string
+  project?: string
+  workspace?: string
   payload: Event
 }
 
@@ -1250,6 +1262,29 @@ export type ProviderConfig = {
   env?: Array<string>
   id?: string
   npm?: string
+  whitelist?: Array<string>
+  blacklist?: Array<string>
+  options?: {
+    apiKey?: string
+    baseURL?: string
+    /**
+     * GitHub Enterprise URL for copilot authentication
+     */
+    enterpriseUrl?: string
+    /**
+     * Enable promptCacheKey for this provider (default false)
+     */
+    setCacheKey?: boolean
+    /**
+     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     */
+    timeout?: number | false
+    /**
+     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
+     */
+    chunkTimeout?: number
+    [key: string]: unknown | string | boolean | number | false | number | undefined
+  }
   models?: {
     [key: string]: {
       id?: string
@@ -1288,15 +1323,15 @@ export type ProviderConfig = {
       }
       experimental?: boolean
       status?: "alpha" | "beta" | "deprecated"
+      provider?: {
+        npm?: string
+        api?: string
+      }
       options?: {
         [key: string]: unknown
       }
       headers?: {
         [key: string]: string
-      }
-      provider?: {
-        npm?: string
-        api?: string
       }
       /**
        * Variant-specific configuration
@@ -1311,29 +1346,6 @@ export type ProviderConfig = {
         }
       }
     }
-  }
-  whitelist?: Array<string>
-  blacklist?: Array<string>
-  options?: {
-    apiKey?: string
-    baseURL?: string
-    /**
-     * GitHub Enterprise URL for copilot authentication
-     */
-    enterpriseUrl?: string
-    /**
-     * Enable promptCacheKey for this provider (default false)
-     */
-    setCacheKey?: boolean
-    /**
-     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
-     */
-    timeout?: number | false
-    /**
-     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
-     */
-    chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
   }
 }
 
@@ -1375,6 +1387,10 @@ export type McpOAuthConfig = {
    * OAuth scopes to request during authorization
    */
   scope?: string
+  /**
+   * OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).
+   */
+  redirectUri?: string
 }
 
 export type McpRemoteConfig = {
@@ -2851,6 +2867,30 @@ export type ExperimentalWorkspaceCreateResponses = {
 export type ExperimentalWorkspaceCreateResponse =
   ExperimentalWorkspaceCreateResponses[keyof ExperimentalWorkspaceCreateResponses]
 
+export type ExperimentalWorkspaceStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace/status"
+}
+
+export type ExperimentalWorkspaceStatusResponses = {
+  /**
+   * Workspace status
+   */
+  200: Array<{
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+    error?: string
+  }>
+}
+
+export type ExperimentalWorkspaceStatusResponse =
+  ExperimentalWorkspaceStatusResponses[keyof ExperimentalWorkspaceStatusResponses]
+
 export type ExperimentalWorkspaceRemoveData = {
   body?: never
   path: {
@@ -3226,6 +3266,7 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    permission?: PermissionRuleset
     time?: {
       archived?: number
     }
@@ -3936,7 +3977,10 @@ export type SessionShellResponses = {
   /**
    * Created message
    */
-  200: AssistantMessage
+  200: {
+    info: Message
+    parts: Array<Part>
+  }
 }
 
 export type SessionShellResponse = SessionShellResponses[keyof SessionShellResponses]
@@ -4212,68 +4256,7 @@ export type ProviderListResponses = {
    * List of providers
    */
   200: {
-    all: Array<{
-      api?: string
-      name: string
-      env: Array<string>
-      id: string
-      npm?: string
-      models: {
-        [key: string]: {
-          id: string
-          name: string
-          family?: string
-          release_date: string
-          attachment: boolean
-          reasoning: boolean
-          temperature: boolean
-          tool_call: boolean
-          interleaved?:
-            | true
-            | {
-                field: "reasoning_content" | "reasoning_details"
-              }
-          cost?: {
-            input: number
-            output: number
-            cache_read?: number
-            cache_write?: number
-            context_over_200k?: {
-              input: number
-              output: number
-              cache_read?: number
-              cache_write?: number
-            }
-          }
-          limit: {
-            context: number
-            input?: number
-            output: number
-          }
-          modalities?: {
-            input: Array<"text" | "audio" | "image" | "video" | "pdf">
-            output: Array<"text" | "audio" | "image" | "video" | "pdf">
-          }
-          experimental?: boolean
-          status?: "alpha" | "beta" | "deprecated"
-          options: {
-            [key: string]: unknown
-          }
-          headers?: {
-            [key: string]: string
-          }
-          provider?: {
-            npm?: string
-            api?: string
-          }
-          variants?: {
-            [key: string]: {
-              [key: string]: unknown
-            }
-          }
-        }
-      }
-    }>
+    all: Array<Provider>
     default: {
       [key: string]: string
     }

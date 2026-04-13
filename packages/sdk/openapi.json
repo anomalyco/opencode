@@ -1656,6 +1656,64 @@
         ]
       }
     },
+    "/experimental/workspace/status": {
+      "get": {
+        "operationId": "experimental.workspace.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Workspace status",
+        "description": "Get connection status for workspaces in the current project.",
+        "responses": {
+          "200": {
+            "description": "Workspace status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "workspaceID": {
+                        "type": "string",
+                        "pattern": "^wrk.*"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["connected", "connecting", "disconnected", "error"]
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["workspaceID", "status"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/workspace/{id}": {
       "delete": {
         "operationId": "experimental.workspace.remove",
@@ -2491,6 +2549,9 @@
                 "properties": {
                   "title": {
                     "type": "string"
+                  },
+                  "permission": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
                   },
                   "time": {
                     "type": "object",
@@ -4098,7 +4159,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantMessage"
+                  "type": "object",
+                  "properties": {
+                    "info": {
+                      "$ref": "#/components/schemas/Message"
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Part"
+                      }
+                    }
+                  },
+                  "required": ["info", "parts"]
                 }
               }
             }
@@ -4790,211 +4863,7 @@
                     "all": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "api": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "env": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "npm": {
-                            "type": "string"
-                          },
-                          "models": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "name": {
-                                  "type": "string"
-                                },
-                                "family": {
-                                  "type": "string"
-                                },
-                                "release_date": {
-                                  "type": "string"
-                                },
-                                "attachment": {
-                                  "type": "boolean"
-                                },
-                                "reasoning": {
-                                  "type": "boolean"
-                                },
-                                "temperature": {
-                                  "type": "boolean"
-                                },
-                                "tool_call": {
-                                  "type": "boolean"
-                                },
-                                "interleaved": {
-                                  "anyOf": [
-                                    {
-                                      "type": "boolean",
-                                      "const": true
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "field": {
-                                          "type": "string",
-                                          "enum": ["reasoning_content", "reasoning_details"]
-                                        }
-                                      },
-                                      "required": ["field"],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                },
-                                "cost": {
-                                  "type": "object",
-                                  "properties": {
-                                    "input": {
-                                      "type": "number"
-                                    },
-                                    "output": {
-                                      "type": "number"
-                                    },
-                                    "cache_read": {
-                                      "type": "number"
-                                    },
-                                    "cache_write": {
-                                      "type": "number"
-                                    },
-                                    "context_over_200k": {
-                                      "type": "object",
-                                      "properties": {
-                                        "input": {
-                                          "type": "number"
-                                        },
-                                        "output": {
-                                          "type": "number"
-                                        },
-                                        "cache_read": {
-                                          "type": "number"
-                                        },
-                                        "cache_write": {
-                                          "type": "number"
-                                        }
-                                      },
-                                      "required": ["input", "output"]
-                                    }
-                                  },
-                                  "required": ["input", "output"]
-                                },
-                                "limit": {
-                                  "type": "object",
-                                  "properties": {
-                                    "context": {
-                                      "type": "number"
-                                    },
-                                    "input": {
-                                      "type": "number"
-                                    },
-                                    "output": {
-                                      "type": "number"
-                                    }
-                                  },
-                                  "required": ["context", "output"]
-                                },
-                                "modalities": {
-                                  "type": "object",
-                                  "properties": {
-                                    "input": {
-                                      "type": "array",
-                                      "items": {
-                                        "type": "string",
-                                        "enum": ["text", "audio", "image", "video", "pdf"]
-                                      }
-                                    },
-                                    "output": {
-                                      "type": "array",
-                                      "items": {
-                                        "type": "string",
-                                        "enum": ["text", "audio", "image", "video", "pdf"]
-                                      }
-                                    }
-                                  },
-                                  "required": ["input", "output"]
-                                },
-                                "experimental": {
-                                  "type": "boolean"
-                                },
-                                "status": {
-                                  "type": "string",
-                                  "enum": ["alpha", "beta", "deprecated"]
-                                },
-                                "options": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {}
-                                },
-                                "headers": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {
-                                    "type": "string"
-                                  }
-                                },
-                                "provider": {
-                                  "type": "object",
-                                  "properties": {
-                                    "npm": {
-                                      "type": "string"
-                                    },
-                                    "api": {
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                "variants": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {
-                                    "type": "object",
-                                    "propertyNames": {
-                                      "type": "string"
-                                    },
-                                    "additionalProperties": {}
-                                  }
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "name",
-                                "release_date",
-                                "attachment",
-                                "reasoning",
-                                "temperature",
-                                "tool_call",
-                                "limit",
-                                "options"
-                              ]
-                            }
-                          }
-                        },
-                        "required": ["name", "env", "id", "models"]
+                        "$ref": "#/components/schemas/Provider"
                       }
                     },
                     "default": {
@@ -7606,546 +7475,6 @@
         },
         "required": ["type", "properties"]
       },
-      "SessionStatus": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "idle"
-              }
-            },
-            "required": ["type"]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "retry"
-              },
-              "attempt": {
-                "type": "number"
-              },
-              "message": {
-                "type": "string"
-              },
-              "next": {
-                "type": "number"
-              }
-            },
-            "required": ["type", "attempt", "message", "next"]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "busy"
-              }
-            },
-            "required": ["type"]
-          }
-        ]
-      },
-      "Event.session.status": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "session.status"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "status": {
-                "$ref": "#/components/schemas/SessionStatus"
-              }
-            },
-            "required": ["sessionID", "status"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.session.idle": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "session.idle"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              }
-            },
-            "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "QuestionOption": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "description": "Display text (1-5 words, concise)",
-            "type": "string"
-          },
-          "description": {
-            "description": "Explanation of choice",
-            "type": "string"
-          }
-        },
-        "required": ["label", "description"]
-      },
-      "QuestionInfo": {
-        "type": "object",
-        "properties": {
-          "question": {
-            "description": "Complete question",
-            "type": "string"
-          },
-          "header": {
-            "description": "Very short label (max 30 chars)",
-            "type": "string"
-          },
-          "options": {
-            "description": "Available choices",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionOption"
-            }
-          },
-          "multiple": {
-            "description": "Allow selecting multiple choices",
-            "type": "boolean"
-          },
-          "custom": {
-            "description": "Allow typing a custom answer (default: true)",
-            "type": "boolean"
-          }
-        },
-        "required": ["question", "header", "options"]
-      },
-      "QuestionRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^que.*"
-          },
-          "sessionID": {
-            "type": "string",
-            "pattern": "^ses.*"
-          },
-          "questions": {
-            "description": "Questions to ask",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionInfo"
-            }
-          },
-          "tool": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg.*"
-              },
-              "callID": {
-                "type": "string"
-              }
-            },
-            "required": ["messageID", "callID"]
-          }
-        },
-        "required": ["id", "sessionID", "questions"]
-      },
-      "Event.question.asked": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.asked"
-          },
-          "properties": {
-            "$ref": "#/components/schemas/QuestionRequest"
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "QuestionAnswer": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "Event.question.replied": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.replied"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionAnswer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.question.rejected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.rejected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              }
-            },
-            "required": ["sessionID", "requestID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.session.compacted": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "session.compacted"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              }
-            },
-            "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.edited": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.edited"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              }
-            },
-            "required": ["file"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.watcher.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.watcher.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
-              }
-            },
-            "required": ["file", "event"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Todo": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Brief description of the task",
-            "type": "string"
-          },
-          "status": {
-            "description": "Current status of the task: pending, in_progress, completed, cancelled",
-            "type": "string"
-          },
-          "priority": {
-            "description": "Priority level of the task: high, medium, low",
-            "type": "string"
-          }
-        },
-        "required": ["content", "status", "priority"]
-      },
-      "Event.todo.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "todo.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "todos": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Todo"
-                }
-              }
-            },
-            "required": ["sessionID", "todos"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.prompt.append": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.prompt.append"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.command.execute": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.command.execute"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "session.list",
-                      "session.new",
-                      "session.share",
-                      "session.interrupt",
-                      "session.compact",
-                      "session.page.up",
-                      "session.page.down",
-                      "session.line.up",
-                      "session.line.down",
-                      "session.half.page.up",
-                      "session.half.page.down",
-                      "session.first",
-                      "session.last",
-                      "prompt.clear",
-                      "prompt.submit",
-                      "agent.cycle"
-                    ]
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            },
-            "required": ["command"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.toast.show": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.toast.show"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "title": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string",
-                "enum": ["info", "success", "warning", "error"]
-              },
-              "duration": {
-                "description": "Duration in milliseconds",
-                "default": 5000,
-                "type": "number"
-              }
-            },
-            "required": ["message", "variant"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.session.select": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.session.select"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "description": "Session ID to navigate to",
-                "type": "string",
-                "pattern": "^ses.*"
-              }
-            },
-            "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.mcp.tools.changed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "mcp.tools.changed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "server": {
-                "type": "string"
-              }
-            },
-            "required": ["server"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.mcp.browser.open.failed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "mcp.browser.open.failed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "mcpName": {
-                "type": "string"
-              },
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": ["mcpName", "url"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.command.executed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "command.executed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "arguments": {
-                "type": "string"
-              },
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg.*"
-              }
-            },
-            "required": ["name", "sessionID", "arguments", "messageID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "SnapshotFileDiff": {
         "type": "object",
         "properties": {
@@ -8402,6 +7731,60 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.edited": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.edited"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": ["file"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.file.watcher.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.watcher.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "add"
+                  },
+                  {
+                    "type": "string",
+                    "const": "change"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlink"
+                  }
+                ]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.vcs.branch.updated": {
         "type": "object",
         "properties": {
@@ -8420,31 +7803,520 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.workspace.ready": {
+      "Event.tui.prompt.append": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "workspace.ready"
+            "const": "tui.prompt.append"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.command.execute": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.command.execute"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "session.list",
+                      "session.new",
+                      "session.share",
+                      "session.interrupt",
+                      "session.compact",
+                      "session.page.up",
+                      "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
+                      "session.half.page.up",
+                      "session.half.page.down",
+                      "session.first",
+                      "session.last",
+                      "prompt.clear",
+                      "prompt.submit",
+                      "agent.cycle"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["command"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.toast.show": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.toast.show"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "description": "Duration in milliseconds",
+                "default": 5000,
+                "type": "number"
+              }
+            },
+            "required": ["message", "variant"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.session.select": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.session.select"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "description": "Session ID to navigate to",
+                "type": "string",
+                "pattern": "^ses.*"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.mcp.tools.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "mcp.tools.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": ["server"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.mcp.browser.open.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "mcp.browser.open.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "mcpName": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": ["mcpName", "url"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.command.executed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "command.executed"
           },
           "properties": {
             "type": "object",
             "properties": {
               "name": {
                 "type": "string"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "arguments": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
               }
             },
-            "required": ["name"]
+            "required": ["name", "sessionID", "arguments", "messageID"]
           }
         },
         "required": ["type", "properties"]
       },
-      "Event.workspace.failed": {
+      "QuestionOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "description": "Display text (1-5 words, concise)",
+            "type": "string"
+          },
+          "description": {
+            "description": "Explanation of choice",
+            "type": "string"
+          }
+        },
+        "required": ["label", "description"]
+      },
+      "QuestionInfo": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "description": "Complete question",
+            "type": "string"
+          },
+          "header": {
+            "description": "Very short label (max 30 chars)",
+            "type": "string"
+          },
+          "options": {
+            "description": "Available choices",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            }
+          },
+          "multiple": {
+            "description": "Allow selecting multiple choices",
+            "type": "boolean"
+          },
+          "custom": {
+            "description": "Allow typing a custom answer (default: true)",
+            "type": "boolean"
+          }
+        },
+        "required": ["question", "header", "options"]
+      },
+      "QuestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^que.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "questions": {
+            "description": "Questions to ask",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionInfo"
+            }
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"]
+          }
+        },
+        "required": ["id", "sessionID", "questions"]
+      },
+      "Event.question.asked": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "workspace.failed"
+            "const": "question.asked"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/QuestionRequest"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "QuestionAnswer": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "Event.question.replied": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.replied"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.question.rejected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.rejected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              }
+            },
+            "required": ["sessionID", "requestID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Todo": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "Brief description of the task",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the task: pending, in_progress, completed, cancelled",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority level of the task: high, medium, low",
+            "type": "string"
+          }
+        },
+        "required": ["content", "status", "priority"]
+      },
+      "Event.todo.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "todo.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "todos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Todo"
+                }
+              }
+            },
+            "required": ["sessionID", "todos"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "SessionStatus": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "idle"
+              }
+            },
+            "required": ["type"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "retry"
+              },
+              "attempt": {
+                "type": "number"
+              },
+              "message": {
+                "type": "string"
+              },
+              "next": {
+                "type": "number"
+              }
+            },
+            "required": ["type", "attempt", "message", "next"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "busy"
+              }
+            },
+            "required": ["type"]
+          }
+        ]
+      },
+      "Event.session.status": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.status"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "status": {
+                "$ref": "#/components/schemas/SessionStatus"
+              }
+            },
+            "required": ["sessionID", "status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.session.idle": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.idle"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.session.compacted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.compacted"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.worktree.ready": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.ready"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.worktree.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.failed"
           },
           "properties": {
             "type": "object",
@@ -8571,34 +8443,31 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.worktree.ready": {
+      "Event.workspace.ready": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "worktree.ready"
+            "const": "workspace.ready"
           },
           "properties": {
             "type": "object",
             "properties": {
               "name": {
                 "type": "string"
-              },
-              "branch": {
-                "type": "string"
               }
             },
-            "required": ["name", "branch"]
+            "required": ["name"]
           }
         },
         "required": ["type", "properties"]
       },
-      "Event.worktree.failed": {
+      "Event.workspace.failed": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "worktree.failed"
+            "const": "workspace.failed"
           },
           "properties": {
             "type": "object",
@@ -8608,6 +8477,33 @@
               }
             },
             "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.workspace.status": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "workspace.status"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "workspaceID": {
+                "type": "string",
+                "pattern": "^wrk.*"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["connected", "connecting", "disconnected", "error"]
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": ["workspaceID", "status"]
           }
         },
         "required": ["type", "properties"]
@@ -10009,22 +9905,10 @@
             "$ref": "#/components/schemas/Event.permission.replied"
           },
           {
-            "$ref": "#/components/schemas/Event.session.status"
+            "$ref": "#/components/schemas/Event.session.diff"
           },
           {
-            "$ref": "#/components/schemas/Event.session.idle"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.asked"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.replied"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.rejected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.compacted"
+            "$ref": "#/components/schemas/Event.session.error"
           },
           {
             "$ref": "#/components/schemas/Event.file.edited"
@@ -10033,7 +9917,7 @@
             "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.todo.updated"
+            "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -10057,19 +9941,31 @@
             "$ref": "#/components/schemas/Event.command.executed"
           },
           {
-            "$ref": "#/components/schemas/Event.session.diff"
+            "$ref": "#/components/schemas/Event.question.asked"
           },
           {
-            "$ref": "#/components/schemas/Event.session.error"
+            "$ref": "#/components/schemas/Event.question.replied"
           },
           {
-            "$ref": "#/components/schemas/Event.vcs.branch.updated"
+            "$ref": "#/components/schemas/Event.question.rejected"
           },
           {
-            "$ref": "#/components/schemas/Event.workspace.ready"
+            "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.workspace.failed"
+            "$ref": "#/components/schemas/Event.session.status"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.idle"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.compacted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.failed"
           },
           {
             "$ref": "#/components/schemas/Event.pty.created"
@@ -10084,10 +9980,13 @@
             "$ref": "#/components/schemas/Event.pty.deleted"
           },
           {
-            "$ref": "#/components/schemas/Event.worktree.ready"
+            "$ref": "#/components/schemas/Event.workspace.ready"
           },
           {
-            "$ref": "#/components/schemas/Event.worktree.failed"
+            "$ref": "#/components/schemas/Event.workspace.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.status"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -10116,6 +10015,12 @@
         "type": "object",
         "properties": {
           "directory": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "workspace": {
             "type": "string"
           },
           "payload": {
@@ -10788,6 +10693,60 @@
           "npm": {
             "type": "string"
           },
+          "whitelist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blacklist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string"
+              },
+              "baseURL": {
+                "type": "string"
+              },
+              "enterpriseUrl": {
+                "description": "GitHub Enterprise URL for copilot authentication",
+                "type": "string"
+              },
+              "setCacheKey": {
+                "description": "Enable promptCacheKey for this provider (default false)",
+                "type": "boolean"
+              },
+              "timeout": {
+                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                "anyOf": [
+                  {
+                    "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "description": "Disable timeout for this provider entirely.",
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "chunkTimeout": {
+                "description": "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": {}
+          },
           "models": {
             "type": "object",
             "propertyNames": {
@@ -10917,6 +10876,17 @@
                   "type": "string",
                   "enum": ["alpha", "beta", "deprecated"]
                 },
+                "provider": {
+                  "type": "object",
+                  "properties": {
+                    "npm": {
+                      "type": "string"
+                    },
+                    "api": {
+                      "type": "string"
+                    }
+                  }
+                },
                 "options": {
                   "type": "object",
                   "propertyNames": {
@@ -10931,17 +10901,6 @@
                   },
                   "additionalProperties": {
                     "type": "string"
-                  }
-                },
-                "provider": {
-                  "type": "object",
-                  "properties": {
-                    "npm": {
-                      "type": "string"
-                    },
-                    "api": {
-                      "type": "string"
-                    }
                   }
                 },
                 "variants": {
@@ -10963,60 +10922,6 @@
                 }
               }
             }
-          },
-          "whitelist": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "blacklist": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "options": {
-            "type": "object",
-            "properties": {
-              "apiKey": {
-                "type": "string"
-              },
-              "baseURL": {
-                "type": "string"
-              },
-              "enterpriseUrl": {
-                "description": "GitHub Enterprise URL for copilot authentication",
-                "type": "string"
-              },
-              "setCacheKey": {
-                "description": "Enable promptCacheKey for this provider (default false)",
-                "type": "boolean"
-              },
-              "timeout": {
-                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                "anyOf": [
-                  {
-                    "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  {
-                    "description": "Disable timeout for this provider entirely.",
-                    "type": "boolean",
-                    "const": false
-                  }
-                ]
-              },
-              "chunkTimeout": {
-                "description": "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
-                "type": "integer",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991
-              }
-            },
-            "additionalProperties": {}
           }
         },
         "additionalProperties": false
@@ -11073,6 +10978,10 @@
           },
           "scope": {
             "description": "OAuth scopes to request during authorization",
+            "type": "string"
+          },
+          "redirectUri": {
+            "description": "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
             "type": "string"
           }
         },

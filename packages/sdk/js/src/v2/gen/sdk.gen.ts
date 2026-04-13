@@ -34,6 +34,7 @@ import type {
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
+  ExperimentalWorkspaceStatusResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
@@ -1164,6 +1165,36 @@ export class Workspace extends HeyApiClient {
   }
 
   /**
+   * Workspace status
+   *
+   * Get connection status for workspaces in the current project.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceStatusResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Remove workspace
    *
    * Remove an existing workspace.
@@ -1694,6 +1725,7 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       title?: string
+      permission?: PermissionRuleset
       time?: {
         archived?: number
       }
@@ -1709,6 +1741,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "title" },
+            { in: "body", key: "permission" },
             { in: "body", key: "time" },
           ],
         },

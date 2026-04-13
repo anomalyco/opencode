@@ -26,7 +26,7 @@
       "packages/slack"
     ],
     "catalog": {
-      "@effect/platform-node": "4.0.0-beta.43",
+      "@effect/platform-node": "4.0.0-beta.46",
       "@types/bun": "1.3.11",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
@@ -47,8 +47,8 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
-      "effect": "4.0.0-beta.43",
-      "ai": "6.0.149",
+      "effect": "4.0.0-beta.46",
+      "ai": "6.0.158",
       "cross-spawn": "7.0.6",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
@@ -71,7 +71,8 @@
       "@solidjs/router": "0.15.4",
       "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
       "solid-js": "1.9.10",
-      "vite-plugin-solid": "2.11.10"
+      "vite-plugin-solid": "2.11.10",
+      "@lydell/node-pty": "1.2.0-beta.10"
     }
   },
   "devDependencies": {

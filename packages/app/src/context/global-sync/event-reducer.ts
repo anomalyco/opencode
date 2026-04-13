@@ -14,6 +14,7 @@ import type {
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
+import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -162,7 +163,7 @@ export function applyDirectoryEvent(input: {
     }
     case "session.diff": {
       const props = event.properties as { sessionID: string; diff: SnapshotFileDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
+      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
       break
     }
     case "todo.updated": {
@@ -177,7 +178,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "message.updated": {
-      const info = (event.properties as { info: Message }).info
+      const info = clean((event.properties as { info: Message }).info)
       const messages = input.store.message[info.sessionID]
       if (!messages) {
         input.setStore("message", info.sessionID, [info])
