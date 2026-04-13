@@ -103,6 +103,9 @@ export const dict = {
   "ui.tool.questions": "질문",
   "ui.tool.agent": "{{type}} 에이전트",
   "ui.tool.agent.default": "에이전트",
+  "ui.tool.task.running": "실행 중",
+  "ui.tool.task.completed": "완료",
+  "ui.tool.task.elapsed": "{{duration}} 경과",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",

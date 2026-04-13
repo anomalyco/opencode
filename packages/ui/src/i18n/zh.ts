@@ -107,6 +107,9 @@ export const dict = {
   "ui.tool.questions": "问题",
   "ui.tool.agent": "{{type}} 智能体",
   "ui.tool.agent.default": "智能体",
+  "ui.tool.task.running": "运行中",
+  "ui.tool.task.completed": "已完成",
+  "ui.tool.task.elapsed": "已耗时 {{duration}}",
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",
