@@ -1,0 +1,114 @@
+sequenceDiagram
+    autonumber
+    participant User as 👤 User<br/>(CLI / TUI / Web)
+    participant CLI as 📟 RunCommand<br/>cli/cmd/run.ts
+    participant Boot as 🔧 bootstrap()<br/>cli/bootstrap.ts
+    participant SDK as 📦 OpencodeClient<br/>@opencode-ai/sdk
+    participant Server as 🌐 Hono Server<br/>server/instance/session.ts
+    participant Prompt as 💬 SessionPrompt<br/>session/prompt.ts
+    participant Session as 🗄️ Session<br/>session/index.ts
+    participant Agent as 🤖 Agent<br/>agent/agent.ts
+    participant Proc as ⚙️ Processor<br/>session/processor.ts
+    participant LLM as 🔗 LLM<br/>session/llm.ts
+    participant Prov as 🏭 Provider<br/>provider/provider.ts
+    participant AI as 📡 streamText<br/>Vercel AI SDK
+    participant API as ☁️ LLM API<br/>Anthropic / OpenAI / ...
+
+    rect rgb(245, 245, 255)
+        Note over User,CLI: Phase 1 — CLI 입력 & 부트스트랩
+        User->>CLI: opencode run "Fix the bug"
+        CLI->>CLI: yargs 인자 파싱
+        CLI->>Boot: bootstrap(cwd, callback)
+        Boot->>Boot: Effect.js 런타임 초기화<br/>모든 서비스 Layer 구성
+    end
+
+    rect rgb(245, 255, 245)
+        Note over SDK,Server: Phase 2 — SDK → 내부 서버 라우팅
+        Boot->>SDK: createOpencodeClient(<br/>  fetch: Server.app.fetch<br/>)
+        SDK->>Server: POST /:sessionID/message<br/>(body: parts, agent, model)
+        Server->>Server: Zod 스키마 검증
+        Server->>Prompt: SessionPrompt.prompt(input)
+    end
+
+    rect rgb(255, 250, 240)
+        Note over Prompt,Session: Phase 3 — 유저 메시지 저장
+        Prompt->>Session: sessions.get(sessionID)
+        Session-->>Prompt: Session.Info
+        Prompt->>Prompt: createUserMessage(input)<br/>text/file/agent 파트 처리
+        Prompt->>Session: sessions.updateMessage(userMsg)
+        Prompt->>Session: sessions.updatePart(textPart)
+    end
+
+    rect rgb(255, 245, 245)
+        Note over Prompt,API: Phase 4 — runLoop (while true 반복)
+        Prompt->>Prompt: loop({sessionID})<br/>→ runLoop(sessionID)
+
+        Prompt->>Session: filterCompactedEffect()<br/>대화 히스토리 조회
+        Session-->>Prompt: msgs[]
+
+        Prompt->>Prov: getModel(providerID, modelID)
+        Prov-->>Prompt: Provider.Model
+
+        Prompt->>Agent: agents.get(agentName)
+        Agent-->>Prompt: Agent.Info<br/>(prompt, permission, options)
+
+        Note over Prompt: Tool 해석 & System Prompt 조립
+        Prompt->>Prompt: resolveTools()<br/>ToolRegistry + MCP tools
+        Prompt->>Prompt: system prompt 조립<br/>skills + env + instructions
+        Prompt->>Prompt: MessageV2.toModelMessages()<br/>대화 → ModelMessage 변환
+
+        Prompt->>Session: updateMessage(assistantMsg)
+        Prompt->>Proc: processor.create(input)
+    end
+
+    rect rgb(240, 248, 255)
+        Note over Proc,API: Phase 5 — LLM 스트림 호출
+        Proc->>LLM: llm.stream(StreamInput)
+
+        LLM->>Prov: getLanguage(model)
+        Prov->>Prov: resolveSDK() → @ai-sdk/* 인스턴스
+        Prov-->>LLM: LanguageModelV3
+
+        LLM->>LLM: Plugin hooks 실행<br/>system.transform / chat.params / chat.headers
+        LLM->>LLM: wrapLanguageModel(middleware)
+
+        LLM->>AI: streamText({<br/>  model, messages, tools,<br/>  system, temperature, ...<br/>})
+        AI->>API: HTTPS Request (SSE)
+        API-->>AI: Streaming Response
+        AI-->>LLM: AsyncIterable‹Event›
+        LLM-->>Proc: Stream‹Event›
+    end
+
+    rect rgb(248, 245, 255)
+        Note over Proc,Session: Phase 6 — 스트림 이벤트 처리
+        loop 이벤트 소비
+            alt text-delta
+                Proc->>Session: updatePart(TextPart)
+            else tool-call
+                Proc->>Session: updatePart(ToolPart: running)
+                Note over Proc: tool.execute() 실행
+                Proc->>Session: updatePart(ToolPart: completed)
+            else reasoning-delta
+                Proc->>Session: updatePart(ReasoningPart)
+            else finish
+                Proc->>Session: updateMessage(tokens, cost)
+            end
+        end
+        Proc-->>Prompt: Result
+    end
+
+    rect rgb(245, 255, 250)
+        Note over Prompt,User: Phase 7 — 루프 판정 & 응답
+        alt tool-calls → continue
+            Note over Prompt: tool 결과 포함하여<br/>Phase 4로 돌아감 (재호출)
+        else stop
+            Note over Prompt: 루프 종료
+        else compact (토큰 초과)
+            Prompt->>Prompt: compaction.create()<br/>컨텍스트 압축 후 재시도
+        end
+
+        Prompt-->>Server: MessageV2.WithParts
+        Server-->>SDK: JSON Response
+        SDK-->>CLI: Response
+        CLI-->>User: 포맷팅된 응답 출력
+    end
