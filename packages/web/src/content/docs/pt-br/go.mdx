@@ -64,6 +64,7 @@ Apenas um membro por workspace pode assinar o OpenCode Go.
 A lista atual de modelos inclui:
 
 - **GLM-5**
+- **GLM-5.1**
 - **Kimi K2.5**
 - **MiMo-V2-Pro**
 - **MiMo-V2-Omni**
@@ -82,19 +83,19 @@ O OpenCode Go inclui os seguintes limites:
 - **Limite semanal** — US$ 30 de uso
 - **Limite mensal** — US$ 60 de uso
 
-Os limites são definidos em valor em dólares. Isso significa que a sua contagem real de requisições depende do modelo que você usa. Modelos mais baratos como o MiniMax M2.5 permitem mais requisições, enquanto modelos de custo mais alto como o GLM-5 permitem menos.
+Os limites são definidos em valor em dólares. Isso significa que a sua contagem real de requisições depende do modelo que você usa. Modelos mais baratos como o MiniMax M2.5 permitem mais requisições, enquanto modelos de custo mais alto como o GLM-5.1 permitem menos.
 
 A tabela abaixo fornece uma contagem estimada de requisições com base nos padrões típicos de uso do Go:
 
-|                         | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
-| ----------------------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
-| requisições por 5 horas | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
-| requisições por semana  | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
-| requisições por mês     | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
+|                         | GLM-5.1 | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
+| ----------------------- | ------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
+| requisições por 5 horas | 880     | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
+| requisições por semana  | 2.150   | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
+| requisições por mês     | 4.300   | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
 
 As estimativas baseiam-se nos padrões médios de requisições observados:
 
-- GLM-5 — 700 tokens de entrada, 52.000 em cache, 150 tokens de saída por requisição
+- GLM-5/5.1 — 700 tokens de entrada, 52.000 em cache, 150 tokens de saída por requisição
 - Kimi K2.5 — 870 tokens de entrada, 55.000 em cache, 200 tokens de saída por requisição
 - MiniMax M2.7/M2.5 — 300 tokens de entrada, 55.000 em cache, 125 tokens de saída por requisição
 - MiMo-V2-Pro — 350 tokens de entrada, 41.000 em cache, 250 tokens de saída por requisição
@@ -124,6 +125,7 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 
 | Modelo       | ID do Modelo | Endpoint                                         | Pacote do AI SDK            |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |

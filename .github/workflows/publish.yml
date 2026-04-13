@@ -389,6 +389,7 @@ jobs:
     needs:
       - build-cli
       - version
+    if: github.repository == 'anomalyco/opencode'
     continue-on-error: false
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -421,7 +422,6 @@ jobs:
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
-    # if: github.ref_name == 'beta'
     steps:
       - uses: actions/checkout@v3
 
@@ -547,6 +547,7 @@ jobs:
       - sign-cli-windows
       - build-tauri
       - build-electron
+    if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
