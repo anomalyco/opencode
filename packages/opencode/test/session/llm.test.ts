@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
-import { Cause, Exit, Stream } from "effect"
+import { Cause, Effect, Exit, Stream } from "effect"
 import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
@@ -15,6 +15,16 @@ import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
+
+async function getModel(providerID: ProviderID, modelID: ModelID) {
+  return AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      return yield* provider.getModel(providerID, modelID)
+    }),
+  )
+}
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -325,7 +335,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
@@ -416,7 +426,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-raw-abort")
         const agent = {
           name: "test",
@@ -490,7 +500,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-service-abort")
         const agent = {
           name: "test",
@@ -581,7 +591,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-tools")
         const agent = {
           name: "test",
@@ -699,7 +709,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
@@ -819,7 +829,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-data-url")
         const agent = {
           name: "test",
@@ -942,7 +952,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-3")
         const agent = {
           name: "test",
@@ -1043,7 +1053,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",

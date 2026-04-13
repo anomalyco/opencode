@@ -9,24 +9,26 @@ import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
-import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
+import * as Effect from "effect/Effect"
 
-export async function InstanceBootstrap() {
+export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  await Plugin.init()
-  void BootstrapRuntime.runPromise(ShareNext.Service.use((svc) => svc.init()))
-  void BootstrapRuntime.runPromise(Format.Service.use((svc) => svc.init()))
-  await LSP.init()
-  File.init()
-  void BootstrapRuntime.runPromise(FileWatcher.Service.use((svc) => svc.init()))
-  Vcs.init()
-  Snapshot.init()
+  yield* Plugin.Service.use((svc) => svc.init())
+  yield* ShareNext.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+  yield* Format.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+  yield* LSP.Service.use((svc) => svc.init())
+  yield* File.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+  yield* FileWatcher.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+  yield* Vcs.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+  yield* Snapshot.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
 
-  Bus.subscribe(Command.Event.Executed, async (payload) => {
-    if (payload.properties.name === Command.Default.INIT) {
-      Project.setInitialized(Instance.project.id)
-    }
-  })
-}
+  yield* Bus.Service.use((svc) =>
+    svc.subscribeCallback(Command.Event.Executed, async (payload) => {
+      if (payload.properties.name === Command.Default.INIT) {
+        Project.setInitialized(Instance.project.id)
+      }
+    }),
+  )
+}).pipe(Effect.withSpan("InstanceBootstrap"))

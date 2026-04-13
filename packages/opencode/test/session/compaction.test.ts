@@ -18,6 +18,7 @@ import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionSummary } from "../../src/session/summary"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "../../src/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
@@ -25,6 +26,15 @@ import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
 
 Log.init({ print: false })
+
+const summary = Layer.succeed(
+  SessionSummary.Service,
+  SessionSummary.Service.of({
+    summarize: () => Effect.void,
+    diff: () => Effect.succeed([]),
+    computeDiff: () => Effect.succeed([]),
+  }),
+)
 
 const ref = {
   providerID: ProviderID.make("test"),
@@ -194,7 +204,7 @@ function llm() {
 function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fake()) {
   const bus = Bus.layer
   const status = SessionStatus.layer.pipe(Layer.provide(bus))
-  const processor = SessionProcessorModule.SessionProcessor.layer
+  const processor = SessionProcessorModule.SessionProcessor.layer.pipe(Layer.provide(summary))
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
       Layer.provide(provider.layer),
@@ -1005,6 +1015,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1023,7 +1042,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1039,6 +1066,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         anthropic: {
@@ -1059,7 +1095,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         anthropic: {},
@@ -1078,7 +1122,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        reasoningTokens: 100,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 400,
+          reasoningTokens: 100,
+        },
       },
     })
 
@@ -1104,7 +1156,15 @@ describe("session.getUsage", () => {
         inputTokens: 0,
         outputTokens: 1_000_000,
         totalTokens: 1_000_000,
-        reasoningTokens: 250_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 750_000,
+          reasoningTokens: 250_000,
+        },
       },
     })
 
@@ -1121,6 +1181,15 @@ describe("session.getUsage", () => {
         inputTokens: 0,
         outputTokens: 0,
         totalTokens: 0,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1148,6 +1217,15 @@ describe("session.getUsage", () => {
         inputTokens: 1_000_000,
         outputTokens: 100_000,
         totalTokens: 1_100_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1163,7 +1241,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       }
       if (npm === "@ai-sdk/amazon-bedrock") {
         const result = Session.getUsage({
@@ -1214,7 +1300,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         vertex: {

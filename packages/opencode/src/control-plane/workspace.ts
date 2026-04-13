@@ -9,6 +9,7 @@ import { SyncEvent } from "@/sync"
 import { Log } from "@/util/log"
 import { Filesystem } from "@/util/filesystem"
 import { ProjectID } from "@/project/schema"
+import { Slug } from "@opencode-ai/util/slug"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
@@ -66,9 +67,9 @@ export namespace Workspace {
 
   export const create = fn(CreateInput, async (input) => {
     const id = WorkspaceID.ascending(input.id)
-    const adaptor = await getAdaptor(input.type)
+    const adaptor = await getAdaptor(input.projectID, input.type)
 
-    const config = await adaptor.configure({ ...input, id, name: null, directory: null })
+    const config = await adaptor.configure({ ...input, id, name: Slug.create(), directory: null })
 
     const info: Info = {
       id,
@@ -124,7 +125,7 @@ export namespace Workspace {
       stopSync(id)
 
       const info = fromRow(row)
-      const adaptor = await getAdaptor(row.type)
+      const adaptor = await getAdaptor(info.projectID, row.type)
       adaptor.remove(info)
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
       return info
@@ -162,7 +163,7 @@ export namespace Workspace {
       log.info("connecting to sync: " + space.id)
 
       setStatus(space.id, "connecting")
-      const adaptor = await getAdaptor(space.type)
+      const adaptor = await getAdaptor(space.projectID, space.type)
       const target = await adaptor.target(space)
 
       if (target.type === "local") return

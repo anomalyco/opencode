@@ -8,6 +8,7 @@ import { ProjectID } from "../../project/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { InstanceBootstrap } from "../../project/bootstrap"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export const ProjectRoutes = lazy(() =>
   new Hono()
@@ -83,7 +84,7 @@ export const ProjectRoutes = lazy(() =>
           directory: dir,
           worktree: dir,
           project: next,
-          init: InstanceBootstrap,
+          init: () => AppRuntime.runPromise(InstanceBootstrap),
         })
         return c.json(next)
       },
