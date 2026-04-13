@@ -102,6 +102,9 @@ export namespace Terminal {
     })
   }
 
+  // Keep startup mode detection separate from `colors()`: the TUI boot path only
+  // needs OSC 11 and should resolve on the first background response instead of
+  // waiting on the full palette query used by system theme generation.
   export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     if (!process.stdin.isTTY) return "dark"
 
