@@ -1,12 +1,17 @@
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
 import { provideInstance, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
 
-const it = testEffect(Skill.defaultLayer)
+const node = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
+
+const it = testEffect(Layer.mergeAll(Skill.defaultLayer, node))
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
