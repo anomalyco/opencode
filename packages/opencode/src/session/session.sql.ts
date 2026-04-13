@@ -11,7 +11,6 @@ import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
 type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
-type EntryData = Omit<SessionEntry.Entry, "id" | "type">
 
 export const SessionTable = sqliteTable(
   "session",
@@ -104,7 +103,7 @@ export const SessionEntryTable = sqliteTable(
       .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().notNull(),
+    type: text().$type<SessionEntry.Type>().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<Omit<SessionEntry.Entry, "type" | "id">>(),
   },
