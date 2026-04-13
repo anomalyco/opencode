@@ -17,7 +17,7 @@ function getLastModel(sessionID: SessionID) {
   return undefined
 }
 
-export const PlanExitTool = Tool.defineEffect(
+export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -74,7 +74,7 @@ export const PlanExitTool = Tool.defineEffect(
             output: "User approved switching to build agent. Wait for further instructions.",
             metadata: {},
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

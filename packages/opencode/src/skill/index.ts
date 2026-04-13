@@ -2,7 +2,7 @@ import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -187,7 +187,7 @@ export namespace Skill {
     log.info("init", { count: Object.keys(state.skills).length })
   })
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
 
   export const layer = Layer.effect(
     Service,

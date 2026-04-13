@@ -3,12 +3,10 @@ import type { UpgradeWebSocket } from "hono/ws"
 import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
-import { ServerProxy } from "./proxy"
-import { lazy } from "@/util/lazy"
+import { ServerProxy } from "../proxy"
 import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { InstanceRoutes } from "./instance"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
@@ -29,20 +27,25 @@ function local(method: string, path: string) {
   return false
 }
 
-async function getSessionWorkspace(url: URL) {
+function getSessionID(url: URL) {
   if (url.pathname === "/session/status") return null
 
   const id = url.pathname.match(/^\/session\/([^/]+)(?:\/|$)/)?.[1]
   if (!id) return null
 
-  const session = await Session.get(SessionID.make(id)).catch(() => undefined)
+  return SessionID.make(id)
+}
+
+async function getSessionWorkspace(url: URL) {
+  const id = getSessionID(url)
+  if (!id) return null
+
+  const session = await Session.get(id).catch(() => undefined)
   return session?.workspaceID
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
-  const routes = lazy(() => InstanceRoutes(upgrade))
-
-  return async (c) => {
+  return async (c, next) => {
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
     const directory = Filesystem.resolve(
       (() => {
@@ -65,13 +68,24 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
         directory,
         init: InstanceBootstrap,
         async fn() {
-          return routes().fetch(c.req.raw, c.env)
+          return next()
         },
       })
     }
 
     const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
+
     if (!workspace) {
+      // Special-case deleting a session in case user's data in a
+      // weird state. Allow them to forcefully delete a synced session
+      // even if the remote workspace is not in their data.
+      //
+      // The lets the `DELETE /session/:id` endpoint through and we've
+      // made sure that it will run without an instance
+      if (url.pathname.match(/\/session\/[^/]+$/) && c.req.method === "DELETE") {
+        return next()
+      }
+
       return new Response(`Workspace not found: ${workspaceID}`, {
         status: 500,
         headers: {
@@ -91,7 +105,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
             directory: target.directory,
             init: InstanceBootstrap,
             async fn() {
-              return routes().fetch(c.req.raw, c.env)
+              return next()
             },
           }),
       })
@@ -100,7 +114,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     if (local(c.req.method, url.pathname)) {
       // No instance provided because we are serving cached data; there
       // is no instance to work with
-      return routes().fetch(c.req.raw, c.env)
+      return next()
     }
 
     if (c.req.header("upgrade")?.toLowerCase() === "websocket") {

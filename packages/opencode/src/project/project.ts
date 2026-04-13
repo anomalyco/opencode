@@ -8,7 +8,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRuntime } from "@/effect/run-service"
@@ -100,7 +100,7 @@ export namespace Project {
     readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Project") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
 
   type GitResult = { code: number; text: string; stderr: string }
 

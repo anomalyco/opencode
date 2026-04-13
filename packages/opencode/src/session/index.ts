@@ -4,7 +4,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
-import { type ProviderMetadata } from "ai"
+import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
@@ -28,8 +28,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
-import type { LanguageModelV2Usage } from "@ai-sdk/provider"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Option, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
@@ -240,7 +239,7 @@ export namespace Session {
 
   export const getUsage = (input: {
     model: Provider.Model
-    usage: LanguageModelV2Usage
+    usage: LanguageModelUsage
     metadata?: ProviderMetadata
   }) => {
     const safe = (value: number) => {
@@ -249,11 +248,14 @@ export namespace Session {
     }
     const inputTokens = safe(input.usage.inputTokens ?? 0)
     const outputTokens = safe(input.usage.outputTokens ?? 0)
-    const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
+    const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
 
-    const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+    const cacheReadInputTokens = safe(
+      input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
+    )
     const cacheWriteInputTokens = safe(
-      (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+      (input.usage.inputTokenDetails?.cacheWriteTokens ??
+        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
         // google-vertex-anthropic returns metadata under "vertex" key
         // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
         input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
@@ -274,7 +276,7 @@ export namespace Session {
     const tokens = {
       total,
       input: adjustedInputTokens,
-      output: outputTokens - reasoningTokens,
+      output: safe(outputTokens - reasoningTokens),
       reasoning: reasoningTokens,
       cache: {
         write: cacheWriteInputTokens,
@@ -352,19 +354,25 @@ export namespace Session {
       field: string
       delta: string
     }) => Effect.Effect<void>
+    /** Finds the first message matching the predicate, searching newest-first. */
+    readonly findMessage: (
+      sessionID: SessionID,
+      predicate: (msg: MessageV2.WithParts) => boolean,
+    ) => Effect.Effect<Option.Option<MessageV2.WithParts>>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Session") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
   type Patch = z.infer<typeof Event.Updated.schema>["info"]
 
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))
 
-  export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const storage = yield* Storage.Service
 
       const createNext = Effect.fn("Session.createNext")(function* (input: {
         id?: SessionID
@@ -413,26 +421,35 @@ export namespace Session {
       })
 
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-        const ctx = yield* InstanceState.context
         const rows = yield* db((d) =>
           d
             .select()
             .from(SessionTable)
-            .where(and(eq(SessionTable.project_id, ctx.project.id), eq(SessionTable.parent_id, parentID)))
+            .where(and(eq(SessionTable.parent_id, parentID)))
             .all(),
         )
         return rows.map(fromRow)
       })
 
-      const remove: (sessionID: SessionID) => Effect.Effect<void> = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
         try {
           const session = yield* get(sessionID)
           const kids = yield* children(sessionID)
           for (const child of kids) {
             yield* remove(child.id)
           }
+
+          // `remove` needs to work in all cases, such as a broken
+          // sessions that run cleanup. In certain cases these will
+          // run without any instance state, so we need to turn off
+          // publishing of events in that case
+          const hasInstance = yield* InstanceState.directory.pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          )
+
           yield* Effect.sync(() => {
-            SyncEvent.run(Event.Deleted, { sessionID, info: session })
+            SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
             SyncEvent.remove(sessionID)
           })
         } catch (e) {
@@ -576,9 +593,9 @@ export namespace Session {
       })
 
       const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-        return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
-          Effect.orElseSucceed((): Snapshot.FileDiff[] => []),
-        )
+        return yield* storage
+          .read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+          .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => []))
       })
 
       const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
@@ -626,6 +643,17 @@ export namespace Session {
         yield* bus.publish(MessageV2.Event.PartDelta, input)
       })
 
+      /** Finds the first message matching the predicate, searching newest-first. */
+      const findMessage = Effect.fn("Session.findMessage")(function* (
+        sessionID: SessionID,
+        predicate: (msg: MessageV2.WithParts) => boolean,
+      ) {
+        for (const item of MessageV2.stream(sessionID)) {
+          if (predicate(item)) return Option.some(item)
+        }
+        return Option.none<MessageV2.WithParts>()
+      })
+
       return Service.of({
         create,
         fork,
@@ -647,11 +675,12 @@ export namespace Session {
         updatePart,
         getPart,
         updatePartDelta,
+        findMessage,
       })
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -679,6 +708,10 @@ export namespace Session {
 
   export const setArchived = fn(z.object({ sessionID: SessionID.zod, time: z.number().optional() }), (input) =>
     runPromise((svc) => svc.setArchived(input)),
+  )
+
+  export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset }), (input) =>
+    runPromise((svc) => svc.setPermission(input)),
   )
 
   export const setRevert = fn(
@@ -823,15 +856,4 @@ export namespace Session {
     MessageV2.Part.parse(part)
     return runPromise((svc) => svc.updatePart(part))
   }
-
-  export const updatePartDelta = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-      partID: PartID.zod,
-      field: z.string(),
-      delta: z.string(),
-    }),
-    (input) => runPromise((svc) => svc.updatePartDelta(input)),
-  )
 }

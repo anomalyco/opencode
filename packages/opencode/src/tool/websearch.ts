@@ -24,7 +24,7 @@ const Parameters = z.object({
     .describe("Maximum characters for context string optimized for LLMs (default: 10000)"),
 })
 
-export const WebSearchTool = Tool.defineEffect(
+export const WebSearchTool = Tool.define(
   "websearch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
@@ -36,20 +36,18 @@ export const WebSearchTool = Tool.defineEffect(
       parameters: Parameters,
       execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "websearch",
-              patterns: [params.query],
-              always: ["*"],
-              metadata: {
-                query: params.query,
-                numResults: params.numResults,
-                livecrawl: params.livecrawl,
-                type: params.type,
-                contextMaxCharacters: params.contextMaxCharacters,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "websearch",
+            patterns: [params.query],
+            always: ["*"],
+            metadata: {
+              query: params.query,
+              numResults: params.numResults,
+              livecrawl: params.livecrawl,
+              type: params.type,
+              contextMaxCharacters: params.contextMaxCharacters,
+            },
+          })
 
           const result = yield* McpExa.call(
             http,
@@ -70,7 +68,7 @@ export const WebSearchTool = Tool.defineEffect(
             title: `Web search: ${params.query}`,
             metadata: {},
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

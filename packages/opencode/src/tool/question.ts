@@ -12,7 +12,7 @@ type Metadata = {
   answers: Question.Answer[]
 }
 
-export const QuestionTool = Tool.defineEffect<typeof parameters, Metadata, Question.Service>(
+export const QuestionTool = Tool.define<typeof parameters, Metadata, Question.Service>(
   "question",
   Effect.gen(function* () {
     const question = yield* Question.Service
@@ -39,7 +39,7 @@ export const QuestionTool = Tool.defineEffect<typeof parameters, Metadata, Quest
               answers,
             },
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )

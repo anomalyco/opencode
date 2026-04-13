@@ -3,6 +3,7 @@ import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { QuestionID } from "@/question/schema"
 import { Question } from "../../question"
+import { AppRuntime } from "@/effect/app-runtime"
 import z from "zod"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -27,7 +28,7 @@ export const QuestionRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const questions = await Question.list()
+        const questions = await AppRuntime.runPromise(Question.Service.use((svc) => svc.list()))
         return c.json(questions)
       },
     )
@@ -59,10 +60,14 @@ export const QuestionRoutes = lazy(() =>
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")
-        await Question.reply({
-          requestID: params.requestID,
-          answers: json.answers,
-        })
+        await AppRuntime.runPromise(
+          Question.Service.use((svc) =>
+            svc.reply({
+              requestID: params.requestID,
+              answers: json.answers,
+            }),
+          ),
+        )
         return c.json(true)
       },
     )
@@ -92,7 +97,7 @@ export const QuestionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        await Question.reject(params.requestID)
+        await AppRuntime.runPromise(Question.Service.use((svc) => svc.reject(params.requestID)))
         return c.json(true)
       },
     ),
