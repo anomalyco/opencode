@@ -24,6 +24,7 @@ import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { WorkspaceRouterMiddleware } from "./middleware"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Effect } from "effect"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
   new Hono()
@@ -215,7 +216,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        const skills = await Skill.all()
+        const skills = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const skill = yield* Skill.Service
+            return yield* skill.all()
+          }),
+        )
         return c.json(skills)
       },
     )
