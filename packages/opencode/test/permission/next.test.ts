@@ -10,7 +10,8 @@ import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
-const env = Layer.mergeAll(Permission.defaultLayer, CrossSpawnSpawner.defaultLayer)
+const bus = Bus.layer
+const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(bus)), bus, CrossSpawnSpawner.defaultLayer)
 const it = testEffect(env)
 
 afterEach(async () => {
@@ -579,7 +580,7 @@ it.live("ask - adds request to pending list", () =>
         ruleset: [],
       }).pipe(Effect.forkScoped)
 
-      const items = yield* list()
+      const items = yield* waitForPending(1)
       expect(items).toHaveLength(1)
       expect(items[0]).toMatchObject({
         sessionID: SessionID.make("session_test"),
@@ -602,8 +603,9 @@ it.live("ask - adds request to pending list", () =>
 it.live("ask - publishes asked event", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
       let seen: Permission.Request | undefined
-      const unsub = Bus.subscribe(Permission.Event.Asked, (event) => {
+      const unsub = yield* bus.subscribeCallback(Permission.Event.Asked, (event) => {
         seen = event.properties
       })
 
@@ -621,7 +623,7 @@ it.live("ask - publishes asked event", () =>
           ruleset: [],
         }).pipe(Effect.forkScoped)
 
-        expect(yield* list()).toHaveLength(1)
+        expect(yield* waitForPending(1)).toHaveLength(1)
         expect(seen).toBeDefined()
         expect(seen).toMatchObject({
           sessionID: SessionID.make("session_test"),
@@ -850,6 +852,7 @@ it.live("reply - always keeps other session pending", () =>
 it.live("reply - publishes replied event", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
       const fiber = yield* ask({
         id: PermissionID.make("per_test7"),
         sessionID: SessionID.make("session_test"),
@@ -869,13 +872,17 @@ it.live("reply - publishes replied event", () =>
             reply: Permission.Reply
           }
         | undefined
-      const unsub = Bus.subscribe(Permission.Event.Replied, (event) => {
+      const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
         seen = event.properties
       })
 
       try {
         yield* reply({ requestID: PermissionID.make("per_test7"), reply: "once" })
         yield* Fiber.join(fiber)
+        for (let i = 0; i < 20; i++) {
+          if (seen) break
+          yield* Effect.promise(() => Bun.sleep(0))
+        }
         expect(seen).toEqual({
           sessionID: SessionID.make("session_test"),
           requestID: PermissionID.make("per_test7"),
