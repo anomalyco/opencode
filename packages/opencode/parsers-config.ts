@@ -286,5 +286,13 @@ export default {
         ],
       },
     },
+    {
+      filetype: "fsharp",
+      wasm: "https://github.com/ionide/tree-sitter-fsharp/releases/download/0.2.2/tree-sitter-fsharp.wasm",
+      queries: {
+        highlights: ["https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/main/queries/highlights.scm"],
+        locals: ["https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/main/queries/locals.scm"],
+      },
+    },
   ],
 }
