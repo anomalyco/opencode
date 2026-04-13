@@ -15,7 +15,7 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
-import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
+import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
@@ -72,9 +72,15 @@ function createGlobalSync() {
   let projectWritten = false
   let bootedAt = 0
   let bootingRoot = false
+  let eventFrame: number | undefined
+  let eventTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
     active = false
+  })
+  onCleanup(() => {
+    if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
+    if (eventTimer !== undefined) clearTimeout(eventTimer)
   })
 
   const cacheProjects = () => {
@@ -154,6 +160,7 @@ function createGlobalSync() {
       queue.clear(directory)
       sessionMeta.delete(directory)
       sdkCache.delete(directory)
+      clearProviderRev(directory)
       clearSessionPrefetchDirectory(directory)
     },
     translate: language.t,
@@ -252,6 +259,7 @@ function createGlobalSync() {
         directory,
         global: {
           config: globalStore.config,
+          path: globalStore.path,
           project: globalStore.project,
           provider: globalStore.provider,
         },
@@ -311,7 +319,10 @@ function createGlobalSync() {
       loadLsp: () => {
         sdkFor(directory)
           .lsp.status()
-          .then((x) => setStore("lsp", x.data ?? []))
+          .then((x) => {
+            setStore("lsp", x.data ?? [])
+            setStore("lsp_ready", true)
+          })
       },
     })
   })
@@ -343,6 +354,20 @@ function createGlobalSync() {
   }
 
   onMount(() => {
+    if (typeof requestAnimationFrame === "function") {
+      eventFrame = requestAnimationFrame(() => {
+        eventFrame = undefined
+        eventTimer = setTimeout(() => {
+          eventTimer = undefined
+          globalSDK.event.start()
+        }, 0)
+      })
+    } else {
+      eventTimer = setTimeout(() => {
+        eventTimer = undefined
+        globalSDK.event.start()
+      }, 0)
+    }
     void bootstrap()
   })
 

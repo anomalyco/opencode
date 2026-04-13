@@ -5,6 +5,9 @@ import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config/config"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Color } from "../../src/util/color"
+import { AppRuntime } from "../../src/effect/app-runtime"
+
+const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
 
 test("agent color parsed from project config", async () => {
   await using tmp = await tmpdir({
@@ -24,7 +27,7 @@ test("agent color parsed from project config", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const cfg = await Config.get()
+      const cfg = await load()
       expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
       expect(cfg.agent?.["plan"]?.color).toBe("primary")
     },

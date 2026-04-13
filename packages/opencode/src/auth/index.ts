@@ -1,9 +1,8 @@
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
-import { makeRunPromise } from "@/effect/run-service"
+import { Effect, Layer, Record, Result, Schema, Context } from "effect"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
-import { Filesystem } from "../util/filesystem"
+import { AppFileSystem } from "../filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -24,6 +23,7 @@ export namespace Auth {
   export class Api extends Schema.Class<Api>("ApiAuth")({
     type: Schema.Literal("api"),
     key: Schema.String,
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   }) {}
 
   export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
@@ -48,22 +48,18 @@ export namespace Auth {
     readonly remove: (key: string) => Effect.Effect<void, AuthError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Auth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Auth") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const fsys = yield* AppFileSystem.Service
       const decode = Schema.decodeUnknownOption(Info)
 
-      const all = Effect.fn("Auth.all")(() =>
-        Effect.tryPromise({
-          try: async () => {
-            const data = await Filesystem.readJson<Record<string, unknown>>(file).catch(() => ({}))
-            return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
-          },
-          catch: fail("Failed to read auth data"),
-        }),
-      )
+      const all = Effect.fn("Auth.all")(function* () {
+        const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
+        return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+      })
 
       const get = Effect.fn("Auth.get")(function* (providerID: string) {
         return (yield* all())[providerID]
@@ -74,10 +70,9 @@ export namespace Auth {
         const data = yield* all()
         if (norm !== key) delete data[key]
         delete data[norm + "/"]
-        yield* Effect.tryPromise({
-          try: () => Filesystem.writeJson(file, { ...data, [norm]: info }, 0o600),
-          catch: fail("Failed to write auth data"),
-        })
+        yield* fsys
+          .writeJson(file, { ...data, [norm]: info }, 0o600)
+          .pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
       const remove = Effect.fn("Auth.remove")(function* (key: string) {
@@ -85,31 +80,12 @@ export namespace Auth {
         const data = yield* all()
         delete data[key]
         delete data[norm]
-        yield* Effect.tryPromise({
-          try: () => Filesystem.writeJson(file, data, 0o600),
-          catch: fail("Failed to write auth data"),
-        })
+        yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
       return Service.of({ get, all, set, remove })
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
-
-  export async function get(providerID: string) {
-    return runPromise((service) => service.get(providerID))
-  }
-
-  export async function all(): Promise<Record<string, Info>> {
-    return runPromise((service) => service.all())
-  }
-
-  export async function set(key: string, info: Info) {
-    return runPromise((service) => service.set(key, info))
-  }
-
-  export async function remove(key: string) {
-    return runPromise((service) => service.remove(key))
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
 }

@@ -23,6 +23,7 @@ export type E2EWindow = Window & {
     prompt?: {
       enabled?: boolean
       current?: import("./prompt").PromptProbeState
+      sent?: import("./prompt").PromptSendState
     }
     terminal?: {
       enabled?: boolean

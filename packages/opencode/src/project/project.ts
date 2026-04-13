@@ -8,10 +8,10 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
@@ -100,7 +100,7 @@ export namespace Project {
     readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Project") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
 
   type GitResult = { code: number; text: string; stderr: string }
 
@@ -111,7 +111,7 @@ export namespace Project {
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fs = yield* AppFileSystem.Service
       const pathSvc = yield* Path.Path
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
@@ -137,6 +137,8 @@ export namespace Project {
       const emitUpdated = (data: Info) =>
         Effect.sync(() =>
           GlobalBus.emit("event", {
+            directory: "global",
+            project: data.id,
             payload: { type: Event.Updated.type, properties: data },
           }),
         )
@@ -155,10 +157,10 @@ export namespace Project {
       const scope = yield* Scope.Scope
 
       const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
-        return yield* fsys.readFileString(pathSvc.join(dir, "opencode")).pipe(
+        return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
           Effect.map((x) => x.trim()),
           Effect.map(ProjectID.make),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.catch(() => Effect.void),
         )
       })
 
@@ -169,7 +171,7 @@ export namespace Project {
         type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
 
         const data: DiscoveryResult = yield* Effect.gen(function* () {
-          const dotgitMatches = yield* fsys.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
+          const dotgitMatches = yield* fs.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
           const dotgit = dotgitMatches[0]
 
           if (!dotgit) {
@@ -222,7 +224,7 @@ export namespace Project {
 
             id = roots[0] ? ProjectID.make(roots[0]) : undefined
             if (id) {
-              yield* fsys.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
+              yield* fs.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
             }
           }
 
@@ -270,7 +272,7 @@ export namespace Project {
         result.sandboxes = yield* Effect.forEach(
           result.sandboxes,
           (s) =>
-            fsys.exists(s).pipe(
+            fs.exists(s).pipe(
               Effect.orDie,
               Effect.map((exists) => (exists ? s : undefined)),
             ),
@@ -329,7 +331,7 @@ export namespace Project {
         if (input.icon?.override) return
         if (input.icon?.url) return
 
-        const matches = yield* fsys
+        const matches = yield* fs
           .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
             cwd: input.worktree,
             absolute: true,
@@ -339,7 +341,7 @@ export namespace Project {
         const shortest = matches.sort((a, b) => a.length - b.length)[0]
         if (!shortest) return
 
-        const buffer = yield* fsys.readFile(shortest).pipe(Effect.orDie)
+        const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
         const base64 = Buffer.from(buffer).toString("base64")
         const mime = AppFileSystem.mimeType(shortest)
         const url = `data:${mime};base64,${base64}`
@@ -400,7 +402,7 @@ export namespace Project {
         return yield* Effect.forEach(
           data.sandboxes,
           (dir) =>
-            fsys.isDir(dir).pipe(
+            fs.isDir(dir).pipe(
               Effect.orDie,
               Effect.map((ok) => (ok ? dir : undefined)),
             ),
@@ -457,12 +459,11 @@ export namespace Project {
   )
 
   export const defaultLayer = layer.pipe(
-    Layer.provide(CrossSpawnSpawner.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // ---------------------------------------------------------------------------
   // Promise-based API (delegates to Effect service via runPromise)

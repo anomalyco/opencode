@@ -1,4 +1,5 @@
 import { EOL } from "os"
+import { AppRuntime } from "../../../effect/app-runtime"
 import { Ripgrep } from "../../../file/ripgrep"
 import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
@@ -76,12 +77,18 @@ const SearchCommand = cmd({
         description: "Limit number of results",
       }),
   async handler(args) {
-    const results = await Ripgrep.search({
-      cwd: process.cwd(),
-      pattern: args.pattern,
-      glob: args.glob as string[] | undefined,
-      limit: args.limit,
+    await bootstrap(process.cwd(), async () => {
+      const results = await AppRuntime.runPromise(
+        Ripgrep.Service.use((svc) =>
+          svc.search({
+            cwd: Instance.directory,
+            pattern: args.pattern,
+            glob: args.glob as string[] | undefined,
+            limit: args.limit,
+          }),
+        ),
+      )
+      process.stdout.write(JSON.stringify(results.items, null, 2) + EOL)
     })
-    process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   },
 })

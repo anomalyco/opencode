@@ -41,13 +41,14 @@ function mockGitFailure(failArg: string) {
               all: Stream.empty,
               getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
               getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
             })
           }
           return yield* real.spawn(command)
         }),
       )
     }),
-  ).pipe(Layer.provide(CrossSpawnSpawner.layer), Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+  ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
 }
 
 function projectLayerWithFailure(failArg: string) {

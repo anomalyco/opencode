@@ -26,7 +26,7 @@ async function bootstrap() {
       await Filesystem.write(`${dir}/a.txt`, aContent)
       await Filesystem.write(`${dir}/b.txt`, bContent)
       await $`git add .`.cwd(dir).quiet()
-      await $`git commit --no-gpg-sign -m init`.cwd(dir).quiet()
+      await $`git commit -m init`.cwd(dir).quiet()
       return {
         aContent,
         bContent,
@@ -181,7 +181,7 @@ test("symlink handling", async () => {
   })
 })
 
-test("large file handling", async () => {
+test("file under size limit handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -192,6 +192,23 @@ test("large file handling", async () => {
       await Filesystem.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
       expect((await Snapshot.patch(before!)).files).toContain(fwd(tmp.path, "large.txt"))
+    },
+  })
+})
+
+test("large added files are skipped", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Filesystem.write(`${tmp.path}/huge.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
+
+      expect((await Snapshot.patch(before!)).files).toEqual([])
+      expect(await Snapshot.diff(before!)).toBe("")
+      expect(await Snapshot.track()).toBe(before)
     },
   })
 })
@@ -494,6 +511,49 @@ test("circular symlinks", async () => {
   })
 })
 
+test("source project gitignore is respected - ignored files are not snapshotted", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      // Create gitignore BEFORE any tracking
+      await Filesystem.write(`${dir}/.gitignore`, "*.ignored\nbuild/\nnode_modules/\n")
+      await Filesystem.write(`${dir}/tracked.txt`, "tracked content")
+      await Filesystem.write(`${dir}/ignored.ignored`, "ignored content")
+      await $`mkdir -p ${dir}/build`.quiet()
+      await Filesystem.write(`${dir}/build/output.js`, "build output")
+      await Filesystem.write(`${dir}/normal.js`, "normal js")
+      await $`git add .`.cwd(dir).quiet()
+      await $`git commit -m init`.cwd(dir).quiet()
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      // Modify tracked files and create new ones - some ignored, some not
+      await Filesystem.write(`${tmp.path}/tracked.txt`, "modified tracked")
+      await Filesystem.write(`${tmp.path}/new.ignored`, "new ignored")
+      await Filesystem.write(`${tmp.path}/new-tracked.txt`, "new tracked")
+      await Filesystem.write(`${tmp.path}/build/new-build.js`, "new build file")
+
+      const patch = await Snapshot.patch(before!)
+
+      // Modified and new tracked files should be in snapshot
+      expect(patch.files).toContain(fwd(tmp.path, "new-tracked.txt"))
+      expect(patch.files).toContain(fwd(tmp.path, "tracked.txt"))
+
+      // Ignored files should NOT be in snapshot
+      expect(patch.files).not.toContain(fwd(tmp.path, "new.ignored"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "ignored.ignored"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "build/output.js"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "build/new-build.js"))
+    },
+  })
+})
+
 test("gitignore changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
@@ -514,6 +574,75 @@ test("gitignore changes", async () => {
       expect(patch.files).toContain(fwd(tmp.path, "normal.txt"))
       // Should not track ignored files (git won't see them)
       expect(patch.files).not.toContain(fwd(tmp.path, "test.ignored"))
+    },
+  })
+})
+
+test("files tracked in snapshot but now gitignored are filtered out", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // First, create a file and snapshot it
+      await Filesystem.write(`${tmp.path}/later-ignored.txt`, "initial content")
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      // Modify the file (so it appears in diff-files)
+      await Filesystem.write(`${tmp.path}/later-ignored.txt`, "modified content")
+
+      // Now add gitignore that would exclude this file
+      await Filesystem.write(`${tmp.path}/.gitignore`, "later-ignored.txt\n")
+
+      // Also create another tracked file
+      await Filesystem.write(`${tmp.path}/still-tracked.txt`, "new tracked file")
+
+      const patch = await Snapshot.patch(before!)
+
+      // The file that is now gitignored should NOT appear, even though it was
+      // previously tracked and modified
+      expect(patch.files).not.toContain(fwd(tmp.path, "later-ignored.txt"))
+
+      // The gitignore file itself should appear
+      expect(patch.files).toContain(fwd(tmp.path, ".gitignore"))
+
+      // Other tracked files should appear
+      expect(patch.files).toContain(fwd(tmp.path, "still-tracked.txt"))
+    },
+  })
+})
+
+test("gitignore updated between track calls filters from diff", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // a.txt is already committed from bootstrap - track it in snapshot
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      // Modify a.txt (so it appears in diff-files)
+      await Filesystem.write(`${tmp.path}/a.txt`, "modified content")
+
+      // Now add gitignore that would exclude a.txt
+      await Filesystem.write(`${tmp.path}/.gitignore`, "a.txt\n")
+
+      // Also modify b.txt which is not gitignored
+      await Filesystem.write(`${tmp.path}/b.txt`, "also modified")
+
+      // Second track - should not include a.txt even though it changed
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      // Verify a.txt is NOT in the diff between snapshots
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.some((x) => x.file === "a.txt")).toBe(false)
+
+      // But .gitignore should be in the diff
+      expect(diffs.some((x) => x.file === ".gitignore")).toBe(true)
+
+      // b.txt should be in the diff (not gitignored)
+      expect(diffs.some((x) => x.file === "b.txt")).toBe(true)
     },
   })
 })
@@ -957,10 +1086,98 @@ test("diffFull with new file additions", async () => {
 
       const newFileDiff = diffs[0]
       expect(newFileDiff.file).toBe("new.txt")
-      expect(newFileDiff.before).toBe("")
-      expect(newFileDiff.after).toBe("new content")
+      expect(newFileDiff.patch).toContain("+new content")
       expect(newFileDiff.additions).toBe(1)
       expect(newFileDiff.deletions).toBe(0)
+    },
+  })
+})
+
+test("diffFull with a large interleaved mixed diff", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ids = Array.from({ length: 60 }, (_, i) => i.toString().padStart(3, "0"))
+      const mod = ids.map((id) => fwd(tmp.path, "mix", `${id}-mod.txt`))
+      const del = ids.map((id) => fwd(tmp.path, "mix", `${id}-del.txt`))
+      const add = ids.map((id) => fwd(tmp.path, "mix", `${id}-add.txt`))
+      const bin = ids.map((id) => fwd(tmp.path, "mix", `${id}-bin.bin`))
+
+      await $`mkdir -p ${tmp.path}/mix`.quiet()
+      await Promise.all([
+        ...mod.map((file, i) => Filesystem.write(file, `before-${ids[i]}-é\n🙂\nline`)),
+        ...del.map((file, i) => Filesystem.write(file, `gone-${ids[i]}\n你好`)),
+        ...bin.map((file, i) => Filesystem.write(file, new Uint8Array([0, i, 255, i % 251]))),
+      ])
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Promise.all([
+        ...mod.map((file, i) => Filesystem.write(file, `after-${ids[i]}-é\n🚀\nline`)),
+        ...add.map((file, i) => Filesystem.write(file, `new-${ids[i]}\nこんにちは`)),
+        ...bin.map((file, i) => Filesystem.write(file, new Uint8Array([9, i, 8, i % 251]))),
+        ...del.map((file) => fs.rm(file)),
+      ])
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs).toHaveLength(ids.length * 4)
+
+      const map = new Map(diffs.map((item) => [item.file, item]))
+      for (let i = 0; i < ids.length; i++) {
+        const m = map.get(fwd("mix", `${ids[i]}-mod.txt`))
+        expect(m).toBeDefined()
+        expect(m!.patch).toContain(`-before-${ids[i]}-é`)
+        expect(m!.patch).toContain(`+after-${ids[i]}-é`)
+        expect(m!.status).toBe("modified")
+
+        const d = map.get(fwd("mix", `${ids[i]}-del.txt`))
+        expect(d).toBeDefined()
+        expect(d!.patch).toContain(`-gone-${ids[i]}`)
+        expect(d!.status).toBe("deleted")
+
+        const a = map.get(fwd("mix", `${ids[i]}-add.txt`))
+        expect(a).toBeDefined()
+        expect(a!.patch).toContain(`+new-${ids[i]}`)
+        expect(a!.status).toBe("added")
+
+        const b = map.get(fwd("mix", `${ids[i]}-bin.bin`))
+        expect(b).toBeDefined()
+        expect(b!.patch).toBe("")
+        expect(b!.additions).toBe(0)
+        expect(b!.deletions).toBe(0)
+        expect(b!.status).toBe("modified")
+      }
+    },
+  })
+})
+
+test("diffFull preserves git diff order across batch boundaries", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ids = Array.from({ length: 140 }, (_, i) => i.toString().padStart(3, "0"))
+
+      await $`mkdir -p ${tmp.path}/order`.quiet()
+      await Promise.all(ids.map((id) => Filesystem.write(`${tmp.path}/order/${id}.txt`, `before-${id}`)))
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Promise.all(ids.map((id) => Filesystem.write(`${tmp.path}/order/${id}.txt`, `after-${id}`)))
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const expected = ids.map((id) => `order/${id}.txt`)
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.map((item) => item.file)).toEqual(expected)
     },
   })
 })
@@ -983,8 +1200,8 @@ test("diffFull with file modifications", async () => {
 
       const modifiedFileDiff = diffs[0]
       expect(modifiedFileDiff.file).toBe("b.txt")
-      expect(modifiedFileDiff.before).toBe(tmp.extra.bContent)
-      expect(modifiedFileDiff.after).toBe("modified content")
+      expect(modifiedFileDiff.patch).toContain(`-${tmp.extra.bContent}`)
+      expect(modifiedFileDiff.patch).toContain("+modified content")
       expect(modifiedFileDiff.additions).toBeGreaterThan(0)
       expect(modifiedFileDiff.deletions).toBeGreaterThan(0)
     },
@@ -1009,8 +1226,7 @@ test("diffFull with file deletions", async () => {
 
       const removedFileDiff = diffs[0]
       expect(removedFileDiff.file).toBe("a.txt")
-      expect(removedFileDiff.before).toBe(tmp.extra.aContent)
-      expect(removedFileDiff.after).toBe("")
+      expect(removedFileDiff.patch).toContain(`-${tmp.extra.aContent}`)
       expect(removedFileDiff.additions).toBe(0)
       expect(removedFileDiff.deletions).toBe(1)
     },
@@ -1035,8 +1251,8 @@ test("diffFull with multiple line additions", async () => {
 
       const multiDiff = diffs[0]
       expect(multiDiff.file).toBe("multi.txt")
-      expect(multiDiff.before).toBe("")
-      expect(multiDiff.after).toBe("line1\nline2\nline3")
+      expect(multiDiff.patch).toContain("+line1")
+      expect(multiDiff.patch).toContain("+line3")
       expect(multiDiff.additions).toBe(3)
       expect(multiDiff.deletions).toBe(0)
     },
@@ -1062,15 +1278,13 @@ test("diffFull with addition and deletion", async () => {
 
       const addedFileDiff = diffs.find((d) => d.file === "added.txt")
       expect(addedFileDiff).toBeDefined()
-      expect(addedFileDiff!.before).toBe("")
-      expect(addedFileDiff!.after).toBe("added content")
+      expect(addedFileDiff!.patch).toContain("+added content")
       expect(addedFileDiff!.additions).toBe(1)
       expect(addedFileDiff!.deletions).toBe(0)
 
       const removedFileDiff = diffs.find((d) => d.file === "a.txt")
       expect(removedFileDiff).toBeDefined()
-      expect(removedFileDiff!.before).toBe(tmp.extra.aContent)
-      expect(removedFileDiff!.after).toBe("")
+      expect(removedFileDiff!.patch).toContain(`-${tmp.extra.aContent}`)
       expect(removedFileDiff!.additions).toBe(0)
       expect(removedFileDiff!.deletions).toBe(1)
     },
@@ -1154,7 +1368,7 @@ test("diffFull with binary file changes", async () => {
 
       const binaryDiff = diffs[0]
       expect(binaryDiff.file).toBe("binary.bin")
-      expect(binaryDiff.before).toBe("")
+      expect(binaryDiff.patch).toBe("")
     },
   })
 })
@@ -1213,6 +1427,83 @@ test("revert with overlapping files across patches uses first patch hash", async
 
       const content = await fs.readFile(`${tmp.path}/shared.txt`, "utf-8")
       expect(content).toBe("v1")
+    },
+  })
+})
+
+test("revert preserves patch order when the same hash appears again", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await $`mkdir -p ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/foo/bar`, "v1")
+      await Filesystem.write(`${tmp.path}/a.txt`, "v1")
+
+      const snap1 = await Snapshot.track()
+      expect(snap1).toBeTruthy()
+
+      await $`rm -rf ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/foo`, "v2")
+      await Filesystem.write(`${tmp.path}/a.txt`, "v2")
+
+      const snap2 = await Snapshot.track()
+      expect(snap2).toBeTruthy()
+
+      await $`rm -rf ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/a.txt`, "v3")
+
+      await Snapshot.revert([
+        { hash: snap1!, files: [fwd(tmp.path, "a.txt")] },
+        { hash: snap2!, files: [fwd(tmp.path, "foo")] },
+        { hash: snap1!, files: [fwd(tmp.path, "foo", "bar")] },
+      ])
+
+      expect(await fs.readFile(`${tmp.path}/a.txt`, "utf-8")).toBe("v1")
+      expect((await fs.stat(`${tmp.path}/foo`)).isDirectory()).toBe(true)
+      expect(await fs.readFile(`${tmp.path}/foo/bar`, "utf-8")).toBe("v1")
+    },
+  })
+})
+
+test("revert handles large mixed batches across chunk boundaries", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
+      const fresh = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "fresh", `${i}.txt`))
+
+      await $`mkdir -p ${tmp.path}/batch ${tmp.path}/fresh`.quiet()
+      await Promise.all(base.map((file, i) => Filesystem.write(file, `base-${i}`)))
+
+      const snap = await Snapshot.track()
+      expect(snap).toBeTruthy()
+
+      await Promise.all(base.map((file, i) => Filesystem.write(file, `next-${i}`)))
+      await Promise.all(fresh.map((file, i) => Filesystem.write(file, `fresh-${i}`)))
+
+      const patch = await Snapshot.patch(snap!)
+      expect(patch.files.length).toBe(base.length + fresh.length)
+
+      await Snapshot.revert([patch])
+
+      await Promise.all(
+        base.map(async (file, i) => {
+          expect(await fs.readFile(file, "utf-8")).toBe(`base-${i}`)
+        }),
+      )
+
+      await Promise.all(
+        fresh.map(async (file) => {
+          expect(
+            await fs
+              .access(file)
+              .then(() => true)
+              .catch(() => false),
+          ).toBe(false)
+        }),
+      )
     },
   })
 })
