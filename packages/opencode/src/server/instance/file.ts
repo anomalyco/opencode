@@ -112,11 +112,6 @@ export const FileRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        /*
-      const query = c.req.valid("query").query
-      const result = await LSP.workspaceSymbol(query)
-      return c.json(result)
-      */
         return c.json([])
       },
     )
