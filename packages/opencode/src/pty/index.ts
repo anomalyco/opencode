@@ -1,7 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
 import type { Proc } from "#pty"
 import z from "zod"
@@ -361,34 +360,4 @@ export namespace Pty {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function get(id: PtyID) {
-    return runPromise((svc) => svc.get(id))
-  }
-
-  export async function write(id: PtyID, data: string) {
-    return runPromise((svc) => svc.write(id, data))
-  }
-
-  export async function connect(id: PtyID, ws: Socket, cursor?: number) {
-    return runPromise((svc) => svc.connect(id, ws, cursor))
-  }
-
-  export async function create(input: CreateInput) {
-    return runPromise((svc) => svc.create(input))
-  }
-
-  export async function update(id: PtyID, input: UpdateInput) {
-    return runPromise((svc) => svc.update(id, input))
-  }
-
-  export async function remove(id: PtyID) {
-    return runPromise((svc) => svc.remove(id))
-  }
 }
