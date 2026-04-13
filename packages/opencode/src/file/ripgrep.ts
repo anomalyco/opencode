@@ -284,7 +284,6 @@ export namespace Ripgrep {
   }
 
   export interface Interface {
-    readonly path: () => Effect.Effect<string>
     readonly files: (input: {
       cwd: string
       glob?: string[]
@@ -311,6 +310,29 @@ export namespace Ripgrep {
       const bin = Effect.fn("Ripgrep.path")(function* () {
         return yield* Effect.promise(() => filepath())
       })
+      const args = Effect.fn("Ripgrep.args")(function* (input: {
+        mode: "files" | "search"
+        glob?: string[]
+        hidden?: boolean
+        follow?: boolean
+        maxDepth?: number
+        limit?: number
+        pattern?: string
+      }) {
+        const out = [yield* bin(), input.mode === "search" ? "--json" : "--files", "--glob=!.git/*"]
+        if (input.follow) out.push("--follow")
+        if (input.hidden !== false) out.push("--hidden")
+        if (input.maxDepth !== undefined) out.push(`--max-depth=${input.maxDepth}`)
+        if (input.glob) {
+          for (const g of input.glob) {
+            out.push(`--glob=${g}`)
+          }
+        }
+        if (input.limit) out.push(`--max-count=${input.limit}`)
+        if (input.mode === "search") out.push("--no-messages")
+        if (input.pattern) out.push("--", input.pattern)
+        return out
+      })
 
       const files = Effect.fn("Ripgrep.files")(function* (input: {
         cwd: string
@@ -331,18 +353,16 @@ export namespace Ripgrep {
           )
         }
 
-        const args = [rgPath, "--files", "--glob=!.git/*"]
-        if (input.follow) args.push("--follow")
-        if (input.hidden !== false) args.push("--hidden")
-        if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
-        if (input.glob) {
-          for (const g of input.glob) {
-            args.push(`--glob=${g}`)
-          }
-        }
+        const cmd = yield* args({
+          mode: "files",
+          glob: input.glob,
+          hidden: input.hidden,
+          follow: input.follow,
+          maxDepth: input.maxDepth,
+        })
 
         return spawner
-          .streamLines(ChildProcess.make(args[0], args.slice(1), { cwd: input.cwd }))
+          .streamLines(ChildProcess.make(cmd[0], cmd.slice(1), { cwd: input.cwd }))
           .pipe(Stream.filter((line: string) => line.length > 0))
       })
 
@@ -355,18 +375,16 @@ export namespace Ripgrep {
       }) {
         return yield* Effect.scoped(
           Effect.gen(function* () {
-            const args = [yield* bin(), "--json", "--hidden", "--glob=!.git/*"]
-            if (input.follow) args.push("--follow")
-            if (input.glob) {
-              for (const g of input.glob) {
-                args.push(`--glob=${g}`)
-              }
-            }
-            if (input.limit) args.push(`--max-count=${input.limit}`)
-            args.push("--", input.pattern)
+            const cmd = yield* args({
+              mode: "search",
+              glob: input.glob,
+              follow: input.follow,
+              limit: input.limit,
+              pattern: input.pattern,
+            })
 
             const handle = yield* spawner.spawn(
-              ChildProcess.make(args[0], args.slice(1), {
+              ChildProcess.make(cmd[0], cmd.slice(1), {
                 cwd: input.cwd,
                 stdin: "ignore",
               }),
@@ -403,7 +421,6 @@ export namespace Ripgrep {
       })
 
       return Service.of({
-        path: bin,
         files: (input) => Stream.unwrap(files(input)),
         search,
       })

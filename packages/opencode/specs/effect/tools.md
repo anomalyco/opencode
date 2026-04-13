@@ -71,7 +71,6 @@ Most exported tools are already on the intended Effect-native shape. The remaini
 Current spot cleanups worth tracking:
 
 - [ ] `read.ts` — still bridges to Node stream / `readline` helpers and Promise-based binary detection
-- [ ] `grep.ts` — mostly effectified already; remaining cleanup is switching binary-path lookup and metadata reads off facade/sync helpers
 - [ ] `bash.ts` — already uses Effect child-process primitives; only keep tracking shell-specific platform bridges and parser/loading details as they come up
 - [ ] `webfetch.ts` — already uses `HttpClient`; remaining work is limited to smaller boundary helpers like HTML text extraction
 - [ ] `file/ripgrep.ts` — adjacent to tool migration; still has raw fs/process usage that affects `grep.ts` and `ls.ts`
@@ -80,6 +79,7 @@ Current spot cleanups worth tracking:
 Notable items that are already effectively on the target path and do not need separate migration bullets right now:
 
 - `apply_patch.ts`
+- `grep.ts`
 - `write.ts`
 - `codesearch.ts`
 - `websearch.ts`

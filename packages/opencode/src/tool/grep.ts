@@ -59,28 +59,33 @@ export const GrepTool = Tool.define(
             }
           }
 
-          const matches = (yield* Effect.forEach(
-            result.items,
-            Effect.fnUntraced(function* (item) {
-              const file = path.isAbsolute(item.path.text) ? item.path.text : path.resolve(searchPath, item.path.text)
-              const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-              if (!info || info.type === "Directory") return []
-
-              return [
-                {
-                  path: file,
-                  mtime:
-                    info.mtime.pipe(
-                      Option.map((time) => time.getTime()),
-                      Option.getOrElse(() => 0),
-                    ) ?? 0,
-                  line: item.line_number,
-                  text: item.lines.text,
-                },
-              ]
-            }),
-            { concurrency: "unbounded" },
-          )).flat()
+          const rows = result.items.map((item) => ({
+            path: path.isAbsolute(item.path.text) ? item.path.text : path.resolve(searchPath, item.path.text),
+            line: item.line_number,
+            text: item.lines.text,
+          }))
+          const times = new Map(
+            (yield* Effect.forEach(
+              [...new Set(rows.map((row) => row.path))],
+              Effect.fnUntraced(function* (file) {
+                const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!info || info.type === "Directory") return undefined
+                return [
+                  file,
+                  info.mtime.pipe(
+                    Option.map((time) => time.getTime()),
+                    Option.getOrElse(() => 0),
+                  ) ?? 0,
+                ] as const
+              }),
+              { concurrency: "unbounded" },
+            )).filter((entry): entry is readonly [string, number] => Boolean(entry)),
+          )
+          const matches = rows.flatMap((row) => {
+            const mtime = times.get(row.path)
+            if (mtime === undefined) return []
+            return [{ ...row, mtime }]
+          })
 
           matches.sort((a, b) => b.mtime - a.mtime)
 
