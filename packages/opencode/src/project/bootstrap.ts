@@ -15,14 +15,19 @@ import * as Effect from "effect/Effect"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  yield* Plugin.Service.use((svc) => svc.init())
-  yield* ShareNext.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* Format.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* LSP.Service.use((svc) => svc.init())
-  yield* File.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* FileWatcher.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* Vcs.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* Snapshot.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+  yield* Effect.all(
+    [
+      Plugin.Service.use((svc) => svc.init()),
+      LSP.Service.use((svc) => svc.init()),
+      ShareNext.Service.use((svc) => svc.init()),
+      Format.Service.use((svc) => svc.init()),
+      File.Service.use((svc) => svc.init()),
+      FileWatcher.Service.use((svc) => svc.init()),
+      Vcs.Service.use((svc) => svc.init()),
+      Snapshot.Service.use((svc) => svc.init()),
+    ].map((e) => Effect.forkDetach(e)),
+    { concurrency: "unbounded" },
+  )
 
   yield* Bus.Service.use((svc) =>
     svc.subscribeCallback(Command.Event.Executed, async (payload) => {
