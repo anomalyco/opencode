@@ -1,4 +1,7 @@
 import { Player } from "cli-sound"
+import { mkdirSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { basename, join } from "node:path"
 import { Process } from "@/util/process"
 import { which } from "@/util/which"
 import pulseA from "../asset/pulse-a.wav" with { type: "file" }
@@ -9,6 +12,7 @@ import charge from "../asset/charge.wav" with { type: "file" }
 const FILE = [pulseA, pulseB, pulseC]
 
 const HUM = charge
+const DIR = join(tmpdir(), "opencode-sfx")
 
 const LIST = [
   "ffplay",
@@ -44,6 +48,7 @@ export namespace Sound {
   let kind: Kind | null | undefined
   let proc: Process.Child | undefined
   let tail: ReturnType<typeof setTimeout> | undefined
+  let cache: Promise<{ hum: string; pulse: string[] }> | undefined
   let seq = 0
   let shot = 0
 
@@ -55,6 +60,20 @@ export namespace Sound {
       item = null
     }
     return item
+  }
+
+  async function file(path: string) {
+    mkdirSync(DIR, { recursive: true })
+    const next = join(DIR, basename(path))
+    const out = Bun.file(next)
+    if (await out.exists()) return next
+    await Bun.write(out, Bun.file(path))
+    return next
+  }
+
+  function asset() {
+    cache ??= Promise.all([file(HUM), Promise.all(FILE.map(file))]).then(([hum, pulse]) => ({ hum, pulse }))
+    return cache
   }
 
   function pick() {
@@ -88,19 +107,22 @@ export namespace Sound {
   export function start() {
     stop()
     const id = ++seq
-    const next = run(HUM, 0.24)
-    if (!next) return
-    proc = next
-    void next.exited.then(
-      () => {
-        if (id !== seq) return
-        if (proc === next) proc = undefined
-      },
-      () => {
-        if (id !== seq) return
-        if (proc === next) proc = undefined
-      },
-    )
+    void asset().then(({ hum }) => {
+      if (id !== seq) return
+      const next = run(hum, 0.24)
+      if (!next) return
+      proc = next
+      void next.exited.then(
+        () => {
+          if (id !== seq) return
+          if (proc === next) proc = undefined
+        },
+        () => {
+          if (id !== seq) return
+          if (proc === next) proc = undefined
+        },
+      )
+    })
   }
 
   export function stop(delay = 0) {
@@ -122,8 +144,10 @@ export namespace Sound {
 
   export function pulse(scale = 1) {
     stop(140)
-    const file = FILE[shot++ % FILE.length]
-    void Promise.resolve(play(file, 0.26 + 0.14 * scale)).catch(() => undefined)
+    const index = shot++ % FILE.length
+    void asset()
+      .then(({ pulse }) => play(pulse[index], 0.26 + 0.14 * scale))
+      .catch(() => undefined)
   }
 
   export function dispose() {
