@@ -12,6 +12,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
+import type { Provider } from "../provider/provider"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -149,7 +150,35 @@ export const ReadTool = Tool.define(
       const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
       const isPdf = mime === "application/pdf"
       if (isImage || isPdf) {
+        const model = ctx.extra?.model as Provider.Model | undefined
+        const supportsVision = model?.capabilities.input.image ?? false
+        const supportsPdf = model?.capabilities.input.pdf ?? false
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
+
+        if (isImage && !supportsVision) {
+          return {
+            title,
+            output: `This model does not support image input. Image file: ${filepath}`,
+            metadata: {
+              preview: `Image file skipped (model does not support image input): ${filepath}`,
+              truncated: false,
+              loaded: loaded.map((item) => item.filepath),
+            },
+          }
+        }
+
+        if (isPdf && !supportsPdf) {
+          return {
+            title,
+            output: `This model does not support PDF input. PDF file: ${filepath}`,
+            metadata: {
+              preview: `PDF file skipped (model does not support PDF input): ${filepath}`,
+              truncated: false,
+              loaded: loaded.map((item) => item.filepath),
+            },
+          }
+        }
+
         return {
           title,
           output: msg,
