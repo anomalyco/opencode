@@ -474,10 +474,14 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const params = c.req.valid("param")
-        const result = await SessionSummary.diff({
-          sessionID: params.sessionID,
-          messageID: query.messageID,
-        })
+        const result = await AppRuntime.runPromise(
+          SessionSummary.Service.use((summary) =>
+            summary.diff({
+              sessionID: params.sessionID,
+              messageID: query.messageID,
+            }),
+          ),
+        )
         return c.json(result)
       },
     )
