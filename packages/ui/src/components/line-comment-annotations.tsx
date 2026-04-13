@@ -294,11 +294,6 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     cancelDraft()
   }
 
-  createEffect(() => {
-    props.commenting()
-    setDraft("")
-  })
-
   return {
     draft,
     setDraft,

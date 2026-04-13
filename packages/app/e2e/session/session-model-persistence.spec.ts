@@ -1,18 +1,9 @@
 import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import {
-  openSidebar,
-  resolveSlug,
-  sessionIDFromUrl,
-  setWorkspacesEnabled,
-  waitSession,
-  waitSessionIdle,
-  waitSlug,
-} from "../actions"
+import { openSidebar, resolveSlug, setWorkspacesEnabled, waitSession, waitSlug } from "../actions"
 import {
   promptAgentSelector,
   promptModelSelector,
-  promptSelector,
   promptVariantSelector,
   workspaceItemSelector,
   workspaceNewSessionSelector,
@@ -230,32 +221,8 @@ async function goto(page: Page, directory: string, sessionID?: string) {
   await waitSession(page, { directory, sessionID })
 }
 
-async function submit(page: Page, value: string) {
-  const prompt = page.locator(promptSelector)
-  await expect(prompt).toBeVisible()
-  await prompt.click()
-  await prompt.fill(value)
-  await prompt.press("Enter")
-
-  await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
-  const id = sessionIDFromUrl(page.url())
-  if (!id) throw new Error(`Failed to resolve session id from ${page.url()}`)
-  return id
-}
-
-async function waitUser(directory: string, sessionID: string) {
-  const sdk = createSdk(directory)
-  await expect
-    .poll(
-      async () => {
-        const items = await sdk.session.messages({ sessionID, limit: 20 }).then((x) => x.data ?? [])
-        return items.some((item) => item.info.role === "user")
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true)
-  await sdk.session.abort({ sessionID }).catch(() => undefined)
-  await waitSessionIdle(sdk, sessionID, 30_000).catch(() => undefined)
+async function submit(project: Parameters<typeof test>[0]["project"], value: string) {
+  return project.prompt(value)
 }
 
 async function createWorkspace(page: Page, root: string, seen: string[]) {
@@ -298,108 +265,98 @@ async function newWorkspaceSession(page: Page, slug: string) {
   return waitSession(page, { directory: next.directory }).then((item) => item.directory)
 }
 
-test("session model restore per session without leaking into new sessions", async ({ page, withProject }) => {
+test("session model restore per session without leaking into new sessions", async ({ page, project }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  await withProject(async ({ directory, gotoSession, trackSession }) => {
-    await gotoSession()
+  await project.open()
+  await project.gotoSession()
 
-    const firstState = await chooseOtherModel(page)
-    const firstKey = await currentModel(page)
-    const first = await submit(page, `session variant ${Date.now()}`)
-    trackSession(first)
-    await waitUser(directory, first)
+  const firstState = await chooseOtherModel(page)
+  const firstKey = await currentModel(page)
+  const first = await submit(project, `session variant ${Date.now()}`)
 
-    await page.reload()
-    await waitSession(page, { directory, sessionID: first })
-    await waitFooter(page, firstState)
+  await page.reload()
+  await waitSession(page, { directory: project.directory, sessionID: first })
+  await waitFooter(page, firstState)
 
-    await gotoSession()
-    const fresh = await read(page)
-    expect(fresh.model).not.toBe(firstState.model)
+  await project.gotoSession()
+  const fresh = await read(page)
+  expect(fresh.model).not.toBe(firstState.model)
 
-    const secondState = await chooseOtherModel(page, [firstKey])
-    const second = await submit(page, `session model ${Date.now()}`)
-    trackSession(second)
-    await waitUser(directory, second)
+  const secondState = await chooseOtherModel(page, [firstKey])
+  const second = await submit(project, `session model ${Date.now()}`)
 
-    await goto(page, directory, first)
-    await waitFooter(page, firstState)
+  await goto(page, project.directory, first)
+  await waitFooter(page, firstState)
 
-    await goto(page, directory, second)
-    await waitFooter(page, secondState)
+  await goto(page, project.directory, second)
+  await waitFooter(page, secondState)
 
-    await gotoSession()
-    await waitFooter(page, fresh)
-  })
+  await project.gotoSession()
+  await page.reload()
+  await waitSession(page, { directory: project.directory })
+  await waitFooter(page, fresh)
 })
 
-test("session model restore across workspaces", async ({ page, withProject }) => {
+test("session model restore across workspaces", async ({ page, project }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  await withProject(async ({ directory: root, slug, gotoSession, trackDirectory, trackSession }) => {
-    await gotoSession()
+  await project.open()
+  const root = project.directory
+  await project.gotoSession()
 
-    const firstState = await chooseOtherModel(page)
-    const firstKey = await currentModel(page)
-    const first = await submit(page, `root session ${Date.now()}`)
-    trackSession(first, root)
-    await waitUser(root, first)
+  const firstState = await chooseOtherModel(page)
+  const firstKey = await currentModel(page)
+  const first = await submit(project, `root session ${Date.now()}`)
 
-    await openSidebar(page)
-    await setWorkspacesEnabled(page, slug, true)
+  await openSidebar(page)
+  await setWorkspacesEnabled(page, project.slug, true)
 
-    const one = await createWorkspace(page, slug, [])
-    const oneDir = await newWorkspaceSession(page, one.slug)
-    trackDirectory(oneDir)
+  const one = await createWorkspace(page, project.slug, [])
+  const oneDir = await newWorkspaceSession(page, one.slug)
+  project.trackDirectory(oneDir)
 
-    const secondState = await chooseOtherModel(page, [firstKey])
-    const secondKey = await currentModel(page)
-    const second = await submit(page, `workspace one ${Date.now()}`)
-    trackSession(second, oneDir)
-    await waitUser(oneDir, second)
+  const secondState = await chooseOtherModel(page, [firstKey])
+  const secondKey = await currentModel(page)
+  const second = await submit(project, `workspace one ${Date.now()}`)
 
-    const two = await createWorkspace(page, slug, [one.slug])
-    const twoDir = await newWorkspaceSession(page, two.slug)
-    trackDirectory(twoDir)
+  const two = await createWorkspace(page, project.slug, [one.slug])
+  const twoDir = await newWorkspaceSession(page, two.slug)
+  project.trackDirectory(twoDir)
 
-    const thirdState = await chooseOtherModel(page, [firstKey, secondKey])
-    const third = await submit(page, `workspace two ${Date.now()}`)
-    trackSession(third, twoDir)
-    await waitUser(twoDir, third)
+  const thirdState = await chooseOtherModel(page, [firstKey, secondKey])
+  const third = await submit(project, `workspace two ${Date.now()}`)
 
-    await goto(page, root, first)
-    await waitFooter(page, firstState)
+  await goto(page, root, first)
+  await waitFooter(page, firstState)
 
-    await goto(page, oneDir, second)
-    await waitFooter(page, secondState)
+  await goto(page, oneDir, second)
+  await waitFooter(page, secondState)
 
-    await goto(page, twoDir, third)
-    await waitFooter(page, thirdState)
+  await goto(page, twoDir, third)
+  await waitFooter(page, thirdState)
 
-    await goto(page, root, first)
-    await waitFooter(page, firstState)
-  })
+  await goto(page, root, first)
+  await waitFooter(page, firstState)
 })
 
-test("variant preserved when switching agent modes", async ({ page, withProject }) => {
+test("variant preserved when switching agent modes", async ({ page, project }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  await withProject(async ({ directory, gotoSession }) => {
-    await gotoSession()
+  await project.open()
+  await project.gotoSession()
 
-    await ensureVariant(page, directory)
-    const updated = await chooseDifferentVariant(page)
+  await ensureVariant(page, project.directory)
+  const updated = await chooseDifferentVariant(page)
 
-    const available = await agents(page)
-    const other = available.find((name) => name !== updated.agent)
-    test.skip(!other, "only one agent available")
-    if (!other) return
+  const available = await agents(page)
+  const other = available.find((name) => name !== updated.agent)
+  test.skip(!other, "only one agent available")
+  if (!other) return
 
-    await choose(page, promptAgentSelector, other)
-    await waitFooter(page, { agent: other, variant: updated.variant })
+  await choose(page, promptAgentSelector, other)
+  await waitFooter(page, { agent: other, variant: updated.variant })
 
-    await choose(page, promptAgentSelector, updated.agent)
-    await waitFooter(page, { agent: updated.agent, variant: updated.variant })
-  })
+  await choose(page, promptAgentSelector, updated.agent)
+  await waitFooter(page, { agent: updated.agent, variant: updated.variant })
 })

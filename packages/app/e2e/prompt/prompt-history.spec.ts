@@ -1,10 +1,9 @@
 import type { ToolPart } from "@opencode-ai/sdk/v2/client"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { assistantText, sessionIDFromUrl } from "../actions"
+import { assistantText } from "../actions"
 import { promptSelector } from "../selectors"
 import { createSdk } from "../utils"
-import { openaiModel, promptMatch, titleMatch, withMockOpenAI } from "./mock"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()
 type Sdk = ReturnType<typeof createSdk>
@@ -43,73 +42,45 @@ async function shell(sdk: Sdk, sessionID: string, cmd: string, token: string) {
     .toContain(token)
 }
 
-test("prompt history restores unsent draft with arrow navigation", async ({
-  page,
-  llm,
-  backend,
-  withBackendProject,
-}) => {
+test("prompt history restores unsent draft with arrow navigation", async ({ page, project, assistant }) => {
   test.setTimeout(120_000)
 
-  await withMockOpenAI({
-    serverUrl: backend.url,
-    llmUrl: llm.url,
-    fn: async () => {
-      const firstToken = `E2E_HISTORY_ONE_${Date.now()}`
-      const secondToken = `E2E_HISTORY_TWO_${Date.now()}`
-      const first = `Reply with exactly: ${firstToken}`
-      const second = `Reply with exactly: ${secondToken}`
-      const draft = `draft ${Date.now()}`
+  const firstToken = `E2E_HISTORY_ONE_${Date.now()}`
+  const secondToken = `E2E_HISTORY_TWO_${Date.now()}`
+  const first = `Reply with exactly: ${firstToken}`
+  const second = `Reply with exactly: ${secondToken}`
+  const draft = `draft ${Date.now()}`
 
-      await llm.textMatch(titleMatch, "E2E Title")
-      await llm.textMatch(promptMatch(firstToken), firstToken)
-      await llm.textMatch(promptMatch(secondToken), secondToken)
+  await project.open()
+  await assistant.reply(firstToken)
+  const sessionID = await project.prompt(first)
+  await wait(page, "")
+  await reply(project.sdk, sessionID, firstToken)
 
-      await withBackendProject(
-        async (project) => {
-          const prompt = page.locator(promptSelector)
+  await assistant.reply(secondToken)
+  await project.prompt(second)
+  await wait(page, "")
+  await reply(project.sdk, sessionID, secondToken)
 
-          await prompt.click()
-          await page.keyboard.type(first)
-          await page.keyboard.press("Enter")
-          await wait(page, "")
+  const prompt = page.locator(promptSelector)
+  await prompt.click()
+  await page.keyboard.type(draft)
+  await wait(page, draft)
 
-          await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
-          const sessionID = sessionIDFromUrl(page.url())!
-          project.trackSession(sessionID)
-          await reply(project.sdk, sessionID, firstToken)
+  await prompt.fill("")
+  await wait(page, "")
 
-          await prompt.click()
-          await page.keyboard.type(second)
-          await page.keyboard.press("Enter")
-          await wait(page, "")
-          await reply(project.sdk, sessionID, secondToken)
+  await page.keyboard.press("ArrowUp")
+  await wait(page, second)
 
-          await prompt.click()
-          await page.keyboard.type(draft)
-          await wait(page, draft)
+  await page.keyboard.press("ArrowUp")
+  await wait(page, first)
 
-          await prompt.fill("")
-          await wait(page, "")
+  await page.keyboard.press("ArrowDown")
+  await wait(page, second)
 
-          await page.keyboard.press("ArrowUp")
-          await wait(page, second)
-
-          await page.keyboard.press("ArrowUp")
-          await wait(page, first)
-
-          await page.keyboard.press("ArrowDown")
-          await wait(page, second)
-
-          await page.keyboard.press("ArrowDown")
-          await wait(page, "")
-        },
-        {
-          model: openaiModel,
-        },
-      )
-    },
-  })
+  await page.keyboard.press("ArrowDown")
+  await wait(page, "")
 })
 
 test.fixme("shell history stays separate from normal prompt history", async ({ page, sdk, gotoSession }) => {

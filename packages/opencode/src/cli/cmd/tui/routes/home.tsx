@@ -1,6 +1,7 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, on, onMount } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { Logo } from "../component/logo"
+import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -18,36 +19,39 @@ const placeholder = {
 
 export function Home() {
   const sync = useSync()
+  const project = useProject()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
-  let prompt: PromptRef | undefined
+  const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
-  onMount(() => {
-    if (once) return
-    if (!prompt) return
+  let sent = false
+
+  const bind = (r: PromptRef | undefined) => {
+    setRef(r)
+    promptRef.set(r)
+    if (once || !r) return
     if (route.initialPrompt) {
-      prompt.set(route.initialPrompt)
+      r.set(route.initialPrompt)
       once = true
-    } else if (args.prompt) {
-      prompt.set({ input: args.prompt, parts: [] })
-      once = true
+      return
     }
-  })
+    if (!args.prompt) return
+    r.set({ input: args.prompt, parts: [] })
+    once = true
+  }
 
   // Wait for sync and model store to be ready before auto-submitting --prompt
-  createEffect(
-    on(
-      () => sync.ready && local.model.ready,
-      (ready) => {
-        if (!ready) return
-        if (!prompt) return
-        if (!args.prompt) return
-        if (prompt.current?.input !== args.prompt) return
-        prompt.submit()
-      },
-    ),
-  )
+  createEffect(() => {
+    const r = ref()
+    if (sent) return
+    if (!r) return
+    if (!sync.ready || !local.model.ready) return
+    if (!args.prompt) return
+    if (r.current.input !== args.prompt) return
+    sent = true
+    r.submit()
+  })
 
   return (
     <>
@@ -61,13 +65,16 @@ export function Home() {
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" workspace_id={route.workspaceID}>
+          <TuiPluginRuntime.Slot
+            name="home_prompt"
+            mode="replace"
+            workspace_id={project.workspace.current()}
+            ref={bind}
+          >
             <Prompt
-              ref={(r) => {
-                prompt = r
-                promptRef.set(r)
-              }}
-              workspaceID={route.workspaceID}
+              ref={bind}
+              workspaceID={project.workspace.current()}
+              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
               placeholders={placeholder}
             />
           </TuiPluginRuntime.Slot>

@@ -1,8 +1,7 @@
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
@@ -31,7 +30,7 @@ export namespace Format {
     readonly file: (filepath: string) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Format") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Format") {}
 
   export const layer = Layer.effect(
     Service,
@@ -41,7 +40,7 @@ export namespace Format {
 
       const state = yield* InstanceState.make(
         Effect.fn("Format.state")(function* (_ctx) {
-          const enabled: Record<string, boolean> = {}
+          const commands: Record<string, string[] | false> = {}
           const formatters: Record<string, Formatter.Info> = {}
 
           const cfg = yield* config.get()
@@ -51,35 +50,44 @@ export namespace Format {
               formatters[item.name] = item
             }
             for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
+              // Ruff and uv are both the same formatter, so disabling either should disable both.
+              if (["ruff", "uv"].includes(name) && (cfg.formatter?.ruff?.disabled || cfg.formatter?.uv?.disabled)) {
+                // TODO combine formatters so shared backends like Ruff/uv don't need linked disable handling here.
+                delete formatters.ruff
+                delete formatters.uv
+                continue
+              }
               if (item.disabled) {
                 delete formatters[name]
                 continue
               }
               const info = mergeDeep(formatters[name] ?? {}, {
-                command: [],
                 extensions: [],
                 ...item,
               })
 
-              if (info.command.length === 0) continue
-
               formatters[name] = {
                 ...info,
                 name,
-                enabled: async () => true,
+                enabled: async () => info.command ?? false,
               }
             }
           } else {
             log.info("all formatters are disabled")
           }
 
-          async function isEnabled(item: Formatter.Info) {
-            let status = enabled[item.name]
-            if (status === undefined) {
-              status = await item.enabled()
-              enabled[item.name] = status
+          async function getCommand(item: Formatter.Info) {
+            let cmd = commands[item.name]
+            if (cmd === false || cmd === undefined) {
+              cmd = await item.enabled()
+              commands[item.name] = cmd
             }
-            return status
+            return cmd
+          }
+
+          async function isEnabled(item: Formatter.Info) {
+            const cmd = await getCommand(item)
+            return cmd !== false
           }
 
           async function getFormatter(ext: string) {
@@ -87,17 +95,17 @@ export namespace Format {
             const checks = await Promise.all(
               matching.map(async (item) => {
                 log.info("checking", { name: item.name, ext })
-                const on = await isEnabled(item)
-                if (on) {
+                const cmd = await getCommand(item)
+                if (cmd) {
                   log.info("enabled", { name: item.name, ext })
                 }
                 return {
                   item,
-                  enabled: on,
+                  cmd,
                 }
               }),
             )
-            return checks.filter((x) => x.enabled).map((x) => x.item)
+            return checks.filter((x) => x.cmd).map((x) => ({ item: x.item, cmd: x.cmd! }))
           }
 
           function formatFile(filepath: string) {
@@ -105,13 +113,14 @@ export namespace Format {
               log.info("formatting", { file: filepath })
               const ext = path.extname(filepath)
 
-              for (const item of yield* Effect.promise(() => getFormatter(ext))) {
-                log.info("running", { command: item.command })
-                const cmd = item.command.map((x) => x.replace("$FILE", filepath))
+              for (const { item, cmd } of yield* Effect.promise(() => getFormatter(ext))) {
+                if (cmd === false) continue
+                log.info("running", { command: cmd })
+                const replaced = cmd.map((x) => x.replace("$FILE", filepath))
                 const dir = yield* InstanceState.directory
                 const code = yield* spawner
                   .spawn(
-                    ChildProcess.make(cmd[0]!, cmd.slice(1), {
+                    ChildProcess.make(replaced[0]!, replaced.slice(1), {
                       cwd: dir,
                       env: item.environment,
                       extendEnv: true,
@@ -124,7 +133,7 @@ export namespace Format {
                       Effect.sync(() => {
                         log.error("failed to format file", {
                           error: "spawn failed",
-                          command: item.command,
+                          command: cmd,
                           ...item.environment,
                           file: filepath,
                         })
@@ -134,7 +143,7 @@ export namespace Format {
                   )
                 if (code !== 0) {
                   log.error("failed", {
-                    command: item.command,
+                    command: cmd,
                     ...item.environment,
                   })
                 }
@@ -183,18 +192,4 @@ export namespace Format {
     Layer.provide(Config.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((s) => s.init())
-  }
-
-  export async function status() {
-    return runPromise((s) => s.status())
-  }
-
-  export async function file(filepath: string) {
-    return runPromise((s) => s.file(filepath))
-  }
 }

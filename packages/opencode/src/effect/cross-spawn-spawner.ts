@@ -402,6 +402,7 @@ export const make = Effect.gen(function* () {
 
           const fd = yield* setupFds(command, proc, extra)
           const out = setupOutput(command, proc, sout, serr)
+          let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
             stdin: yield* setupStdin(command, proc, sin),
@@ -432,6 +433,18 @@ export const make = Effect.gen(function* () {
                 orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
               })
             },
+            unref: Effect.sync(() => {
+              if (ref) {
+                proc.unref()
+                ref = false
+              }
+              return Effect.sync(() => {
+                if (!ref) {
+                  proc.ref()
+                  ref = true
+                }
+              })
+            }),
           })
         }
         case "PipedCommand": {
@@ -488,3 +501,14 @@ export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSyste
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+
+import { lazy } from "@/util/lazy"
+
+const rt = lazy(async () => {
+  // Dynamic import to avoid circular dep: cross-spawn-spawner → run-service → Instance → project → cross-spawn-spawner
+  const { makeRuntime } = await import("@/effect/run-service")
+  return makeRuntime(ChildProcessSpawner, defaultLayer)
+})
+
+type RT = Awaited<ReturnType<typeof rt>>
+export const runPromiseExit: RT["runPromiseExit"] = async (...args) => (await rt()).runPromiseExit(...(args as [any]))

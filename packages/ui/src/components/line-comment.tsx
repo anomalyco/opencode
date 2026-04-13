@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createSignal, For, onMount, Show, splitProps, type JSX } from "solid-js"
+import { createSignal, For, onMount, Show, splitProps, type JSX } from "solid-js"
 import { Button } from "./button"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
@@ -210,7 +210,6 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   const refs = {
     textarea: undefined as HTMLTextAreaElement | undefined,
   }
-  const [text, setText] = createSignal(split.value)
   const [open, setOpen] = createSignal(false)
 
   function selectMention(item: { path: string } | undefined) {
@@ -220,10 +219,9 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     const query = currentMention()
     if (!textarea || !query) return
 
-    const value = `${text().slice(0, query.start)}@${item.path} ${text().slice(query.end)}`
+    const value = `${textarea.value.slice(0, query.start)}@${item.path} ${textarea.value.slice(query.end)}`
     const cursor = query.start + item.path.length + 2
 
-    setText(value)
     split.onInput(value)
     closeMention()
 
@@ -256,10 +254,6 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       e.stopPropagation()
       fn()
     }
-
-  createEffect(() => {
-    setText(split.value)
-  })
 
   const closeMention = () => {
     setOpen(false)
@@ -302,7 +296,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   }
 
   const submit = () => {
-    const value = text().trim()
+    const value = split.value.trim()
     if (!value) return
     split.onSubmit(value)
   }
@@ -322,10 +316,9 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           data-slot="line-comment-textarea"
           rows={split.rows ?? 3}
           placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
-          value={text()}
+          value={split.value}
           on:input={(e) => {
             const value = (e.currentTarget as HTMLTextAreaElement).value
-            setText(value)
             split.onInput(value)
             syncMention()
           }}
@@ -422,7 +415,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                   type="button"
                   data-slot="line-comment-action"
                   data-variant="primary"
-                  disabled={text().trim().length === 0}
+                  disabled={split.value.trim().length === 0}
                   on:mousedown={hold as any}
                   on:click={click(submit) as any}
                 >
@@ -434,7 +427,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             <Button size="small" variant="ghost" onClick={split.onCancel}>
               {split.cancelLabel ?? i18n.t("ui.common.cancel")}
             </Button>
-            <Button size="small" variant="primary" disabled={text().trim().length === 0} onClick={submit}>
+            <Button size="small" variant="primary" disabled={split.value.trim().length === 0} onClick={submit}>
               {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </Show>

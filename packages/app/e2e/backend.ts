@@ -44,8 +44,12 @@ async function waitForHealth(url: string, probe = "/global/health") {
   throw new Error(`Timed out waiting for backend health at ${url}${probe}${last ? ` (${last})` : ""}`)
 }
 
+function done(proc: ReturnType<typeof spawn>) {
+  return proc.exitCode !== null || proc.signalCode !== null
+}
+
 async function waitExit(proc: ReturnType<typeof spawn>, timeout = 10_000) {
-  if (proc.exitCode !== null) return
+  if (done(proc)) return
   await Promise.race([
     new Promise<void>((resolve) => proc.once("exit", () => resolve())),
     new Promise<void>((resolve) => setTimeout(resolve, timeout)),
@@ -62,7 +66,7 @@ function tail(input: string[]) {
   return input.slice(-40).join("")
 }
 
-export async function startBackend(label: string): Promise<Handle> {
+export async function startBackend(label: string, input?: { llmUrl?: string }): Promise<Handle> {
   const port = await freePort()
   const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `opencode-e2e-${label}-`))
   const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -80,6 +84,7 @@ export async function startBackend(label: string): Promise<Handle> {
     XDG_STATE_HOME: path.join(sandbox, "state"),
     OPENCODE_CLIENT: "app",
     OPENCODE_STRICT_CONFIG_DEPS: "true",
+    OPENCODE_E2E_LLM_URL: input?.llmUrl,
   } satisfies Record<string, string | undefined>
   const out: string[] = []
   const err: string[] = []
@@ -122,11 +127,11 @@ export async function startBackend(label: string): Promise<Handle> {
   return {
     url,
     async stop() {
-      if (proc.exitCode === null) {
+      if (!done(proc)) {
         proc.kill("SIGTERM")
         await waitExit(proc)
       }
-      if (proc.exitCode === null) {
+      if (!done(proc)) {
         proc.kill("SIGKILL")
         await waitExit(proc)
       }
