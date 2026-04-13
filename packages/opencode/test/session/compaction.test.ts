@@ -244,6 +244,20 @@ function plugin(ready: ReturnType<typeof defer>) {
   })
 }
 
+function autocontinue(enabled: boolean) {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+      if (name !== "experimental.compaction.autocontinue") return Effect.succeed(output)
+      return Effect.sync(() => {
+        ;(output as { enabled: boolean }).enabled = enabled
+        return output
+      })
+    },
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
 describe("session.compaction.isOverflow", () => {
   test("returns true when token count exceeds usable context", async () => {
     await using tmp = await tmpdir()
@@ -664,6 +678,49 @@ describe("session.compaction.process", () => {
           if (last?.parts[0]?.type === "text") {
             expect(last.parts[0].text).toContain("Continue if you have next steps")
           }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("allows plugins to disable synthetic continue prompt", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = runtime("continue", autocontinue(false), wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+
+          expect(result).toBe("continue")
+          expect(last?.info.role).toBe("assistant")
+          expect(
+            all.some(
+              (msg) =>
+                msg.info.role === "user" &&
+                msg.parts.some(
+                  (part) =>
+                    part.type === "text" && part.synthetic && part.text.includes("Continue if you have next steps"),
+                ),
+            ),
+          ).toBe(false)
         } finally {
           await rt.dispose()
         }

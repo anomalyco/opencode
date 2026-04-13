@@ -3,6 +3,33 @@
   "provider": {
     "opencode": {
       "options": {},
+      "models": {
+        "gpt-5.4": {
+          "limit": {
+            "context": 20000,
+            "input": 16000,
+            "output": 1000,
+          },
+        },
+      },
+    },
+    "github-copilot": {
+      "models": {
+        "claude-haiku-4.5": {
+          "limit": {
+            "context": 22000,
+            "input": 18000,
+            "output": 1000,
+          },
+        },
+        "gpt-5.4": {
+          "limit": {
+            "context": 20000,
+            "input": 16000,
+            "output": 1000,
+          },
+        },
+      },
     },
   },
   "permission": {
