@@ -62,6 +62,7 @@ const seed = async () => {
     })
   } finally {
     await Instance.disposeAll().catch(() => {})
+    await AppRuntime.dispose().catch(() => {})
   }
 }
 
