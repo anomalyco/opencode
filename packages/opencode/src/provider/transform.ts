@@ -217,7 +217,6 @@ export namespace ProviderTransform {
     for (const msg of unique([...system, ...final])) {
       const useMessageLevelOptions =
         model.providerID === "anthropic" ||
-        model.providerID === "google-vertex-anthropic" ||
         model.providerID.includes("bedrock") ||
         model.api.npm === "@ai-sdk/amazon-bedrock"
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
@@ -289,8 +288,7 @@ export namespace ProviderTransform {
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic" ||
-        model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+        model.api.npm === "@ai-sdk/anthropic") &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
       msgs = applyCaching(msgs, model)
