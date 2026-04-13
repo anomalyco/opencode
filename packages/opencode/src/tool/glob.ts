@@ -2,9 +2,9 @@ import path from "path"
 import z from "zod"
 import { Effect, Option } from "effect"
 import * as Stream from "effect/Stream"
+import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "../filesystem"
 import { Ripgrep } from "../file/ripgrep"
-import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import { Tool } from "./tool"
@@ -28,6 +28,7 @@ export const GlobTool = Tool.define(
       }),
       execute: (params: { pattern: string; path?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const ins = yield* InstanceState.context
           yield* ctx.ask({
             permission: "glob",
             patterns: [params.pattern],
@@ -38,8 +39,8 @@ export const GlobTool = Tool.define(
             },
           })
 
-          let search = params.path ?? Instance.directory
-          search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+          let search = params.path ?? ins.directory
+          search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
           yield* assertExternalDirectoryEffect(ctx, search, { kind: "directory" })
 
           const limit = 100
@@ -81,7 +82,7 @@ export const GlobTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, search),
+            title: path.relative(ins.worktree, search),
             metadata: {
               count: files.length,
               truncated,

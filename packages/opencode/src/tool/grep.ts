@@ -1,8 +1,8 @@
 import path from "path"
 import z from "zod"
 import { Effect } from "effect"
+import { InstanceState } from "@/effect/instance-state"
 import { Ripgrep } from "../file/ripgrep"
-import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
@@ -24,6 +24,7 @@ export const GrepTool = Tool.define(
       }),
       execute: (params: { pattern: string; path?: string; include?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const ins = yield* InstanceState.context
           if (!params.pattern) {
             throw new Error("pattern is required")
           }
@@ -39,8 +40,8 @@ export const GrepTool = Tool.define(
             },
           })
 
-          let search = params.path ?? Instance.directory
-          search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+          let search = params.path ?? ins.directory
+          search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
           yield* assertExternalDirectoryEffect(ctx, search, { kind: "directory" })
 
           const matches = []

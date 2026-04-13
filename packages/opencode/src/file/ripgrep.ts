@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import z from "zod"
-import { Cause, Effect, Layer, Queue, ServiceMap, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { ripgrep } from "ripgrep"
 import { makeRuntime } from "@/effect/run-service"
 import { Filesystem } from "@/util/filesystem"
@@ -119,7 +119,7 @@ export namespace Ripgrep {
     readonly search: (input: SearchInput) => Effect.Effect<Row[], Error>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Ripgrep") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
 
   type Run = { kind: "files" | "search"; cwd: string; args: string[] }
 

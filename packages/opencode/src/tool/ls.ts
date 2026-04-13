@@ -2,8 +2,8 @@ import * as path from "path"
 import z from "zod"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
+import { InstanceState } from "@/effect/instance-state"
 import { Ripgrep } from "../file/ripgrep"
-import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./ls.txt"
 import { Tool } from "./tool"
@@ -53,7 +53,8 @@ export const ListTool = Tool.define(
       }),
       execute: (params: { path?: string; ignore?: string[] }, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const search = path.resolve(Instance.directory, params.path || ".")
+          const ins = yield* InstanceState.context
+          const search = path.resolve(ins.directory, params.path || ".")
           yield* assertExternalDirectoryEffect(ctx, search, { kind: "directory" })
 
           yield* ctx.ask({
@@ -108,7 +109,7 @@ export const ListTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, search),
+            title: path.relative(ins.worktree, search),
             metadata: {
               count: files.length,
               truncated,
