@@ -1,4 +1,4 @@
-import type { McpServer } from "@agentclientprotocol/sdk"
+import type { McpServer, ClientCapabilities } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import type { ProviderID, ModelID } from "../provider/schema"
 
@@ -21,4 +21,5 @@ export interface ACPConfig {
     providerID: ProviderID
     modelID: ModelID
   }
+  clientCapabilities?: ClientCapabilities
 }

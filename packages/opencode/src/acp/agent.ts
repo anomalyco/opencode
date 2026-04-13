@@ -467,6 +467,27 @@ export namespace ACP {
           await this.processMessage({ info: msg.info, parts: [part] })
           return
         }
+        case "file.edited":
+          const props = event.properties
+          const session = this.sessionManager.tryGet(props.sessionID)
+          if (!session) return
+          const sessionId = session.id
+
+          if (this.config.clientCapabilities?.fs?.writeTextFile) {
+            const filepath = event.properties.file
+            try {
+              const content = await Bun.file(filepath).text()
+              await this.connection.writeTextFile({
+                sessionId,
+                path: filepath,
+                content,
+              })
+              log.info("synced file edit to ACP client", { filepath, sessionId})
+            } catch (err) {
+              log.error("failed to sync file edit to ACP client", { error: err, filepath, sessionId })
+            }
+          }
+          break
 
         case "message.part.delta": {
           const props = event.properties
@@ -536,7 +557,9 @@ export namespace ACP {
     }
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
-      log.info("initialize", { protocolVersion: params.protocolVersion })
+      log.info("initialize", { protocolVersion: params.protocolVersion, clientCapabilities: params.clientCapabilities })
+
+      this.config.clientCapabilities = params.clientCapabilities
 
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",

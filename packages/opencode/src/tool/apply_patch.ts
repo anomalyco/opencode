@@ -220,7 +220,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
       if (edited) {
         await Format.file(edited)
-        Bus.publish(File.Event.Edited, { file: edited })
+        Bus.publish(File.Event.Edited, { file: edited, sessionID: ctx.sessionID })
       }
     }
 

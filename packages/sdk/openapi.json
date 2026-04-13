@@ -7682,6 +7682,9 @@
             "properties": {
               "file": {
                 "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
               }
             },
             "required": ["file"]
