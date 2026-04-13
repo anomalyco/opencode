@@ -1964,13 +1964,8 @@ export namespace LSPServer {
       let binary = which("banglish")
       const args: string[] = []
       if (!binary) {
-        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-        const resolved = await Npm.which("banglish")
-        if (!resolved) {
-          log.info("banglish not found, please install it via: npm install -g banglish")
-          return
-        }
-        binary = resolved
+        log.info("banglish not found, please install it via: npm install -g banglish")
+        return
       }
       args.push("--stdio")
       const proc = spawn(binary, args, {
