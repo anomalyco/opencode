@@ -1,52 +1,25 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { assistantText, sessionIDFromUrl, withSession } from "../actions"
-import { openaiModel, promptMatch, titleMatch, withMockOpenAI } from "./mock"
+import { assistantText, withSession } from "../actions"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()
 
 // Regression test for Issue #12453: the synchronous POST /message endpoint holds
 // the connection open while the agent works, causing "Failed to fetch" over
 // VPN/Tailscale. The fix switches to POST /prompt_async which returns immediately.
-test("prompt succeeds when sync message endpoint is unreachable", async ({
-  page,
-  llm,
-  backend,
-  withBackendProject,
-}) => {
+test("prompt succeeds when sync message endpoint is unreachable", async ({ page, project, assistant }) => {
   test.setTimeout(120_000)
 
   // Simulate Tailscale/VPN killing the long-lived sync connection
   await page.route("**/session/*/message", (route) => route.abort("connectionfailed"))
 
-  await withMockOpenAI({
-    serverUrl: backend.url,
-    llmUrl: llm.url,
-    fn: async () => {
-      const token = `E2E_ASYNC_${Date.now()}`
-      await llm.textMatch(titleMatch, "E2E Title")
-      await llm.textMatch(promptMatch(token), token)
+  const token = `E2E_ASYNC_${Date.now()}`
+  await project.open()
+  await assistant.reply(token)
+  const sessionID = await project.prompt(`Reply with exactly: ${token}`)
 
-      await withBackendProject(
-        async (project) => {
-          await page.locator(promptSelector).click()
-          await page.keyboard.type(`Reply with exactly: ${token}`)
-          await page.keyboard.press("Enter")
-
-          await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
-          const sessionID = sessionIDFromUrl(page.url())!
-          project.trackSession(sessionID)
-
-          await expect.poll(() => llm.calls()).toBeGreaterThanOrEqual(1)
-
-          await expect.poll(() => assistantText(project.sdk, sessionID), { timeout: 90_000 }).toContain(token)
-        },
-        {
-          model: openaiModel,
-        },
-      )
-    },
-  })
+  await expect.poll(() => assistant.calls()).toBeGreaterThanOrEqual(1)
+  await expect.poll(() => assistantText(project.sdk, sessionID), { timeout: 90_000 }).toContain(token)
 })
 
 test("failed prompt send restores the composer input", async ({ page, sdk, gotoSession }) => {

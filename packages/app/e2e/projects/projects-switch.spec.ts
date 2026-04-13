@@ -5,114 +5,89 @@ import {
   createTestProject,
   cleanupTestProject,
   openSidebar,
-  sessionIDFromUrl,
   setWorkspacesEnabled,
   waitSession,
-  waitSessionSaved,
   waitSlug,
-  withNoReplyPrompt,
 } from "../actions"
-import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { projectSwitchSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { dirSlug, resolveDirectory } from "../utils"
 
-test("can switch between projects from sidebar", async ({ page, withProject }) => {
+test("can switch between projects from sidebar", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
 
   try {
-    await withProject(
-      async ({ directory }) => {
-        await defocus(page)
+    await project.open({ extra: [other] })
+    await defocus(page)
 
-        const currentSlug = dirSlug(directory)
-        const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
-        await expect(otherButton).toBeVisible()
-        await otherButton.click()
+    const currentSlug = dirSlug(project.directory)
+    const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
+    await expect(otherButton).toBeVisible()
+    await otherButton.click()
 
-        await expect(page).toHaveURL(new RegExp(`/${otherSlug}/session`))
+    await expect(page).toHaveURL(new RegExp(`/${otherSlug}/session`))
 
-        const currentButton = page.locator(projectSwitchSelector(currentSlug)).first()
-        await expect(currentButton).toBeVisible()
-        await currentButton.click()
+    const currentButton = page.locator(projectSwitchSelector(currentSlug)).first()
+    await expect(currentButton).toBeVisible()
+    await currentButton.click()
 
-        await expect(page).toHaveURL(new RegExp(`/${currentSlug}/session`))
-      },
-      { extra: [other] },
-    )
+    await expect(page).toHaveURL(new RegExp(`/${currentSlug}/session`))
   } finally {
     await cleanupTestProject(other)
   }
 })
 
-test("switching back to a project opens the latest workspace session", async ({ page, withProject }) => {
+test("switching back to a project opens the latest workspace session", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
   try {
-    await withProject(
-      async ({ directory, slug, trackSession, trackDirectory }) => {
-        await defocus(page)
-        await setWorkspacesEnabled(page, slug, true)
-        await openSidebar(page)
-        await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
+    await project.open({ extra: [other] })
+    await defocus(page)
+    await setWorkspacesEnabled(page, project.slug, true)
+    await openSidebar(page)
+    await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 
-        await page.getByRole("button", { name: "New workspace" }).first().click()
+    await page.getByRole("button", { name: "New workspace" }).first().click()
 
-        const raw = await waitSlug(page, [slug])
-        const dir = base64Decode(raw)
-        if (!dir) throw new Error(`Failed to decode workspace slug: ${raw}`)
-        const space = await resolveDirectory(dir)
-        const next = dirSlug(space)
-        trackDirectory(space)
-        await openSidebar(page)
+    const raw = await waitSlug(page, [project.slug])
+    const dir = base64Decode(raw)
+    if (!dir) throw new Error(`Failed to decode workspace slug: ${raw}`)
+    const space = await resolveDirectory(dir)
+    const next = dirSlug(space)
+    project.trackDirectory(space)
+    await openSidebar(page)
 
-        const item = page.locator(`${workspaceItemSelector(next)}, ${workspaceItemSelector(raw)}`).first()
-        await expect(item).toBeVisible()
-        await item.hover()
+    const item = page.locator(`${workspaceItemSelector(next)}, ${workspaceItemSelector(raw)}`).first()
+    await expect(item).toBeVisible()
+    await item.hover()
 
-        const btn = page.locator(`${workspaceNewSessionSelector(next)}, ${workspaceNewSessionSelector(raw)}`).first()
-        await expect(btn).toBeVisible()
-        await btn.click({ force: true })
+    const btn = page.locator(`${workspaceNewSessionSelector(next)}, ${workspaceNewSessionSelector(raw)}`).first()
+    await expect(btn).toBeVisible()
+    await btn.click({ force: true })
 
-        await waitSession(page, { directory: space })
+    await waitSession(page, { directory: space })
 
-        // Create a session by sending a prompt
-        const prompt = page.locator(promptSelector)
-        await expect(prompt).toBeVisible()
-        await withNoReplyPrompt(page, async () => {
-          await prompt.fill("test")
-          await page.keyboard.press("Enter")
-        })
+    const created = await project.user("test")
 
-        // Wait for the URL to update with the new session ID
-        await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
+    await expect(page).toHaveURL(new RegExp(`/${next}/session/${created}(?:[/?#]|$)`))
 
-        const created = sessionIDFromUrl(page.url())
-        if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
-        trackSession(created, space)
-        await waitSessionSaved(space, created)
+    await openSidebar(page)
 
-        await expect(page).toHaveURL(new RegExp(`/${next}/session/${created}(?:[/?#]|$)`))
+    const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
+    await expect(otherButton).toBeVisible()
+    await otherButton.click({ force: true })
+    await waitSession(page, { directory: other })
 
-        await openSidebar(page)
+    const rootButton = page.locator(projectSwitchSelector(project.slug)).first()
+    await expect(rootButton).toBeVisible()
+    await rootButton.click({ force: true })
 
-        const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
-        await expect(otherButton).toBeVisible()
-        await otherButton.click({ force: true })
-        await waitSession(page, { directory: other })
-
-        const rootButton = page.locator(projectSwitchSelector(slug)).first()
-        await expect(rootButton).toBeVisible()
-        await rootButton.click({ force: true })
-
-        await waitSession(page, { directory: space, sessionID: created })
-        await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))
-      },
-      { extra: [other] },
-    )
+    await waitSession(page, { directory: space, sessionID: created })
+    await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))
   } finally {
     await cleanupTestProject(other)
   }

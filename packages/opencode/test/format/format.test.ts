@@ -64,6 +64,46 @@ describe("Format", () => {
     ),
   )
 
+  it.live("status() excludes uv when ruff is disabled", () =>
+    provideTmpdirInstance(
+      () =>
+        Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            const statuses = yield* fmt.status()
+            expect(statuses.find((item) => item.name === "ruff")).toBeUndefined()
+            expect(statuses.find((item) => item.name === "uv")).toBeUndefined()
+          }),
+        ),
+      {
+        config: {
+          formatter: {
+            ruff: { disabled: true },
+          },
+        },
+      },
+    ),
+  )
+
+  it.live("status() excludes ruff when uv is disabled", () =>
+    provideTmpdirInstance(
+      () =>
+        Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            const statuses = yield* fmt.status()
+            expect(statuses.find((item) => item.name === "ruff")).toBeUndefined()
+            expect(statuses.find((item) => item.name === "uv")).toBeUndefined()
+          }),
+        ),
+      {
+        config: {
+          formatter: {
+            uv: { disabled: true },
+          },
+        },
+      },
+    ),
+  )
+
   it.live("service initializes without error", () => provideTmpdirInstance(() => Format.Service.use(() => Effect.void)))
 
   it.live("status() initializes formatter state per directory", () =>
@@ -87,12 +127,10 @@ describe("Format", () => {
         const one = {
           extensions: Formatter.gofmt.extensions,
           enabled: Formatter.gofmt.enabled,
-          command: Formatter.gofmt.command,
         }
         const two = {
           extensions: Formatter.mix.extensions,
           enabled: Formatter.mix.enabled,
-          command: Formatter.mix.command,
         }
 
         let active = 0
@@ -102,21 +140,19 @@ describe("Format", () => {
           Effect.sync(() => {
             Formatter.gofmt.extensions = [".parallel"]
             Formatter.mix.extensions = [".parallel"]
-            Formatter.gofmt.command = ["sh", "-c", "true"]
-            Formatter.mix.command = ["sh", "-c", "true"]
             Formatter.gofmt.enabled = async () => {
               active++
               max = Math.max(max, active)
               await Bun.sleep(20)
               active--
-              return true
+              return ["sh", "-c", "true"]
             }
             Formatter.mix.enabled = async () => {
               active++
               max = Math.max(max, active)
               await Bun.sleep(20)
               active--
-              return true
+              return ["sh", "-c", "true"]
             }
           }),
           () =>
@@ -130,10 +166,8 @@ describe("Format", () => {
             Effect.sync(() => {
               Formatter.gofmt.extensions = one.extensions
               Formatter.gofmt.enabled = one.enabled
-              Formatter.gofmt.command = one.command
               Formatter.mix.extensions = two.extensions
               Formatter.mix.enabled = two.enabled
-              Formatter.mix.command = two.command
             }),
         )
 

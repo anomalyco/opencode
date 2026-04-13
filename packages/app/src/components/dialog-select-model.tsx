@@ -86,6 +86,7 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
+type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 
 export function ModelSelectorPopover(props: {
   provider?: string
@@ -93,25 +94,31 @@ export function ModelSelectorPopover(props: {
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
+  onClose?: (cause: "escape" | "select") => void
 }) {
   const [store, setStore] = createStore<{
     open: boolean
-    dismiss: "escape" | "outside" | null
+    dismiss: Dismiss | null
   }>({
     open: false,
     dismiss: null,
   })
   const dialog = useDialog()
 
-  const handleManage = () => {
+  const close = (dismiss: Dismiss) => {
+    setStore("dismiss", dismiss)
     setStore("open", false)
+  }
+
+  const handleManage = () => {
+    close("manage")
     void import("./dialog-manage-models").then((x) => {
       dialog.show(() => <x.DialogManageModels />)
     })
   }
 
   const handleConnectProvider = () => {
-    setStore("open", false)
+    close("provider")
     void import("./dialog-select-provider").then((x) => {
       dialog.show(() => <x.DialogSelectProvider />)
     })
@@ -136,21 +143,19 @@ export function ModelSelectorPopover(props: {
         <Kobalte.Content
           class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
-            setStore("dismiss", "escape")
-            setStore("open", false)
+            close("escape")
             event.preventDefault()
             event.stopPropagation()
           }}
-          onPointerDownOutside={() => {
-            setStore("dismiss", "outside")
-            setStore("open", false)
-          }}
-          onFocusOutside={() => {
-            setStore("dismiss", "outside")
-            setStore("open", false)
-          }}
+          onPointerDownOutside={() => close("outside")}
+          onFocusOutside={() => close("outside")}
           onCloseAutoFocus={(event) => {
-            if (store.dismiss === "outside") event.preventDefault()
+            const dismiss = store.dismiss
+            if (dismiss === "outside") event.preventDefault()
+            if (dismiss === "escape" || dismiss === "select") {
+              event.preventDefault()
+              props.onClose?.(dismiss)
+            }
             setStore("dismiss", null)
           }}
         >
@@ -158,7 +163,7 @@ export function ModelSelectorPopover(props: {
           <ModelList
             provider={props.provider}
             model={props.model}
-            onSelect={() => setStore("open", false)}
+            onSelect={() => close("select")}
             class="p-1"
             action={
               <div class="flex items-center gap-1">

@@ -49,8 +49,10 @@ Config sources are loaded in this order (later sources override earlier ones):
 4. **Project config** (`opencode.json` in project) - project-specific settings
 5. **`.opencode` directories** - agents, commands, plugins
 6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+7. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
+8. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
 
-This means project configs can override global defaults, and global configs can override remote organizational defaults.
+This means project configs can override global defaults, and global configs can override remote organizational defaults. Managed settings override everything.
 
 :::note
 The `.opencode` and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
@@ -149,6 +151,106 @@ The custom directory is loaded after the global config and `.opencode` directori
 
 ---
 
+### Managed settings
+
+Organizations can enforce configuration that users cannot override. Managed settings are loaded at the highest priority tier.
+
+#### File-based
+
+Drop an `opencode.json` or `opencode.jsonc` file in the system managed config directory:
+
+| Platform | Path                                     |
+| -------- | ---------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/` |
+| Linux    | `/etc/opencode/`                         |
+| Windows  | `%ProgramData%\opencode`                 |
+
+These directories require admin/root access to write, so users cannot modify them.
+
+#### macOS managed preferences
+
+On macOS, OpenCode reads managed preferences from the `ai.opencode.managed` preference domain. Deploy a `.mobileconfig` via MDM (Jamf, Kandji, FleetDM) and the settings are enforced automatically.
+
+OpenCode checks these paths:
+
+1. `/Library/Managed Preferences/<user>/ai.opencode.managed.plist`
+2. `/Library/Managed Preferences/ai.opencode.managed.plist`
+
+The plist keys map directly to `opencode.json` fields. MDM metadata keys (`PayloadUUID`, `PayloadType`, etc.) are stripped automatically.
+
+**Creating a `.mobileconfig`**
+
+Use the `ai.opencode.managed` PayloadType. The OpenCode config keys go directly in the payload dict:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>ai.opencode.managed</string>
+      <key>PayloadIdentifier</key>
+      <string>com.example.opencode.config</string>
+      <key>PayloadUUID</key>
+      <string>GENERATE-YOUR-OWN-UUID</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>share</key>
+      <string>disabled</string>
+      <key>server</key>
+      <dict>
+        <key>hostname</key>
+        <string>127.0.0.1</string>
+      </dict>
+      <key>permission</key>
+      <dict>
+        <key>*</key>
+        <string>ask</string>
+        <key>bash</key>
+        <dict>
+          <key>*</key>
+          <string>ask</string>
+          <key>rm -rf *</key>
+          <string>deny</string>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.opencode</string>
+  <key>PayloadUUID</key>
+  <string>GENERATE-YOUR-OWN-UUID</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+```
+
+Generate unique UUIDs with `uuidgen`. Customize the settings to match your organization's requirements.
+
+**Deploying via MDM**
+
+- **Jamf Pro:** Computers > Configuration Profiles > Upload > scope to target devices or smart groups
+- **FleetDM:** Add the `.mobileconfig` to your gitops repo under `mdm.macos_settings.custom_settings` and run `fleetctl apply`
+
+**Verifying on a device**
+
+Double-click the `.mobileconfig` to install locally for testing (shows in System Settings > Privacy & Security > Profiles), then run:
+
+```bash
+opencode debug config
+```
+
+All managed preference keys appear in the resolved config and cannot be overridden by user or project configuration.
+
+---
+
 ## Schema
 
 The server/runtime config schema is defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
@@ -170,15 +272,14 @@ Use a dedicated `tui.json` (or `tui.jsonc`) file for TUI-specific settings.
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true
 }
 ```
 
 Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.
 
 Legacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible.
-
-[Learn more about TUI configuration here](/docs/tui#configure).
 
 ---
 

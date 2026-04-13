@@ -52,13 +52,15 @@ export namespace CopilotModels {
       (remote.capabilities.supports.vision ?? false) ||
       (remote.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/"))
 
+    const isMsgApi = remote.supported_endpoints?.includes("/v1/messages")
+
     return {
       id: key,
       providerID: "github-copilot",
       api: {
         id: remote.id,
-        url,
-        npm: "@ai-sdk/github-copilot",
+        url: isMsgApi ? `${url}/v1` : url,
+        npm: isMsgApi ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot",
       },
       // API response wins
       status: "active",
@@ -112,6 +114,7 @@ export namespace CopilotModels {
   ): Promise<Record<string, Model>> {
     const data = await fetch(`${baseURL}/models`, {
       headers,
+      signal: AbortSignal.timeout(5_000),
     }).then(async (res) => {
       if (!res.ok) {
         throw new Error(`Failed to fetch models: ${res.status}`)

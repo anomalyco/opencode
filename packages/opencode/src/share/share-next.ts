@@ -1,152 +1,46 @@
-import { Bus } from "@/bus"
-import { Account } from "@/account"
-import { Config } from "@/config/config"
-import { Provider } from "@/provider/provider"
-import { ProviderID, ModelID } from "@/provider/schema"
-import { Session } from "@/session"
-import type { SessionID } from "@/session/schema"
-import { MessageV2 } from "@/session/message-v2"
-import { Database, eq } from "@/storage/db"
-import { SessionShareTable } from "./share.sql"
-import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
+import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Account } from "@/account"
+import { Bus } from "@/bus"
+import { InstanceState } from "@/effect/instance-state"
+import { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { Session } from "@/session"
+import { MessageV2 } from "@/session/message-v2"
+import type { SessionID } from "@/session/schema"
+import { Database, eq } from "@/storage/db"
+import { Config } from "@/config/config"
+import { Log } from "@/util/log"
+import { SessionShareTable } from "./share.sql"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
-
-  type ApiEndpoints = {
-    create: string
-    sync: (shareId: string) => string
-    remove: (shareId: string) => string
-    data: (shareId: string) => string
-  }
-
-  function apiEndpoints(resource: string): ApiEndpoints {
-    return {
-      create: `/api/${resource}`,
-      sync: (shareId) => `/api/${resource}/${shareId}/sync`,
-      remove: (shareId) => `/api/${resource}/${shareId}`,
-      data: (shareId) => `/api/${resource}/${shareId}/data`,
-    }
-  }
-
-  const legacyApi = apiEndpoints("share")
-  const consoleApi = apiEndpoints("shares")
-
-  export async function url() {
-    const req = await request()
-    return req.baseUrl
-  }
-
-  export async function request(): Promise<{
-    headers: Record<string, string>
-    api: ApiEndpoints
-    baseUrl: string
-  }> {
-    const headers: Record<string, string> = {}
-
-    const active = await Account.active()
-    if (!active?.active_org_id) {
-      const baseUrl = await Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
-      return { headers, api: legacyApi, baseUrl }
-    }
-
-    const token = await Account.token(active.id)
-    if (!token) {
-      throw new Error("No active account token available for sharing")
-    }
-
-    headers["authorization"] = `Bearer ${token}`
-    headers["x-org-id"] = active.active_org_id
-    return { headers, api: consoleApi, baseUrl: active.url }
-  }
-
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
-  export async function init() {
-    if (disabled) return
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
-      const session = await Session.get(evt.properties.sessionID)
-
-      await sync(session.id, [
-        {
-          type: "session",
-          data: session,
-        },
-      ])
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      const info = evt.properties.info
-      await sync(info.sessionID, [
-        {
-          type: "message",
-          data: evt.properties.info,
-        },
-      ])
-      if (info.role === "user") {
-        await sync(info.sessionID, [
-          {
-            type: "model",
-            data: [await Provider.getModel(info.model.providerID, info.model.modelID).then((m) => m)],
-          },
-        ])
-      }
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(evt.properties.part.sessionID, [
-        {
-          type: "part",
-          data: evt.properties.part,
-        },
-      ])
-    })
-    Bus.subscribe(Session.Event.Diff, async (evt) => {
-      await sync(evt.properties.sessionID, [
-        {
-          type: "session_diff",
-          data: evt.properties.diff,
-        },
-      ])
-    })
+  export type Api = {
+    create: string
+    sync: (shareID: string) => string
+    remove: (shareID: string) => string
+    data: (shareID: string) => string
   }
 
-  export async function create(sessionID: SessionID) {
-    if (disabled) return { id: "", url: "", secret: "" }
-    log.info("creating share", { sessionID })
-    const req = await request()
-    const response = await fetch(`${req.baseUrl}${req.api.create}`, {
-      method: "POST",
-      headers: { ...req.headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionID: sessionID }),
-    })
-
-    if (!response.ok) {
-      const message = await response.text().catch(() => response.statusText)
-      throw new Error(`Failed to create share (${response.status}): ${message || response.statusText}`)
-    }
-
-    const result = (await response.json()) as { id: string; url: string; secret: string }
-
-    Database.use((db) =>
-      db
-        .insert(SessionShareTable)
-        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
-        .onConflictDoUpdate({
-          target: SessionShareTable.session_id,
-          set: { id: result.id, secret: result.secret, url: result.url },
-        })
-        .run(),
-    )
-    fullSync(sessionID)
-    return result
+  export type Req = {
+    headers: Record<string, string>
+    api: Api
+    baseUrl: string
   }
 
-  function get(sessionID: SessionID) {
-    const row = Database.use((db) =>
-      db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
-    )
-    if (!row) return
-    return { id: row.id, secret: row.secret, url: row.url }
+  const ShareSchema = Schema.Struct({
+    id: Schema.String,
+    url: Schema.String,
+    secret: Schema.String,
+  })
+  export type Share = typeof ShareSchema.Type
+
+  type State = {
+    queue: Map<string, { data: Map<string, Data> }>
+    scope: Scope.Closeable
   }
 
   type Data =
@@ -164,12 +58,37 @@ export namespace ShareNext {
       }
     | {
         type: "session_diff"
-        data: SDK.FileDiff[]
+        data: SDK.SnapshotFileDiff[]
       }
     | {
         type: "model"
         data: SDK.Model[]
       }
+
+  export interface Interface {
+    readonly init: () => Effect.Effect<void, unknown>
+    readonly url: () => Effect.Effect<string, unknown>
+    readonly request: () => Effect.Effect<Req, unknown>
+    readonly create: (sessionID: SessionID) => Effect.Effect<Share, unknown>
+    readonly remove: (sessionID: SessionID) => Effect.Effect<void, unknown>
+  }
+
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
+
+  const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
+    Effect.sync(() => Database.use(fn))
+
+  function api(resource: string): Api {
+    return {
+      create: `/api/${resource}`,
+      sync: (shareID) => `/api/${resource}/${shareID}/sync`,
+      remove: (shareID) => `/api/${resource}/${shareID}`,
+      data: (shareID) => `/api/${resource}/${shareID}/data`,
+    }
+  }
+
+  const legacyApi = api("share")
+  const consoleApi = api("shares")
 
   function key(item: Data) {
     switch (item.type) {
@@ -186,102 +105,246 @@ export namespace ShareNext {
     }
   }
 
-  const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
-  async function sync(sessionID: SessionID, data: Data[]) {
-    if (disabled) return
-    const existing = queue.get(sessionID)
-    if (existing) {
-      for (const item of data) {
-        existing.data.set(key(item), item)
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const account = yield* Account.Service
+      const bus = yield* Bus.Service
+      const cfg = yield* Config.Service
+      const http = yield* HttpClient.HttpClient
+      const httpOk = HttpClient.filterStatusOk(http)
+      const provider = yield* Provider.Service
+      const session = yield* Session.Service
+
+      function sync(sessionID: SessionID, data: Data[]): Effect.Effect<void> {
+        return Effect.gen(function* () {
+          if (disabled) return
+          const s = yield* InstanceState.get(state)
+          const existing = s.queue.get(sessionID)
+          if (existing) {
+            for (const item of data) {
+              existing.data.set(key(item), item)
+            }
+            return
+          }
+
+          const next = new Map(data.map((item) => [key(item), item]))
+          s.queue.set(sessionID, { data: next })
+          yield* flush(sessionID).pipe(
+            Effect.delay(1000),
+            Effect.catchCause((cause) =>
+              Effect.sync(() => {
+                log.error("share flush failed", { sessionID, cause })
+              }),
+            ),
+            Effect.forkIn(s.scope),
+          )
+        })
       }
-      return
-    }
 
-    const dataMap = new Map<string, Data>()
-    for (const item of data) {
-      dataMap.set(key(item), item)
-    }
+      const state: InstanceState<State> = yield* InstanceState.make<State>(
+        Effect.fn("ShareNext.state")(function* (_ctx) {
+          const cache: State = { queue: new Map(), scope: yield* Scope.make() }
 
-    const timeout = setTimeout(async () => {
-      const queued = queue.get(sessionID)
-      if (!queued) return
-      queue.delete(sessionID)
-      const share = get(sessionID)
-      if (!share) return
+          yield* Effect.addFinalizer(() =>
+            Scope.close(cache.scope, Exit.void).pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  cache.queue.clear()
+                }),
+              ),
+            ),
+          )
 
-      const req = await request()
-      const response = await fetch(`${req.baseUrl}${req.api.sync(share.id)}`, {
-        method: "POST",
-        headers: { ...req.headers, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          secret: share.secret,
-          data: Array.from(queued.data.values()),
+          if (disabled) return cache
+
+          const watch = <D extends { type: string }>(
+            def: D,
+            fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
+          ) =>
+            bus.subscribe(def as never).pipe(
+              Stream.runForEach((evt) =>
+                fn(evt).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => {
+                      log.error("share subscriber failed", { type: def.type, cause })
+                    }),
+                  ),
+                ),
+              ),
+              Effect.forkScoped,
+            )
+
+          yield* watch(Session.Event.Updated, (evt) =>
+            Effect.gen(function* () {
+              const info = yield* session.get(evt.properties.sessionID)
+              yield* sync(info.id, [{ type: "session", data: info }])
+            }),
+          )
+          yield* watch(MessageV2.Event.Updated, (evt) =>
+            Effect.gen(function* () {
+              const info = evt.properties.info
+              yield* sync(info.sessionID, [{ type: "message", data: info }])
+              if (info.role !== "user") return
+              const model = yield* provider.getModel(info.model.providerID, info.model.modelID)
+              yield* sync(info.sessionID, [{ type: "model", data: [model] }])
+            }),
+          )
+          yield* watch(MessageV2.Event.PartUpdated, (evt) =>
+            sync(evt.properties.part.sessionID, [{ type: "part", data: evt.properties.part }]),
+          )
+          yield* watch(Session.Event.Diff, (evt) =>
+            sync(evt.properties.sessionID, [{ type: "session_diff", data: evt.properties.diff }]),
+          )
+          yield* watch(Session.Event.Deleted, (evt) => remove(evt.properties.sessionID))
+
+          return cache
         }),
+      )
+
+      const request = Effect.fn("ShareNext.request")(function* () {
+        const headers: Record<string, string> = {}
+        const active = yield* account.active()
+        if (Option.isNone(active) || !active.value.active_org_id) {
+          const baseUrl = (yield* cfg.get()).enterprise?.url ?? "https://opncd.ai"
+          return { headers, api: legacyApi, baseUrl } satisfies Req
+        }
+
+        const token = yield* account.token(active.value.id)
+        if (Option.isNone(token)) {
+          throw new Error("No active account token available for sharing")
+        }
+
+        headers.authorization = `Bearer ${token.value}`
+        headers["x-org-id"] = active.value.active_org_id
+        return { headers, api: consoleApi, baseUrl: active.value.url } satisfies Req
       })
 
-      if (!response.ok) {
-        log.warn("failed to sync share", { sessionID, shareID: share.id, status: response.status })
-      }
-    }, 1000)
-    queue.set(sessionID, { timeout, data: dataMap })
-  }
+      const get = Effect.fnUntraced(function* (sessionID: SessionID) {
+        const row = yield* db((db) =>
+          db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
+        )
+        if (!row) return
+        return { id: row.id, secret: row.secret, url: row.url } satisfies Share
+      })
 
-  export async function remove(sessionID: SessionID) {
-    if (disabled) return
-    log.info("removing share", { sessionID })
-    const share = get(sessionID)
-    if (!share) return
+      const flush = Effect.fn("ShareNext.flush")(function* (sessionID: SessionID) {
+        if (disabled) return
+        const s = yield* InstanceState.get(state)
+        const queued = s.queue.get(sessionID)
+        if (!queued) return
 
-    const req = await request()
-    const response = await fetch(`${req.baseUrl}${req.api.remove(share.id)}`, {
-      method: "DELETE",
-      headers: { ...req.headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        secret: share.secret,
-      }),
-    })
+        s.queue.delete(sessionID)
 
-    if (!response.ok) {
-      const message = await response.text().catch(() => response.statusText)
-      throw new Error(`Failed to remove share (${response.status}): ${message || response.statusText}`)
-    }
+        const share = yield* get(sessionID)
+        if (!share) return
 
-    Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
-  }
+        const req = yield* request()
+        const res = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.sync(share.id)}`).pipe(
+          HttpClientRequest.setHeaders(req.headers),
+          HttpClientRequest.bodyJson({ secret: share.secret, data: Array.from(queued.data.values()) }),
+          Effect.flatMap((r) => http.execute(r)),
+        )
 
-  async function fullSync(sessionID: SessionID) {
-    log.info("full sync", { sessionID })
-    const session = await Session.get(sessionID)
-    const diffs = await Session.diff(sessionID)
-    const messages = await Array.fromAsync(MessageV2.stream(sessionID))
-    const models = await Promise.all(
-      Array.from(
-        new Map(
-          messages
-            .filter((m) => m.info.role === "user")
-            .map((m) => (m.info as SDK.UserMessage).model)
-            .map((m) => [`${m.providerID}/${m.modelID}`, m] as const),
-        ).values(),
-      ).map((m) => Provider.getModel(ProviderID.make(m.providerID), ModelID.make(m.modelID)).then((item) => item)),
-    )
-    await sync(sessionID, [
-      {
-        type: "session",
-        data: session,
-      },
-      ...messages.map((x) => ({
-        type: "message" as const,
-        data: x.info,
-      })),
-      ...messages.flatMap((x) => x.parts.map((y) => ({ type: "part" as const, data: y }))),
-      {
-        type: "session_diff",
-        data: diffs,
-      },
-      {
-        type: "model",
-        data: models,
-      },
-    ])
-  }
+        if (res.status >= 400) {
+          log.warn("failed to sync share", { sessionID, shareID: share.id, status: res.status })
+        }
+      })
+
+      const full = Effect.fn("ShareNext.full")(function* (sessionID: SessionID) {
+        log.info("full sync", { sessionID })
+        const info = yield* session.get(sessionID)
+        const diffs = yield* session.diff(sessionID)
+        const messages = yield* Effect.sync(() => Array.from(MessageV2.stream(sessionID)))
+        const models = yield* Effect.forEach(
+          Array.from(
+            new Map(
+              messages
+                .filter((msg) => msg.info.role === "user")
+                .map((msg) => (msg.info as SDK.UserMessage).model)
+                .map((item) => [`${item.providerID}/${item.modelID}`, item] as const),
+            ).values(),
+          ),
+          (item) => provider.getModel(ProviderID.make(item.providerID), ModelID.make(item.modelID)),
+          { concurrency: 8 },
+        )
+
+        yield* sync(sessionID, [
+          { type: "session", data: info },
+          ...messages.map((item) => ({ type: "message" as const, data: item.info })),
+          ...messages.flatMap((item) => item.parts.map((part) => ({ type: "part" as const, data: part }))),
+          { type: "session_diff", data: diffs },
+          { type: "model", data: models },
+        ])
+      })
+
+      const init = Effect.fn("ShareNext.init")(function* () {
+        if (disabled) return
+        yield* InstanceState.get(state)
+      })
+
+      const url = Effect.fn("ShareNext.url")(function* () {
+        return (yield* request()).baseUrl
+      })
+
+      const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
+        if (disabled) return { id: "", url: "", secret: "" }
+        log.info("creating share", { sessionID })
+        const req = yield* request()
+        const result = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.create}`).pipe(
+          HttpClientRequest.setHeaders(req.headers),
+          HttpClientRequest.bodyJson({ sessionID }),
+          Effect.flatMap((r) => httpOk.execute(r)),
+          Effect.flatMap(HttpClientResponse.schemaBodyJson(ShareSchema)),
+        )
+        yield* db((db) =>
+          db
+            .insert(SessionShareTable)
+            .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
+            .onConflictDoUpdate({
+              target: SessionShareTable.session_id,
+              set: { id: result.id, secret: result.secret, url: result.url },
+            })
+            .run(),
+        )
+        const s = yield* InstanceState.get(state)
+        yield* full(sessionID).pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => {
+              log.error("share full sync failed", { sessionID, cause })
+            }),
+          ),
+          Effect.forkIn(s.scope),
+        )
+        return result
+      })
+
+      const remove = Effect.fn("ShareNext.remove")(function* (sessionID: SessionID) {
+        if (disabled) return
+        log.info("removing share", { sessionID })
+        const share = yield* get(sessionID)
+        if (!share) return
+
+        const req = yield* request()
+        yield* HttpClientRequest.delete(`${req.baseUrl}${req.api.remove(share.id)}`).pipe(
+          HttpClientRequest.setHeaders(req.headers),
+          HttpClientRequest.bodyJson({ secret: share.secret }),
+          Effect.flatMap((r) => httpOk.execute(r)),
+        )
+
+        yield* db((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
+      })
+
+      return Service.of({ init, url, request, create, remove })
+    }),
+  )
+
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Bus.layer),
+    Layer.provide(Account.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Session.defaultLayer),
+  )
 }
