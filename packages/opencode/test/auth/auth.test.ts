@@ -1,13 +1,11 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Auth } from "../../src/auth"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const node = NodeChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
+const node = CrossSpawnSpawner.defaultLayer
 
 const it = testEffect(Layer.mergeAll(Auth.defaultLayer, node))
 
