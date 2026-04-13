@@ -12,6 +12,10 @@
       "icons/beta/icon.ico"
     ],
     "windows": {
+      "signCommand": {
+        "cmd": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "../../../script/sign-windows.ps1", "%1"]
+      },
       "nsis": {
         "installerIcon": "icons/beta/icon.ico"
       }

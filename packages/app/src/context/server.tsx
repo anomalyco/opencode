@@ -94,7 +94,11 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
+  init: (props: {
+    defaultServer: ServerConnection.Key
+    disableHealthCheck?: boolean
+    servers?: Array<ServerConnection.Any>
+  }) => {
     const checkServerHealth = useCheckServerHealth()
 
     const [store, setStore, _, ready] = persisted(
@@ -202,6 +206,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const current_ = current()
       if (!current_) return
 
+      if (props.disableHealthCheck) {
+        setState("healthy", true)
+        return
+      }
       setState("healthy", undefined)
       onCleanup(startHealthPolling(current_))
     })

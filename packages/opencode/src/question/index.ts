@@ -1,15 +1,15 @@
-import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID } from "@/session/schema"
 import { Log } from "@/util/log"
 import z from "zod"
 import { QuestionID } from "./schema"
 
-const log = Log.create({ service: "question" })
-
 export namespace Question {
+  const log = Log.create({ service: "question" })
+
   // Schemas
 
   export const Option = z
@@ -86,6 +86,10 @@ export namespace Question {
     deferred: Deferred.Deferred<Answer[], RejectedError>
   }
 
+  interface State {
+    pending: Map<QuestionID, PendingEntry>
+  }
+
   // Service
 
   export interface Interface {
@@ -99,18 +103,37 @@ export namespace Question {
     readonly list: () => Effect.Effect<Request[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Question") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Question") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const pending = new Map<QuestionID, PendingEntry>()
+      const bus = yield* Bus.Service
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Question.state")(function* () {
+          const state = {
+            pending: new Map<QuestionID, PendingEntry>(),
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              for (const item of state.pending.values()) {
+                yield* Deferred.fail(item.deferred, new RejectedError())
+              }
+              state.pending.clear()
+            }),
+          )
+
+          return state
+        }),
+      )
 
       const ask = Effect.fn("Question.ask")(function* (input: {
         sessionID: SessionID
         questions: Info[]
         tool?: { messageID: MessageID; callID: string }
       }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const id = QuestionID.ascending()
         log.info("asking", { id, questions: input.questions.length })
 
@@ -122,7 +145,7 @@ export namespace Question {
           tool: input.tool,
         }
         pending.set(id, { info, deferred })
-        Bus.publish(Event.Asked, info)
+        yield* bus.publish(Event.Asked, info)
 
         return yield* Effect.ensuring(
           Deferred.await(deferred),
@@ -133,6 +156,7 @@ export namespace Question {
       })
 
       const reply = Effect.fn("Question.reply")(function* (input: { requestID: QuestionID; answers: Answer[] }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(input.requestID)
         if (!existing) {
           log.warn("reply for unknown request", { requestID: input.requestID })
@@ -140,7 +164,7 @@ export namespace Question {
         }
         pending.delete(input.requestID)
         log.info("replied", { requestID: input.requestID, answers: input.answers })
-        Bus.publish(Event.Replied, {
+        yield* bus.publish(Event.Replied, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
           answers: input.answers,
@@ -149,6 +173,7 @@ export namespace Question {
       })
 
       const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
+        const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(requestID)
         if (!existing) {
           log.warn("reject for unknown request", { requestID })
@@ -156,7 +181,7 @@ export namespace Question {
         }
         pending.delete(requestID)
         log.info("rejected", { requestID })
-        Bus.publish(Event.Rejected, {
+        yield* bus.publish(Event.Rejected, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
         })
@@ -164,6 +189,7 @@ export namespace Question {
       })
 
       const list = Effect.fn("Question.list")(function* () {
+        const pending = (yield* InstanceState.get(state)).pending
         return Array.from(pending.values(), (x) => x.info)
       })
 
@@ -171,23 +197,5 @@ export namespace Question {
     }),
   )
 
-  export async function ask(input: {
-    sessionID: SessionID
-    questions: Info[]
-    tool?: { messageID: MessageID; callID: string }
-  }): Promise<Answer[]> {
-    return runPromiseInstance(Service.use((svc) => svc.ask(input)))
-  }
-
-  export async function reply(input: { requestID: QuestionID; answers: Answer[] }): Promise<void> {
-    return runPromiseInstance(Service.use((svc) => svc.reply(input)))
-  }
-
-  export async function reject(requestID: QuestionID): Promise<void> {
-    return runPromiseInstance(Service.use((svc) => svc.reject(requestID)))
-  }
-
-  export async function list(): Promise<Request[]> {
-    return runPromiseInstance(Service.use((svc) => svc.list()))
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 }
