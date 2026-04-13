@@ -17,10 +17,10 @@ import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
+import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { makeRuntime } from "@/effect/run-service"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { AppRuntime } from "@/effect/app-runtime"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -267,7 +267,7 @@ export namespace Worktree {
         const booted = yield* Effect.promise(() =>
           Instance.provide({
             directory: info.directory,
-            init: () => AppRuntime.runPromise(InstanceBootstrap),
+            init: () => BootstrapRuntime.runPromise(InstanceBootstrap),
             fn: () => undefined,
           })
             .then(() => true)
