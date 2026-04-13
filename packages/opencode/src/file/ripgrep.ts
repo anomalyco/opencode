@@ -17,6 +17,7 @@ import { AppFileSystem } from "../filesystem"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { text } from "node:stream/consumers"
+import { makeRuntime } from "@/effect/run-service"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -96,6 +97,7 @@ export namespace Ripgrep {
 
   export type Result = z.infer<typeof Result>
   export type Match = z.infer<typeof Match>
+  export type Item = Match["data"]
   export type Begin = z.infer<typeof Begin>
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
@@ -290,6 +292,13 @@ export namespace Ripgrep {
       follow?: boolean
       maxDepth?: number
     }) => Stream.Stream<string, PlatformError>
+    readonly search: (input: {
+      cwd: string
+      pattern: string
+      glob?: string[]
+      limit?: number
+      follow?: boolean
+    }) => Effect.Effect<{ items: Item[]; partial: boolean }, PlatformError | Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
@@ -337,9 +346,66 @@ export namespace Ripgrep {
           .pipe(Stream.filter((line: string) => line.length > 0))
       })
 
+      const search = Effect.fn("Ripgrep.search")(function* (input: {
+        cwd: string
+        pattern: string
+        glob?: string[]
+        limit?: number
+        follow?: boolean
+      }) {
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const args = [yield* bin(), "--json", "--hidden", "--glob=!.git/*"]
+            if (input.follow) args.push("--follow")
+            if (input.glob) {
+              for (const g of input.glob) {
+                args.push(`--glob=${g}`)
+              }
+            }
+            if (input.limit) args.push(`--max-count=${input.limit}`)
+            args.push("--", input.pattern)
+
+            const handle = yield* spawner.spawn(
+              ChildProcess.make(args[0], args.slice(1), {
+                cwd: input.cwd,
+                stdin: "ignore",
+              }),
+            )
+
+            const [stdout, stderr, code] = yield* Effect.all(
+              [
+                Stream.mkString(Stream.decodeText(handle.stdout)),
+                Stream.mkString(Stream.decodeText(handle.stderr)),
+                handle.exitCode,
+              ],
+              { concurrency: "unbounded" },
+            )
+
+            if (code !== 0 && code !== 1 && code !== 2) {
+              return yield* Effect.fail(new Error(`ripgrep failed: ${stderr}`))
+            }
+
+            const items = stdout
+              .trim()
+              .split(/\r?\n/)
+              .filter(Boolean)
+              .map((line) => JSON.parse(line))
+              .map((parsed) => Result.parse(parsed))
+              .filter((row): row is Match => row.type === "match")
+              .map((row) => row.data)
+
+            return {
+              items,
+              partial: code === 2,
+            }
+          }),
+        )
+      })
+
       return Service.of({
         path: bin,
         files: (input) => Stream.unwrap(files(input)),
+        search,
       })
     }),
   )
@@ -348,6 +414,8 @@ export namespace Ripgrep {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     log.info("tree", input)
@@ -414,38 +482,6 @@ export namespace Ripgrep {
     limit?: number
     follow?: boolean
   }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob=!.git/*"]
-    if (input.follow) args.push("--follow")
-
-    if (input.glob) {
-      for (const g of input.glob) {
-        args.push(`--glob=${g}`)
-      }
-    }
-
-    if (input.limit) {
-      args.push(`--max-count=${input.limit}`)
-    }
-
-    args.push("--")
-    args.push(input.pattern)
-
-    const result = await Process.text(args, {
-      cwd: input.cwd,
-      nothrow: true,
-    })
-    if (result.code !== 0) {
-      return []
-    }
-
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text.trim().split(/\r?\n/).filter(Boolean)
-    // Parse JSON lines from ripgrep output
-
-    return lines
-      .map((line) => JSON.parse(line))
-      .map((parsed) => Result.parse(parsed))
-      .filter((r) => r.type === "match")
-      .map((r) => r.data)
+    return runPromise((svc) => svc.search(input).pipe(Effect.map((result) => result.items)))
   }
 }

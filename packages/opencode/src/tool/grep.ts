@@ -1,10 +1,7 @@
 import z from "zod"
 import { Effect, Option } from "effect"
-import * as Stream from "effect/Stream"
 import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
-import { ChildProcess } from "effect/unstable/process"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { AppFileSystem } from "../filesystem"
 
 import DESCRIPTION from "./grep.txt"
@@ -19,7 +16,6 @@ export const GrepTool = Tool.define(
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const rg = yield* Ripgrep.Service
-    const spawner = yield* ChildProcessSpawner
 
     return {
       description: DESCRIPTION,
@@ -49,38 +45,13 @@ export const GrepTool = Tool.define(
           searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
           yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
 
-          const rgPath = yield* rg.path()
-          const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
-          if (params.include) {
-            args.push("--glob", params.include)
-          }
-          args.push(searchPath)
+          const result = yield* rg.search({
+            cwd: searchPath,
+            pattern: params.pattern,
+            glob: params.include ? [params.include] : undefined,
+          })
 
-          const result = yield* Effect.scoped(
-            Effect.gen(function* () {
-              const handle = yield* spawner.spawn(
-                ChildProcess.make(rgPath, args, {
-                  stdin: "ignore",
-                }),
-              )
-
-              const [output, errorOutput] = yield* Effect.all(
-                [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-                { concurrency: 2 },
-              )
-
-              const exitCode = yield* handle.exitCode
-
-              return { output, errorOutput, exitCode }
-            }),
-          )
-
-          const { output, errorOutput, exitCode } = result
-
-          // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
-          // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
-          // Only fail if exit code is 2 AND no output was produced
-          if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
+          if (result.items.length === 0) {
             return {
               title: params.pattern,
               metadata: { matches: 0, truncated: false },
@@ -88,22 +59,10 @@ export const GrepTool = Tool.define(
             }
           }
 
-          if (exitCode !== 0 && exitCode !== 2) {
-            throw new Error(`ripgrep failed: ${errorOutput}`)
-          }
-
-          const hasErrors = exitCode === 2
-
-          // Handle both Unix (\n) and Windows (\r\n) line endings
-          const lines = output.trim().split(/\r?\n/)
           const matches = (yield* Effect.forEach(
-            lines,
-            Effect.fnUntraced(function* (line) {
-              if (!line) return []
-
-              const [file, raw, ...rest] = line.split("|")
-              if (!file || !raw || rest.length === 0) return []
-
+            result.items,
+            Effect.fnUntraced(function* (item) {
+              const file = path.isAbsolute(item.path.text) ? item.path.text : path.resolve(searchPath, item.path.text)
               const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
               if (!info || info.type === "Directory") return []
 
@@ -115,8 +74,8 @@ export const GrepTool = Tool.define(
                       Option.map((time) => time.getTime()),
                       Option.getOrElse(() => 0),
                     ) ?? 0,
-                  line: parseInt(raw, 10),
-                  text: rest.join("|"),
+                  line: item.line_number,
+                  text: item.lines.text,
                 },
               ]
             }),
@@ -161,7 +120,7 @@ export const GrepTool = Tool.define(
             )
           }
 
-          if (hasErrors) {
+          if (result.partial) {
             outputLines.push("")
             outputLines.push("(Some paths were inaccessible and skipped)")
           }
