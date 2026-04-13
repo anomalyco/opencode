@@ -1,5 +1,6 @@
 import type {
   Config,
+  Env,
   OpencodeClient,
   Path,
   PermissionRequest,
@@ -22,6 +23,7 @@ import { formatServerError } from "@/utils/server-errors"
 type GlobalStore = {
   ready: boolean
   path: Path
+  env: Env
   project: Project[]
   session_todo: {
     [sessionID: string]: Todo[]
@@ -112,6 +114,12 @@ export async function bootstrapGlobal(input: {
       ),
     () =>
       retry(() =>
+        input.globalSDK.env.get().then((x) => {
+          input.setGlobalStore("env", x.data!)
+        }),
+      ),
+    () =>
+      retry(() =>
         input.globalSDK.project.list().then((x) => {
           const projects = (x.data ?? [])
             .filter((p) => !!p?.id)
@@ -198,6 +206,7 @@ export async function bootstrapDirectory(input: {
   global: {
     config: Config
     path: Path
+    env: Env
     project: Project[]
     provider: ProviderListResponse
   }
@@ -207,6 +216,7 @@ export async function bootstrapDirectory(input: {
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
+  input.setStore("env", input.global.env)
   if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
     input.setStore("provider", input.global.provider)
   }

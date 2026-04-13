@@ -1395,8 +1395,6 @@ export type Path = {
   config: string
   worktree: string
   directory: string
-  serveDomain?: string
-  jupyterhubUser?: string
 }
 
 export type VcsInfo = {

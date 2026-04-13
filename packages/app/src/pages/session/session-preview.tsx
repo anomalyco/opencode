@@ -9,9 +9,9 @@ export function createSessionPreview() {
   const sync = useSync()
 
   const previewUrl = createMemo(() => {
-    const path = sync.data.path
-    const domain = path?.serveDomain
-    const user = path?.jupyterhubUser
+    const env = sync.data.env
+    const domain = env?.serveDomain
+    const user = env?.jupyterhubUser
     if (!domain || !user) return undefined
     return `https://${user}.${domain}`
   })

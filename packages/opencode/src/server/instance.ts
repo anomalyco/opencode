@@ -22,6 +22,7 @@ import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
+import { EnvRoutes } from "./routes/env"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
@@ -41,6 +42,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes())
     .route("/config", ConfigRoutes())
+    .route("/env", EnvRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
     .route("/permission", PermissionRoutes())
@@ -91,8 +93,6 @@ export const InstanceRoutes = (app?: Hono) =>
                       config: z.string(),
                       worktree: z.string(),
                       directory: z.string(),
-                      serveDomain: z.string().optional(),
-                      jupyterhubUser: z.string().optional(),
                     })
                     .meta({
                       ref: "Path",
@@ -110,8 +110,6 @@ export const InstanceRoutes = (app?: Hono) =>
           config: Global.Path.config,
           worktree: Instance.worktree,
           directory: Instance.directory,
-          ...(Flag.OPENCODE_SERVE_DOMAIN ? { serveDomain: Flag.OPENCODE_SERVE_DOMAIN } : {}),
-          ...(Flag.JUPYTERHUB_USER ? { jupyterhubUser: Flag.JUPYTERHUB_USER } : {}),
         })
       },
     )
