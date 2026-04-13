@@ -3,7 +3,7 @@ import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -93,6 +93,40 @@ export namespace Ripgrep {
   })
 
   const Result = z.union([Begin, Match, End, Summary])
+
+  const Hit = Schema.Struct({
+    type: Schema.Literal("match"),
+    data: Schema.Struct({
+      path: Schema.Struct({
+        text: Schema.String,
+      }),
+      lines: Schema.Struct({
+        text: Schema.String,
+      }),
+      line_number: Schema.Number,
+      absolute_offset: Schema.Number,
+      submatches: Schema.mutable(
+        Schema.Array(
+          Schema.Struct({
+            match: Schema.Struct({
+              text: Schema.String,
+            }),
+            start: Schema.Number,
+            end: Schema.Number,
+          }),
+        ),
+      ),
+    }),
+  })
+
+  const Row = Schema.Union([
+    Schema.Struct({ type: Schema.Literal("begin"), data: Schema.Unknown }),
+    Hit,
+    Schema.Struct({ type: Schema.Literal("end"), data: Schema.Unknown }),
+    Schema.Struct({ type: Schema.Literal("summary"), data: Schema.Unknown }),
+  ])
+
+  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Row))
 
   export type Result = z.infer<typeof Result>
   export type Match = z.infer<typeof Match>
@@ -374,14 +408,6 @@ export namespace Ripgrep {
       }) {
         return yield* Effect.scoped(
           Effect.gen(function* () {
-            const parse = Effect.fn("Ripgrep.parse")(function* (line: string) {
-              const row = yield* Effect.try({
-                try: () => Result.parse(JSON.parse(line)),
-                catch: (cause) => new Error(`invalid ripgrep output: ${cause}`),
-              })
-              if (row.type !== "match") return undefined
-              return row.data
-            })
             const cmd = yield* args({
               mode: "search",
               glob: input.glob,
@@ -402,8 +428,11 @@ export namespace Ripgrep {
                 Stream.decodeText(handle.stdout).pipe(
                   Stream.splitLines,
                   Stream.filter((line) => line.length > 0),
-                  Stream.mapEffect(parse),
-                  Stream.filter((item): item is Item => item !== undefined),
+                  Stream.mapEffect((line) =>
+                    decode(line).pipe(Effect.mapError((cause) => new Error("invalid ripgrep output", { cause }))),
+                  ),
+                  Stream.filter((row): row is Schema.Schema.Type<typeof Hit> => row.type === "match"),
+                  Stream.map((row): Item => row.data),
                   Stream.runCollect,
                   Effect.map((chunk) => [...chunk]),
                 ),
