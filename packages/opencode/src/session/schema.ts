@@ -33,13 +33,3 @@ export const PartID = Schema.String.pipe(
 )
 
 export type PartID = Schema.Schema.Type<typeof PartID>
-
-export const SessionEntryID = Schema.String.pipe(
-  Schema.brand("SessionEntryID"),
-  withStatics((s) => ({
-    ascending: (id?: string) => s.make(Identifier.ascending("entry", id)),
-    zod: Identifier.schema("entry").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
-  })),
-)
-
-export type SessionEntryID = Schema.Schema.Type<typeof SessionEntryID>
