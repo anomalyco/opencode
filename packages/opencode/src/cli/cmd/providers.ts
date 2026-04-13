@@ -478,7 +478,7 @@ export const ProvidersLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler(_args) {
     UI.empty()
-    const credentials = await AppRuntime.runPromise(
+    const credentials: Array<[string, Auth.Info]> = await AppRuntime.runPromise(
       Effect.gen(function* () {
         const auth = yield* Auth.Service
         return Object.entries(yield* auth.all())
@@ -490,14 +490,15 @@ export const ProvidersLogoutCommand = cmd({
       return
     }
     const database = await ModelsDev.get()
-    const providerID = await prompts.select({
+    const selected = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
         label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
         value: key,
       })),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+    if (prompts.isCancel(selected)) throw new UI.CancelledError()
+    const providerID = selected as string
     await AppRuntime.runPromise(
       Effect.gen(function* () {
         const auth = yield* Auth.Service

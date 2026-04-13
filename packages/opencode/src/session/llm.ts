@@ -45,7 +45,7 @@ export namespace LLM {
     abort: AbortSignal
   }
 
-  export type Event = ReturnType<typeof streamText>["fullStream"] extends AsyncIterable<infer T> ? T : never
+  export type Event = Awaited<ReturnType<typeof stream>>["fullStream"] extends AsyncIterable<infer T> ? T : never
 
   export interface Interface {
     readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
@@ -66,7 +66,7 @@ export namespace LLM {
                   (ctrl) => Effect.sync(() => ctrl.abort()),
                 )
 
-                const result = yield* stream({ ...input, abort: ctrl.signal })
+                const result = yield* Effect.promise(() => LLM.stream({ ...input, abort: ctrl.signal }))
 
                 return Stream.fromAsyncIterable(result.fullStream, (e) =>
                   e instanceof Error ? e : new Error(String(e)),
@@ -81,7 +81,7 @@ export namespace LLM {
 
   export const defaultLayer = layer
 
-  const stream = Effect.fn("LLM.stream")(function* (input: StreamRequest) {
+  export async function stream(input: StreamRequest) {
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -94,13 +94,14 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const auth = yield* Auth.Service
-    const [language, cfg, provider, info] = yield* Effect.promise(() =>
-      Promise.all([Provider.getLanguage(input.model), Config.get(), Provider.getProvider(input.model.providerID)]),
-    ).pipe(
-      Effect.flatMap(([language, cfg, provider]) =>
-        auth.get(input.model.providerID).pipe(Effect.map((info) => [language, cfg, provider, info] as const)),
-      ),
+    const [language, cfg, provider, info] = await Effect.runPromise(
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        const [language, cfg, provider] = yield* Effect.promise(() =>
+          Promise.all([Provider.getLanguage(input.model), Config.get(), Provider.getProvider(input.model.providerID)]),
+        )
+        return [language, cfg, provider, yield* auth.get(input.model.providerID)] as const
+      }).pipe(Effect.provide(Auth.defaultLayer)),
     )
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && info?.type === "oauth"
@@ -120,12 +121,10 @@ export namespace LLM {
     )
 
     const header = system[0]
-    yield* Effect.promise(() =>
-      Plugin.trigger(
-        "experimental.chat.system.transform",
-        { sessionID: input.sessionID, model: input.model },
-        { system },
-      ),
+    await Plugin.trigger(
+      "experimental.chat.system.transform",
+      { sessionID: input.sessionID, model: input.model },
+      { system },
     )
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
@@ -170,42 +169,38 @@ export namespace LLM {
             ...input.messages,
           ]
 
-    const params = yield* Effect.promise(() =>
-      Plugin.trigger(
-        "chat.params",
-        {
-          sessionID: input.sessionID,
-          agent: input.agent.name,
-          model: input.model,
-          provider,
-          message: input.user,
-        },
-        {
-          temperature: input.model.capabilities.temperature
-            ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-            : undefined,
-          topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-          topK: ProviderTransform.topK(input.model),
-          maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
-          options,
-        },
-      ),
+    const params = await Plugin.trigger(
+      "chat.params",
+      {
+        sessionID: input.sessionID,
+        agent: input.agent.name,
+        model: input.model,
+        provider,
+        message: input.user,
+      },
+      {
+        temperature: input.model.capabilities.temperature
+          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+          : undefined,
+        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
+        topK: ProviderTransform.topK(input.model),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
+        options,
+      },
     )
 
-    const { headers } = yield* Effect.promise(() =>
-      Plugin.trigger(
-        "chat.headers",
-        {
-          sessionID: input.sessionID,
-          agent: input.agent.name,
-          model: input.model,
-          provider,
-          message: input.user,
-        },
-        {
-          headers: {},
-        },
-      ),
+    const { headers } = await Plugin.trigger(
+      "chat.headers",
+      {
+        sessionID: input.sessionID,
+        agent: input.agent.name,
+        model: input.model,
+        provider,
+        message: input.user,
+      },
+      {
+        headers: {},
+      },
     )
 
     const tools = resolveTools(input)
@@ -400,7 +395,7 @@ export namespace LLM {
         },
       },
     })
-  })
+  }
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(

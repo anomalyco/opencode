@@ -1,10 +1,15 @@
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Auth } from "../../src/auth"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Auth.defaultLayer)
+const node = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
+
+const it = testEffect(Layer.mergeAll(Auth.defaultLayer, node))
 
 describe("Auth", () => {
   it.live("set normalizes trailing slashes in keys", () =>
