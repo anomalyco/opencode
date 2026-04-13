@@ -94,6 +94,7 @@ export namespace Config {
    */
   export function parseManagedPlist(json: string, source: string): Info {
     const raw = JSON.parse(json)
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
     for (const key of Object.keys(raw)) {
       if (PLIST_META.has(key)) delete raw[key]
     }
