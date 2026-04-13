@@ -5,7 +5,6 @@ import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type ProviderMetadata } from "ai"
-import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
@@ -30,7 +29,7 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
-import { Effect, Layer, Scope, ServiceMap } from "effect"
+import { Effect, Layer, Option, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
@@ -319,8 +318,6 @@ export namespace Session {
     readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
     readonly touch: (sessionID: SessionID) => Effect.Effect<void>
     readonly get: (id: SessionID) => Effect.Effect<Info>
-    readonly share: (id: SessionID) => Effect.Effect<{ url: string }>
-    readonly unshare: (id: SessionID) => Effect.Effect<void>
     readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
     readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
     readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
@@ -355,21 +352,25 @@ export namespace Session {
       field: string
       delta: string
     }) => Effect.Effect<void>
+    /** Finds the first message matching the predicate, searching newest-first. */
+    readonly findMessage: (
+      sessionID: SessionID,
+      predicate: (msg: MessageV2.WithParts) => boolean,
+    ) => Effect.Effect<Option.Option<MessageV2.WithParts>>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Session") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
   type Patch = z.infer<typeof Event.Updated.schema>["info"]
 
   const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
     Effect.sync(() => Database.use(fn))
 
-  export const layer: Layer.Layer<Service, never, Bus.Service | Config.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      const config = yield* Config.Service
-      const scope = yield* Scope.Scope
+      const storage = yield* Storage.Service
 
       const createNext = Effect.fn("Session.createNext")(function* (input: {
         id?: SessionID
@@ -399,11 +400,6 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
-        const cfg = yield* config.get()
-        if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
-          yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
-        }
-
         if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // This only exist for backwards compatibility. We should not be
           // manually publishing this event; it is a sync event now
@@ -422,47 +418,36 @@ export namespace Session {
         return fromRow(row)
       })
 
-      const share = Effect.fn("Session.share")(function* (id: SessionID) {
-        const cfg = yield* config.get()
-        if (cfg.share === "disabled") throw new Error("Sharing is disabled in configuration")
-        const result = yield* Effect.promise(async () => {
-          const { ShareNext } = await import("@/share/share-next")
-          return ShareNext.create(id)
-        })
-        yield* Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: result.url } } }))
-        return result
-      })
-
-      const unshare = Effect.fn("Session.unshare")(function* (id: SessionID) {
-        yield* Effect.promise(async () => {
-          const { ShareNext } = await import("@/share/share-next")
-          await ShareNext.remove(id)
-        })
-        yield* Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null } } }))
-      })
-
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-        const ctx = yield* InstanceState.context
         const rows = yield* db((d) =>
           d
             .select()
             .from(SessionTable)
-            .where(and(eq(SessionTable.project_id, ctx.project.id), eq(SessionTable.parent_id, parentID)))
+            .where(and(eq(SessionTable.parent_id, parentID)))
             .all(),
         )
         return rows.map(fromRow)
       })
 
-      const remove: (sessionID: SessionID) => Effect.Effect<void> = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
         try {
           const session = yield* get(sessionID)
           const kids = yield* children(sessionID)
           for (const child of kids) {
             yield* remove(child.id)
           }
-          yield* unshare(sessionID).pipe(Effect.ignore)
+
+          // `remove` needs to work in all cases, such as a broken
+          // sessions that run cleanup. In certain cases these will
+          // run without any instance state, so we need to turn off
+          // publishing of events in that case
+          const hasInstance = yield* InstanceState.directory.pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          )
+
           yield* Effect.sync(() => {
-            SyncEvent.run(Event.Deleted, { sessionID, info: session })
+            SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
             SyncEvent.remove(sessionID)
           })
         } catch (e) {
@@ -606,9 +591,9 @@ export namespace Session {
       })
 
       const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-        return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
-          Effect.orElseSucceed((): Snapshot.FileDiff[] => []),
-        )
+        return yield* storage
+          .read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+          .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => []))
       })
 
       const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
@@ -656,13 +641,22 @@ export namespace Session {
         yield* bus.publish(MessageV2.Event.PartDelta, input)
       })
 
+      /** Finds the first message matching the predicate, searching newest-first. */
+      const findMessage = Effect.fn("Session.findMessage")(function* (
+        sessionID: SessionID,
+        predicate: (msg: MessageV2.WithParts) => boolean,
+      ) {
+        for (const item of MessageV2.stream(sessionID)) {
+          if (predicate(item)) return Option.some(item)
+        }
+        return Option.none<MessageV2.WithParts>()
+      })
+
       return Service.of({
         create,
         fork,
         touch,
         get,
-        share,
-        unshare,
         setTitle,
         setArchived,
         setPermission,
@@ -679,11 +673,12 @@ export namespace Session {
         updatePart,
         getPart,
         updatePartDelta,
+        findMessage,
       })
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
@@ -704,8 +699,6 @@ export namespace Session {
   )
 
   export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
-  export const share = fn(SessionID.zod, (id) => runPromise((svc) => svc.share(id)))
-  export const unshare = fn(SessionID.zod, (id) => runPromise((svc) => svc.unshare(id)))
 
   export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
     runPromise((svc) => svc.setTitle(input)),
@@ -713,6 +706,10 @@ export namespace Session {
 
   export const setArchived = fn(z.object({ sessionID: SessionID.zod, time: z.number().optional() }), (input) =>
     runPromise((svc) => svc.setArchived(input)),
+  )
+
+  export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset }), (input) =>
+    runPromise((svc) => svc.setPermission(input)),
   )
 
   export const setRevert = fn(
@@ -857,15 +854,4 @@ export namespace Session {
     MessageV2.Part.parse(part)
     return runPromise((svc) => svc.updatePart(part))
   }
-
-  export const updatePartDelta = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-      partID: PartID.zod,
-      field: z.string(),
-      delta: z.string(),
-    }),
-    (input) => runPromise((svc) => svc.updatePartDelta(input)),
-  )
 }

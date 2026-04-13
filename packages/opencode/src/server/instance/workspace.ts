@@ -62,6 +62,28 @@ export const WorkspaceRoutes = lazy(() =>
         return c.json(Workspace.list(Instance.project))
       },
     )
+    .get(
+      "/status",
+      describeRoute({
+        summary: "Workspace status",
+        description: "Get connection status for workspaces in the current project.",
+        operationId: "experimental.workspace.status",
+        responses: {
+          200: {
+            description: "Workspace status",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(Workspace.ConnectionStatus)),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const ids = new Set(Workspace.list(Instance.project).map((item) => item.id))
+        return c.json(Workspace.status().filter((item) => ids.has(item.workspaceID)))
+      },
+    )
     .delete(
       "/:id",
       describeRoute({

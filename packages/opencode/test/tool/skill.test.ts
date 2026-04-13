@@ -1,11 +1,16 @@
-import { Effect } from "effect"
+import { Effect, Layer, ManagedRuntime } from "effect"
+import { Agent } from "../../src/agent/agent"
+import { Skill } from "../../src/skill"
+import { Ripgrep } from "../../src/file/ripgrep"
+import { Truncate } from "../../src/tool/truncate"
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import type { Permission } from "../../src/permission"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
-import { SkillTool, SkillDescription } from "../../src/tool/skill"
+import { SkillTool } from "../../src/tool/skill"
+import { ToolRegistry } from "../../src/tool/registry"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -16,7 +21,7 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: () => Effect.void,
 }
 
 afterEach(async () => {
@@ -49,9 +54,11 @@ description: Skill for tool tests.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const desc = await Effect.runPromise(
-            SkillDescription({ name: "build", mode: "primary" as const, permission: [], options: {} }),
-          )
+          const desc = await ToolRegistry.tools({
+            providerID: "opencode" as any,
+            modelID: "gpt-5" as any,
+            agent: { name: "build", mode: "primary" as const, permission: [], options: {} },
+          }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
           expect(desc).toContain(`**tool-skill**: Skill for tool tests.`)
         },
       })
@@ -92,8 +99,14 @@ description: ${description}
         directory: tmp.path,
         fn: async () => {
           const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
-          const first = await Effect.runPromise(SkillDescription(agent))
-          const second = await Effect.runPromise(SkillDescription(agent))
+          const load = () =>
+            ToolRegistry.tools({
+              providerID: "opencode" as any,
+              modelID: "gpt-5" as any,
+              agent,
+            }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
+          const first = await load()
+          const second = await load()
 
           expect(first).toBe(second)
 
@@ -139,16 +152,21 @@ Use this skill.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const tool = await SkillTool.init()
+          const runtime = ManagedRuntime.make(
+            Layer.mergeAll(Skill.defaultLayer, Ripgrep.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
+          )
+          const info = await runtime.runPromise(SkillTool)
+          const tool = await runtime.runPromise(info.init())
           const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const ctx: Tool.Context = {
             ...baseCtx,
-            ask: async (req) => {
-              requests.push(req)
-            },
+            ask: (req) =>
+              Effect.sync(() => {
+                requests.push(req)
+              }),
           }
 
-          const result = await tool.execute({ name: "tool-skill" }, ctx)
+          const result = await runtime.runPromise(tool.execute({ name: "tool-skill" }, ctx))
           const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
           const file = path.resolve(dir, "scripts", "demo.txt")
 
