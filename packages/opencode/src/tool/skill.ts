@@ -1,4 +1,6 @@
 import path from "path"
+import fs from "fs"
+import os from "os"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect } from "effect"
@@ -7,6 +9,39 @@ import * as Stream from "effect/Stream"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
+
+const USAGE_FILE = path.join(os.homedir(), ".config/opencode/skills/usage.json")
+
+// Helper function to track skill usage
+async function trackSkillUsage(skillName: string): Promise<void> {
+  try {
+    // Ensure directory exists
+    const dir = path.dirname(USAGE_FILE)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+
+    // Read existing usage or create new
+    let usage: Record<string, number> = {}
+    if (fs.existsSync(USAGE_FILE)) {
+      const content = fs.readFileSync(USAGE_FILE, "utf-8")
+      try {
+        usage = JSON.parse(content)
+      } catch {
+        usage = {}
+      }
+    }
+
+    // Increment counter
+    usage[skillName] = (usage[skillName] || 0) + 1
+
+    // Write back
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 2))
+  } catch (err) {
+    // Silently fail - tracking should not break the tool
+    console.error("Failed to track skill usage:", err)
+  }
+}
 
 const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
@@ -51,6 +86,12 @@ export const SkillTool = Tool.define(
                 const available = all.map((s) => s.name).join(", ")
                 throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
               }
+
+              // Track skill usage
+              yield* Effect.tryPromise({
+                try: () => trackSkillUsage(params.name),
+                catch: () => Effect.unit,
+              })
 
               yield* ctx.ask({
                 permission: "skill",
