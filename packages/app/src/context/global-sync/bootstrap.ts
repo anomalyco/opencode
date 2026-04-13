@@ -214,9 +214,11 @@ export async function bootstrapDirectory(input: {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
+  const seededEnv =
+    input.global.env.serveDomain || input.global.env.jupyterhubUser ? input.global.env : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
-  input.setStore("env", input.global.env)
+  if (seededEnv) input.setStore("env", seededEnv)
   if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
     input.setStore("provider", input.global.provider)
   }
@@ -251,6 +253,14 @@ export async function bootstrapDirectory(input: {
               input.setStore("path", x.data!)
               const next = projectID(x.data?.directory ?? input.directory, input.global.project)
               if (next) input.setStore("project", next)
+            }),
+          ),
+    () =>
+      seededEnv
+        ? Promise.resolve()
+        : retry(() =>
+            input.sdk.env.get().then((x) => {
+              input.setStore("env", x.data!)
             }),
           ),
     () =>
