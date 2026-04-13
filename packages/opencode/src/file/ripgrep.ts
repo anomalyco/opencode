@@ -374,6 +374,14 @@ export namespace Ripgrep {
       }) {
         return yield* Effect.scoped(
           Effect.gen(function* () {
+            const parse = Effect.fn("Ripgrep.parse")(function* (line: string) {
+              const row = yield* Effect.try({
+                try: () => Result.parse(JSON.parse(line)),
+                catch: (cause) => new Error(`invalid ripgrep output: ${cause}`),
+              })
+              if (row.type !== "match") return undefined
+              return row.data
+            })
             const cmd = yield* args({
               mode: "search",
               glob: input.glob,
@@ -389,9 +397,16 @@ export namespace Ripgrep {
               }),
             )
 
-            const [stdout, stderr, code] = yield* Effect.all(
+            const [items, stderr, code] = yield* Effect.all(
               [
-                Stream.mkString(Stream.decodeText(handle.stdout)),
+                Stream.decodeText(handle.stdout).pipe(
+                  Stream.splitLines,
+                  Stream.filter((line) => line.length > 0),
+                  Stream.mapEffect(parse),
+                  Stream.filter((item): item is Item => item !== undefined),
+                  Stream.runCollect,
+                  Effect.map((chunk) => [...chunk]),
+                ),
                 Stream.mkString(Stream.decodeText(handle.stderr)),
                 handle.exitCode,
               ],
@@ -401,15 +416,6 @@ export namespace Ripgrep {
             if (code !== 0 && code !== 1 && code !== 2) {
               return yield* Effect.fail(new Error(`ripgrep failed: ${stderr}`))
             }
-
-            const items = stdout
-              .trim()
-              .split(/\r?\n/)
-              .filter(Boolean)
-              .map((line) => JSON.parse(line))
-              .map((parsed) => Result.parse(parsed))
-              .filter((row): row is Match => row.type === "match")
-              .map((row) => row.data)
 
             return {
               items,
