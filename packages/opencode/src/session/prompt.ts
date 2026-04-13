@@ -811,254 +811,266 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }),
       )
 
-      try {
-        const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
-        const blocked = SandboxSpawn.excludedText(input.command, cfg.excluded_commands)
-        if (blocked) {
-          throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
-        }
+      return yield* Effect.gen(function* () {
+        try {
+          const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
+          const blocked = SandboxSpawn.excludedText(input.command, cfg.excluded_commands)
+          if (blocked) {
+            throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
+          }
 
-        const sh = Shell.preferred()
-        const shellName = (
-          process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
-        ).toLowerCase()
-        const request = SandboxSpawn.directive(input.command)
-        const command = request.command
-        const invocations: Record<string, { args: string[] }> = {
-          nu: { args: ["-c", command] },
-          fish: { args: ["-c", command] },
-          zsh: {
-            args: [
-              "-l",
-              "-c",
-              `
+          const sh = Shell.preferred()
+          const shellName = (
+            process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
+          ).toLowerCase()
+          const request = SandboxSpawn.directive(input.command)
+          const command = request.command
+          const invocations: Record<string, { args: string[] }> = {
+            nu: { args: ["-c", command] },
+            fish: { args: ["-c", command] },
+            zsh: {
+              args: [
+                "-l",
+                "-c",
+                `
                 __oc_cwd=$PWD
                 [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
                 [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
                 cd "$__oc_cwd"
                 eval ${JSON.stringify(command)}
               `,
-            ],
-          },
-          bash: {
-            args: [
-              "-l",
-              "-c",
-              `
+              ],
+            },
+            bash: {
+              args: [
+                "-l",
+                "-c",
+                `
                 __oc_cwd=$PWD
                 shopt -s expand_aliases
                 [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
                 cd "$__oc_cwd"
                 eval ${JSON.stringify(command)}
               `,
-            ],
-          },
-          cmd: { args: ["/c", command] },
-          powershell: { args: ["-NoProfile", "-Command", command] },
-          pwsh: { args: ["-NoProfile", "-Command", command] },
-          "": { args: ["-c", command] },
-        }
-        const clean: Record<string, { args: string[] }> = {
-          nu: { args: ["-c", command] },
-          fish: { args: ["-c", command] },
-          zsh: { args: ["-f", "-c", command] },
-          bash: { args: ["--noprofile", "--norc", "-c", command] },
-          cmd: { args: ["/c", command] },
-          powershell: { args: ["-NoProfile", "-Command", command] },
-          pwsh: { args: ["-NoProfile", "-Command", command] },
-          "": { args: ["-c", command] },
-        }
+              ],
+            },
+            cmd: { args: ["/c", command] },
+            powershell: { args: ["-NoProfile", "-Command", command] },
+            pwsh: { args: ["-NoProfile", "-Command", command] },
+            "": { args: ["-c", command] },
+          }
+          const clean: Record<string, { args: string[] }> = {
+            nu: { args: ["-c", command] },
+            fish: { args: ["-c", command] },
+            zsh: { args: ["-f", "-c", command] },
+            bash: { args: ["--noprofile", "--norc", "-c", command] },
+            cmd: { args: ["/c", command] },
+            powershell: { args: ["-NoProfile", "-Command", command] },
+            pwsh: { args: ["-NoProfile", "-Command", command] },
+            "": { args: ["-c", command] },
+          }
 
-        const cwd = ctx.directory
-        const shellEnv = yield* plugin.trigger(
-          "shell.env",
-          { cwd, sessionID: input.sessionID, callID: part.callID },
-          { env: {} },
-        )
-        const root = ctx.worktree === "/" ? ctx.directory : ctx.worktree
-        const sandbox = yield* Effect.promise(() =>
-          SandboxSpawn.resolve({
-            cwd,
-            project_root: ctx.directory,
-            worktree_root: root,
-          }),
-        )
-        const cleanArgs = clean[shellName]?.args ?? clean[""]?.args ?? ["-c", input.command]
-        const rawArgs = invocations[shellName]?.args ?? invocations[""].args
-        const raw = { file: sh, args: sandbox.active ? cleanArgs : rawArgs }
-        const call =
-          sandbox.active && sandbox.profile
-            ? SandboxSpawn.wrap({ profile: sandbox.profile, file: sh, args: cleanArgs })
-            : raw
-        const env = { ...shellEnv.env, TERM: "dumb" }
-
-        const exec = Effect.fnUntraced(function* (call: { file: string; args: string[] }) {
-          let stderr = ""
-          const proc = ChildProcess.make(call.file, call.args, {
-            cwd,
-            extendEnv: true,
-            env,
-            stdin: "ignore",
-            forceKillAfter: "3 seconds",
-          })
-          const exit = yield* Effect.gen(function* () {
-            const handle = yield* spawner.spawn(proc)
-            yield* Effect.forkScoped(
-              Stream.runForEach(Stream.decodeText(handle.stdout), (chunk) =>
-                Effect.sync(() => {
-                  output += chunk
-                  if (part.state.status === "running") {
-                    part.state.metadata = { output, description: "" }
-                    void run.fork(sessions.updatePart(part))
-                  }
-                }),
-              ),
-            )
-            yield* Effect.forkScoped(
-              Stream.runForEach(Stream.decodeText(handle.stderr), (chunk) =>
-                Effect.sync(() => {
-                  stderr += chunk
-                  output += chunk
-                  if (part.state.status === "running") {
-                    part.state.metadata = { output, description: "" }
-                    void run.fork(sessions.updatePart(part))
-                  }
-                }),
-              ),
-            )
-            return yield* handle.exitCode
-          }).pipe(
-            Effect.scoped,
-            Effect.onInterrupt(() =>
-              Effect.sync(() => {
-                aborted = true
-              }),
-            ),
-            Effect.exit,
+          const cwd = ctx.directory
+          const shellEnv = yield* plugin.trigger(
+            "shell.env",
+            { cwd, sessionID: input.sessionID, callID: part.callID },
+            { env: {} },
           )
+          const root = ctx.worktree === "/" ? ctx.directory : ctx.worktree
+          const sandbox = yield* Effect.promise(() =>
+            SandboxSpawn.resolve({
+              cwd,
+              project_root: ctx.directory,
+              worktree_root: root,
+            }),
+          )
+          const cleanArgs = clean[shellName]?.args ?? clean[""]?.args ?? ["-c", input.command]
+          const rawArgs = invocations[shellName]?.args ?? invocations[""].args
+          const raw = { file: sh, args: sandbox.active ? cleanArgs : rawArgs }
+          const call =
+            sandbox.active && sandbox.profile
+              ? SandboxSpawn.wrap({ profile: sandbox.profile, file: sh, args: cleanArgs })
+              : raw
+          const env = { ...shellEnv.env, TERM: "dumb" }
 
-          if (Exit.isFailure(exit)) {
-            if (Cause.hasInterruptsOnly(exit.cause)) return { code: 1, stderr }
-            return yield* Effect.failCause(exit.cause)
-          }
-
-          return { code: exit.value, stderr }
-        })
-
-        let proactive = false
-        let rejected = false
-        let asked = false
-        const unsandboxed = cfg.allow_unsandboxed_retry ? yield* Effect.promise(() => commandFamilies(command)) : []
-        if (command !== input.command && cfg.allow_unsandboxed_retry && sandbox.active) {
-          asked = true
-          try {
-            yield* permission.ask({
-              permission: "bash:unsandboxed",
-              patterns: unsandboxed,
-              always: unsandboxed,
-              metadata: {
-                reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
-                detail: request.detail,
-                command,
-              },
-              sessionID: input.sessionID,
-              tool: {
-                messageID: msg.id,
-                callID: part.callID,
-              },
-              ruleset: Permission.merge(agent.permission, session.permission ?? []),
+          const exec = Effect.fnUntraced(function* (call: { file: string; args: string[] }) {
+            let stderr = ""
+            const proc = ChildProcess.make(call.file, call.args, {
+              cwd,
+              extendEnv: true,
+              env,
+              stdin: "ignore",
+              forceKillAfter: "3 seconds",
             })
-            proactive = true
-          } catch (error) {
-            rejected = true
-            log.info("proactive unsandboxed request rejected", { error, sessionID: input.sessionID })
-          }
-        }
-
-        let retried = false
-        let reason: SandboxSpawn.RetryReason | undefined
-        let result
-        try {
-          result = yield* exec(proactive ? raw : call)
-        } catch (error) {
-          if (rejected && !proactive && sandbox.active) {
-            const message = error instanceof Error ? error.message : String(error)
-            throw new Error(
-              `Explicit unsandboxed request was rejected; sandboxed fallback failed before command start: ${message}`,
-              error instanceof Error ? { cause: error } : undefined,
+            const exit = yield* Effect.gen(function* () {
+              const handle = yield* spawner.spawn(proc)
+              yield* Effect.forkScoped(
+                Stream.runForEach(Stream.decodeText(handle.stdout), (chunk) =>
+                  Effect.sync(() => {
+                    output += chunk
+                    if (part.state.status === "running") {
+                      part.state.metadata = { output, description: "" }
+                      void run.fork(sessions.updatePart(part))
+                    }
+                  }),
+                ),
+              )
+              yield* Effect.forkScoped(
+                Stream.runForEach(Stream.decodeText(handle.stderr), (chunk) =>
+                  Effect.sync(() => {
+                    stderr += chunk
+                    output += chunk
+                    if (part.state.status === "running") {
+                      part.state.metadata = { output, description: "" }
+                      void run.fork(sessions.updatePart(part))
+                    }
+                  }),
+                ),
+              )
+              return yield* handle.exitCode
+            }).pipe(
+              Effect.scoped,
+              Effect.onInterrupt(() =>
+                Effect.sync(() => {
+                  aborted = true
+                }),
+              ),
+              Effect.exit,
             )
-          }
-          throw error
-        }
 
-        if (!proactive) {
-          reason = SandboxSpawn.retryReason({
-            active: sandbox.active,
-            code: result.code,
-            stderr: result.stderr,
-            allow_network: sandbox.diag.allow_network,
-            command,
-          })
-        }
-
-        if (cfg.allow_unsandboxed_retry && !asked && !aborted && reason) {
-          asked = true
-          try {
-            yield* permission.ask({
-              permission: "bash:unsandboxed",
-              patterns: unsandboxed,
-              always: unsandboxed,
-              metadata: {
-                reason,
-                command,
-              },
-              sessionID: input.sessionID,
-              tool: {
-                messageID: msg.id,
-                callID: part.callID,
-              },
-              ruleset: Permission.merge(agent.permission, session.permission ?? []),
-            })
-            retried = true
-            output = ""
-            if (part.state.status === "running") {
-              part.state.metadata = { output: "", description: "" }
-              yield* sessions.updatePart(part)
+            if (Exit.isFailure(exit)) {
+              if (Cause.hasInterruptsOnly(exit.cause)) return { code: 1, stderr }
+              return yield* Effect.failCause(exit.cause)
             }
-            result = yield* exec(raw)
-          } catch (error) {
-            log.info("unsandboxed retry rejected", { error, sessionID: input.sessionID })
+
+            return { code: exit.value, stderr }
+          })
+
+          let proactive = false
+          let rejected = false
+          let asked = false
+          const unsandboxed = cfg.allow_unsandboxed_retry ? yield* Effect.promise(() => commandFamilies(command)) : []
+          if (command !== input.command && cfg.allow_unsandboxed_retry && sandbox.active) {
+            asked = true
+            const exit = yield* permission
+              .ask({
+                permission: "bash:unsandboxed",
+                patterns: unsandboxed,
+                always: unsandboxed,
+                metadata: {
+                  reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
+                  detail: request.detail,
+                  command,
+                },
+                sessionID: input.sessionID,
+                tool: {
+                  messageID: msg.id,
+                  callID: part.callID,
+                },
+                ruleset: Permission.merge(agent.permission, session.permission ?? []),
+              })
+              .pipe(Effect.exit)
+            if (Exit.isSuccess(exit)) {
+              proactive = true
+            } else {
+              rejected = true
+              log.info("proactive unsandboxed request rejected", {
+                error: Cause.squash(exit.cause),
+                sessionID: input.sessionID,
+              })
+            }
           }
-        }
 
-        if (rejected) {
-          output +=
-            "\n\n" +
-            ["<metadata>", "Explicit unsandboxed request was rejected; command ran in sandbox", "</metadata>"].join(
-              "\n",
-            )
-        }
+          let retried = false
+          let reason: SandboxSpawn.RetryReason | undefined
+          let result
+          try {
+            result = yield* exec(proactive ? raw : call)
+          } catch (error) {
+            if (rejected && !proactive && sandbox.active) {
+              const message = error instanceof Error ? error.message : String(error)
+              throw new Error(
+                `Explicit unsandboxed request was rejected; sandboxed fallback failed before command start: ${message}`,
+                error instanceof Error ? { cause: error } : undefined,
+              )
+            }
+            throw error
+          }
 
-        if (retried) {
-          output +=
-            "\n\n" +
-            [
-              "<metadata>",
-              reason === "possible_network_sandbox_denial"
-                ? "Retried command without sandbox after a possible network-related sandbox failure"
-                : "Retried command without sandbox after sandbox denial",
-              "</metadata>",
-            ].join("\n")
-        }
+          if (!proactive) {
+            reason = SandboxSpawn.retryReason({
+              active: sandbox.active,
+              code: result.code,
+              stderr: result.stderr,
+              allow_network: sandbox.diag.allow_network,
+              command,
+            })
+          }
 
-        yield* finish
-        return { info: msg, parts: [part] }
-      } catch (error) {
-        output = error instanceof Error ? error.message : String(error)
-        log.error("session shell failed", { error, sessionID: input.sessionID })
-        yield* finish
-        return { info: msg, parts: [part] }
-      }
+          if (cfg.allow_unsandboxed_retry && !asked && !aborted && reason) {
+            asked = true
+            const exit = yield* permission
+              .ask({
+                permission: "bash:unsandboxed",
+                patterns: unsandboxed,
+                always: unsandboxed,
+                metadata: {
+                  reason,
+                  command,
+                },
+                sessionID: input.sessionID,
+                tool: {
+                  messageID: msg.id,
+                  callID: part.callID,
+                },
+                ruleset: Permission.merge(agent.permission, session.permission ?? []),
+              })
+              .pipe(Effect.exit)
+            if (Exit.isSuccess(exit)) {
+              retried = true
+              output = ""
+              if (part.state.status === "running") {
+                part.state.metadata = { output: "", description: "" }
+                yield* sessions.updatePart(part)
+              }
+              result = yield* exec(raw)
+            } else {
+              log.info("unsandboxed retry rejected", {
+                error: Cause.squash(exit.cause),
+                sessionID: input.sessionID,
+              })
+            }
+          }
+
+          if (rejected) {
+            output +=
+              "\n\n" +
+              ["<metadata>", "Explicit unsandboxed request was rejected; command ran in sandbox", "</metadata>"].join(
+                "\n",
+              )
+          }
+
+          if (retried) {
+            output +=
+              "\n\n" +
+              [
+                "<metadata>",
+                reason === "possible_network_sandbox_denial"
+                  ? "Retried command without sandbox after a possible network-related sandbox failure"
+                  : "Retried command without sandbox after sandbox denial",
+                "</metadata>",
+              ].join("\n")
+          }
+
+          yield* finish
+          return { info: msg, parts: [part] }
+        } catch (error) {
+          output = error instanceof Error ? error.message : String(error)
+          log.error("session shell failed", { error, sessionID: input.sessionID })
+          yield* finish
+          return { info: msg, parts: [part] }
+        }
+      }).pipe(Effect.onInterrupt(() => finish))
     })
 
     const getModel = Effect.fn("SessionPrompt.getModel")(function* (
@@ -1709,7 +1721,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
       function* (input: ShellInput) {
-        return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input))
+        return yield* state.startShell(
+          input.sessionID,
+          lastAssistant(input.sessionID),
+          shellImpl(input).pipe(Effect.orDie),
+        )
       },
     )
 

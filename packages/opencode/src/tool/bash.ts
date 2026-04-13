@@ -17,7 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
-import { Effect, Stream } from "effect"
+import { Cause, Effect, Exit, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { SandboxSpawn } from "@/sandbox/spawn"
@@ -390,10 +390,10 @@ const parser = lazy(async () => {
 })
 
 export async function commandFamilies(cmd: string): Promise<string[]> {
-  const root = await parse(cmd, false).catch(() => undefined)
-  if (!root) return [cmd]
+  const tree = await parser().then((p) => p.bash.parse(cmd))
+  if (!tree) return [cmd]
   const result = new Set<string>()
-  for (const node of root.descendantsOfType("command")) {
+  for (const node of tree.rootNode.descendantsOfType("command")) {
     if (!node) continue
     const tokens: string[] = []
     for (let i = 0; i < node.childCount; i++) {
@@ -662,14 +662,14 @@ export const BashTool = Tool.define(
       let proactive = false
       let rejected = false
       let asked = false
-      const unsandboxed = yield* Effect.promise(() =>
-        input.cfg.allow_unsandboxed_retry ? commandFamilies(input.command) : Promise.resolve([]),
-      )
+      const unsandboxed = input.cfg.allow_unsandboxed_retry
+        ? yield* Effect.promise(() => commandFamilies(input.command))
+        : []
 
       if (input.command !== input.source && input.cfg.allow_unsandboxed_retry && launch.sandbox.active) {
         asked = true
-        try {
-          yield* ctx.ask({
+        const exit = yield* ctx
+          .ask({
             permission: "bash:unsandboxed",
             patterns: unsandboxed,
             always: unsandboxed,
@@ -679,18 +679,20 @@ export const BashTool = Tool.define(
               command: input.command,
             },
           })
+          .pipe(Effect.exit)
+        if (Exit.isSuccess(exit)) {
           proactive = true
-        } catch (error) {
+        } else {
           rejected = true
-          log.info("proactive unsandboxed request rejected", { error })
+          log.info("proactive unsandboxed request rejected", { error: Cause.squash(exit.cause) })
         }
       }
 
       let reason: SandboxSpawn.RetryReason | undefined
-      let result
-      try {
-        result = yield* exec(proactive ? launch.plain : launch.proc)
-      } catch (error) {
+      let result: { code: number | null; stderr: string; timedOut: boolean; aborted: boolean }
+      const first = yield* exec(proactive ? launch.plain : launch.proc).pipe(Effect.exit)
+      if (Exit.isFailure(first)) {
+        const error = Cause.squash(first.cause)
         if (rejected && !proactive && launch.sandbox.active) {
           const message = error instanceof Error ? error.message : String(error)
           throw new Error(
@@ -698,8 +700,9 @@ export const BashTool = Tool.define(
             error instanceof Error ? { cause: error } : undefined,
           )
         }
-        throw error
+        return yield* Effect.failCause(first.cause)
       }
+      result = first.value
 
       if (!proactive) {
         reason = SandboxSpawn.retryReason({
@@ -713,8 +716,8 @@ export const BashTool = Tool.define(
 
       if (input.cfg.allow_unsandboxed_retry && !asked && !result.timedOut && !result.aborted && reason) {
         asked = true
-        try {
-          yield* ctx.ask({
+        const exit = yield* ctx
+          .ask({
             permission: "bash:unsandboxed",
             patterns: unsandboxed,
             always: unsandboxed,
@@ -723,6 +726,8 @@ export const BashTool = Tool.define(
               command: input.command,
             },
           })
+          .pipe(Effect.exit)
+        if (Exit.isSuccess(exit)) {
           retried = true
           yield* resetOutput()
           yield* ctx.metadata({
@@ -732,8 +737,8 @@ export const BashTool = Tool.define(
             },
           })
           result = yield* exec(launch.plain)
-        } catch (error) {
-          log.info("unsandboxed retry rejected", { error })
+        } else {
+          log.info("unsandboxed retry rejected", { error: Cause.squash(exit.cause) })
         }
       }
 

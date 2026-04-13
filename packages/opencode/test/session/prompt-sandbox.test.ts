@@ -15,10 +15,10 @@ const env = {
 }
 
 async function waitForPending(count: number) {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 100; i++) {
     const list = await Permission.list()
     if (list.length === count) return list
-    await Bun.sleep(0)
+    await Bun.sleep(10)
   }
   return Permission.list()
 }

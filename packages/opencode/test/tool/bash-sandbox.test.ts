@@ -1,17 +1,44 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { BashTool, commandFamilies } from "../../src/tool/bash"
+import { BashTool as RawBashTool, commandFamilies } from "../../src/tool/bash"
 import { SandboxSpawn } from "../../src/sandbox/spawn"
 import { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
+import { Agent } from "../../src/agent/agent"
+import { AppFileSystem } from "../../src/filesystem"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Effect, Layer, ManagedRuntime } from "effect"
+import { Plugin } from "../../src/plugin"
+import { Truncate } from "../../src/tool/truncate"
 
 const env = {
   HOME: process.env.HOME,
   OPENCODE_TEST_HOME: process.env.OPENCODE_TEST_HOME,
   SHELL: process.env.SHELL,
+}
+
+const runtime = ManagedRuntime.make(
+  Layer.mergeAll(
+    CrossSpawnSpawner.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Plugin.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
+)
+
+const BashTool = {
+  init: async () => {
+    const bash = await runtime.runPromise(RawBashTool.pipe(Effect.flatMap((info) => info.init())))
+    return {
+      ...bash,
+      execute: (args: Parameters<typeof bash.execute>[0], ctx: Parameters<typeof bash.execute>[1]) =>
+        runtime.runPromise(bash.execute(args, ctx)),
+    }
+  },
 }
 
 const ctx = {
@@ -21,13 +48,17 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
-const makeCtx = (ask: Tool.Context["ask"] = async () => {}) => ({
+const makeCtx = (ask: (input: Parameters<Tool.Context["ask"]>[0]) => void | Promise<void> = () => undefined) => ({
   ...ctx,
-  ask,
+  ask: (input: Parameters<Tool.Context["ask"]>[0]) =>
+    Effect.tryPromise({
+      try: () => Promise.resolve(ask(input)).then(() => undefined),
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }).pipe(Effect.orDie),
 })
 
 afterEach(() => {
