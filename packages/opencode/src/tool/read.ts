@@ -155,28 +155,8 @@ export const ReadTool = Tool.define(
         const supportsPdf = model?.capabilities.input.pdf ?? false
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
 
-        if (isImage && !supportsVision) {
-          return {
-            title,
-            output: `This model does not support image input. Image file: ${filepath}`,
-            metadata: {
-              preview: `Image file skipped (model does not support image input): ${filepath}`,
-              truncated: false,
-              loaded: loaded.map((item) => item.filepath),
-            },
-          }
-        }
-
-        if (isPdf && !supportsPdf) {
-          return {
-            title,
-            output: `This model does not support PDF input. PDF file: ${filepath}`,
-            metadata: {
-              preview: `PDF file skipped (model does not support PDF input): ${filepath}`,
-              truncated: false,
-              loaded: loaded.map((item) => item.filepath),
-            },
-          }
+        if ((isImage && !supportsVision) || (isPdf && !supportsPdf)) {
+          return yield* Effect.fail(new Error(`This model does not support ${isImage ? "image" : "pdf"} input`))
         }
 
         return {
