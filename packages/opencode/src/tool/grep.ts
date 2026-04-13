@@ -26,6 +26,11 @@ export const GrepTool = Tool.define(
       }),
       execute: (params: { pattern: string; path?: string; include?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const empty = {
+            title: params.pattern,
+            metadata: { matches: 0, truncated: false },
+            output: "No files found",
+          }
           if (!params.pattern) {
             throw new Error("pattern is required")
           }
@@ -41,8 +46,11 @@ export const GrepTool = Tool.define(
             },
           })
 
-          let searchPath = params.path ?? Instance.directory
-          searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+          const searchPath = AppFileSystem.resolve(
+            path.isAbsolute(params.path ?? Instance.directory)
+              ? (params.path ?? Instance.directory)
+              : path.join(Instance.directory, params.path ?? "."),
+          )
           yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
 
           const result = yield* rg.search({
@@ -51,16 +59,12 @@ export const GrepTool = Tool.define(
             glob: params.include ? [params.include] : undefined,
           })
 
-          if (result.items.length === 0) {
-            return {
-              title: params.pattern,
-              metadata: { matches: 0, truncated: false },
-              output: "No files found",
-            }
-          }
+          if (result.items.length === 0) return empty
 
           const rows = result.items.map((item) => ({
-            path: path.isAbsolute(item.path.text) ? item.path.text : path.resolve(searchPath, item.path.text),
+            path: AppFileSystem.resolve(
+              path.isAbsolute(item.path.text) ? item.path.text : path.join(searchPath, item.path.text),
+            ),
             line: item.line_number,
             text: item.lines.text,
           }))
@@ -78,7 +82,7 @@ export const GrepTool = Tool.define(
                   ) ?? 0,
                 ] as const
               }),
-              { concurrency: "unbounded" },
+              { concurrency: 16 },
             )).filter((entry): entry is readonly [string, number] => Boolean(entry)),
           )
           const matches = rows.flatMap((row) => {
@@ -93,13 +97,7 @@ export const GrepTool = Tool.define(
           const truncated = matches.length > limit
           const finalMatches = truncated ? matches.slice(0, limit) : matches
 
-          if (finalMatches.length === 0) {
-            return {
-              title: params.pattern,
-              metadata: { matches: 0, truncated: false },
-              output: "No files found",
-            }
-          }
+          if (finalMatches.length === 0) return empty
 
           const totalMatches = matches.length
           const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
