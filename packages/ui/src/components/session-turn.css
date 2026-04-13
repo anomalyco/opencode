@@ -47,6 +47,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-top: 12px;
     width: 100%;
     min-width: 0;
     color: var(--text-weak);
