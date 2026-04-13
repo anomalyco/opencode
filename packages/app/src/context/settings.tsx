@@ -26,6 +26,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    sendWithModEnter: boolean
   }
   updates: {
     startup: boolean
@@ -92,6 +93,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
+    sendWithModEnter: false,
   },
   updates: {
     startup: true,
@@ -182,6 +184,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        sendWithModEnter: withFallback(() => store.general?.sendWithModEnter, defaultSettings.general.sendWithModEnter),
+        setSendWithModEnter(value: boolean) {
+          setStore("general", "sendWithModEnter", value)
         },
       },
       updates: {

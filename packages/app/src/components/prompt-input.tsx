@@ -33,6 +33,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
@@ -113,6 +114,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const settings = useSettings()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -1247,22 +1249,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      if (event.repeat) return
-      if (
-        working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
-      ) {
-        return
+    const modEnter = event.ctrlKey || event.metaKey
+    const sendWithModEnter = settings.general.sendWithModEnter()
+    if (event.key === "Enter") {
+      if (sendWithModEnter) {
+        if (modEnter && !event.shiftKey) {
+          event.preventDefault()
+          if (event.repeat) return
+          if (
+            working() &&
+            prompt
+              .current()
+              .map((part) => ("content" in part ? part.content : ""))
+              .join("")
+              .trim().length === 0 &&
+            imageAttachments().length === 0 &&
+            commentCount() === 0
+          ) {
+            return
+          }
+          handleSubmit(event)
+        } else if (!modEnter && !event.shiftKey) {
+          addPart({ type: "text", content: "\n", start: 0, end: 0 })
+          event.preventDefault()
+        }
+      } else if (!event.shiftKey) {
+        event.preventDefault()
+        if (event.repeat) return
+        if (
+          working() &&
+          prompt
+            .current()
+            .map((part) => ("content" in part ? part.content : ""))
+            .join("")
+            .trim().length === 0 &&
+          imageAttachments().length === 0 &&
+          commentCount() === 0
+        ) {
+          return
+        }
+        handleSubmit(event)
       }
-      handleSubmit(event)
     }
   }
 
