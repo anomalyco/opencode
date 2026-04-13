@@ -1,8 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from "effect"
-import { Agent } from "../../src/agent/agent"
-import { Skill } from "../../src/skill"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { Truncate } from "../../src/tool/truncate"
+import { Effect } from "effect"
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -13,6 +9,7 @@ import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "../../src/tool/registry"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { attach } from "../../src/effect/run-service"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: SessionID.make("ses_test"),
@@ -152,12 +149,17 @@ Use this skill.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const runtime = ManagedRuntime.make(
-            Layer.mergeAll(Skill.defaultLayer, Ripgrep.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
-          )
-          const info = await runtime.runPromise(SkillTool)
-          const tool = await runtime.runPromise(info.init())
+          const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+          const tool = await ToolRegistry.tools({
+            providerID: "opencode" as any,
+            modelID: "gpt-5" as any,
+            agent,
+          }).then((tools) => tools.find((tool) => tool.id === SkillTool.id))
           const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
+          const file = path.resolve(dir, "scripts", "demo.txt")
+          if (!tool) throw new Error("Skill tool not found")
+
           const ctx: Tool.Context = {
             ...baseCtx,
             ask: (req) =>
@@ -166,9 +168,7 @@ Use this skill.
               }),
           }
 
-          const result = await runtime.runPromise(tool.execute({ name: "tool-skill" }, ctx))
-          const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
-          const file = path.resolve(dir, "scripts", "demo.txt")
+          const result = await Effect.runPromise(attach(tool.execute({ name: "tool-skill" }, ctx)))
 
           expect(requests.length).toBe(1)
           expect(requests[0].permission).toBe("skill")
