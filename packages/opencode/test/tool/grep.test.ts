@@ -2,16 +2,14 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { GrepTool } from "../../src/tool/grep"
+import { Ripgrep } from "../../src/file/ripgrep"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Truncate } from "../../src/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 
-const runtime = ManagedRuntime.make(
-  Layer.mergeAll(CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
-)
+const runtime = ManagedRuntime.make(Layer.mergeAll(Ripgrep.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer))
 
 function initGrep() {
   return runtime.runPromise(GrepTool.pipe(Effect.flatMap((info) => info.init())))
