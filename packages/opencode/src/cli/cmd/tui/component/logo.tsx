@@ -32,6 +32,7 @@ const SHIMMER_OUT = 2.8
 const TRACE = 0.033
 const TAIL = 1.8
 const TRACE_IN = 200
+const GLOW_OUT = 1600
 const PEAK = RGBA.fromInts(255, 255, 255)
 
 type Ring = {
@@ -58,11 +59,18 @@ type Release = {
   rise: number
 }
 
+type Glow = {
+  glyph: number
+  at: number
+  force: number
+}
+
 type Frame = {
   t: number
   list: Ring[]
   hold: Hold | undefined
   release: Release | undefined
+  glow: Glow | undefined
   spark: number
 }
 
@@ -193,6 +201,7 @@ function mapGlyphs() {
   const seen = new Set<string>()
   const glyph = new Map<string, number>()
   const trace = new Map<string, Trace>()
+  const center = new Map<number, { x: number; y: number }>()
   let id = 0
 
   for (const item of cells) {
@@ -218,10 +227,14 @@ function mapGlyphs() {
 
     const path = route(part)
     path.forEach((cell, i) => trace.set(key(cell.x, cell.y), { glyph: id, i, l: path.length }))
+    center.set(id, {
+      x: part.reduce((sum, item) => sum + item.x, 0) / part.length + 0.5,
+      y: (part.reduce((sum, item) => sum + item.y, 0) / part.length) * 2 + 1,
+    })
     id++
   }
 
-  return { glyph, trace }
+  return { glyph, trace, center }
 }
 
 const MAP = mapGlyphs()
@@ -362,11 +375,27 @@ function trace(x: number, y: number, frame: Frame) {
   return (core + glow + trail) * appear * fade
 }
 
+function bloom(x: number, y: number, frame: Frame) {
+  const item = frame.glow
+  if (!item) return 0
+  const glyph = MAP.glyph.get(key(x, y))
+  if (glyph !== item.glyph) return 0
+  const age = frame.t - item.at
+  if (age < 0 || age > GLOW_OUT) return 0
+  const p = age / GLOW_OUT
+  const flash = (1 - p) ** 2
+  const dx = x + 0.5 - MAP.center.get(item.glyph)!.x
+  const dy = y * 2 + 1 - MAP.center.get(item.glyph)!.y
+  const bias = Math.exp(-((Math.hypot(dx, dy) / 2.8) ** 2))
+  return lerp(item.force, item.force * 0.18, p) * lerp(0.72, 1.1, bias) * flash
+}
+
 export function Logo() {
   const { theme } = useTheme()
   const [rings, setRings] = createSignal<Ring[]>([])
   const [hold, setHold] = createSignal<Hold>()
   const [release, setRelease] = createSignal<Release>()
+  const [glow, setGlow] = createSignal<Glow>()
   const [now, setNow] = createSignal(0)
   let box: BoxRenderable | undefined
   let timer: ReturnType<typeof setInterval> | undefined
@@ -395,8 +424,12 @@ export function Logo() {
       live = next.length > 0
       return next
     })
+    const flash = glow()
+    if (flash && t - flash.at >= GLOW_OUT) {
+      setGlow(undefined)
+    }
     if (!live) setRelease(undefined)
-    if (live || hold() || release()) return
+    if (live || hold() || release() || glow()) return
     stop()
   }
 
@@ -420,6 +453,9 @@ export function Logo() {
     const level = push(rise)
     setHold(undefined)
     setRelease({ x, y, at: t, glyph: item.glyph, level, rise })
+    if (item.glyph !== undefined) {
+      setGlow({ glyph: item.glyph, at: t, force: lerp(0.6, 1.5, level) })
+    }
     setRings((list) => [
       ...list,
       {
@@ -443,6 +479,7 @@ export function Logo() {
       list: rings(),
       hold: item,
       release: release(),
+      glow: glow(),
       spark: item ? noise(item.x, item.y, t) : 0,
     }
   })
@@ -456,6 +493,7 @@ export function Logo() {
       list: base.list,
       hold: item,
       release: base.release,
+      glow: base.glow,
       spark: item ? noise(item.x, item.y, t) : 0,
     }
   })
@@ -478,6 +516,7 @@ export function Logo() {
       const s = wave(off + i, y, dusk, false) + h
       const p = lit(char) ? pick(off + i, y, frame) : 0
       const e = lit(char) ? trace(off + i, y, frame) : 0
+      const b = lit(char) ? bloom(off + i, y, frame) : 0
       const q = shimmer(off + i, y, frame)
 
       if (char === "_") {
@@ -496,8 +535,8 @@ export function Logo() {
       if (char === "^") {
         return (
           <text
-            fg={shade(ink, theme, n + p + e)}
-            bg={shade(shadow, theme, ghost(s, 0.18) + ghost(q, 0.05))}
+            fg={shade(ink, theme, n + p + e + b)}
+            bg={shade(shadow, theme, ghost(s, 0.18) + ghost(q, 0.05) + ghost(b, 0.08))}
             attributes={attrs}
             selectable={false}
           >
@@ -523,7 +562,7 @@ export function Logo() {
       }
 
       return (
-        <text fg={shade(ink, theme, n + p + e)} attributes={attrs} selectable={false}>
+        <text fg={shade(ink, theme, n + p + e + b)} attributes={attrs} selectable={false}>
           {char}
         </text>
       )
