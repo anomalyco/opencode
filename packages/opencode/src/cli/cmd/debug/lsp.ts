@@ -22,12 +22,13 @@ const DiagnosticsCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const out = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const lsp = yield* LSP.Service
-          yield* lsp.touchFile(args.file, true)
-          yield* Effect.promise(() => sleep(1000))
-          return yield* lsp.diagnostics()
-        }),
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            yield* lsp.touchFile(args.file, true)
+            yield* Effect.sleep(1000)
+            return yield* lsp.diagnostics()
+          }),
+        ),
       )
       process.stdout.write(JSON.stringify(out, null, 2) + EOL)
     })
@@ -41,12 +42,7 @@ export const SymbolsCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       using _ = Log.Default.time("symbols")
-      const results = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const lsp = yield* LSP.Service
-          return yield* lsp.workspaceSymbol(args.query)
-        }),
-      )
+      const results = await AppRuntime.runPromise(LSP.Service.use((lsp) => lsp.workspaceSymbol(args.query)))
       process.stdout.write(JSON.stringify(results, null, 2) + EOL)
     })
   },
@@ -59,12 +55,7 @@ export const DocumentSymbolsCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       using _ = Log.Default.time("document-symbols")
-      const results = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const lsp = yield* LSP.Service
-          return yield* lsp.documentSymbol(args.uri)
-        }),
-      )
+      const results = await AppRuntime.runPromise(LSP.Service.use((lsp) => lsp.documentSymbol(args.uri)))
       process.stdout.write(JSON.stringify(results, null, 2) + EOL)
     })
   },

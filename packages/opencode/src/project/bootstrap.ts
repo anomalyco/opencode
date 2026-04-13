@@ -15,11 +15,10 @@ import * as Effect from "effect/Effect"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  const lsp = yield* LSP.Service
   yield* Plugin.Service.use((svc) => svc.init())
   yield* ShareNext.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
   yield* Format.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* lsp.init()
+  yield* LSP.Service.use((svc) => svc.init())
   yield* File.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
   yield* FileWatcher.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
   yield* Vcs.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
