@@ -5,10 +5,12 @@ import fs from "fs/promises"
 import path from "path"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
-const status = () => Effect.runPromise(File.Service.use((svc) => svc.status()))
-const read = (file: string) => Effect.runPromise(File.Service.use((svc) => svc.read(file)))
+const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
+  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
+const status = () => run(File.Service.use((svc) => svc.status()))
+const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
 
 const wintest = process.platform === "win32" ? test : test.skip
 

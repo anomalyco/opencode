@@ -5,10 +5,12 @@ import fs from "fs/promises"
 import { Filesystem } from "../../src/util/filesystem"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
-const read = (file: string) => Effect.runPromise(File.Service.use((svc) => svc.read(file)))
-const list = (dir?: string) => Effect.runPromise(File.Service.use((svc) => svc.list(dir)))
+const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
+  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
+const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
+const list = (dir?: string) => run(File.Service.use((svc) => svc.list(dir)))
 
 describe("Filesystem.contains", () => {
   test("allows paths within project", () => {

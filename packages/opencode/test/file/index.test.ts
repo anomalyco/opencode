@@ -6,18 +6,20 @@ import fs from "fs/promises"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-const init = () => Effect.runPromise(File.Service.use((svc) => svc.init()))
-const status = () => Effect.runPromise(File.Service.use((svc) => svc.status()))
-const read = (file: string) => Effect.runPromise(File.Service.use((svc) => svc.read(file)))
-const list = (dir?: string) => Effect.runPromise(File.Service.use((svc) => svc.list(dir)))
+const init = () => run(File.Service.use((svc) => svc.init()))
+const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
+  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
+const status = () => run(File.Service.use((svc) => svc.status()))
+const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
+const list = (dir?: string) => run(File.Service.use((svc) => svc.list(dir)))
 const search = (input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) =>
-  Effect.runPromise(File.Service.use((svc) => svc.search(input)))
+  run(File.Service.use((svc) => svc.search(input)))
 
 describe("file/index Filesystem patterns", () => {
   describe("read() - text content", () => {
