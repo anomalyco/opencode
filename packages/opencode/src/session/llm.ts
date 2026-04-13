@@ -21,6 +21,7 @@ import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -305,15 +306,19 @@ export namespace LLM {
             }
           })
           const uniquePatterns = [...new Set(toolPatterns)] as string[]
-          await Permission.ask({
-            id,
-            sessionID: SessionID.make(input.sessionID),
-            permission: "workflow_tool_approval",
-            patterns: uniquePatterns,
-            metadata: { tools: approvalTools },
-            always: uniquePatterns,
-            ruleset: [],
-          })
+          await AppRuntime.runPromise(
+            Permission.Service.use((svc) =>
+              svc.ask({
+                id,
+                sessionID: SessionID.make(input.sessionID),
+                permission: "workflow_tool_approval",
+                patterns: uniquePatterns,
+                metadata: { tools: approvalTools },
+                always: uniquePatterns,
+                ruleset: [],
+              }),
+            ),
+          )
           for (const name of uniqueNames) approvedToolsForSession.add(name)
           workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
           return { approved: true }

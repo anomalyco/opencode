@@ -1051,10 +1051,14 @@ export const SessionRoutes = lazy(() =>
       validator("json", z.object({ response: Permission.Reply })),
       async (c) => {
         const params = c.req.valid("param")
-        Permission.reply({
-          requestID: params.permissionID,
-          reply: c.req.valid("json").response,
-        })
+        await AppRuntime.runPromise(
+          Permission.Service.use((svc) =>
+            svc.reply({
+              requestID: params.permissionID,
+              reply: c.req.valid("json").response,
+            }),
+          ),
+        )
         return c.json(true)
       },
     ),
