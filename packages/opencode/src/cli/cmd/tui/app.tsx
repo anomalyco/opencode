@@ -123,6 +123,16 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
+function openSessionSwitcher(input: {
+  args: Args
+  status: string
+  dialog: ReturnType<typeof useDialog>
+}) {
+  if (input.args.sessionID !== "" || input.status === "loading") return false
+  input.dialog.replace(() => <DialogSessionList />)
+  return true
+}
+
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
@@ -419,6 +429,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         route.navigate({ type: "session", sessionID: match })
       }
     }
+  })
+
+  let sessionSwitched = false
+  createEffect(() => {
+    if (sessionSwitched) return
+    sessionSwitched = openSessionSwitcher({
+      args,
+      status: sync.status,
+      dialog,
+    })
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking
