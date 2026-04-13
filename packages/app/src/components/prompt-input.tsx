@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, onMount, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -35,7 +35,7 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { promptEnabled, promptProbe, promptInputDriver } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -551,7 +551,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setComposing(false)
     requestAnimationFrame(() => {
       if (composing()) return
-      reconcile(prompt.current().filter((part) => part.type !== "image"))
+      reconcile(parts())
     })
   }
 
@@ -762,7 +762,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const parts = createMemo(() => prompt.current().filter((part) => part.type !== "image"))
+
   const reconcile = (input: Prompt) => {
+    if (!editorRef) return
     if (mirror.input) {
       mirror.input = false
       if (isNormalizedEditor()) return
@@ -778,14 +781,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   createEffect(
-    on(
-      () => prompt.current(),
-      (parts) => {
-        if (composing()) return
-        reconcile(parts.filter((part) => part.type !== "image"))
-      },
-    ),
+    on(parts, (p) => {
+      if (composing()) return
+      reconcile(p)
+    }),
   )
+
+  onMount(() => reconcile(parts()))
 
   const parseFromDOM = (): Prompt => {
     const parts: Prompt = []
@@ -1336,6 +1338,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div
               data-component="prompt-input"
               ref={(el) => {
+                if (promptInputDriver.delayEditorRef()) {
+                  Promise.resolve().then(() => {
+                    editorRef = el
+                    props.ref?.(el)
+                    reconcile(parts())
+                  })
+                  return
+                }
                 editorRef = el
                 props.ref?.(el)
               }}

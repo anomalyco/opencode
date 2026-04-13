@@ -33,6 +33,16 @@ export function healthPhase(page: Page) {
   return phase.get(page) ?? "test"
 }
 
+export async function setEditorRefDelay(page: Page, value: boolean) {
+  await page.evaluate((v) => {
+    const win = window as E2EWindow
+    win.__opencode_e2e = {
+      ...win.__opencode_e2e,
+      promptInput: { delayEditorRef: v },
+    }
+  }, value)
+}
+
 export async function defocus(page: Page) {
   await page
     .evaluate(() => {

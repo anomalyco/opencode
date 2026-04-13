@@ -5,7 +5,14 @@ import {
   type ComposerProbeState,
   type ComposerWindow,
 } from "../../src/testing/session-composer"
-import { cleanupSession, clearSessionDockSeed, closeDialog, openSettings, seedSessionQuestion } from "../actions"
+import {
+  cleanupSession,
+  clearSessionDockSeed,
+  closeDialog,
+  openSettings,
+  seedSessionQuestion,
+  setEditorRefDelay,
+} from "../actions"
 import {
   permissionDockSelector,
   promptSelector,
@@ -382,6 +389,86 @@ test("blocked question flow supports escape dismiss", async ({ page, llm, projec
 
         await page.keyboard.press("Escape")
         await expectQuestionOpen(page)
+      })
+    },
+    { trackSession: project.trackSession },
+  )
+})
+
+test("prompt text typed before question dock is restored after answer", async ({ page, llm, project }) => {
+  await project.open()
+  await withDockSession(
+    project.sdk,
+    "e2e composer dock question prompt restore",
+    async (session) => {
+      await withDockSeed(project.sdk, session.id, async () => {
+        await project.gotoSession(session.id)
+
+        const typed = `restore-${Date.now()}`
+        const prompt = page.locator(promptSelector)
+        await prompt.click()
+        await page.keyboard.type(typed)
+        await expect.poll(async () => ((await prompt.textContent()) ?? "").replace(/\u200B/g, "").trim()).toBe(typed)
+
+        // Simulate the production timing race: delay editorRef assignment by one
+        // microtask so it lands after the on() effect and onMount both fire.
+        await setEditorRefDelay(page, true)
+
+        await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
+        await seedSessionQuestion(project.sdk, { sessionID: session.id, questions: defaultQuestions })
+
+        const dock = page.locator(questionDockSelector)
+        await expectQuestionBlocked(page)
+
+        await dock.locator('[data-slot="question-option"]').first().click()
+        await dock.getByRole("button", { name: /submit/i }).click()
+
+        await expectQuestionOpen(page)
+        await expect.poll(async () => ((await prompt.textContent()) ?? "").replace(/\u200B/g, "").trim()).toBe(typed)
+      })
+    },
+    { trackSession: project.trackSession },
+  )
+})
+
+test("prompt image attached before question dock is restored after answer", async ({ page, llm, project }) => {
+  await project.open()
+  await withDockSession(
+    project.sdk,
+    "e2e composer dock question image restore",
+    async (session) => {
+      await withDockSeed(project.sdk, session.id, async () => {
+        await project.gotoSession(session.id)
+
+        // Attach a minimal 1x1 PNG via the hidden file input
+        const filename = "test-attachment.png"
+        // prettier-ignore
+        const png = Buffer.from([
+          0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a, // PNG signature
+          0x00,0x00,0x00,0x0d,0x49,0x48,0x44,0x52, // IHDR chunk length + type
+          0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01, // 1x1
+          0x08,0x02,0x00,0x00,0x00,0x90,0x77,0x53, // 8-bit RGB
+          0xde,0x00,0x00,0x00,0x0c,0x49,0x44,0x41, // IDAT chunk
+          0x54,0x08,0xd7,0x63,0xf8,0xcf,0xc0,0x00,
+          0x00,0x00,0x02,0x00,0x01,0xe2,0x21,0xbc,
+          0x33,0x00,0x00,0x00,0x00,0x49,0x45,0x4e, // IEND chunk
+          0x44,0xae,0x42,0x60,0x82,
+        ])
+        const fileInput = page.locator('input[type="file"]').first()
+        await fileInput.setInputFiles({ name: filename, mimeType: "image/png", buffer: png })
+        await expect(page.getByAltText(filename)).toBeVisible()
+
+        await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
+        await seedSessionQuestion(project.sdk, { sessionID: session.id, questions: defaultQuestions })
+
+        const dock = page.locator(questionDockSelector)
+        await expectQuestionBlocked(page)
+
+        await dock.locator('[data-slot="question-option"]').first().click()
+        await dock.getByRole("button", { name: /submit/i }).click()
+
+        await expectQuestionOpen(page)
+        await expect(page.getByAltText(filename)).toBeVisible()
       })
     },
     { trackSession: project.trackSession },

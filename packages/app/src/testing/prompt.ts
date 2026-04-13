@@ -81,3 +81,10 @@ export const promptProbe = {
     }
   },
 }
+
+export const promptInputDriver = {
+  delayEditorRef(): boolean {
+    if (typeof window === "undefined") return false
+    return (window as E2EWindow).__opencode_e2e?.promptInput?.delayEditorRef === true
+  },
+}

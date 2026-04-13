@@ -25,6 +25,9 @@ export type E2EWindow = Window & {
       current?: import("./prompt").PromptProbeState
       sent?: import("./prompt").PromptSendState
     }
+    promptInput?: {
+      delayEditorRef?: boolean
+    }
     terminal?: {
       enabled?: boolean
       terminals?: Record<string, TerminalProbeState>
