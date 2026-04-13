@@ -121,6 +121,7 @@ export namespace ToolRegistry {
       const greptool = yield* GrepTool
       const patchtool = yield* ApplyPatchTool
       const skilltool = yield* SkillTool
+      const agent = yield* Agent.Service
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -140,8 +141,8 @@ export namespace ToolRegistry {
                     worktree: ctx.worktree,
                   }
                   const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
-                  const agent = yield* Effect.promise(() => Agent.get(toolCtx.agent))
-                  const out = yield* truncate.output(result, {}, agent)
+                  const info = yield* agent.get(toolCtx.agent)
+                  const out = yield* truncate.output(result, {}, info)
                   return {
                     title: "",
                     output: out.truncated ? out.content : result,
