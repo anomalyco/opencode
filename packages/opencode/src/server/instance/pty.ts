@@ -1,7 +1,9 @@
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import type { UpgradeWebSocket } from "hono/ws"
+import { Effect } from "effect"
 import z from "zod"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { NotFoundError } from "../../storage/db"
@@ -27,7 +29,14 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         },
       }),
       async (c) => {
-        return c.json(await Pty.list())
+        return c.json(
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const pty = yield* Pty.Service
+              return yield* pty.list()
+            }),
+          ),
+        )
       },
     )
     .post(
@@ -50,7 +59,12 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       }),
       validator("json", Pty.CreateInput),
       async (c) => {
-        const info = await Pty.create(c.req.valid("json"))
+        const info = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            return yield* pty.create(c.req.valid("json"))
+          }),
+        )
         return c.json(info)
       },
     )
@@ -74,7 +88,12 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
-        const info = await Pty.get(c.req.valid("param").ptyID)
+        const info = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            return yield* pty.get(c.req.valid("param").ptyID)
+          }),
+        )
         if (!info) {
           throw new NotFoundError({ message: "Session not found" })
         }
@@ -102,7 +121,12 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       validator("param", z.object({ ptyID: PtyID.zod })),
       validator("json", Pty.UpdateInput),
       async (c) => {
-        const info = await Pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
+        const info = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
+          }),
+        )
         return c.json(info)
       },
     )
@@ -126,7 +150,12 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
-        await Pty.remove(c.req.valid("param").ptyID)
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            yield* pty.remove(c.req.valid("param").ptyID)
+          }),
+        )
         return c.json(true)
       },
     )
@@ -150,6 +179,11 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
       upgradeWebSocket(async (c) => {
+        type Handler = {
+          onMessage: (message: string | ArrayBuffer) => void
+          onClose: () => void
+        }
+
         const id = PtyID.zod.parse(c.req.param("ptyID"))
         const cursor = (() => {
           const value = c.req.query("cursor")
@@ -158,8 +192,17 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
           if (!Number.isSafeInteger(parsed) || parsed < -1) return
           return parsed
         })()
-        let handler: Awaited<ReturnType<typeof Pty.connect>>
-        if (!(await Pty.get(id))) throw new Error("Session not found")
+        let handler: Handler | undefined
+        if (
+          !(await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const pty = yield* Pty.Service
+              return yield* pty.get(id)
+            }),
+          ))
+        ) {
+          throw new Error("Session not found")
+        }
 
         type Socket = {
           readyState: number
@@ -185,7 +228,12 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
               ws.close()
               return
             }
-            handler = await Pty.connect(id, socket, cursor)
+            handler = await AppRuntime.runPromise(
+              Effect.gen(function* () {
+                const pty = yield* Pty.Service
+                return yield* pty.connect(id, socket, cursor)
+              }),
+            )
             ready = true
             for (const msg of pending) handler?.onMessage(msg)
             pending.length = 0

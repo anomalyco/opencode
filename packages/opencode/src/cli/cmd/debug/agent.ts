@@ -12,6 +12,7 @@ import { Permission } from "../../../permission"
 import { iife } from "../../../util/iife"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export const AgentCommand = cmd({
   command: "agent <name>",
@@ -71,11 +72,17 @@ export const AgentCommand = cmd({
 })
 
 async function getAvailableTools(agent: Agent.Info) {
-  const model = agent.model ?? (await Provider.defaultModel())
-  return ToolRegistry.tools({
-    ...model,
-    agent,
-  })
+  return AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      const registry = yield* ToolRegistry.Service
+      const model = agent.model ?? (yield* provider.defaultModel())
+      return yield* registry.tools({
+        ...model,
+        agent,
+      })
+    }),
+  )
 }
 
 async function resolveTools(agent: Agent.Info, availableTools: Awaited<ReturnType<typeof getAvailableTools>>) {
