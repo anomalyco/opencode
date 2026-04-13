@@ -154,11 +154,17 @@ test("state() generates a new state when none is saved", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
       const provider = new McpOAuthProvider(
         "test-state-gen",
         "https://example.com/mcp",
         {},
         { onRedirect: async () => {} },
+        auth,
       )
 
       const entryBefore = await Effect.runPromise(
@@ -189,11 +195,17 @@ test("state() returns existing state when one is saved", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
       const provider = new McpOAuthProvider(
         "test-state-existing",
         "https://example.com/mcp",
         {},
         { onRedirect: async () => {} },
+        auth,
       )
 
       // Pre-save a state
