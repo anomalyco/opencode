@@ -6,6 +6,7 @@ import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID } from "../../src/session/schema"
+import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -139,4 +140,26 @@ describe("step-finish token propagation via Bus event", () => {
     },
     { timeout: 30000 },
   )
+})
+
+describe("Session", () => {
+  test("remove works without an instance", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const session = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => Session.create({ title: "remove-without-instance" }),
+    })
+
+    await expect(async () => {
+      await Session.remove(session.id)
+    }).not.toThrow()
+
+    let missing = false
+    await Session.get(session.id).catch(() => {
+      missing = true
+    })
+
+    expect(missing).toBe(true)
+  })
 })

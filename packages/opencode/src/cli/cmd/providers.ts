@@ -148,6 +148,12 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   }
 
   if (method.type === "api") {
+    const key = await prompts.password({
+      message: "Enter your API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    })
+    if (prompts.isCancel(key)) throw new UI.CancelledError()
+
     if (method.authorize) {
       const result = await method.authorize(inputs)
       if (result.type === "failed") {
@@ -157,7 +163,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
         const saveProvider = result.provider ?? provider
         await Auth.set(saveProvider, {
           type: "api",
-          key: result.key,
+          key: result.key ?? key,
         })
         prompts.log.success("Login successful")
       }
