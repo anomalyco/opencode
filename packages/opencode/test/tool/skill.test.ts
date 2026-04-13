@@ -1,3 +1,4 @@
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Skill } from "../../src/skill"
@@ -29,7 +30,11 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-const it = testEffect(ToolRegistry.defaultLayer)
+const node = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
+
+const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
 
 describe("tool.skill", () => {
   it.live("description lists skill location URL", () =>
