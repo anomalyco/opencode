@@ -1,5 +1,6 @@
 export const docsLocale = [
   "ar",
+  "bn",
   "bs",
   "da",
   "de",
@@ -26,6 +27,7 @@ export type Locale = (typeof locale)[number]
 
 export const localeAlias = {
   ar: "ar",
+  bn: "bn",
   br: "pt-br",
   bs: "bs",
   da: "da",

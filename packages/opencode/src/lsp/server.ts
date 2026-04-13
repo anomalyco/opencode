@@ -1955,4 +1955,33 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Banglish: Info = {
+    id: "banglish",
+    extensions: [".bangla", ".bn", ".bd"],
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock", "package.json"]),
+    async spawn(root) {
+      let binary = which("banglish")
+      const args: string[] = []
+      if (!binary) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        const resolved = await Npm.which("banglish")
+        if (!resolved) {
+          log.info("banglish not found, please install it via: npm install -g banglish")
+          return
+        }
+        binary = resolved
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
 }

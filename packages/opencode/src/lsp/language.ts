@@ -1,8 +1,11 @@
 export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".abap": "abap",
   ".bat": "bat",
+  ".bangla": "banglish",
+  ".bd": "banglish",
   ".bib": "bibtex",
   ".bibtex": "bibtex",
+  ".bn": "banglish",
   ".clj": "clojure",
   ".cljs": "clojure",
   ".cljc": "clojure",
