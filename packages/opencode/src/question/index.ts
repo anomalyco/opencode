@@ -2,7 +2,6 @@ import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { Log } from "@/util/log"
 import z from "zod"
@@ -199,26 +198,4 @@ export namespace Question {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function ask(input: {
-    sessionID: SessionID
-    questions: Info[]
-    tool?: { messageID: MessageID; callID: string }
-  }): Promise<Answer[]> {
-    return runPromise((s) => s.ask(input))
-  }
-
-  export async function reply(input: { requestID: QuestionID; answers: Answer[] }) {
-    return runPromise((s) => s.reply(input))
-  }
-
-  export async function reject(requestID: QuestionID) {
-    return runPromise((s) => s.reject(requestID))
-  }
-
-  export async function list() {
-    return runPromise((s) => s.list())
-  }
 }
