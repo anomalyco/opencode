@@ -46,6 +46,7 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createVenice } from "venice-ai-sdk-provider"
+import { createAlibaba } from "@ai-sdk/alibaba"
 import {
   createGitLab,
   VERSION as GITLAB_PROVIDER_VERSION,
@@ -145,6 +146,7 @@ export namespace Provider {
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
+    "@ai-sdk/alibaba": createAlibaba,
     "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
     "venice-ai-sdk-provider": createVenice,
