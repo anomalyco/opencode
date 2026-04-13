@@ -461,15 +461,15 @@ export function FileTabContent(props: { tab: string }) {
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Show when={state()?.loaded && isMarkdown() && state()?.content?.type !== "binary"}>
-          <div class="sticky top-0 z-10 flex items-center gap-1 bg-surface px-4 py-1.5 border-b border-border">
+          <div class="sticky top-0 z-10 flex items-center gap-1 bg-surface-base px-4 py-1.5 border-b border-border-base">
             <button
-              class={"px-2 py-0.5 rounded text-sm " + (preview() ? "bg-surface-active text-text" : "text-text-weak hover:text-text")}
+              class={"px-2 py-0.5 rounded text-sm " + (preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
               onClick={() => setPreview(true)}
             >
               {language.t("session.files.viewPreview")}
             </button>
             <button
-              class={"px-2 py-0.5 rounded text-sm " + (!preview() ? "bg-surface-active text-text" : "text-text-weak hover:text-text")}
+              class={"px-2 py-0.5 rounded text-sm " + (!preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
               onClick={() => setPreview(false)}
             >
               {language.t("session.files.viewSource")}
@@ -477,7 +477,7 @@ export function FileTabContent(props: { tab: string }) {
           </div>
         </Show>
         <Switch>
-          <Match when={state()?.loaded && isMarkdown() && preview()}>
+          <Match when={state()?.loaded && isMarkdown() && preview() && state()?.content?.type !== "binary"}>
             <div class="px-6 py-4 pb-40">
               <Markdown text={contents()} cacheKey={cacheKey()} />
             </div>
