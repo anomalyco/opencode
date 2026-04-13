@@ -156,7 +156,7 @@ export const ReadTool = Tool.define(
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
 
         if ((isImage && !supportsVision) || (isPdf && !supportsPdf)) {
-          return yield* Effect.fail(new Error(`This model does not support ${isImage ? "image" : "pdf"} input`))
+          return yield* Effect.fail(new Error(`This model does not support ${isImage ? "image" : "pdf"} input, please try other tools`))
         }
 
         return {
