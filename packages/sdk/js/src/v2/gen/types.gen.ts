@@ -33,6 +33,13 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
+export type EventServerInstanceDisposed = {
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
+  }
+}
+
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -47,13 +54,6 @@ export type EventInstallationUpdateAvailable = {
   }
 }
 
-export type EventServerInstanceDisposed = {
-  type: "server.instance.disposed"
-  properties: {
-    directory: string
-  }
-}
-
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -65,6 +65,21 @@ export type EventGlobalDisposed = {
   type: "global.disposed"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
   }
 }
 
@@ -215,107 +230,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
-
-export type EventMcpToolsChanged = {
-  type: "mcp.tools.changed"
-  properties: {
-    server: string
-  }
-}
-
-export type EventMcpBrowserOpenFailed = {
-  type: "mcp.browser.open.failed"
-  properties: {
-    mcpName: string
-    url: string
-  }
-}
-
-export type EventCommandExecuted = {
-  type: "command.executed"
-  properties: {
-    name: string
-    sessionID: string
-    arguments: string
-    messageID: string
-  }
-}
-
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -443,6 +357,92 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
+export type EventCommandExecuted = {
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
   }
 }
 
@@ -971,64 +971,12 @@ export type EventSessionDeleted = {
   }
 }
 
-export type Event =
-  | EventProjectUpdated
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
-  | EventServerInstanceDisposed
-  | EventServerConnected
-  | EventGlobalDisposed
-  | EventLspClientDiagnostics
-  | EventLspUpdated
-  | EventMessagePartDelta
-  | EventPermissionAsked
-  | EventPermissionReplied
-  | EventSessionDiff
-  | EventSessionError
-  | EventFileEdited
-  | EventFileWatcherUpdated
-  | EventVcsBranchUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
-  | EventMcpToolsChanged
-  | EventMcpBrowserOpenFailed
-  | EventCommandExecuted
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
-  | EventTodoUpdated
-  | EventSessionStatus
-  | EventSessionIdle
-  | EventSessionCompacted
-  | EventWorktreeReady
-  | EventWorktreeFailed
-  | EventPtyCreated
-  | EventPtyUpdated
-  | EventPtyExited
-  | EventPtyDeleted
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
-  | EventWorkspaceStatus
-  | EventMessageUpdated
-  | EventMessageRemoved
-  | EventMessagePartUpdated
-  | EventMessagePartRemoved
-  | EventSessionCreated
-  | EventSessionUpdated
-  | EventSessionDeleted
-
-export type GlobalEvent = {
-  directory: string
-  project?: string
-  workspace?: string
-  payload: Event
-}
-
 export type SyncEventMessageUpdated = {
-  type: "message.updated.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "message.updated.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     info: Message
@@ -1036,8 +984,11 @@ export type SyncEventMessageUpdated = {
 }
 
 export type SyncEventMessageRemoved = {
-  type: "message.removed.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "message.removed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     messageID: string
@@ -1045,8 +996,11 @@ export type SyncEventMessageRemoved = {
 }
 
 export type SyncEventMessagePartUpdated = {
-  type: "message.part.updated.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "message.part.updated.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     part: Part
@@ -1055,8 +1009,11 @@ export type SyncEventMessagePartUpdated = {
 }
 
 export type SyncEventMessagePartRemoved = {
-  type: "message.part.removed.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "message.part.removed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     messageID: string
@@ -1065,8 +1022,11 @@ export type SyncEventMessagePartRemoved = {
 }
 
 export type SyncEventSessionCreated = {
-  type: "session.created.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "session.created.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     info: Session
@@ -1074,8 +1034,11 @@ export type SyncEventSessionCreated = {
 }
 
 export type SyncEventSessionUpdated = {
-  type: "session.updated.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "session.updated.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     info: {
@@ -1114,16 +1077,75 @@ export type SyncEventSessionUpdated = {
 }
 
 export type SyncEventSessionDeleted = {
-  type: "session.deleted.1"
-  aggregate: "sessionID"
+  type: "sync"
+  name: "session.deleted.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
   data: {
     sessionID: string
     info: Session
   }
 }
 
-export type SyncEvent = {
-  payload: SyncEvent
+export type GlobalEvent = {
+  directory: string
+  project?: string
+  workspace?: string
+  payload:
+    | EventProjectUpdated
+    | EventServerInstanceDisposed
+    | EventInstallationUpdated
+    | EventInstallationUpdateAvailable
+    | EventServerConnected
+    | EventGlobalDisposed
+    | EventFileEdited
+    | EventFileWatcherUpdated
+    | EventLspClientDiagnostics
+    | EventLspUpdated
+    | EventMessagePartDelta
+    | EventPermissionAsked
+    | EventPermissionReplied
+    | EventSessionDiff
+    | EventSessionError
+    | EventQuestionAsked
+    | EventQuestionReplied
+    | EventQuestionRejected
+    | EventTodoUpdated
+    | EventSessionStatus
+    | EventSessionIdle
+    | EventSessionCompacted
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventMcpToolsChanged
+    | EventMcpBrowserOpenFailed
+    | EventCommandExecuted
+    | EventVcsBranchUpdated
+    | EventWorktreeReady
+    | EventWorktreeFailed
+    | EventPtyCreated
+    | EventPtyUpdated
+    | EventPtyExited
+    | EventPtyDeleted
+    | EventWorkspaceReady
+    | EventWorkspaceFailed
+    | EventWorkspaceStatus
+    | EventMessageUpdated
+    | EventMessageRemoved
+    | EventMessagePartUpdated
+    | EventMessagePartRemoved
+    | EventSessionCreated
+    | EventSessionUpdated
+    | EventSessionDeleted
+    | SyncEventMessageUpdated
+    | SyncEventMessageRemoved
+    | SyncEventMessagePartUpdated
+    | SyncEventMessagePartRemoved
+    | SyncEventSessionCreated
+    | SyncEventSessionUpdated
+    | SyncEventSessionDeleted
 }
 
 /**
@@ -1772,8 +1794,8 @@ export type ToolList = Array<ToolListItem>
 export type Workspace = {
   id: string
   type: string
+  name: string
   branch: string | null
-  name: string | null
   directory: string | null
   extra: unknown | null
   projectID: string
@@ -1982,6 +2004,54 @@ export type File = {
   status: "added" | "deleted" | "modified"
 }
 
+export type Event =
+  | EventProjectUpdated
+  | EventServerInstanceDisposed
+  | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
+  | EventServerConnected
+  | EventGlobalDisposed
+  | EventFileEdited
+  | EventFileWatcherUpdated
+  | EventLspClientDiagnostics
+  | EventLspUpdated
+  | EventMessagePartDelta
+  | EventPermissionAsked
+  | EventPermissionReplied
+  | EventSessionDiff
+  | EventSessionError
+  | EventQuestionAsked
+  | EventQuestionReplied
+  | EventQuestionRejected
+  | EventTodoUpdated
+  | EventSessionStatus
+  | EventSessionIdle
+  | EventSessionCompacted
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
+  | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
+  | EventCommandExecuted
+  | EventVcsBranchUpdated
+  | EventWorktreeReady
+  | EventWorktreeFailed
+  | EventPtyCreated
+  | EventPtyUpdated
+  | EventPtyExited
+  | EventPtyDeleted
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
+  | EventWorkspaceStatus
+  | EventMessageUpdated
+  | EventMessageRemoved
+  | EventMessagePartUpdated
+  | EventMessagePartRemoved
+  | EventSessionCreated
+  | EventSessionUpdated
+  | EventSessionDeleted
+
 export type McpStatusConnected = {
   status: "connected"
 }
@@ -2112,23 +2182,6 @@ export type GlobalEventResponses = {
 }
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
-
-export type GlobalSyncEventSubscribeData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/global/sync-event"
-}
-
-export type GlobalSyncEventSubscribeResponses = {
-  /**
-   * Event stream
-   */
-  200: SyncEvent
-}
-
-export type GlobalSyncEventSubscribeResponse =
-  GlobalSyncEventSubscribeResponses[keyof GlobalSyncEventSubscribeResponses]
 
 export type GlobalConfigGetData = {
   body?: never
@@ -2811,6 +2864,30 @@ export type ToolListResponses = {
 }
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
+
+export type ExperimentalWorkspaceAdaptorListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace/adaptor"
+}
+
+export type ExperimentalWorkspaceAdaptorListResponses = {
+  /**
+   * Workspace adaptors
+   */
+  200: Array<{
+    type: string
+    name: string
+    description: string
+  }>
+}
+
+export type ExperimentalWorkspaceAdaptorListResponse =
+  ExperimentalWorkspaceAdaptorListResponses[keyof ExperimentalWorkspaceAdaptorListResponses]
 
 export type ExperimentalWorkspaceListData = {
   body?: never

@@ -155,7 +155,12 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               resetHeartbeat()
               streamErrorLogged = false
               const directory = event.directory ?? "global"
-              const payload = event.payload
+              if (event.payload.type === "sync") {
+                continue
+              }
+
+              const payload = event.payload as Event
+
               const k = key(directory, payload)
               if (k) {
                 const i = coalesced.get(k)

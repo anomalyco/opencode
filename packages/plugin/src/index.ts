@@ -24,11 +24,44 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type WorkspaceInfo = {
+  id: string
+  type: string
+  name: string
+  branch: string | null
+  directory: string | null
+  extra: unknown | null
+  projectID: string
+}
+
+export type WorkspaceTarget =
+  | {
+      type: "local"
+      directory: string
+    }
+  | {
+      type: "remote"
+      url: string | URL
+      headers?: HeadersInit
+    }
+
+export type WorkspaceAdaptor = {
+  name: string
+  description: string
+  configure(config: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
+  create(config: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
+  remove(config: WorkspaceInfo): Promise<void>
+  target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
   directory: string
   worktree: string
+  experimental_workspace: {
+    register(type: string, adaptor: WorkspaceAdaptor): void
+  }
   serverUrl: URL
   $: BunShell
 }
