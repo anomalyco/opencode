@@ -640,7 +640,7 @@ export const McpDebugCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Debug")
 
-        const config = await Config.get()
+        const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
         const mcpServers = config.mcp ?? {}
         const serverName = args.name
 
