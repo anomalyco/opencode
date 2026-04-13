@@ -219,6 +219,85 @@ describe("Instruction.resolve", () => {
   test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
 })
 
+describe("Instruction .local.md variants", () => {
+  test("loads AGENTS.local.md alongside AGENTS.md in systemPaths", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Shared Instructions")
+        await Bun.write(path.join(dir, "AGENTS.local.md"), "# Personal Instructions")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(tmp.path, "AGENTS.local.md"))).toBe(true)
+      },
+    })
+  })
+
+  test("loads AGENTS.local.md even without AGENTS.md", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.local.md"), "# Personal Only")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(tmp.path, "AGENTS.local.md"))).toBe(true)
+      },
+    })
+  })
+
+  test("resolve returns both AGENTS.md and AGENTS.local.md from subdirectory", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# Subdir Shared")
+        await Bun.write(path.join(dir, "subdir", "AGENTS.local.md"), "# Subdir Personal")
+        await Bun.write(path.join(dir, "subdir", "nested", "file.ts"), "const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const results = await Instruction.resolve(
+          [],
+          path.join(tmp.path, "subdir", "nested", "file.ts"),
+          MessageID.make("test-local-1"),
+        )
+        expect(results.length).toBe(2)
+        const paths = results.map((r) => r.filepath)
+        expect(paths).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
+        expect(paths).toContain(path.join(tmp.path, "subdir", "AGENTS.local.md"))
+      },
+    })
+  })
+
+  test("resolve returns only AGENTS.local.md when AGENTS.md is absent", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.local.md"), "# Subdir Personal")
+        await Bun.write(path.join(dir, "subdir", "nested", "file.ts"), "const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const results = await Instruction.resolve(
+          [],
+          path.join(tmp.path, "subdir", "nested", "file.ts"),
+          MessageID.make("test-local-2"),
+        )
+        expect(results.length).toBe(1)
+        expect(results[0].filepath).toBe(path.join(tmp.path, "subdir", "AGENTS.local.md"))
+      },
+    })
+  })
+})
+
 describe("Instruction.systemPaths OPENCODE_CONFIG_DIR", () => {
   let originalConfigDir: string | undefined
 

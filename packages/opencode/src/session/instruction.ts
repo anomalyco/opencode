@@ -21,16 +21,26 @@ const FILES = [
   "CONTEXT.md", // deprecated
 ]
 
+function variant(file: string) {
+  return file.replace(/\.md$/, ".local.md")
+}
+
 function globalFiles() {
-  const files = []
+  const groups: string[][] = []
   if (Flag.OPENCODE_CONFIG_DIR) {
-    files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+    groups.push([
+      path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"),
+      path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.local.md"),
+    ])
   }
-  files.push(path.join(Global.Path.config, "AGENTS.md"))
+  groups.push([path.join(Global.Path.config, "AGENTS.md"), path.join(Global.Path.config, "AGENTS.local.md")])
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+    groups.push([
+      path.join(os.homedir(), ".claude", "CLAUDE.md"),
+      path.join(os.homedir(), ".claude", "CLAUDE.local.md"),
+    ])
   }
-  return files
+  return groups
 }
 
 function extract(messages: MessageV2.WithParts[]) {
@@ -55,7 +65,7 @@ export namespace Instruction {
     readonly clear: (messageID: MessageID) => Effect.Effect<void>
     readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
     readonly system: () => Effect.Effect<string[], AppFileSystem.Error>
-    readonly find: (dir: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
+    readonly find: (dir: string) => Effect.Effect<string[], AppFileSystem.Error>
     readonly resolve: (
       messages: MessageV2.WithParts[],
       filepath: string,
@@ -126,18 +136,24 @@ export namespace Instruction {
           if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
             for (const file of FILES) {
               const matches = yield* fs.findUp(file, Instance.directory, Instance.worktree)
-              if (matches.length > 0) {
+              const locals = yield* fs.findUp(variant(file), Instance.directory, Instance.worktree)
+              if (matches.length > 0 || locals.length > 0) {
                 matches.forEach((item) => paths.add(path.resolve(item)))
+                locals.forEach((item) => paths.add(path.resolve(item)))
                 break
               }
             }
           }
 
-          for (const file of globalFiles()) {
-            if (yield* fs.existsSafe(file)) {
-              paths.add(path.resolve(file))
-              break
+          for (const group of globalFiles()) {
+            let found = false
+            for (const file of group) {
+              if (yield* fs.existsSafe(file)) {
+                paths.add(path.resolve(file))
+                found = true
+              }
             }
+            if (found) break
           }
 
           if (config.instructions) {
@@ -178,9 +194,14 @@ export namespace Instruction {
 
         const find = Effect.fn("Instruction.find")(function* (dir: string) {
           for (const file of FILES) {
-            const filepath = path.resolve(path.join(dir, file))
-            if (yield* fs.existsSafe(filepath)) return filepath
+            const base = path.resolve(path.join(dir, file))
+            const local = path.resolve(path.join(dir, variant(file)))
+            const results: string[] = []
+            if (yield* fs.existsSafe(base)) results.push(base)
+            if (yield* fs.existsSafe(local)) results.push(local)
+            if (results.length > 0) return results
           }
+          return [] as string[]
         })
 
         const resolve = Effect.fn("Instruction.resolve")(function* (
@@ -199,26 +220,22 @@ export namespace Instruction {
 
           // Walk upward from the file being read and attach nearby instruction files once per message.
           while (current.startsWith(root) && current !== root) {
-            const found = yield* find(current)
-            if (!found || found === target || sys.has(found) || already.has(found)) {
-              current = path.dirname(current)
-              continue
-            }
+            const files = yield* find(current)
+            for (const found of files) {
+              if (found === target || sys.has(found) || already.has(found)) continue
 
-            let set = s.claims.get(messageID)
-            if (!set) {
-              set = new Set()
-              s.claims.set(messageID, set)
-            }
-            if (set.has(found)) {
-              current = path.dirname(current)
-              continue
-            }
+              let set = s.claims.get(messageID)
+              if (!set) {
+                set = new Set()
+                s.claims.set(messageID, set)
+              }
+              if (set.has(found)) continue
 
-            set.add(found)
-            const content = yield* read(found)
-            if (content) {
-              results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+              set.add(found)
+              const content = yield* read(found)
+              if (content) {
+                results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+              }
             }
 
             current = path.dirname(current)
