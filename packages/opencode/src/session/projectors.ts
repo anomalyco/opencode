@@ -1,10 +1,11 @@
-import { NotFoundError, eq, and } from "../storage/db"
+import { NotFoundError, eq, and, sql } from "../storage/db"
 import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
+import { DateTime } from "effect"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -131,5 +132,34 @@ export default [
       if (!foreign(err)) throw err
       log.warn("ignored late part update", { partID: id, messageID, sessionID })
     }
+  }),
+
+  // Experimental
+  SyncEvent.project(MessageV2.Event.PartUpdated, (db, data) => {
+    /*
+    const id = SessionEntry.ID.make(data.part.id.replace("prt", "ent"))
+    switch (data.part.type) {
+      case "text":
+        db.insert(SessionEntryTable)
+          .values({
+            id,
+            session_id: data.sessionID,
+            type: "text",
+            data: new SessionEntry.Text({
+              id,
+              text: data.part.text,
+              type: "text",
+              time: {
+                created: DateTime.makeUnsafe(data.part.time?.start ?? Date.now()),
+                completed: data.part.time?.end ? DateTime.makeUnsafe(data.part.time.end) : undefined,
+              },
+            }),
+            time_created: Date.now(),
+            time_updated: Date.now(),
+          })
+          .onConflictDoUpdate({ target: SessionEntryTable.id, set: { data: sql`excluded.data` } })
+          .run()
+    }
+    */
   }),
 ]

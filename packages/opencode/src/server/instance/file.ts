@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
+import { Effect } from "effect"
 import z from "zod"
 import { AppRuntime } from "../../effect/app-runtime"
 import { File } from "../../file"
@@ -72,12 +73,18 @@ export const FileRoutes = lazy(() =>
         const dirs = c.req.valid("query").dirs
         const type = c.req.valid("query").type
         const limit = c.req.valid("query").limit
-        const results = await File.search({
-          query,
-          limit: limit ?? 10,
-          dirs: dirs !== "false",
-          type,
-        })
+        const results = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            return yield* File.Service.use((svc) =>
+              svc.search({
+                query,
+                limit: limit ?? 10,
+                dirs: dirs !== "false",
+                type,
+              }),
+            )
+          }),
+        )
         return c.json(results)
       },
     )
@@ -133,7 +140,11 @@ export const FileRoutes = lazy(() =>
       ),
       async (c) => {
         const path = c.req.valid("query").path
-        const content = await File.list(path)
+        const content = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            return yield* File.Service.use((svc) => svc.list(path))
+          }),
+        )
         return c.json(content)
       },
     )
@@ -162,7 +173,11 @@ export const FileRoutes = lazy(() =>
       ),
       async (c) => {
         const path = c.req.valid("query").path
-        const content = await File.read(path)
+        const content = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            return yield* File.Service.use((svc) => svc.read(path))
+          }),
+        )
         return c.json(content)
       },
     )
@@ -184,7 +199,11 @@ export const FileRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const content = await File.status()
+        const content = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            return yield* File.Service.use((svc) => svc.status())
+          }),
+        )
         return c.json(content)
       },
     ),

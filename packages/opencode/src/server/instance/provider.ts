@@ -44,7 +44,8 @@ export const ProviderRoutes = lazy(() =>
         const result = await AppRuntime.runPromise(
           Effect.gen(function* () {
             const svc = yield* Provider.Service
-            const config = yield* Effect.promise(() => Config.get())
+            const cfg = yield* Config.Service
+            const config = yield* cfg.get()
             const all = yield* Effect.promise(() => ModelsDev.get())
             const disabled = new Set(config.disabled_providers ?? [])
             const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined

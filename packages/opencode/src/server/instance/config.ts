@@ -32,7 +32,7 @@ export const ConfigRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await Config.get())
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get())))
       },
     )
     .patch(
@@ -56,7 +56,7 @@ export const ConfigRoutes = lazy(() =>
       validator("json", Config.Info),
       async (c) => {
         const config = c.req.valid("json")
-        await Config.update(config)
+        await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.update(config)))
         return c.json(config)
       },
     )
