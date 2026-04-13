@@ -172,7 +172,11 @@ export default function Layout(props: ParentProps) {
   const openclawDir = "/openclaw"
   const openclawSlug = base64Encode(openclawDir)
   const isOpenclawDir = (directory?: string) => directory === openclawDir
-  const waitServer = (key: ServerConnection.Key) => waitForMatch(() => server.key, (value) => value === key)
+  const waitServer = (key: ServerConnection.Key) =>
+    waitForMatch(
+      () => server.key,
+      (value) => value === key,
+    )
   const openclawProject = createMemo(
     () =>
       ({
@@ -1159,25 +1163,35 @@ export default function Layout(props: ParentProps) {
         id: "project.openInFinder",
         title:
           platform.os === "macos"
-            ? "Open in Finder"
+            ? language.t("session.header.open.finder")
             : platform.os === "windows"
-              ? "Open in Explorer"
-              : "Open in File Manager",
+              ? language.t("session.header.open.fileExplorer")
+              : language.t("session.header.open.fileManager"),
         category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInFinder,
+        disabled: !params.dir || (platform.os === "windows" ? !platform.openPath : !platform.openInFinder),
         onSelect: async () => {
           const dir = params.dir ? decode64(params.dir) : null
-          if (dir && platform.openInFinder) await platform.openInFinder(dir)
+          if (!dir) return
+          if (platform.os === "windows" && platform.openPath) {
+            await platform.openPath(dir)
+            return
+          }
+          if (platform.openInFinder) await platform.openInFinder(dir)
         },
       },
       {
         id: "project.openInVscode",
         title: "Open in VSCode",
         category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInVscode,
+        disabled: !params.dir || (platform.os === "windows" ? !platform.openPath : !platform.openInVscode),
         onSelect: async () => {
           const dir = params.dir ? decode64(params.dir) : null
-          if (dir && platform.openInVscode) await platform.openInVscode(dir)
+          if (!dir) return
+          if (platform.os === "windows" && platform.openPath) {
+            await platform.openPath(dir, "code")
+            return
+          }
+          if (platform.openInVscode) await platform.openInVscode(dir)
         },
       },
       {
@@ -2661,11 +2675,11 @@ export default function Layout(props: ParentProps) {
                 fallback={
                   <>
                     <div class="shrink-0 py-4 px-3">
-                    <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                      <Button
-                        size="large"
-                        icon="new-session"
-                        variant="ghost"
+                      <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <Button
+                          size="large"
+                          icon="new-session"
+                          variant="ghost"
                           class="w-full border border-border-weak-base"
                           onClick={() => {
                             const dir = worktree()
