@@ -2,10 +2,9 @@ import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, Context } from "effect"
 import z from "zod"
 
 export namespace ProviderAuth {
@@ -109,28 +108,27 @@ export namespace ProviderAuth {
     pending: Map<ProviderID, AuthOAuthResult>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
-  export const layer = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const auth = yield* Auth.Service
+      const plugin = yield* Plugin.Service
       const state = yield* InstanceState.make<State>(
-        Effect.fn("ProviderAuth.state")(() =>
-          Effect.promise(async () => {
-            const plugins = await Plugin.list()
-            return {
-              hooks: Record.fromEntries(
-                Arr.filterMap(plugins, (x) =>
-                  x.auth?.provider !== undefined
-                    ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
-                    : Result.failVoid,
-                ),
+        Effect.fn("ProviderAuth.state")(function* () {
+          const plugins = yield* plugin.list()
+          return {
+            hooks: Record.fromEntries(
+              Arr.filterMap(plugins, (x) =>
+                x.auth?.provider !== undefined
+                  ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
+                  : Result.failVoid,
               ),
-              pending: new Map<ProviderID, AuthOAuthResult>(),
-            }
-          }),
-        ),
+            ),
+            pending: new Map<ProviderID, AuthOAuthResult>(),
+          }
+        }),
       )
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
@@ -230,23 +228,7 @@ export namespace ProviderAuth {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Auth.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function methods() {
-    return runPromise((svc) => svc.methods())
-  }
-
-  export async function authorize(input: {
-    providerID: ProviderID
-    method: number
-    inputs?: Record<string, string>
-  }): Promise<Authorization | undefined> {
-    return runPromise((svc) => svc.authorize(input))
-  }
-
-  export async function callback(input: { providerID: ProviderID; method: number; code?: string }) {
-    return runPromise((svc) => svc.callback(input))
-  }
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
+  )
 }

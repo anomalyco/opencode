@@ -1,20 +1,103 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
+import { Config } from "../../src/config/config"
 import { TuiConfig } from "../../src/config/tui"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
+import { AppRuntime } from "../../src/effect/app-runtime"
 
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+const wintest = process.platform === "win32" ? test : test.skip
+const clear = (wait = false) => AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate(wait)))
+const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
+
+beforeEach(async () => {
+  await clear(true)
+})
 
 afterEach(async () => {
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
+  await fs.rm(path.join(Global.Path.config, "opencode.json"), { force: true }).catch(() => {})
+  await fs.rm(path.join(Global.Path.config, "opencode.jsonc"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.jsonc"), { force: true }).catch(() => {})
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+  await clear(true)
+})
+
+test("keeps server and tui plugin merge semantics aligned", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const local = path.join(dir, ".opencode")
+      await fs.mkdir(local, { recursive: true })
+
+      await Bun.write(
+        path.join(Global.Path.config, "opencode.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+      await Bun.write(
+        path.join(Global.Path.config, "tui.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+
+      await Bun.write(
+        path.join(local, "opencode.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+      await Bun.write(
+        path.join(local, "tui.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const server = await load()
+      const tui = await TuiConfig.get()
+      const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
+      const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
+
+      expect(serverPlugins).toEqual(tuiPlugins)
+      expect(serverPlugins).toContain("shared-plugin@2.0.0")
+      expect(serverPlugins).not.toContain("shared-plugin@1.0.0")
+
+      const serverOrigins = server.plugin_origins ?? []
+      const tuiOrigins = tui.plugin_origins ?? []
+      expect(serverOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(serverPlugins)
+      expect(tuiOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(tuiPlugins)
+      expect(serverOrigins.map((item) => item.scope)).toEqual(tuiOrigins.map((item) => item.scope))
+    },
+  })
 })
 
 test("loads tui config with the same precedence order as server config paths", async () => {
@@ -362,6 +445,53 @@ test("merges keybind overrides across precedence layers", async () => {
   })
 })
 
+wintest("defaults Ctrl+Z to input undo on Windows", async () => {
+  await using tmp = await tmpdir()
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
+    },
+  })
+})
+
+wintest("keeps explicit input undo overrides on Windows", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ keybinds: { input_undo: "ctrl+y" } }))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+y")
+    },
+  })
+})
+
+wintest("ignores terminal suspend bindings on Windows", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ keybinds: { terminal_suspend: "alt+z" } }))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
+    },
+  })
+})
+
 test("OPENCODE_TUI_CONFIG provides settings when no project config exists", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -476,9 +606,9 @@ test("loads managed tui config and gives it highest precedence", async () => {
       const config = await TuiConfig.get()
       expect(config.theme).toBe("managed-theme")
       expect(config.plugin).toEqual(["shared-plugin@2.0.0"])
-      expect(config.plugin_records).toEqual([
+      expect(config.plugin_origins).toEqual([
         {
-          item: "shared-plugin@2.0.0",
+          spec: "shared-plugin@2.0.0",
           scope: "global",
           source: path.join(managedConfigDir, "tui.json"),
         },
@@ -540,9 +670,9 @@ test("supports tuple plugin specs with options in tui.json", async () => {
     fn: async () => {
       const config = await TuiConfig.get()
       expect(config.plugin).toEqual([["acme-plugin@1.2.3", { enabled: true, label: "demo" }]])
-      expect(config.plugin_records).toEqual([
+      expect(config.plugin_origins).toEqual([
         {
-          item: ["acme-plugin@1.2.3", { enabled: true, label: "demo" }],
+          spec: ["acme-plugin@1.2.3", { enabled: true, label: "demo" }],
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
@@ -580,14 +710,14 @@ test("deduplicates tuple plugin specs by name with higher precedence winning", a
         ["acme-plugin@2.0.0", { source: "project" }],
         ["second-plugin@3.0.0", { source: "project" }],
       ])
-      expect(config.plugin_records).toEqual([
+      expect(config.plugin_origins).toEqual([
         {
-          item: ["acme-plugin@2.0.0", { source: "project" }],
+          spec: ["acme-plugin@2.0.0", { source: "project" }],
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
         {
-          item: ["second-plugin@3.0.0", { source: "project" }],
+          spec: ["second-plugin@3.0.0", { source: "project" }],
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
@@ -619,14 +749,14 @@ test("tracks global and local plugin metadata in merged tui config", async () =>
     fn: async () => {
       const config = await TuiConfig.get()
       expect(config.plugin).toEqual(["global-plugin@1.0.0", "local-plugin@2.0.0"])
-      expect(config.plugin_records).toEqual([
+      expect(config.plugin_origins).toEqual([
         {
-          item: "global-plugin@1.0.0",
+          spec: "global-plugin@1.0.0",
           scope: "global",
           source: path.join(Global.Path.config, "tui.json"),
         },
         {
-          item: "local-plugin@2.0.0",
+          spec: "local-plugin@2.0.0",
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },

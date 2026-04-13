@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
-import { Cause, Exit, Stream } from "effect"
+import { Cause, Effect, Exit, Stream } from "effect"
 import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
@@ -15,6 +15,16 @@ import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
+
+async function getModel(providerID: ProviderID, modelID: ModelID) {
+  return AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      return yield* provider.getModel(providerID, modelID)
+    }),
+  )
+}
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -289,10 +299,9 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const providerID = "alibaba"
-    const modelID = "qwen-plus"
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
 
     const request = waitRequest(
@@ -326,7 +335,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
@@ -343,8 +352,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
-          variant: "high",
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
@@ -418,7 +426,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-raw-abort")
         const agent = {
           name: "test",
@@ -492,7 +500,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-service-abort")
         const agent = {
           name: "test",
@@ -583,7 +591,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-tools")
         const agent = {
           name: "test",
@@ -701,7 +709,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
@@ -717,8 +725,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-          variant: "high",
+          model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
@@ -744,8 +751,7 @@ describe("session.llm.stream", () => {
         expect((body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
 
         const maxTokens = body.max_output_tokens as number | undefined
-        const expectedMaxTokens = ProviderTransform.maxOutputTokens(resolved)
-        expect(maxTokens).toBe(expectedMaxTokens)
+        expect(maxTokens).toBe(undefined) // match codex cli behavior
       },
     })
   })
@@ -823,7 +829,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-data-url")
         const agent = {
           name: "test",
@@ -874,16 +880,15 @@ describe("session.llm.stream", () => {
     })
   })
 
-  test("sends messages API payload for Anthropic models", async () => {
+  test("sends messages API payload for Anthropic Compatible models", async () => {
     const server = state.server
     if (!server) {
       throw new Error("Server not initialized")
     }
 
-    const providerID = "anthropic"
-    const modelID = "claude-3-5-sonnet-20241022"
+    const providerID = "minimax"
+    const modelID = "MiniMax-M2.5"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
 
     const chunks = [
@@ -947,7 +952,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-3")
         const agent = {
           name: "test",
@@ -964,7 +969,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.7") },
+          model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.5") },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
@@ -1048,7 +1053,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",

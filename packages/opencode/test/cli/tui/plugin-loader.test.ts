@@ -6,7 +6,6 @@ import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { Global } from "../../../src/global"
 import { TuiConfig } from "../../../src/config/tui"
-import { Config } from "../../../src/config/config"
 import { Filesystem } from "../../../src/util/filesystem"
 
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
@@ -325,7 +324,6 @@ export default {
   })
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const install = spyOn(Config, "installDependencies").mockResolvedValue()
 
   try {
     expect(addTheme(tmp.extra.preloadedThemeName, { theme: { primary: "#303030" } })).toBe(true)
@@ -407,7 +405,6 @@ export default {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    install.mockRestore()
     if (backup === undefined) {
       await fs.rm(globalConfigPath, { force: true })
     } else {
@@ -468,14 +465,14 @@ test("continues loading when a plugin is missing config metadata", async () => {
       [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
       tmp.extra.bareSpec,
     ],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
+        spec: [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
       {
-        item: tmp.extra.bareSpec,
+        spec: tmp.extra.bareSpec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -701,7 +698,6 @@ test("updates installed theme when plugin metadata changes", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const install = spyOn(Config, "installDependencies").mockResolvedValue()
 
   const api = () =>
     createTuiPluginApi({
@@ -746,7 +742,6 @@ test("updates installed theme when plugin metadata changes", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    install.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })

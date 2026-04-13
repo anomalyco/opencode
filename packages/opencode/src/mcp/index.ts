@@ -24,9 +24,9 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Exit, Layer, Option, ServiceMap, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Context, Stream } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
@@ -239,7 +239,7 @@ export namespace MCP {
     readonly getAuthStatus: (mcpName: string) => Effect.Effect<AuthStatus>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/MCP") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
 
   export const layer = Layer.effect(
     Service,
@@ -286,6 +286,7 @@ export namespace MCP {
               clientId: oauthConfig?.clientId,
               clientSecret: oauthConfig?.clientSecret,
               scope: oauthConfig?.scope,
+              redirectUri: oauthConfig?.redirectUri,
             },
             {
               onRedirect: async (url) => {
@@ -468,16 +469,18 @@ export namespace MCP {
           log.info("tools list changed notification received", { server: name })
           if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-          const listed = await Effect.runPromise(defs(name, client, timeout))
+          const listed = await Effect.runPromise(defs(name, client, timeout).pipe(Effect.provide(EffectLogger.layer)))
           if (!listed) return
           if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
           s.defs[name] = listed
-          await Effect.runPromise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+          await Effect.runPromise(
+            bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore, Effect.provide(EffectLogger.layer)),
+          )
         })
       }
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
           const cfg = yield* cfgSvc.get()
           const config = cfg.mcp ?? {}
@@ -501,7 +504,7 @@ export namespace MCP {
                   return
                 }
 
-                const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.void))
                 if (!result) return
 
                 s.status[key] = result.status
@@ -549,7 +552,7 @@ export namespace MCP {
       }
 
       const status = Effect.fn("MCP.status")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
 
         const cfg = yield* cfgSvc.get()
         const config = cfg.mcp ?? {}
@@ -564,12 +567,12 @@ export namespace MCP {
       })
 
       const clients = Effect.fn("MCP.clients")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return s.clients
       })
 
       const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: Config.Mcp) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const result = yield* create(name, mcp)
 
         s.status[name] = result.status
@@ -588,7 +591,7 @@ export namespace MCP {
 
       const add = Effect.fn("MCP.add")(function* (name: string, mcp: Config.Mcp) {
         yield* createAndStore(name, mcp)
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return { status: s.status }
       })
 
@@ -602,7 +605,7 @@ export namespace MCP {
       })
 
       const disconnect = Effect.fn("MCP.disconnect")(function* (name: string) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         yield* closeClient(s, name)
         delete s.clients[name]
         s.status[name] = { status: "disabled" }
@@ -610,7 +613,7 @@ export namespace MCP {
 
       const tools = Effect.fn("MCP.tools")(function* () {
         const result: Record<string, Tool> = {}
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
 
         const cfg = yield* cfgSvc.get()
         const config = cfg.mcp ?? {}
@@ -657,12 +660,12 @@ export namespace MCP {
       }
 
       const prompts = Effect.fn("MCP.prompts")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* collectFromConnected(s, (c) => c.listPrompts().then((r) => r.prompts), "prompts")
       })
 
       const resources = Effect.fn("MCP.resources")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* collectFromConnected(s, (c) => c.listResources().then((r) => r.resources), "resources")
       })
 
@@ -672,7 +675,7 @@ export namespace MCP {
         label: string,
         meta?: Record<string, unknown>,
       ) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const client = s.clients[clientName]
         if (!client) {
           log.warn(`client not found for ${label}`, { clientName })
@@ -716,13 +719,16 @@ export namespace MCP {
         if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
         if (mcpConfig.oauth === false) throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
 
-        yield* Effect.promise(() => McpOAuthCallback.ensureRunning())
+        // OAuth config is optional - if not provided, we'll use auto-discovery
+        const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
+
+        // Start the callback server with custom redirectUri if configured
+        yield* Effect.promise(() => McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri))
 
         const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
         yield* auth.updateOAuthState(mcpName, oauthState)
-        const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
         let capturedUrl: URL | undefined
         const authProvider = new McpOAuthProvider(
           mcpName,
@@ -731,6 +737,7 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
+            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {
@@ -882,45 +889,4 @@ export namespace MCP {
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  // --- Async facade functions ---
-
-  export const status = async () => runPromise((svc) => svc.status())
-
-  export const clients = async () => runPromise((svc) => svc.clients())
-
-  export const tools = async () => runPromise((svc) => svc.tools())
-
-  export const prompts = async () => runPromise((svc) => svc.prompts())
-
-  export const resources = async () => runPromise((svc) => svc.resources())
-
-  export const add = async (name: string, mcp: Config.Mcp) => runPromise((svc) => svc.add(name, mcp))
-
-  export const connect = async (name: string) => runPromise((svc) => svc.connect(name))
-
-  export const disconnect = async (name: string) => runPromise((svc) => svc.disconnect(name))
-
-  export const getPrompt = async (clientName: string, name: string, args?: Record<string, string>) =>
-    runPromise((svc) => svc.getPrompt(clientName, name, args))
-
-  export const readResource = async (clientName: string, resourceUri: string) =>
-    runPromise((svc) => svc.readResource(clientName, resourceUri))
-
-  export const startAuth = async (mcpName: string) => runPromise((svc) => svc.startAuth(mcpName))
-
-  export const authenticate = async (mcpName: string) => runPromise((svc) => svc.authenticate(mcpName))
-
-  export const finishAuth = async (mcpName: string, authorizationCode: string) =>
-    runPromise((svc) => svc.finishAuth(mcpName, authorizationCode))
-
-  export const removeAuth = async (mcpName: string) => runPromise((svc) => svc.removeAuth(mcpName))
-
-  export const supportsOAuth = async (mcpName: string) => runPromise((svc) => svc.supportsOAuth(mcpName))
-
-  export const hasStoredTokens = async (mcpName: string) => runPromise((svc) => svc.hasStoredTokens(mcpName))
-
-  export const getAuthStatus = async (mcpName: string) => runPromise((svc) => svc.getAuthStatus(mcpName))
 }

@@ -1,8 +1,7 @@
-import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
+import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { Log } from "@/util/log"
 import z from "zod"
@@ -104,11 +103,12 @@ export namespace Question {
     readonly list: () => Effect.Effect<Request[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Question") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Question") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
       const state = yield* InstanceState.make<State>(
         Effect.fn("Question.state")(function* () {
           const state = {
@@ -145,7 +145,7 @@ export namespace Question {
           tool: input.tool,
         }
         pending.set(id, { info, deferred })
-        Bus.publish(Event.Asked, info)
+        yield* bus.publish(Event.Asked, info)
 
         return yield* Effect.ensuring(
           Deferred.await(deferred),
@@ -164,7 +164,7 @@ export namespace Question {
         }
         pending.delete(input.requestID)
         log.info("replied", { requestID: input.requestID, answers: input.answers })
-        Bus.publish(Event.Replied, {
+        yield* bus.publish(Event.Replied, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
           answers: input.answers,
@@ -181,7 +181,7 @@ export namespace Question {
         }
         pending.delete(requestID)
         log.info("rejected", { requestID })
-        Bus.publish(Event.Rejected, {
+        yield* bus.publish(Event.Rejected, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
         })
@@ -197,25 +197,5 @@ export namespace Question {
     }),
   )
 
-  const { runPromise } = makeRuntime(Service, layer)
-
-  export async function ask(input: {
-    sessionID: SessionID
-    questions: Info[]
-    tool?: { messageID: MessageID; callID: string }
-  }): Promise<Answer[]> {
-    return runPromise((s) => s.ask(input))
-  }
-
-  export async function reply(input: { requestID: QuestionID; answers: Answer[] }) {
-    return runPromise((s) => s.reply(input))
-  }
-
-  export async function reject(requestID: QuestionID) {
-    return runPromise((s) => s.reject(requestID))
-  }
-
-  export async function list() {
-    return runPromise((s) => s.list())
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 }

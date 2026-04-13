@@ -1,6 +1,6 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Record, Context } from "effect"
 import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
@@ -15,6 +15,10 @@ import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
+import { PermissionID } from "@/permission/schema"
+import { Bus } from "@/bus"
+import { Wildcard } from "@/util/wildcard"
+import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 
@@ -25,6 +29,7 @@ export namespace LLM {
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
+    parentSessionID?: string
     model: Provider.Model
     agent: Agent.Info
     permission?: Permission.Ruleset
@@ -46,39 +51,29 @@ export namespace LLM {
     readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LLM") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       return Service.of({
         stream(input) {
-          const stream: Stream.Stream<Event, unknown> = Stream.scoped(
+          return Stream.scoped(
             Stream.unwrap(
               Effect.gen(function* () {
                 const ctrl = yield* Effect.acquireRelease(
                   Effect.sync(() => new AbortController()),
                   (ctrl) => Effect.sync(() => ctrl.abort()),
                 )
-                const queue = yield* Queue.unbounded<Event, unknown | Cause.Done>()
 
-                yield* Effect.promise(async () => {
-                  const result = await LLM.stream({ ...input, abort: ctrl.signal })
-                  for await (const event of result.fullStream) {
-                    if (!Queue.offerUnsafe(queue, event)) break
-                  }
-                  Queue.endUnsafe(queue)
-                }).pipe(
-                  Effect.catchCause((cause) => Effect.sync(() => void Queue.failCauseUnsafe(queue, cause))),
-                  Effect.onInterrupt(() => Effect.sync(() => ctrl.abort())),
-                  Effect.forkScoped,
+                const result = yield* Effect.promise(() => LLM.stream({ ...input, abort: ctrl.signal }))
+
+                return Stream.fromAsyncIterable(result.fullStream, (e) =>
+                  e instanceof Error ? e : new Error(String(e)),
                 )
-
-                return Stream.fromQueue(queue)
               }),
             ),
           )
-          return stream
         },
       })
     }),
@@ -99,14 +94,24 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
-      Config.get(),
-      Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
-    ])
+    const [language, cfg, provider, info] = await Effect.runPromise(
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        const cfg = yield* Config.Service
+        const provider = yield* Provider.Service
+        return yield* Effect.all(
+          [
+            provider.getLanguage(input.model),
+            cfg.get(),
+            provider.getProvider(input.model.providerID),
+            auth.get(input.model.providerID),
+          ],
+          { concurrency: "unbounded" },
+        )
+      }).pipe(Effect.provide(Layer.mergeAll(Auth.defaultLayer, Config.defaultLayer, Provider.defaultLayer))),
+    )
     // TODO: move this to a proper hook
-    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+    const isOpenaiOauth = provider.id === "openai" && info?.type === "oauth"
 
     const system: string[] = []
     system.push(
@@ -136,7 +141,9 @@ export namespace LLM {
     }
 
     const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+      !input.small && input.model.variants && input.user.model.variant
+        ? input.model.variants[input.user.model.variant]
+        : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
@@ -184,6 +191,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
         options,
       },
     )
@@ -202,12 +210,7 @@ export namespace LLM {
       },
     )
 
-    const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
-
-    const tools = await resolveTools(input)
+    const tools = resolveTools(input)
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -241,7 +244,12 @@ export namespace LLM {
     // from the workflow service are executed via opencode's tool system
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
-      const workflowModel = language
+      const workflowModel = language as GitLabWorkflowLanguageModel & {
+        sessionID?: string
+        sessionPreapprovedTools?: string[]
+        approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
+      }
+      workflowModel.sessionID = input.sessionID
       workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
@@ -264,6 +272,57 @@ export namespace LLM {
           return { result: "", error: e.message ?? String(e) }
         }
       }
+
+      const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
+      workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
+        const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
+        return !match || match.action !== "ask"
+      })
+
+      const approvedToolsForSession = new Set<string>()
+      workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
+        const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
+        // Auto-approve tools that were already approved in this session
+        // (prevents infinite approval loops for server-side MCP tools)
+        if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
+          return { approved: true }
+        }
+
+        const id = PermissionID.ascending()
+        let reply: Permission.Reply | undefined
+        let unsub: (() => void) | undefined
+        try {
+          unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
+            if (evt.properties.requestID === id) reply = evt.properties.reply
+          })
+          const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
+            try {
+              const parsed = JSON.parse(t.args) as Record<string, unknown>
+              const title = (parsed?.title ?? parsed?.name ?? "") as string
+              return title ? `${t.name}: ${title}` : t.name
+            } catch {
+              return t.name
+            }
+          })
+          const uniquePatterns = [...new Set(toolPatterns)] as string[]
+          await Permission.ask({
+            id,
+            sessionID: SessionID.make(input.sessionID),
+            permission: "workflow_tool_approval",
+            patterns: uniquePatterns,
+            metadata: { tools: approvalTools },
+            always: uniquePatterns,
+            ruleset: [],
+          })
+          for (const name of uniqueNames) approvedToolsForSession.add(name)
+          workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
+          return { approved: true }
+        } catch {
+          return { approved: false }
+        } finally {
+          unsub?.()
+        }
+      })
     }
 
     return streamText({
@@ -300,7 +359,7 @@ export namespace LLM {
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
-      maxOutputTokens,
+      maxOutputTokens: params.maxOutputTokens,
       abortSignal: input.abort,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
@@ -311,6 +370,8 @@ export namespace LLM {
               "x-opencode-client": Flag.OPENCODE_CLIENT,
             }
           : {
+              "x-session-affinity": input.sessionID,
+              ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
         ...input.model.headers,
