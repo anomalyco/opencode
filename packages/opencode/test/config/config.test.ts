@@ -7,8 +7,9 @@ import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
 import { AppFileSystem } from "../../src/filesystem"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { tmpdir } from "../fixture/fixture"
+import { tmpdir, tmpdirScoped } from "../fixture/fixture"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { testEffect } from "../lib/effect"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
 const infra = CrossSpawnSpawner.defaultLayer.pipe(
@@ -32,8 +33,17 @@ const emptyAuth = Layer.mock(Auth.Service)({
   all: () => Effect.succeed({}),
 })
 
-const installDeps = (dir: string) =>
-  Effect.runPromise(Config.Service.use((svc) => svc.installDependencies(dir)).pipe(Effect.provide(Config.defaultLayer)))
+const it = testEffect(
+  Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(emptyAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
+  ),
+)
+
+const installDeps = (dir: string, input?: Config.InstallInput) =>
+  Config.Service.use((svc) => svc.installDependencies(dir, input))
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -820,124 +830,134 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   }
 })
 
-test("dedupes concurrent config dependency installs for the same dir", async () => {
-  await using tmp = await tmpdir()
-  const dir = path.join(tmp.path, "a")
-  await fs.mkdir(dir, { recursive: true })
+it.live("dedupes concurrent config dependency installs for the same dir", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const dir = path.join(tmp, "a")
+    yield* Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 
-  let calls = 0
-  const online = spyOn(Network, "online").mockReturnValue(false)
-  const ready = Deferred.makeUnsafe<void>()
-  const hold = Deferred.makeUnsafe<void>()
-  const targetDir = path.normalize(dir)
-  const run = spyOn(Npm, "install").mockImplementation(async (d: string) => {
-    if (path.normalize(d) !== targetDir) return
-    calls += 1
-    Deferred.doneUnsafe(ready, Effect.void)
-    await Effect.runPromise(Deferred.await(hold))
-    const mod = path.join(d, "node_modules", "@opencode-ai", "plugin")
-    await fs.mkdir(mod, { recursive: true })
-    await Filesystem.write(
-      path.join(mod, "package.json"),
-      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
-    )
-  })
-
-  try {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const first = yield* Effect.promise(() => installDeps(dir)).pipe(Effect.forkScoped)
-        yield* Deferred.await(ready)
-
-        let done = false
-        const second = yield* Effect.promise(() => installDeps(dir)).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              done = true
-            }),
-          ),
-          Effect.forkScoped,
-        )
-
-        yield* Effect.sleep("50 millis")
-        expect(done).toBe(false)
-
-        yield* Deferred.succeed(hold, void 0)
-        yield* Fiber.join(first)
-        yield* Fiber.join(second)
-      }).pipe(Effect.scoped),
-    )
-  } finally {
-    online.mockRestore()
-    run.mockRestore()
-  }
-
-  expect(calls).toBe(1)
-  expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
-})
-
-test("serializes config dependency installs across dirs", async () => {
-  if (process.platform !== "win32") return
-
-  await using tmp = await tmpdir()
-  const a = path.join(tmp.path, "a")
-  const b = path.join(tmp.path, "b")
-  await fs.mkdir(a, { recursive: true })
-  await fs.mkdir(b, { recursive: true })
-
-  let calls = 0
-  let open = 0
-  let peak = 0
-  const ready = Deferred.makeUnsafe<void>()
-  const hold = Deferred.makeUnsafe<void>()
-
-  const online = spyOn(Network, "online").mockReturnValue(false)
-  const run = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
-    const cwd = path.normalize(dir)
-    const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
-    if (hit) {
+    let calls = 0
+    const online = spyOn(Network, "online").mockReturnValue(false)
+    const ready = Deferred.makeUnsafe<void>()
+    const blocked = Deferred.makeUnsafe<void>()
+    const hold = Deferred.makeUnsafe<void>()
+    const target = path.normalize(dir)
+    const run = spyOn(Npm, "install").mockImplementation(async (d: string) => {
+      if (path.normalize(d) !== target) return
       calls += 1
-      open += 1
-      peak = Math.max(peak, open)
-      if (calls === 1) {
-        Deferred.doneUnsafe(ready, Effect.void)
-        await Effect.runPromise(Deferred.await(hold))
+      Deferred.doneUnsafe(ready, Effect.void)
+      await Effect.runPromise(Deferred.await(hold))
+      const mod = path.join(d, "node_modules", "@opencode-ai", "plugin")
+      await fs.mkdir(mod, { recursive: true })
+      await Filesystem.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+      )
+    })
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        online.mockRestore()
+        run.mockRestore()
+      }),
+    )
+
+    const first = yield* installDeps(dir).pipe(Effect.forkScoped)
+    yield* Deferred.await(ready)
+
+    let done = false
+    const second = yield* installDeps(dir, {
+      waitTick: () => {
+        Deferred.doneUnsafe(blocked, Effect.void)
+      },
+    }).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          done = true
+        }),
+      ),
+      Effect.forkScoped,
+    )
+
+    yield* Deferred.await(blocked)
+    expect(done).toBe(false)
+
+    yield* Deferred.succeed(hold, void 0)
+    yield* Fiber.join(first)
+    yield* Fiber.join(second)
+
+    expect(calls).toBe(1)
+    expect(yield* Effect.promise(() => Filesystem.exists(path.join(dir, "package.json")))).toBe(true)
+  }),
+)
+
+it.live("serializes config dependency installs across dirs", () =>
+  Effect.gen(function* () {
+    if (process.platform !== "win32") return
+
+    const tmp = yield* tmpdirScoped()
+    const a = path.join(tmp, "a")
+    const b = path.join(tmp, "b")
+    yield* Effect.promise(() => fs.mkdir(a, { recursive: true }))
+    yield* Effect.promise(() => fs.mkdir(b, { recursive: true }))
+
+    let calls = 0
+    let open = 0
+    let peak = 0
+    const ready = Deferred.makeUnsafe<void>()
+    const blocked = Deferred.makeUnsafe<void>()
+    const hold = Deferred.makeUnsafe<void>()
+
+    const online = spyOn(Network, "online").mockReturnValue(false)
+    const run = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+      const cwd = path.normalize(dir)
+      const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
+      if (hit) {
+        calls += 1
+        open += 1
+        peak = Math.max(peak, open)
+        if (calls === 1) {
+          Deferred.doneUnsafe(ready, Effect.void)
+          await Effect.runPromise(Deferred.await(hold))
+        }
       }
-    }
-    const mod = path.join(cwd, "node_modules", "@opencode-ai", "plugin")
-    await fs.mkdir(mod, { recursive: true })
-    await Filesystem.write(
-      path.join(mod, "package.json"),
-      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+      const mod = path.join(cwd, "node_modules", "@opencode-ai", "plugin")
+      await fs.mkdir(mod, { recursive: true })
+      await Filesystem.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+      )
+      if (hit) {
+        open -= 1
+      }
+    })
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        online.mockRestore()
+        run.mockRestore()
+      }),
     )
-    if (hit) {
-      open -= 1
-    }
-  })
 
-  try {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const first = yield* Effect.promise(() => installDeps(a)).pipe(Effect.forkScoped)
-        yield* Deferred.await(ready)
+    const first = yield* installDeps(a).pipe(Effect.forkScoped)
+    yield* Deferred.await(ready)
 
-        const second = yield* Effect.promise(() => installDeps(b)).pipe(Effect.forkScoped)
-        yield* Effect.sleep("50 millis")
-        expect(peak).toBe(1)
+    const second = yield* installDeps(b, {
+      waitTick: () => {
+        Deferred.doneUnsafe(blocked, Effect.void)
+      },
+    }).pipe(Effect.forkScoped)
+    yield* Deferred.await(blocked)
+    expect(peak).toBe(1)
 
-        yield* Deferred.succeed(hold, void 0)
-        yield* Fiber.join(first)
-        yield* Fiber.join(second)
-      }).pipe(Effect.scoped),
-    )
-  } finally {
-    online.mockRestore()
-    run.mockRestore()
-  }
+    yield* Deferred.succeed(hold, void 0)
+    yield* Fiber.join(first)
+    yield* Fiber.join(second)
 
-  expect(calls).toBe(2)
-  expect(peak).toBe(1)
-})
+    expect(calls).toBe(2)
+    expect(peak).toBe(1)
+  }),
+)
 
 test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({

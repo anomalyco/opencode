@@ -27,7 +27,6 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
@@ -35,7 +34,7 @@ import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { Duration, Effect, Fiber, Layer, Option, Context } from "effect"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import { Npm } from "@/npm"
@@ -136,6 +135,10 @@ export namespace Config {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
     return merged
+  }
+
+  export type InstallInput = {
+    waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
   }
 
   type Package = {
@@ -1072,7 +1075,7 @@ export namespace Config {
     readonly get: () => Effect.Effect<Info>
     readonly getGlobal: () => Effect.Effect<Info>
     readonly getConsoleState: () => Effect.Effect<ConsoleState>
-    readonly installDependencies: (dir: string) => Effect.Effect<void, AppFileSystem.Error>
+    readonly installDependencies: (dir: string, input?: InstallInput) => Effect.Effect<void, AppFileSystem.Error>
     readonly update: (config: Info) => Effect.Effect<void>
     readonly updateGlobal: (config: Info) => Effect.Effect<Info>
     readonly invalidate: (wait?: boolean) => Effect.Effect<void>
@@ -1309,7 +1312,10 @@ export namespace Config {
           yield* Effect.promise(() => Npm.install(dir))
         })
 
-        const installDependencies = Effect.fn("Config.installDependencies")(function* (dir: string) {
+        const installDependencies = Effect.fn("Config.installDependencies")(function* (
+          dir: string,
+          input?: InstallInput,
+        ) {
           if (
             !(yield* fs.access(dir, { writable: true }).pipe(
               Effect.as(true),
@@ -1318,10 +1324,20 @@ export namespace Config {
           )
             return
 
+          const key =
+            process.platform === "win32" ? "config-install:win32" : `config-install:${AppFileSystem.resolve(dir)}`
+
           yield* Effect.acquireUseRelease(
             Effect.promise((signal) =>
-              Flock.acquire(`config-install:${AppFileSystem.resolve(dir)}`, {
+              Flock.acquire(key, {
                 signal,
+                onWait: (tick) =>
+                  input?.waitTick?.({
+                    dir,
+                    attempt: tick.attempt,
+                    delay: tick.delay,
+                    waited: tick.waited,
+                  }),
               }),
             ),
             () => install(dir),
@@ -1426,11 +1442,15 @@ export namespace Config {
             }
 
             const dep = yield* installDependencies(dir).pipe(
-              Effect.catchCause((cause) =>
-                Effect.sync(() => {
-                  log.warn("background dependency install failed", { dir, error: String(cause) })
-                }),
+              Effect.exit,
+              Effect.tap((exit) =>
+                Exit.isFailure(exit)
+                  ? Effect.sync(() => {
+                      log.warn("background dependency install failed", { dir, error: String(exit.cause) })
+                    })
+                  : Effect.void,
               ),
+              Effect.asVoid,
               Effect.forkScoped,
             )
             deps.push(dep)
@@ -1654,6 +1674,10 @@ export namespace Config {
 
   export async function getConsoleState() {
     return runPromise((svc) => svc.getConsoleState())
+  }
+
+  export async function installDependencies(dir: string, input?: InstallInput) {
+    return runPromise((svc) => svc.installDependencies(dir, input))
   }
 
   export async function update(config: Info) {
