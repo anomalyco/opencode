@@ -18,6 +18,7 @@ import { Effect } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { fileURLToPath } from "url"
 import { readFileSync } from "fs"
+import { readFile } from "fs/promises"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -631,21 +632,30 @@ export namespace MessageV2 {
           type: "content",
           value: [
             { type: "text", text: obj.text },
-            ...attachments.map((attachment) => {
-              if (attachment.url.startsWith("file://")) {
+            ...attachments
+              .map((attachment) => {
+                if (attachment.url.startsWith("file://")) {
+                  try {
+                    return {
+                      type: "media" as const,
+                      mediaType: attachment.mime,
+                      data: readFileSync(fileURLToPath(attachment.url)).toString("base64"),
+                    }
+                  } catch {
+                    return {
+                      type: "text" as const,
+                      text: `[Attached ${attachment.mime}: file not found]`,
+                    }
+                  }
+                }
+                const comma = attachment.url.indexOf(",")
                 return {
                   type: "media" as const,
                   mediaType: attachment.mime,
-                  data: readFileSync(fileURLToPath(attachment.url)).toString("base64"),
+                  data: comma === -1 ? attachment.url : attachment.url.slice(comma + 1),
                 }
-              }
-              const comma = attachment.url.indexOf(",")
-              return {
-                type: "media" as const,
-                mediaType: attachment.mime,
-                data: comma === -1 ? attachment.url : attachment.url.slice(comma + 1),
-              }
-            }),
+              })
+              .filter((p): p is { type: "media"; mediaType: string; data: string } => p !== null),
           ],
         }
       }
@@ -840,11 +850,20 @@ export namespace MessageV2 {
       Promise.all(
         filtered.map((msg) =>
           Promise.all(
-            msg.parts.map((part) => {
+            msg.parts.map(async (part) => {
               if (part.type === "file" && part.url.startsWith("file://")) {
-                return {
-                  ...part,
-                  url: `data:${(part as any).mediaType};base64,${readFileSync(fileURLToPath(part.url)).toString("base64")}`,
+                try {
+                  const buf = await readFile(fileURLToPath(part.url))
+                  return {
+                    ...part,
+                    url: `data:${(part as any).mediaType};base64,${buf.toString("base64")}`,
+                  }
+                } catch {
+                  return {
+                    ...part,
+                    type: "text" as const,
+                    text: `[Attached ${(part as any).mediaType}: file not found]`,
+                  }
                 }
               }
               return part
