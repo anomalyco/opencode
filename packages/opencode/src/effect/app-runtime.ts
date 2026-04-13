@@ -1,5 +1,5 @@
 import { Layer, ManagedRuntime } from "effect"
-import { memoMap } from "./run-service"
+import { attach, memoMap } from "./run-service"
 import { Observability } from "./oltp"
 
 import { AppFileSystem } from "@/filesystem"
@@ -97,4 +97,25 @@ export const AppLayer = Layer.mergeAll(
   SessionShare.defaultLayer,
 )
 
-export const AppRuntime = ManagedRuntime.make(AppLayer, { memoMap })
+const rt = ManagedRuntime.make(AppLayer, { memoMap })
+type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
+const wrap = (effect: Parameters<typeof rt.runSync>[0]) => attach(effect as never) as never
+
+export const AppRuntime: Runtime = {
+  runSync(effect) {
+    return rt.runSync(wrap(effect))
+  },
+  runPromise(effect, options) {
+    return rt.runPromise(wrap(effect), options)
+  },
+  runPromiseExit(effect, options) {
+    return rt.runPromiseExit(wrap(effect), options)
+  },
+  runFork(effect) {
+    return rt.runFork(wrap(effect))
+  },
+  runCallback(effect) {
+    return rt.runCallback(wrap(effect))
+  },
+  dispose: () => rt.dispose(),
+}

@@ -1,8 +1,6 @@
-import { makeRuntime } from "@/effect/run-service"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { SyncEvent } from "@/sync"
-import { fn } from "@/util/fn"
 import { Effect, Layer, Scope, Context } from "effect"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
@@ -10,7 +8,7 @@ import { ShareNext } from "./share-next"
 
 export namespace SessionShare {
   export interface Interface {
-    readonly create: (input?: Parameters<typeof Session.create>[0]) => Effect.Effect<Session.Info>
+    readonly create: (input?: Session.CreateInput) => Effect.Effect<Session.Info>
     readonly share: (sessionID: SessionID) => Effect.Effect<{ url: string }, unknown>
     readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
   }
@@ -40,7 +38,7 @@ export namespace SessionShare {
         yield* Effect.sync(() => SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: null } } }))
       })
 
-      const create = Effect.fn("SessionShare.create")(function* (input?: Parameters<typeof Session.create>[0]) {
+      const create = Effect.fn("SessionShare.create")(function* (input?: Session.CreateInput) {
         const result = yield* session.create(input)
         if (result.parentID) return result
         const conf = yield* cfg.get()
@@ -58,10 +56,4 @@ export namespace SessionShare {
     Layer.provide(Session.defaultLayer),
     Layer.provide(Config.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const create = fn(Session.create.schema, (input) => runPromise((svc) => svc.create(input)))
-  export const share = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.share(sessionID)))
-  export const unshare = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.unshare(sessionID)))
 }

@@ -1,6 +1,7 @@
 import path from "path"
 import { Effect } from "effect"
 import { EffectLogger } from "@/effect/logger"
+import { InstanceState } from "@/effect/instance-state"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { AppFileSystem } from "../filesystem"
@@ -21,8 +22,9 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
 
   if (options?.bypass) return
 
+  const ins = yield* InstanceState.context
   const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
-  if (Instance.containsPath(full)) return
+  if (Instance.containsPath(full, ins)) return
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)

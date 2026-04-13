@@ -4,7 +4,6 @@ import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
@@ -231,22 +230,4 @@ export namespace Vcs {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function branch() {
-    return runPromise((svc) => svc.branch())
-  }
-
-  export async function defaultBranch() {
-    return runPromise((svc) => svc.defaultBranch())
-  }
-
-  export async function diff(mode: Mode) {
-    return runPromise((svc) => svc.diff(mode))
-  }
 }
