@@ -219,6 +219,59 @@ describe("Instruction.resolve", () => {
   test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
 })
 
+describe("Instruction.system", () => {
+  test("loads both project and global AGENTS.md when both exist", async () => {
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+    delete process.env["OPENCODE_CONFIG_DIR"]
+
+    await using globalTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
+      },
+    })
+    await using projectTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Project Instructions")
+      },
+    })
+
+    const originalGlobalConfig = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    try {
+      await Instance.provide({
+        directory: projectTmp.path,
+        fn: () =>
+          run(
+            Instruction.Service.use((svc) =>
+              Effect.gen(function* () {
+                const paths = yield* svc.systemPaths()
+                expect(paths.has(path.join(projectTmp.path, "AGENTS.md"))).toBe(true)
+                expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+
+                const rules = yield* svc.system()
+                expect(rules).toHaveLength(2)
+                expect(rules).toContain(
+                  `Instructions from: ${path.join(projectTmp.path, "AGENTS.md")}\n# Project Instructions`,
+                )
+                expect(rules).toContain(
+                  `Instructions from: ${path.join(globalTmp.path, "AGENTS.md")}\n# Global Instructions`,
+                )
+              }),
+            ),
+          ),
+      })
+    } finally {
+      ;(Global.Path as { config: string }).config = originalGlobalConfig
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+})
+
 describe("Instruction.systemPaths OPENCODE_CONFIG_DIR", () => {
   let originalConfigDir: string | undefined
 

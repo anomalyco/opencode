@@ -1772,8 +1772,8 @@ export type ToolList = Array<ToolListItem>
 export type Workspace = {
   id: string
   type: string
+  name: string
   branch: string | null
-  name: string | null
   directory: string | null
   extra: unknown | null
   projectID: string
@@ -2811,6 +2811,30 @@ export type ToolListResponses = {
 }
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
+
+export type ExperimentalWorkspaceAdaptorListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace/adaptor"
+}
+
+export type ExperimentalWorkspaceAdaptorListResponses = {
+  /**
+   * Workspace adaptors
+   */
+  200: Array<{
+    type: string
+    name: string
+    description: string
+  }>
+}
+
+export type ExperimentalWorkspaceAdaptorListResponse =
+  ExperimentalWorkspaceAdaptorListResponses[keyof ExperimentalWorkspaceAdaptorListResponses]
 
 export type ExperimentalWorkspaceListData = {
   body?: never

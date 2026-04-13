@@ -21,7 +21,6 @@ import path from "path"
 import { Effect, Layer, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { isRecord } from "@/util/record"
 
@@ -1692,36 +1691,6 @@ export namespace Provider {
       Layer.provide(Plugin.defaultLayer),
     ),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function getProvider(providerID: ProviderID) {
-    return runPromise((svc) => svc.getProvider(providerID))
-  }
-
-  export async function getModel(providerID: ProviderID, modelID: ModelID) {
-    return runPromise((svc) => svc.getModel(providerID, modelID))
-  }
-
-  export async function getLanguage(model: Model) {
-    return runPromise((svc) => svc.getLanguage(model))
-  }
-
-  export async function closest(providerID: ProviderID, query: string[]) {
-    return runPromise((svc) => svc.closest(providerID, query))
-  }
-
-  export async function getSmallModel(providerID: ProviderID) {
-    return runPromise((svc) => svc.getSmallModel(providerID))
-  }
-
-  export async function defaultModel() {
-    return runPromise((svc) => svc.defaultModel())
-  }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
   export function sort<T extends { id: string }>(models: T[]) {

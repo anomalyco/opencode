@@ -27,6 +27,7 @@ import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
+import { AppRuntime } from "@/effect/app-runtime"
 
 type ToolProps<T> = {
   input: Tool.InferParameters<T>
@@ -627,6 +628,7 @@ export const RunCommand = cmd({
       // Validate agent if specified
       const agent = await (async () => {
         if (!args.agent) return undefined
+        const name = args.agent
 
         // When attaching, validate against the running server instead of local Instance state.
         if (args.attach) {
@@ -644,12 +646,12 @@ export const RunCommand = cmd({
             return undefined
           }
 
-          const agent = modes.find((a) => a.name === args.agent)
+          const agent = modes.find((a) => a.name === name)
           if (!agent) {
             UI.println(
               UI.Style.TEXT_WARNING_BOLD + "!",
               UI.Style.TEXT_NORMAL,
-              `agent "${args.agent}" not found. Falling back to default agent`,
+              `agent "${name}" not found. Falling back to default agent`,
             )
             return undefined
           }
@@ -658,20 +660,20 @@ export const RunCommand = cmd({
             UI.println(
               UI.Style.TEXT_WARNING_BOLD + "!",
               UI.Style.TEXT_NORMAL,
-              `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+              `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
             )
             return undefined
           }
 
-          return args.agent
+          return name
         }
 
-        const entry = await Agent.get(args.agent)
+        const entry = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(name)))
         if (!entry) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
-            `agent "${args.agent}" not found. Falling back to default agent`,
+            `agent "${name}" not found. Falling back to default agent`,
           )
           return undefined
         }
@@ -679,11 +681,11 @@ export const RunCommand = cmd({
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
-            `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+            `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
           )
           return undefined
         }
-        return args.agent
+        return name
       })()
 
       const sessionID = await session(sdk)

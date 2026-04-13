@@ -21,7 +21,6 @@ import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, Context, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace Agent {
   export const Info = z
@@ -404,22 +403,4 @@ export namespace Agent {
     Layer.provide(Config.defaultLayer),
     Layer.provide(Skill.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(agent: string) {
-    return runPromise((svc) => svc.get(agent))
-  }
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function defaultAgent() {
-    return runPromise((svc) => svc.defaultAgent())
-  }
-
-  export async function generate(input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
-    return runPromise((svc) => svc.generate(input))
-  }
 }

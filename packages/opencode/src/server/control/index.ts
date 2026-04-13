@@ -1,5 +1,7 @@
 import { Auth } from "@/auth"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Log } from "@/util/log"
+import { Effect } from "effect"
 import { ProviderID } from "@/provider/schema"
 import { Hono } from "hono"
 import { describeRoute, resolver, validator, openAPIRouteHandler } from "hono-openapi"
@@ -39,7 +41,12 @@ export function ControlPlaneRoutes(): Hono {
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const info = c.req.valid("json")
-        await Auth.set(providerID, info)
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const auth = yield* Auth.Service
+            yield* auth.set(providerID, info)
+          }),
+        )
         return c.json(true)
       },
     )
@@ -69,7 +76,12 @@ export function ControlPlaneRoutes(): Hono {
       ),
       async (c) => {
         const providerID = c.req.valid("param").providerID
-        await Auth.remove(providerID)
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const auth = yield* Auth.Service
+            yield* auth.remove(providerID)
+          }),
+        )
         return c.json(true)
       },
     )

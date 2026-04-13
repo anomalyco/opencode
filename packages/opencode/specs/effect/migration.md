@@ -180,7 +180,7 @@ That is fine for leaf files like `schema.ts`. Keep the service surface in the ow
 
 Service-shape migrated (single namespace, traced methods, `InstanceState` where needed).
 
-This checklist is only about the service shape migration. Many of these services still keep `makeRuntime(...)` plus async facade exports; that facade-removal phase is tracked separately in [Destroying the facades](#destroying-the-facades).
+This checklist is only about the service shape migration. Many of these services still keep `makeRuntime(...)` plus async facade exports; that facade-removal phase is tracked separately in `facades.md`.
 
 - [x] `Account` — `account/index.ts`
 - [x] `Agent` — `agent/agent.ts`
@@ -263,7 +263,7 @@ Tool-specific filesystem cleanup notes live in `tools.md`.
 
 ## Destroying the facades
 
-This phase is still broadly open. As of 2026-04-11 there are still 31 `makeRuntime(...)` call sites under `src/`, and many service namespaces still export async facade helpers like `export async function read(...) { return runPromise(...) }`.
+This phase is still broadly open. As of 2026-04-13 there are still 15 `makeRuntime(...)` call sites under `src/`, with 13 still in scope for facade removal. The live checklist now lives in `facades.md`.
 
 These facades exist because cyclic imports used to force each service to build its own independent runtime. Now that the layer DAG is acyclic and `AppRuntime` (`src/effect/app-runtime.ts`) composes everything into one `ManagedRuntime`, we're removing them.
 
