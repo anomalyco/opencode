@@ -1183,28 +1183,26 @@ export function Session() {
               <Show when={session()?.parentID}>
                 <SubagentFooter />
               </Show>
-              <Show when={visible()}>
-                <TuiPluginRuntime.Slot
-                  name="session_prompt"
-                  mode="replace"
-                  session_id={route.sessionID}
+              <TuiPluginRuntime.Slot
+                name="session_prompt"
+                mode="replace"
+                session_id={route.sessionID}
+                visible={visible()}
+                disabled={disabled()}
+                on_submit={toBottom}
+                ref={bind}
+              >
+                <Prompt
                   visible={visible()}
-                  disabled={disabled()}
-                  on_submit={toBottom}
                   ref={bind}
-                >
-                  <Prompt
-                    visible={visible()}
-                    ref={bind}
-                    disabled={disabled()}
-                    onSubmit={() => {
-                      toBottom()
-                    }}
-                    sessionID={route.sessionID}
-                    right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-                  />
-                </TuiPluginRuntime.Slot>
-              </Show>
+                  disabled={disabled()}
+                  onSubmit={() => {
+                    toBottom()
+                  }}
+                  sessionID={route.sessionID}
+                  right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                />
+              </TuiPluginRuntime.Slot>
             </box>
           </Show>
           <Toast />
