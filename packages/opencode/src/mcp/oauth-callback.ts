@@ -140,6 +140,17 @@ export namespace McpOAuthCallback {
   }
 
   export async function ensureRunning(redirectUri?: string): Promise<void> {
+    if (redirectUri) {
+      const isExternal = await Promise.resolve(new URL(redirectUri))
+        .then((url) => url.hostname !== "127.0.0.1" && url.hostname !== "localhost")
+        .catch(() => false)
+
+      if (isExternal) {
+        log.info("redirect URI is external, skipping local callback server", { redirectUri })
+        return
+      }
+    }
+
     // Parse the redirect URI to get port and path (uses defaults if not provided)
     const { port, path } = parseRedirectUri(redirectUri)
 
