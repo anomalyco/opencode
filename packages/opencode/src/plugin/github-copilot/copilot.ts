@@ -97,7 +97,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           })
           .catch((error) => {
             log.error("failed to fetch copilot models", { error })
-            return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model)]))
+            return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model, url)]))
           })
       },
     },
