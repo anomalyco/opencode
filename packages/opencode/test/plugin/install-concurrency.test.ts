@@ -25,6 +25,11 @@ function run(msg: Msg) {
 
 async function plugin(dir: string, kinds: Array<"server" | "tui">) {
   const p = path.join(dir, "plugin")
+  const server = kinds.includes("server")
+  const tui = kinds.includes("tui")
+  const exports: Record<string, string> = {}
+  if (server) exports["./server"] = "./server.js"
+  if (tui) exports["./tui"] = "./tui.js"
   await fs.mkdir(p, { recursive: true })
   await Bun.write(
     path.join(p, "package.json"),
@@ -32,7 +37,8 @@ async function plugin(dir: string, kinds: Array<"server" | "tui">) {
       {
         name: "acme",
         version: "1.0.0",
-        "oc-plugin": kinds,
+        ...(server ? { main: "./server.js" } : {}),
+        ...(Object.keys(exports).length ? { exports } : {}),
       },
       null,
       2,

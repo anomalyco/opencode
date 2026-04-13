@@ -104,6 +104,58 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.options - zai/zhipuai thinking", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (providerID: string) =>
+    ({
+      id: `${providerID}/glm-4.6`,
+      providerID,
+      api: {
+        id: "glm-4.6",
+        url: "https://open.bigmodel.cn/api/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "GLM 4.6",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  for (const providerID of ["zai-coding-plan", "zai", "zhipuai-coding-plan", "zhipuai"]) {
+    test(`${providerID} should set thinking cfg`, () => {
+      const result = ProviderTransform.options({
+        model: createModel(providerID),
+        sessionID,
+        providerOptions: {},
+      })
+
+      expect(result.thinking).toEqual({
+        type: "enabled",
+        clear_thinking: false,
+      })
+    })
+  }
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
@@ -1557,6 +1609,35 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
     expect(result[0].providerOptions?.openai).toBeUndefined()
   })
 
+  test("azure cognitive services remaps providerID to 'azure' key", () => {
+    const model = createModel("azure-cognitive-services", "@ai-sdk/azure")
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              "azure-cognitive-services": { part: true },
+            },
+          },
+        ],
+        providerOptions: {
+          "azure-cognitive-services": { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+    const part = result[0].content[0] as any
+
+    expect(result[0].providerOptions?.azure).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.["azure-cognitive-services"]).toBeUndefined()
+    expect(part.providerOptions?.azure).toEqual({ part: true })
+    expect(part.providerOptions?.["azure-cognitive-services"]).toBeUndefined()
+  })
+
   test("copilot remaps providerID to 'copilot' key", () => {
     const model = createModel("github-copilot", "@ai-sdk/github-copilot")
     const msgs = [
@@ -1721,6 +1802,58 @@ describe("ProviderTransform.message - cache control on gateway", () => {
         url: "https://api.anthropic.com",
         npm: "@ai-sdk/anthropic",
       },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions).toEqual({
+      anthropic: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      openrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      bedrock: {
+        cachePoint: {
+          type: "default",
+        },
+      },
+      openaiCompatible: {
+        cache_control: {
+          type: "ephemeral",
+        },
+      },
+      copilot: {
+        copilot_cache_control: {
+          type: "ephemeral",
+        },
+      },
+    })
+  })
+
+  test("google-vertex-anthropic applies cache control", () => {
+    const model = createModel({
+      providerID: "google-vertex-anthropic",
+      api: {
+        id: "google-vertex-anthropic",
+        url: "https://us-central1-aiplatform.googleapis.com",
+        npm: "@ai-sdk/google-vertex/anthropic",
+      },
+      id: "claude-sonnet-4@20250514",
     })
     const msgs = [
       {

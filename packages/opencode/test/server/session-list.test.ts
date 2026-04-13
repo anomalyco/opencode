@@ -1,26 +1,30 @@
-import { describe, expect, test } from "bun:test"
-import path from "path"
+import { afterEach, describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
 
-const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("Session.list", () => {
   test("filters by directory", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
         const first = await Session.create({})
 
-        const otherDir = path.join(projectRoot, "..", "__session_list_other")
+        await using other = await tmpdir({ git: true })
         const second = await Instance.provide({
-          directory: otherDir,
+          directory: other.path,
           fn: async () => Session.create({}),
         })
 
-        const sessions = [...Session.list({ directory: projectRoot })]
+        const sessions = [...Session.list({ directory: tmp.path })]
         const ids = sessions.map((s) => s.id)
 
         expect(ids).toContain(first.id)
@@ -30,8 +34,9 @@ describe("Session.list", () => {
   })
 
   test("filters root sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
         const root = await Session.create({ title: "root-session" })
         const child = await Session.create({ title: "child-session", parentID: root.id })
@@ -46,8 +51,9 @@ describe("Session.list", () => {
   })
 
   test("filters by start time", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
         const session = await Session.create({ title: "new-session" })
         const futureStart = Date.now() + 86400000
@@ -59,8 +65,9 @@ describe("Session.list", () => {
   })
 
   test("filters by search term", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
         await Session.create({ title: "unique-search-term-abc" })
         await Session.create({ title: "other-session-xyz" })
@@ -75,8 +82,9 @@ describe("Session.list", () => {
   })
 
   test("respects limit parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
         await Session.create({ title: "session-1" })
         await Session.create({ title: "session-2" })

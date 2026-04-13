@@ -238,6 +238,8 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "prompt.mode.shell.exit": "esc to exit",
+  "session.child.promptDisabled": "Subagent sessions cannot be prompted.",
+  "session.child.backToParent": "Back to main session.",
 
   "prompt.example.1": "Fix a TODO in the codebase",
   "prompt.example.2": "What is the tech stack of this project?",
@@ -535,6 +537,8 @@ export const dict = {
   "session.review.noVcs.createGit.action": "Create Git repository",
   "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
   "session.review.noChanges": "No changes",
+  "session.review.noUncommittedChanges": "No uncommitted changes yet",
+  "session.review.noBranchChanges": "No branch changes yet",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",

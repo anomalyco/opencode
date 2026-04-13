@@ -32,7 +32,11 @@ export const WorktreeAdaptor: Adaptor = {
     const config = Config.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
-  async fetch(_info, _input: RequestInfo | URL, _init?: RequestInit) {
-    throw new Error("fetch not implemented")
+  target(info) {
+    const config = Config.parse(info)
+    return {
+      type: "local",
+      directory: config.directory,
+    }
   },
 }

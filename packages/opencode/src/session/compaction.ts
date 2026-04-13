@@ -15,8 +15,9 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {
@@ -45,7 +46,6 @@ export namespace SessionCompaction {
       parentID: MessageID
       messages: MessageV2.WithParts[]
       sessionID: SessionID
-      abort: AbortSignal
       auto: boolean
       overflow?: boolean
     }) => Effect.Effect<"continue" | "stop">
@@ -58,12 +58,18 @@ export namespace SessionCompaction {
     }) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionCompaction") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
   export const layer: Layer.Layer<
     Service,
     never,
-    Bus.Service | Config.Service | Session.Service | Agent.Service | Plugin.Service | SessionProcessor.Service
+    | Bus.Service
+    | Config.Service
+    | Session.Service
+    | Agent.Service
+    | Plugin.Service
+    | SessionProcessor.Service
+    | Provider.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -73,6 +79,7 @@ export namespace SessionCompaction {
       const agents = yield* Agent.Service
       const plugin = yield* Plugin.Service
       const processors = yield* SessionProcessor.Service
+      const provider = yield* Provider.Service
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
@@ -135,20 +142,28 @@ export namespace SessionCompaction {
         parentID: MessageID
         messages: MessageV2.WithParts[]
         sessionID: SessionID
-        abort: AbortSignal
         auto: boolean
         overflow?: boolean
       }) {
-        const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+        const parent = input.messages.findLast((m) => m.info.id === input.parentID)
+        if (!parent || parent.info.role !== "user") {
+          throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
+        }
+        const userMessage = parent.info
 
         let messages = input.messages
-        let replay: MessageV2.WithParts | undefined
+        let replay:
+          | {
+              info: MessageV2.User
+              parts: MessageV2.Part[]
+            }
+          | undefined
         if (input.overflow) {
           const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
           for (let i = idx - 1; i >= 0; i--) {
             const msg = input.messages[i]
             if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
-              replay = msg
+              replay = { info: msg.info, parts: msg.parts }
               messages = input.messages.slice(0, i)
               break
             }
@@ -162,11 +177,9 @@ export namespace SessionCompaction {
         }
 
         const agent = yield* agents.get("compaction")
-        const model = yield* Effect.promise(() =>
-          agent.model
-            ? Provider.getModel(agent.model.providerID, agent.model.modelID)
-            : Provider.getModel(userMessage.model.providerID, userMessage.model.modelID),
-        )
+        const model = agent.model
+          ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
+          : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
         // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
@@ -177,6 +190,7 @@ export namespace SessionCompaction {
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
 Do not call any tools. Respond only with the summary text.
+Respond in the same language as the user's messages in the conversation.
 
 When constructing the summary, try to stick to this template:
 ---
@@ -205,19 +219,20 @@ When constructing the summary, try to stick to this template:
         const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-        const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
-        const msg = (yield* session.updateMessage({
+        const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
+        const ctx = yield* InstanceState.context
+        const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
           parentID: input.parentID,
           sessionID: input.sessionID,
           mode: "compaction",
           agent: "compaction",
-          variant: userMessage.variant,
+          variant: userMessage.model.variant,
           summary: true,
           path: {
-            cwd: Instance.directory,
-            root: Instance.worktree,
+            cwd: ctx.directory,
+            root: ctx.worktree,
           },
           cost: 0,
           tokens: {
@@ -231,38 +246,28 @@ When constructing the summary, try to stick to this template:
           time: {
             created: Date.now(),
           },
-        })) as MessageV2.Assistant
+        }
+        yield* session.updateMessage(msg)
         const processor = yield* processors.create({
           assistantMessage: msg,
           sessionID: input.sessionID,
           model,
-          abort: input.abort,
         })
-        const cancel = Effect.fn("SessionCompaction.cancel")(function* () {
-          if (!input.abort.aborted || msg.time.completed) return
-          msg.error = msg.error ?? new MessageV2.AbortedError({ message: "Aborted" }).toObject()
-          msg.finish = msg.finish ?? "error"
-          msg.time.completed = Date.now()
-          yield* session.updateMessage(msg)
+        const result = yield* processor.process({
+          user: userMessage,
+          agent,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            ...modelMessages,
+            {
+              role: "user",
+              content: [{ type: "text", text: prompt }],
+            },
+          ],
+          model,
         })
-        const result = yield* processor
-          .process({
-            user: userMessage,
-            agent,
-            abort: input.abort,
-            sessionID: input.sessionID,
-            tools: {},
-            system: [],
-            messages: [
-              ...modelMessages,
-              {
-                role: "user",
-                content: [{ type: "text", text: prompt }],
-              },
-            ],
-            model,
-          })
-          .pipe(Effect.ensuring(cancel()))
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
@@ -277,7 +282,7 @@ When constructing the summary, try to stick to this template:
 
         if (result === "continue" && input.auto) {
           if (replay) {
-            const original = replay.info as MessageV2.User
+            const original = replay.info
             const replayMsg = yield* session.updateMessage({
               id: MessageID.ascending(),
               role: "user",
@@ -288,7 +293,6 @@ When constructing the summary, try to stick to this template:
               format: original.format,
               tools: original.tools,
               system: original.system,
-              variant: original.variant,
             })
             for (const part of replay.parts) {
               if (part.type === "compaction") continue
@@ -373,20 +377,19 @@ When constructing the summary, try to stick to this template:
     }),
   )
 
-  export const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
-        Layer.provide(Session.defaultLayer),
-        Layer.provide(SessionProcessor.defaultLayer),
-        Layer.provide(Agent.defaultLayer),
-        Layer.provide(Plugin.defaultLayer),
-        Layer.provide(Bus.layer),
-        Layer.provide(Config.defaultLayer),
-      ),
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(Provider.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(SessionProcessor.defaultLayer),
+      Layer.provide(Agent.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(Bus.layer),
+      Layer.provide(Config.defaultLayer),
     ),
   )
 
-  const { runPromise, runPromiseExit } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     return runPromise((svc) => svc.isOverflow(input))
@@ -394,22 +397,6 @@ When constructing the summary, try to stick to this template:
 
   export async function prune(input: { sessionID: SessionID }) {
     return runPromise((svc) => svc.prune(input))
-  }
-
-  export async function process(input: {
-    parentID: MessageID
-    messages: MessageV2.WithParts[]
-    sessionID: SessionID
-    abort: AbortSignal
-    auto: boolean
-    overflow?: boolean
-  }) {
-    const exit = await runPromiseExit((svc) => svc.process(input), { signal: input.abort })
-    if (Exit.isFailure(exit)) {
-      if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) return "stop"
-      throw Cause.squash(exit.cause)
-    }
-    return exit.value
   }
 
   export const create = fn(

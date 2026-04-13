@@ -21,17 +21,18 @@ type Usage = {
   }
 }
 
-export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
+export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentifier }) => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
     headers.set("x-session-affinity", headers.get("x-opencode-session") ?? "")
   },
-  modifyBody: (body: Record<string, any>) => {
+  modifyBody: (body: Record<string, any>, workspaceID?: string) => {
     return {
       ...body,
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),
+      ...(safetyIdentifier ? { safety_identifier: safetyIdentifier } : {}),
     }
   },
   createBinaryStreamDecoder: () => undefined,

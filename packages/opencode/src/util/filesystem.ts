@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from "fs/promises"
+import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
@@ -23,6 +23,13 @@ export namespace Filesystem {
 
   export function stat(p: string): ReturnType<typeof statSync> | undefined {
     return statSync(p, { throwIfNoEntry: false }) ?? undefined
+  }
+
+  export async function statAsync(p: string): Promise<ReturnType<typeof statSync> | undefined> {
+    return statFile(p).catch((e) => {
+      if (isEnoent(e)) return undefined
+      throw e
+    })
   }
 
   export async function size(p: string): Promise<number> {
@@ -159,16 +166,41 @@ export namespace Filesystem {
     return !relative(parent, child).startsWith("..")
   }
 
-  export async function findUp(target: string, start: string, stop?: string) {
+  export async function findUp(
+    target: string,
+    start: string,
+    stop?: string,
+    options?: { rootFirst?: boolean },
+  ): Promise<string[]>
+  export async function findUp(
+    target: string[],
+    start: string,
+    stop?: string,
+    options?: { rootFirst?: boolean },
+  ): Promise<string[]>
+  export async function findUp(
+    target: string | string[],
+    start: string,
+    stop?: string,
+    options?: { rootFirst?: boolean },
+  ) {
+    const dirs = [start]
     let current = start
-    const result = []
     while (true) {
-      const search = join(current, target)
-      if (await exists(search)) result.push(search)
       if (stop === current) break
       const parent = dirname(current)
       if (parent === current) break
+      dirs.push(parent)
       current = parent
+    }
+
+    const targets = Array.isArray(target) ? target : [target]
+    const result = []
+    for (const dir of options?.rootFirst ? dirs.toReversed() : dirs) {
+      for (const item of targets) {
+        const search = join(dir, item)
+        if (await exists(search)) result.push(search)
+      }
     }
     return result
   }

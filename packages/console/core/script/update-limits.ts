@@ -6,7 +6,7 @@ import os from "os"
 import { Subscription } from "../src/subscription"
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
-const secrets = await $`bun sst secret list`.cwd(root).text()
+const secrets = await $`bun sst secret list --stage frank`.cwd(root).text()
 
 // read value
 const lines = secrets.split("\n")
@@ -25,4 +25,4 @@ const newValue = JSON.stringify(JSON.parse(await tempFile.text()))
 Subscription.validate(JSON.parse(newValue))
 
 // update the secret
-await $`bun sst secret set ZEN_LIMITS ${newValue}`
+await $`bun sst secret set ZEN_LIMITS ${newValue} --stage frank`.cwd(root)

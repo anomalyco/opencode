@@ -403,7 +403,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "original\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.writeFile(filepath, "modified\nextra line\n", "utf-8")
 
       await Instance.provide({
@@ -441,7 +441,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "gone.txt")
       await fs.writeFile(filepath, "content\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.rm(filepath)
 
       await Instance.provide({
@@ -460,7 +460,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, "keep.txt"), "keep\n", "utf-8")
       await fs.writeFile(path.join(tmp.path, "remove.txt"), "remove\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "initial"`.cwd(tmp.path).quiet()
+      await $`git commit -m "initial"`.cwd(tmp.path).quiet()
 
       // Modify one, delete one, add one
       await fs.writeFile(path.join(tmp.path, "keep.txt"), "changed\n", "utf-8")
@@ -510,7 +510,7 @@ describe("file/index Filesystem patterns", () => {
       for (let i = 0; i < 256; i++) binaryData[i] = i
       await fs.writeFile(filepath, binaryData)
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "add binary"`.cwd(tmp.path).quiet()
+      await $`git commit -m "add binary"`.cwd(tmp.path).quiet()
       // Modify the binary
       const modified = Buffer.alloc(512)
       for (let i = 0; i < 512; i++) modified[i] = i % 256
@@ -826,7 +826,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "original content\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.writeFile(filepath, "modified content\n", "utf-8")
 
       await Instance.provide({
@@ -849,7 +849,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "staged.txt")
       await fs.writeFile(filepath, "before\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.writeFile(filepath, "after\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
 
@@ -868,7 +868,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "clean.txt")
       await fs.writeFile(filepath, "unchanged\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
 
       await Instance.provide({
         directory: tmp.path,
