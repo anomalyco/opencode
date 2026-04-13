@@ -107,6 +107,9 @@ export const dict = {
   "ui.tool.questions": "Pitanja",
   "ui.tool.agent": "{{type}} agent",
   "ui.tool.agent.default": "agent",
+  "ui.tool.task.running": "U toku",
+  "ui.tool.task.completed": "Završeno",
+  "ui.tool.task.elapsed": "{{duration}} proteklo",
 
   "ui.common.file.one": "datoteka",
   "ui.common.file.other": "datoteke",
