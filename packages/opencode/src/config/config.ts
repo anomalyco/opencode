@@ -849,6 +849,18 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
             ),
+          guardrailConfig: z
+            .object({
+              guardrailIdentifier: z.string(),
+              guardrailVersion: z.string(),
+              trace: z.enum(["enabled", "disabled"]).optional(),
+              streamProcessingMode: z.enum(["sync", "async"]).optional(),
+            })
+            .passthrough()
+            .optional()
+            .describe(
+              "AWS Bedrock guardrail applied to every request. Only used by the amazon-bedrock provider.",
+            ),
         })
         .catchall(z.any())
         .optional(),
