@@ -84,10 +84,16 @@ export namespace Ripgrep {
 
   export type Result = z.infer<typeof Result>
   export type Match = z.infer<typeof Match>
+  export type Item = Match["data"]
   export type Begin = z.infer<typeof Begin>
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
   export type Row = Match["data"]
+
+  export interface SearchResult {
+    items: Item[]
+    partial: boolean
+  }
 
   export interface FilesInput {
     cwd: string
@@ -116,7 +122,7 @@ export namespace Ripgrep {
   export interface Interface {
     readonly files: (input: FilesInput) => Stream.Stream<string, Error>
     readonly tree: (input: TreeInput) => Effect.Effect<string, Error>
-    readonly search: (input: SearchInput) => Effect.Effect<Row[], Error>
+    readonly search: (input: SearchInput) => Effect.Effect<SearchResult, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
@@ -297,9 +303,13 @@ export namespace Ripgrep {
     }).pipe(
       Effect.flatMap((ret) => {
         const out = ret.stdout ?? ""
-        if (ret.code === 1) return Effect.succeed([])
-        if (ret.code !== 0 && !out.trim()) return Effect.succeed([])
-        return Effect.sync(() => parse(out))
+        if (ret.code !== 0 && ret.code !== 1 && ret.code !== 2) {
+          return Effect.fail(error(ret.stderr ?? "", ret.code ?? 1))
+        }
+        return Effect.sync(() => ({
+          items: ret.code === 1 ? [] : parse(out),
+          partial: ret.code === 2,
+        }))
       }),
     )
   }
@@ -310,9 +320,9 @@ export namespace Ripgrep {
     return Effect.acquireUseRelease(
       worker(),
       (w) =>
-        Effect.callback<Row[], Error>((resume, signal) => {
+        Effect.callback<SearchResult, Error>((resume, signal) => {
           let open = true
-          const done = (effect: Effect.Effect<Row[], Error>) => {
+          const done = (effect: Effect.Effect<SearchResult, Error>) => {
             if (!open) return
             open = false
             resume(effect)
@@ -329,14 +339,19 @@ export namespace Ripgrep {
               return
             }
             if (msg.code === 1) {
-              done(Effect.succeed([]))
+              done(Effect.succeed({ items: [], partial: false }))
               return
             }
-            if (msg.code !== 0 && !msg.stdout.trim()) {
-              done(Effect.succeed([]))
+            if (msg.code !== 0 && msg.code !== 1 && msg.code !== 2) {
+              done(Effect.fail(error(msg.stderr, msg.code)))
               return
             }
-            done(Effect.sync(() => parse(msg.stdout)))
+            done(
+              Effect.sync(() => ({
+                items: parse(msg.stdout),
+                partial: msg.code === 2,
+              })),
+            )
           }
 
           input.signal?.addEventListener("abort", onabort, { once: true })

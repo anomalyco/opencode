@@ -6,7 +6,7 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Ripgrep } from "../../src/file/ripgrep"
 
-async function seedFiles(dir: string, count: number, size = 16) {
+async function seed(dir: string, count: number, size = 16) {
   const txt = "a".repeat(size)
   await Promise.all(Array.from({ length: count }, (_, i) => Bun.write(path.join(dir, `file-${i}.txt`), `${txt}${i}\n`)))
 }
@@ -32,10 +32,8 @@ describe("file.ripgrep", () => {
     })
 
     const files = await Array.fromAsync(await Ripgrep.files({ cwd: tmp.path }))
-    const hasVisible = files.includes("visible.txt")
-    const hasHidden = files.includes(path.join(".opencode", "thing.json"))
-    expect(hasVisible).toBe(true)
-    expect(hasHidden).toBe(true)
+    expect(files.includes("visible.txt")).toBe(true)
+    expect(files.includes(path.join(".opencode", "thing.json"))).toBe(true)
   })
 
   test("hidden false excludes hidden", async () => {
@@ -48,10 +46,8 @@ describe("file.ripgrep", () => {
     })
 
     const files = await Array.fromAsync(await Ripgrep.files({ cwd: tmp.path, hidden: false }))
-    const hasVisible = files.includes("visible.txt")
-    const hasHidden = files.includes(path.join(".opencode", "thing.json"))
-    expect(hasVisible).toBe(true)
-    expect(hasHidden).toBe(false)
+    expect(files.includes("visible.txt")).toBe(true)
+    expect(files.includes(path.join(".opencode", "thing.json"))).toBe(false)
   })
 
   test("search returns empty when nothing matches", async () => {
@@ -61,12 +57,9 @@ describe("file.ripgrep", () => {
       },
     })
 
-    const hits = await Ripgrep.search({
-      cwd: tmp.path,
-      pattern: "needle",
-    })
-
-    expect(hits).toEqual([])
+    const result = await Ripgrep.search({ cwd: tmp.path, pattern: "needle" })
+    expect(result.partial).toBe(false)
+    expect(result.items).toEqual([])
   })
 
   test("search returns match metadata with normalized path", async () => {
@@ -77,15 +70,12 @@ describe("file.ripgrep", () => {
       },
     })
 
-    const hits = await Ripgrep.search({
-      cwd: tmp.path,
-      pattern: "needle",
-    })
-
-    expect(hits).toHaveLength(1)
-    expect(hits[0].path.text).toBe(path.join("src", "match.ts"))
-    expect(hits[0].line_number).toBe(1)
-    expect(hits[0].lines.text).toContain("needle")
+    const result = await Ripgrep.search({ cwd: tmp.path, pattern: "needle" })
+    expect(result.partial).toBe(false)
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]?.path.text).toBe(path.join("src", "match.ts"))
+    expect(result.items[0]?.line_number).toBe(1)
+    expect(result.items[0]?.lines.text).toContain("needle")
   })
 
   test("files returns empty when glob matches no files in worker mode", async () => {
@@ -116,13 +106,9 @@ describe("file.ripgrep", () => {
     })
 
     const restore = env("RIPGREP_CONFIG_PATH", path.join(tmp.path, "missing-ripgreprc"))
-
     try {
-      const hits = await Ripgrep.search({
-        cwd: tmp.path,
-        pattern: "needle",
-      })
-      expect(hits).toHaveLength(1)
+      const result = await Ripgrep.search({ cwd: tmp.path, pattern: "needle" })
+      expect(result.items).toHaveLength(1)
     } finally {
       restore()
     }
@@ -136,15 +122,14 @@ describe("file.ripgrep", () => {
     })
 
     const restore = env("RIPGREP_CONFIG_PATH", path.join(tmp.path, "missing-ripgreprc"))
-
     try {
       const ctl = new AbortController()
-      const hits = await Ripgrep.search({
+      const result = await Ripgrep.search({
         cwd: tmp.path,
         pattern: "needle",
         signal: ctl.signal,
       })
-      expect(hits).toHaveLength(1)
+      expect(result.items).toHaveLength(1)
     } finally {
       restore()
     }
@@ -153,15 +138,12 @@ describe("file.ripgrep", () => {
   test("aborts files scan in worker mode", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        await seedFiles(dir, 4000)
+        await seed(dir, 4000)
       },
     })
 
     const ctl = new AbortController()
-    const iter = await Ripgrep.files({
-      cwd: tmp.path,
-      signal: ctl.signal,
-    })
+    const iter = await Ripgrep.files({ cwd: tmp.path, signal: ctl.signal })
     const pending = Array.fromAsync(iter)
     setTimeout(() => ctl.abort(), 0)
 
@@ -173,16 +155,12 @@ describe("file.ripgrep", () => {
   test("aborts search in worker mode", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        await seedFiles(dir, 512, 64 * 1024)
+        await seed(dir, 512, 64 * 1024)
       },
     })
 
     const ctl = new AbortController()
-    const pending = Ripgrep.search({
-      cwd: tmp.path,
-      pattern: "needle",
-      signal: ctl.signal,
-    })
+    const pending = Ripgrep.search({ cwd: tmp.path, pattern: "needle", signal: ctl.signal })
     setTimeout(() => ctl.abort(), 0)
 
     const err = await pending.catch((err) => err)
@@ -192,6 +170,25 @@ describe("file.ripgrep", () => {
 })
 
 describe("Ripgrep.Service", () => {
+  test("search returns matched rows", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "match.ts"), "const value = 'needle'\n")
+        await Bun.write(path.join(dir, "skip.txt"), "const value = 'other'\n")
+      },
+    })
+
+    const result = await Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      return yield* rg.search({ cwd: tmp.path, pattern: "needle", glob: ["*.ts"] })
+    }).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromise)
+
+    expect(result.partial).toBe(false)
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]?.path.text).toContain("match.ts")
+    expect(result.items[0]?.lines.text).toContain("needle")
+  })
+
   test("files returns stream of filenames", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
