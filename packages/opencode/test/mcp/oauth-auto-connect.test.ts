@@ -1,4 +1,6 @@
 import { test, expect, mock, beforeEach } from "bun:test"
+import { Effect } from "effect"
+import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Mock UnauthorizedError to match the SDK's class
 class MockUnauthorizedError extends Error {
@@ -98,8 +100,10 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
+const { AppRuntime } = await import("../../src/effect/app-runtime")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
+const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
 test("first connect to OAuth server shows needs_auth instead of failed", async () => {
   await using tmp = await tmpdir({
@@ -122,10 +126,15 @@ test("first connect to OAuth server shows needs_auth instead of failed", async (
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const result = await MCP.add("test-oauth", {
-        type: "remote",
-        url: "https://example.com/mcp",
-      })
+      const result = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const mcp = yield* service
+          return yield* mcp.add("test-oauth", {
+            type: "remote",
+            url: "https://example.com/mcp",
+          })
+        }),
+      )
 
       const serverStatus = result.status as Record<string, { status: string; error?: string }>
 
