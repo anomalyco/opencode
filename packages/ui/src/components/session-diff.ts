@@ -48,9 +48,9 @@ function patch(diff: ReviewDiff) {
       diff.file,
       "before" in diff && typeof diff.before === "string" ? diff.before : "",
       "after" in diff && typeof diff.after === "string" ? diff.after : "",
-      "",
-      "",
-      { context: Number.MAX_SAFE_INTEGER },
+      undefined,
+      undefined,
+      { context: 4 },
     ),
   )
 }
