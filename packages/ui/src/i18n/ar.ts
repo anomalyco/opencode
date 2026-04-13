@@ -103,6 +103,9 @@ export const dict = {
   "ui.tool.questions": "أسئلة",
   "ui.tool.agent": "وكيل {{type}}",
   "ui.tool.agent.default": "وكيل",
+  "ui.tool.task.running": "جارٍ التشغيل",
+  "ui.tool.task.completed": "مكتمل",
+  "ui.tool.task.elapsed": "مضى {{duration}}",
 
   "ui.common.file.one": "ملف",
   "ui.common.file.other": "ملفات",
