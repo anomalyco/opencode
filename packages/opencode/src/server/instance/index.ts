@@ -256,7 +256,13 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        return c.json(await LSP.status())
+        const items = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const lsp = yield* LSP.Service
+            return yield* lsp.status()
+          }),
+        )
+        return c.json(items)
       },
     )
     .get(
