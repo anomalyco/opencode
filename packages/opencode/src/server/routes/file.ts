@@ -6,9 +6,14 @@ import { Ripgrep } from "../../file/ripgrep"
 import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
+import { hostedFilesystemDisabledResponse, localFilesystemDisabled } from "../hosted"
 
 export const FileRoutes = lazy(() =>
   new Hono()
+    .use("*", async (_c, next) => {
+      if (localFilesystemDisabled()) return hostedFilesystemDisabledResponse()
+      return next()
+    })
     .get(
       "/find",
       describeRoute({

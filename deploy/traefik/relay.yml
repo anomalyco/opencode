@@ -1,0 +1,17 @@
+http:
+  routers:
+    relay:
+      rule: "PathPrefix(`/relay`)"
+      entryPoints:
+        - web
+      service: relay
+  
+  services:
+    relay:
+      loadBalancer:
+        servers:
+          - url: "http://relay:8080"
+        sticky:
+          cookie:
+            name: veritly_relay
+            httpOnly: true

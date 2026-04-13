@@ -18,6 +18,7 @@ import { PermissionNext } from "@/permission/next"
 import { PermissionID } from "@/permission/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { assertHostedFilesystemEnabled } from "../hosted"
 
 const log = Log.create({ service: "server" })
 
@@ -316,6 +317,7 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", Session.initialize.schema.omit({ sessionID: true })),
       async (c) => {
+        assertHostedFilesystemEnabled()
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         await Session.initialize({ ...body, sessionID })
@@ -864,6 +866,7 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
       async (c) => {
+        assertHostedFilesystemEnabled()
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const msg = await SessionPrompt.shell({ ...body, sessionID })

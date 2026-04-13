@@ -13,6 +13,7 @@ import { existsSync } from "fs"
 import { mkdir } from "fs/promises"
 import { git } from "../../util/git"
 import { which } from "../../util/which"
+import { assertHostedFilesystemEnabled } from "../hosted"
 
 const CreateProjectInput = z.object({
   name: z.string().trim().min(1).max(120),
@@ -102,6 +103,7 @@ export const ProjectRoutes = lazy(() =>
       }),
       validator("json", CreateProjectInput),
       async (c) => {
+        assertHostedFilesystemEnabled()
         const body = c.req.valid("json")
         const root = projectRoot()
         const base = slugifyProjectName(body.name)
@@ -152,6 +154,7 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        assertHostedFilesystemEnabled()
         const dir = Instance.directory
         const prev = Instance.project
         const next = await Project.initGit({

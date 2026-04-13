@@ -5,9 +5,14 @@ import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { hostedFilesystemDisabledResponse, localFilesystemDisabled } from "../hosted"
 
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
+    .use("*", async (_c, next) => {
+      if (localFilesystemDisabled()) return hostedFilesystemDisabledResponse()
+      return next()
+    })
     .post(
       "/",
       describeRoute({

@@ -26,6 +26,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
+import { localFilesystemDisabled } from "@/server/hosted"
 
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
@@ -99,16 +100,12 @@ export namespace ToolRegistry {
     const custom = await state().then((x) => x.custom)
     const config = await Config.get()
     const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+    const hostedFsDisabled = localFilesystemDisabled()
 
     return [
       InvalidTool,
       ...(question ? [QuestionTool] : []),
-      BashTool,
-      ReadTool,
-      GlobTool,
-      GrepTool,
-      EditTool,
-      WriteTool,
+      ...(hostedFsDisabled ? [] : [BashTool, ReadTool, GlobTool, GrepTool, EditTool, WriteTool]),
       TaskTool,
       WebFetchTool,
       TodoWriteTool,
@@ -116,8 +113,8 @@ export namespace ToolRegistry {
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
-      ApplyPatchTool,
-      ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
+      ...(hostedFsDisabled ? [] : [ApplyPatchTool]),
+      ...(hostedFsDisabled ? [] : Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,
