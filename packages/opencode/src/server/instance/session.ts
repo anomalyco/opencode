@@ -551,28 +551,38 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        const session = await Session.get(sessionID)
-        await SessionRevert.cleanup(session)
-        const msgs = await Session.messages({ sessionID })
-        const defaultAgent = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.defaultAgent()))
-        let currentAgent = defaultAgent
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const info = msgs[i].info
-          if (info.role === "user") {
-            currentAgent = info.agent || defaultAgent
-            break
-          }
-        }
-        await SessionCompaction.create({
-          sessionID,
-          agent: currentAgent,
-          model: {
-            providerID: body.providerID,
-            modelID: body.modelID,
-          },
-          auto: body.auto,
-        })
-        await SessionPrompt.loop({ sessionID })
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const revert = yield* SessionRevert.Service
+            const compact = yield* SessionCompaction.Service
+            const prompt = yield* SessionPrompt.Service
+            const agent = yield* Agent.Service
+
+            yield* revert.cleanup(yield* session.get(sessionID))
+            const msgs = yield* session.messages({ sessionID })
+            const defaultAgent = yield* agent.defaultAgent()
+            let currentAgent = defaultAgent
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const info = msgs[i].info
+              if (info.role === "user") {
+                currentAgent = info.agent || defaultAgent
+                break
+              }
+            }
+
+            yield* compact.create({
+              sessionID,
+              agent: currentAgent,
+              model: {
+                providerID: body.providerID,
+                modelID: body.modelID,
+              },
+              auto: body.auto,
+            })
+            yield* prompt.loop({ sessionID })
+          }),
+        )
         return c.json(true)
       },
     )
