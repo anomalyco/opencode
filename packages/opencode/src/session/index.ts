@@ -4,7 +4,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
-import { type ProviderMetadata } from "ai"
+import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
@@ -28,7 +28,6 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
-import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Option, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -240,7 +239,7 @@ export namespace Session {
 
   export const getUsage = (input: {
     model: Provider.Model
-    usage: LanguageModelV2Usage
+    usage: LanguageModelUsage
     metadata?: ProviderMetadata
   }) => {
     const safe = (value: number) => {
@@ -249,11 +248,14 @@ export namespace Session {
     }
     const inputTokens = safe(input.usage.inputTokens ?? 0)
     const outputTokens = safe(input.usage.outputTokens ?? 0)
-    const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
+    const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
 
-    const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+    const cacheReadInputTokens = safe(
+      input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
+    )
     const cacheWriteInputTokens = safe(
-      (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+      (input.usage.inputTokenDetails?.cacheWriteTokens ??
+        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
         // google-vertex-anthropic returns metadata under "vertex" key
         // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
         input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
@@ -274,7 +276,7 @@ export namespace Session {
     const tokens = {
       total,
       input: adjustedInputTokens,
-      output: outputTokens - reasoningTokens,
+      output: safe(outputTokens - reasoningTokens),
       reasoning: reasoningTokens,
       cache: {
         write: cacheWriteInputTokens,
