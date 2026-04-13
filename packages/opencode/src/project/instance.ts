@@ -21,8 +21,6 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-function emitDisposed(directory: string) {}
-
 function boot(input: { directory: string; init?: () => Promise<any>; worktree?: string; project?: Project.Info }) {
   return iife(async () => {
     const ctx =
