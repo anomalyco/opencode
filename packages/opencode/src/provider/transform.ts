@@ -389,6 +389,14 @@ export function topK(model: Provider.Model) {
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+// Returns safe budgetTokens for Anthropic's 'high' thinking variant, or undefined
+// when the output limit is unknown (0) or the result would be below Anthropic's
+// minimum of 1024. Both callers (variants() and kimi-k2.5) share this formula.
+function highBudget(output: number): number | undefined {
+  const tokens = Math.floor(output / 2 - 1)
+  return tokens >= 1024 ? Math.min(16_000, tokens) : undefined
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
@@ -592,11 +600,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         )
       }
 
+      const high = highBudget(model.limit.output)
+      if (!high) return {}
+
       return {
         high: {
           thinking: {
             type: "enabled",
-            budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
+            budgetTokens: high,
           },
         },
         max: {
@@ -831,9 +842,12 @@ export function options(input: {
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
     (modelId.includes("k2p5") || modelId.includes("kimi-k2.5") || modelId.includes("kimi-k2p5"))
   ) {
-    result["thinking"] = {
-      type: "enabled",
-      budgetTokens: Math.min(16_000, Math.floor(input.model.limit.output / 2 - 1)),
+    const high = highBudget(input.model.limit.output)
+    if (high) {
+      result["thinking"] = {
+        type: "enabled",
+        budgetTokens: high,
+      }
     }
   }
 

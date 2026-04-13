@@ -2999,5 +2999,35 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+
+    test("returns empty object when limit.output is 0 (unknown)", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-4",
+        providerID: "anthropic",
+        api: {
+          id: "claude-4",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+        limit: { context: 200_000, output: 0 },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
+    test("returns empty object when limit.output is too small for valid budgetTokens", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-4",
+        providerID: "anthropic",
+        api: {
+          id: "claude-4",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+        limit: { context: 200_000, output: 2049 },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
   })
 })
