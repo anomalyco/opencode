@@ -38,7 +38,9 @@ describe("file.ripgrep", () => {
     expect(hasVisible).toBe(true)
     expect(hasHidden).toBe(false)
   })
+})
 
+describe("Ripgrep.Service", () => {
   test("search returns empty when nothing matches", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -46,16 +48,15 @@ describe("file.ripgrep", () => {
       },
     })
 
-    const hits = await Ripgrep.search({
-      cwd: tmp.path,
-      pattern: "needle",
-    })
+    const result = await Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      return yield* rg.search({ cwd: tmp.path, pattern: "needle" })
+    }).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromise)
 
-    expect(hits).toEqual([])
+    expect(result.partial).toBe(false)
+    expect(result.items).toEqual([])
   })
-})
 
-describe("Ripgrep.Service", () => {
   test("search returns matched rows", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

@@ -17,7 +17,6 @@ import { AppFileSystem } from "../filesystem"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { text } from "node:stream/consumers"
-import { makeRuntime } from "@/effect/run-service"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -432,8 +431,6 @@ export namespace Ripgrep {
     Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     log.info("tree", input)
     const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd, signal: input.signal }))
@@ -490,15 +487,5 @@ export namespace Ripgrep {
     if (total > used) lines.push(`[${total - used} truncated]`)
 
     return lines.join("\n")
-  }
-
-  export async function search(input: {
-    cwd: string
-    pattern: string
-    glob?: string[]
-    limit?: number
-    follow?: boolean
-  }) {
-    return runPromise((svc) => svc.search(input).pipe(Effect.map((result) => result.items)))
   }
 }
