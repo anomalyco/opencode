@@ -33,8 +33,10 @@ describe("plugin.workspace", () => {
         await Bun.write(
           file,
           [
-            "export default async ({ workspace }) => {",
-            `  workspace.install(${JSON.stringify(type)}, {`,
+            "export default async ({ experimental_workspace }) => {",
+            `  experimental_workspace.register(${JSON.stringify(type)}, {`,
+            '    name: "plug",',
+            '    description: "plugin workspace adaptor",',
             "    configure(input) {",
             `      return { ...input, name: \"plug\", branch: \"plug/main\", directory: ${JSON.stringify(space)} }`,
             "    },",
