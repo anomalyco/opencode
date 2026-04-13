@@ -103,6 +103,9 @@ export const dict = {
   "ui.tool.questions": "Perguntas",
   "ui.tool.agent": "Agente {{type}}",
   "ui.tool.agent.default": "Agente",
+  "ui.tool.task.running": "Em execução",
+  "ui.tool.task.completed": "Concluído",
+  "ui.tool.task.elapsed": "{{duration}} decorridos",
 
   "ui.common.file.one": "arquivo",
   "ui.common.file.other": "arquivos",
