@@ -90,4 +90,25 @@ describe("tool.grep", () => {
       }),
     ),
   )
+
+  it.live("supports exact file paths", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const file = path.join(dir, "test.txt")
+        yield* Effect.promise(() => Bun.write(file, "line1\nline2\nline3"))
+        const info = yield* GrepTool
+        const grep = yield* info.init()
+        const result = yield* grep.execute(
+          {
+            pattern: "line2",
+            path: file,
+          },
+          ctx,
+        )
+        expect(result.metadata.matches).toBe(1)
+        expect(result.output).toContain(file)
+        expect(result.output).toContain("Line 2: line2")
+      }),
+    ),
+  )
 })

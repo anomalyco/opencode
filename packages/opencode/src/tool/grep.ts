@@ -51,19 +51,25 @@ export const GrepTool = Tool.define(
               ? (params.path ?? Instance.directory)
               : path.join(Instance.directory, params.path ?? "."),
           )
-          yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
+          const info = yield* fs.stat(searchPath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const cwd = info?.type === "Directory" ? searchPath : path.dirname(searchPath)
+          const file = info?.type === "Directory" ? undefined : [searchPath]
+          yield* assertExternalDirectoryEffect(ctx, searchPath, {
+            kind: info?.type === "Directory" ? "directory" : "file",
+          })
 
           const result = yield* rg.search({
-            cwd: searchPath,
+            cwd,
             pattern: params.pattern,
             glob: params.include ? [params.include] : undefined,
+            file,
           })
 
           if (result.items.length === 0) return empty
 
           const rows = result.items.map((item) => ({
             path: AppFileSystem.resolve(
-              path.isAbsolute(item.path.text) ? item.path.text : path.join(searchPath, item.path.text),
+              path.isAbsolute(item.path.text) ? item.path.text : path.join(cwd, item.path.text),
             ),
             line: item.line_number,
             text: item.lines.text,
