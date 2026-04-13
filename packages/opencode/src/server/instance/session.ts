@@ -990,10 +990,14 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         log.info("revert", c.req.valid("json"))
-        const session = await SessionRevert.revert({
-          sessionID,
-          ...c.req.valid("json"),
-        })
+        const session = await AppRuntime.runPromise(
+          SessionRevert.Service.use((svc) =>
+            svc.revert({
+              sessionID,
+              ...c.req.valid("json"),
+            }),
+          ),
+        )
         return c.json(session)
       },
     )
@@ -1023,7 +1027,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = await SessionRevert.unrevert({ sessionID })
+        const session = await AppRuntime.runPromise(SessionRevert.Service.use((svc) => svc.unrevert({ sessionID })))
         return c.json(session)
       },
     )
