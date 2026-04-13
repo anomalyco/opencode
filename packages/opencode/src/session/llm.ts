@@ -21,7 +21,6 @@ import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
-import { AppRuntime } from "@/effect/app-runtime"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -95,19 +94,24 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const { language, cfg, provider, auth } = await AppRuntime.runPromise(
+    const [language, cfg, provider, info] = await Effect.runPromise(
       Effect.gen(function* () {
-        const svc = yield* Provider.Service
-        return yield* Effect.all({
-          language: svc.getLanguage(input.model),
-          cfg: Effect.promise(() => Config.get()),
-          provider: svc.getProvider(input.model.providerID),
-          auth: Effect.promise(() => Auth.get(input.model.providerID)),
-        })
-      }),
+        const auth = yield* Auth.Service
+        const cfg = yield* Config.Service
+        const provider = yield* Provider.Service
+        return yield* Effect.all(
+          [
+            provider.getLanguage(input.model),
+            cfg.get(),
+            provider.getProvider(input.model.providerID),
+            auth.get(input.model.providerID),
+          ],
+          { concurrency: "unbounded" },
+        )
+      }).pipe(Effect.provide(Layer.mergeAll(Auth.defaultLayer, Config.defaultLayer, Provider.defaultLayer))),
     )
     // TODO: move this to a proper hook
-    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+    const isOpenaiOauth = provider.id === "openai" && info?.type === "oauth"
 
     const system: string[] = []
     system.push(
@@ -206,7 +210,7 @@ export namespace LLM {
       },
     )
 
-    const tools = await resolveTools(input)
+    const tools = resolveTools(input)
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.

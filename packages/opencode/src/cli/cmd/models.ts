@@ -56,13 +56,14 @@ export const ModelsCommand = cmd({
             }
 
             if (args.provider) {
-              const provider = providers[ProviderID.make(args.provider)]
+              const providerID = ProviderID.make(args.provider)
+              const provider = providers[providerID]
               if (!provider) {
                 yield* Effect.sync(() => UI.error(`Provider not found: ${args.provider}`))
                 return
               }
 
-              yield* Effect.sync(() => print(ProviderID.make(args.provider), args.verbose))
+              yield* Effect.sync(() => print(providerID, args.verbose))
               return
             }
 
