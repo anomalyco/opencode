@@ -217,6 +217,7 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 - [x] `SessionSummary` — `session/summary.ts`
 - [x] `SessionRevert` — `session/revert.ts`
 - [x] `Instruction` — `session/instruction.ts`
+- [x] `SystemPrompt` — `session/system.ts`
 - [x] `Provider` — `provider/provider.ts`
 - [x] `Storage` — `storage/storage.ts`
 - [x] `ShareNext` — `share/share-next.ts`
@@ -229,24 +230,24 @@ Still open:
 
 ## Tool interface → Effect
 
-Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `init` and `execute` return `Effect` instead of `Promise`. This lets tool implementations compose natively with the Effect pipeline rather than being wrapped in `Effect.promise()` at the call site. Requires:
+`Tool.Def.execute` and `Tool.Info.init` already return `Effect` on this branch. Tool definitions should now stay Effect-native all the way through initialization instead of using Promise-returning init callbacks. Tools can still use lazy init callbacks when they need instance-bound state at init time, but those callbacks should return `Effect`, not `Promise`. Remaining work is:
 
-1. Migrate each tool to return Effects
-2. Update `Tool.define()` factory to work with Effects
-3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing
+1. Migrate each tool body to return Effects
+2. Keep `Tool.define()` inputs Effect-native
+3. Update remaining callers to `yield*` tool initialization instead of `await`ing
 
 ### Tool migration details
 
-Until the tool interface itself returns `Effect`, use this transitional pattern for migrated tools:
+With `Tool.Info.init()` now effectful, use this transitional pattern for migrated tools that still need Promise-based boundaries internally:
 
 - `Tool.defineEffect(...)` should `yield*` the services the tool depends on and close over them in the returned tool definition.
-- Keep the bridge at the Promise boundary only. Prefer a single `Effect.runPromise(...)` in the temporary `async execute(...)` implementation, and move the inner logic into `Effect.fn(...)` helpers instead of scattering `runPromise` islands through the tool body.
+- Keep the bridge at the Promise boundary only inside the tool body when required by external APIs. Do not return Promise-based init callbacks from `Tool.define()`.
 - If a tool starts requiring new services, wire them into `ToolRegistry.defaultLayer` so production callers resolve the same dependencies as tests.
 
 Tool tests should use the existing Effect helpers in `packages/opencode/test/lib/effect.ts`:
 
 - Use `testEffect(...)` / `it.live(...)` instead of creating fake local wrappers around effectful tools.
-- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* Effect.promise(() => info.init())`.
+- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* info.init()`.
 - Run tests inside a real instance with `provideTmpdirInstance(...)` or `provideInstance(tmpdirScoped(...))` so instance-scoped services resolve exactly as they do in production.
 
 This keeps migrated tool tests aligned with the production service graph today, and makes the eventual `Tool.Info` → `Effect` cleanup mostly mechanical later.
@@ -340,3 +341,47 @@ For each service, the migration is roughly:
 - `ShareNext` — migrated 2026-04-11. Swapped remaining async callers to `AppRuntime.runPromise(ShareNext.Service.use(...))`, removed the `makeRuntime(...)` facade, and kept instance bootstrap on the shared app runtime.
 - `SessionTodo` — migrated 2026-04-10. Already matched the target service shape in `session/todo.ts`: single namespace, traced Effect methods, and no `makeRuntime(...)` facade remained; checklist updated to reflect the completed migration.
 - `Storage` — migrated 2026-04-10. One production caller (`Session.diff`) and all storage.test.ts tests converted to effectful style. Facades and `makeRuntime` removed.
+- `SessionRunState` — migrated 2026-04-11. Single caller in `server/routes/session.ts` converted; facade removed.
+- `Account` — migrated 2026-04-11. Callers in `server/routes/experimental.ts` and `cli/cmd/account.ts` converted; facade removed.
+- `Instruction` — migrated 2026-04-11. Test-only callers converted; facade removed.
+- `FileTime` — migrated 2026-04-11. Test-only callers converted; facade removed.
+- `FileWatcher` — migrated 2026-04-11. Callers in `project/bootstrap.ts` and test converted; facade removed.
+- `Question` — migrated 2026-04-11. Callers in `server/routes/question.ts` and test converted; facade removed.
+- `Truncate` — migrated 2026-04-11. Caller in `tool/tool.ts` and test converted; facade removed.
+
+## Route handler effectification
+
+Route handlers should wrap their entire body in a single `AppRuntime.runPromise(Effect.gen(...))` call, yielding services from context rather than calling facades one-by-one. This eliminates multiple `runPromise` round-trips and lets handlers compose naturally.
+
+```ts
+// Before — one facade call per service
+;async (c) => {
+  await SessionRunState.assertNotBusy(id)
+  await Session.removeMessage({ sessionID: id, messageID })
+  return c.json(true)
+}
+
+// After — one Effect.gen, yield services from context
+;async (c) => {
+  await AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const state = yield* SessionRunState.Service
+      const session = yield* Session.Service
+      yield* state.assertNotBusy(id)
+      yield* session.removeMessage({ sessionID: id, messageID })
+    }),
+  )
+  return c.json(true)
+}
+```
+
+When migrating, always use `{ concurrency: "unbounded" }` with `Effect.all` — route handlers should run independent service calls in parallel, not sequentially.
+
+Route files to convert (each handler that calls facades should be wrapped):
+
+- [ ] `server/routes/session.ts` — heaviest; uses Session, SessionPrompt, SessionRevert, SessionCompaction, SessionShare, SessionSummary, SessionRunState, Agent, Permission, Bus
+- [ ] `server/routes/global.ts` — uses Config, Project, Provider, Vcs, Snapshot, Agent
+- [ ] `server/routes/provider.ts` — uses Provider, Auth, Config
+- [ ] `server/routes/question.ts` — uses Question
+- [ ] `server/routes/pty.ts` — uses Pty
+- [ ] `server/routes/experimental.ts` — uses Account, ToolRegistry, Agent, MCP, Config

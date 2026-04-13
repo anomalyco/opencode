@@ -1,53 +1,33 @@
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
-import { proxy } from "hono/proxy"
 import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
-import { createHash } from "node:crypto"
-import * as fs from "node:fs/promises"
-import { Log } from "../util/log"
-import { Format } from "../format"
-import { TuiRoutes } from "./routes/tui"
-import { Instance } from "../project/instance"
-import { Vcs } from "../project/vcs"
-import { Agent } from "../agent/agent"
-import { Skill } from "../skill"
-import { Global } from "../global"
-import { LSP } from "../lsp"
-import { Command } from "../command"
-import { Flag } from "../flag/flag"
-import { QuestionRoutes } from "./routes/question"
-import { PermissionRoutes } from "./routes/permission"
-import { Snapshot } from "@/snapshot"
-import { ProjectRoutes } from "./routes/project"
-import { SessionRoutes } from "./routes/session"
-import { PtyRoutes } from "./routes/pty"
-import { McpRoutes } from "./routes/mcp"
-import { FileRoutes } from "./routes/file"
-import { ConfigRoutes } from "./routes/config"
-import { ExperimentalRoutes } from "./routes/experimental"
-import { ProviderRoutes } from "./routes/provider"
-import { EventRoutes } from "./routes/event"
-import { errorHandler } from "./middleware"
-import { getMimeType } from "hono/utils/mime"
+import { Format } from "../../format"
+import { TuiRoutes } from "./tui"
+import { Instance } from "../../project/instance"
+import { Vcs } from "../../project/vcs"
+import { Agent } from "../../agent/agent"
+import { Skill } from "../../skill"
+import { Global } from "../../global"
+import { LSP } from "../../lsp"
+import { Command } from "../../command"
+import { QuestionRoutes } from "./question"
+import { PermissionRoutes } from "./permission"
+import { ProjectRoutes } from "./project"
+import { SessionRoutes } from "./session"
+import { PtyRoutes } from "./pty"
+import { McpRoutes } from "./mcp"
+import { FileRoutes } from "./file"
+import { ConfigRoutes } from "./config"
+import { ExperimentalRoutes } from "./experimental"
+import { ProviderRoutes } from "./provider"
+import { EventRoutes } from "./event"
+import { WorkspaceRouterMiddleware } from "./middleware"
 import { AppRuntime } from "@/effect/app-runtime"
 
-const log = Log.create({ service: "server" })
-
-const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
-  ? Promise.resolve(null)
-  : // @ts-expect-error - generated file at build time
-    import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
-
-const DEFAULT_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
-
-const csp = (hash = "") =>
-  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
-
-export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()) =>
-  app
-    .onError(errorHandler(log))
+export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
+  new Hono()
+    .use(WorkspaceRouterMiddleware(upgrade))
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes(upgrade))
     .route("/config", ConfigRoutes())
@@ -281,39 +261,3 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
         return c.json(await AppRuntime.runPromise(Format.Service.use((svc) => svc.status())))
       },
     )
-    .all("/*", async (c) => {
-      const embeddedWebUI = await embeddedUIPromise
-      const path = c.req.path
-
-      if (embeddedWebUI) {
-        const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
-        if (!match) return c.json({ error: "Not Found" }, 404)
-
-        if (await fs.exists(match)) {
-          const mime = getMimeType(match) ?? "text/plain"
-          c.header("Content-Type", mime)
-          if (mime.startsWith("text/html")) {
-            c.header("Content-Security-Policy", DEFAULT_CSP)
-          }
-          return c.body(new Uint8Array(await fs.readFile(match)))
-        } else {
-          return c.json({ error: "Not Found" }, 404)
-        }
-      } else {
-        const response = await proxy(`https://app.opencode.ai${path}`, {
-          ...c.req,
-          headers: {
-            ...c.req.raw.headers,
-            host: "app.opencode.ai",
-          },
-        })
-        const match = response.headers.get("content-type")?.includes("text/html")
-          ? (await response.clone().text()).match(
-              /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
-            )
-          : undefined
-        const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
-        response.headers.set("Content-Security-Policy", csp(hash))
-        return response
-      }
-    })

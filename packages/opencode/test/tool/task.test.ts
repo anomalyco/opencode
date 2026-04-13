@@ -10,6 +10,7 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { Truncate } from "../../src/tool/truncate"
 import { ToolRegistry } from "../../src/tool/registry"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -29,6 +30,7 @@ const it = testEffect(
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
+    Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
   ),
 )
@@ -191,7 +193,7 @@ describe("tool.task", () => {
         const { chat, assistant } = yield* seed()
         const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
 
@@ -229,7 +231,7 @@ describe("tool.task", () => {
       Effect.gen(function* () {
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
         const calls: unknown[] = []
         const promptOps = stubOps()
 
@@ -278,7 +280,7 @@ describe("tool.task", () => {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
@@ -318,7 +320,7 @@ describe("tool.task", () => {
           const sessions = yield* Session.Service
           const { chat, assistant } = yield* seed()
           const tool = yield* TaskTool
-          const def = yield* Effect.promise(() => tool.init())
+          const def = yield* tool.init()
           let seen: SessionPrompt.PromptInput | undefined
           const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
