@@ -96,7 +96,6 @@ export const TodoTable = sqliteTable(
   ],
 )
 
-/*
 export const SessionEntryTable = sqliteTable(
   "session_entry",
   {
@@ -107,7 +106,7 @@ export const SessionEntryTable = sqliteTable(
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().notNull(),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<SessionEntry.Entry>(),
+    data: text({ mode: "json" }).notNull().$type<Omit<SessionEntry.Entry, "type" | "id">>(),
   },
   (table) => [
     index("session_entry_session_idx").on(table.session_id),
@@ -115,7 +114,6 @@ export const SessionEntryTable = sqliteTable(
     index("session_entry_time_created_idx").on(table.time_created),
   ],
 )
-*/
 
 export const PermissionTable = sqliteTable("permission", {
   project_id: text()

@@ -35,7 +35,7 @@ export const AgentCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const agentName = args.name as string
-      const agent = await Agent.get(agentName)
+      const agent = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(agentName)))
       if (!agent) {
         process.stderr.write(
           `Agent ${agentName} not found, run '${basename(process.execPath)} agent list' to get an agent list` + EOL,
