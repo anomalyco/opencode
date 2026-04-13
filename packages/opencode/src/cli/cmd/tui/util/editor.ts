@@ -17,17 +17,21 @@ export namespace Editor {
     await Filesystem.write(filepath, opts.value)
     opts.renderer.suspend()
     opts.renderer.currentRenderBuffer.clear()
-    const parts = editor.split(" ")
-    const proc = Process.spawn([...parts, filepath], {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    })
-    await proc.exited
-    const content = await Filesystem.readText(filepath)
-    opts.renderer.currentRenderBuffer.clear()
-    opts.renderer.resume()
-    opts.renderer.requestRender()
-    return content || undefined
+    try {
+      const parts = editor.split(" ")
+      const proc = Process.spawn([...parts, filepath], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+        shell: process.platform === "win32",
+      })
+      await proc.exited
+      const content = await Filesystem.readText(filepath)
+      return content || undefined
+    } finally {
+      opts.renderer.currentRenderBuffer.clear()
+      opts.renderer.resume()
+      opts.renderer.requestRender()
+    }
   }
 }

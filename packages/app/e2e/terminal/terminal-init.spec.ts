@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { waitTerminalReady } from "../actions"
+import { waitTerminalFocusIdle, waitTerminalReady } from "../actions"
 import { promptSelector, terminalSelector } from "../selectors"
 import { terminalToggleKey } from "../utils"
 
@@ -14,7 +14,7 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
     await page.keyboard.press(terminalToggleKey)
   }
 
-  await waitTerminalReady(page, { term: terminals.first() })
+  await waitTerminalFocusIdle(page, { term: terminals.first() })
   await expect(terminals).toHaveCount(1)
 
   // Ghostty captures a lot of keybinds when focused; move focus back

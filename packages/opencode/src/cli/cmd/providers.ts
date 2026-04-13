@@ -46,9 +46,13 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
-      if (prompt.condition && !prompt.condition(inputs)) {
-        continue
+      if (prompt.when) {
+        const value = inputs[prompt.when.key]
+        if (value === undefined) continue
+        const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
+        if (!matches) continue
       }
+      if (prompt.condition && !prompt.condition(inputs)) continue
       if (prompt.type === "select") {
         const value = await prompts.select({
           message: prompt.message,
@@ -144,6 +148,12 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   }
 
   if (method.type === "api") {
+    const key = await prompts.password({
+      message: "Enter your API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    })
+    if (prompts.isCancel(key)) throw new UI.CancelledError()
+
     if (method.authorize) {
       const result = await method.authorize(inputs)
       if (result.type === "failed") {
@@ -153,7 +163,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
         const saveProvider = result.provider ?? provider
         await Auth.set(saveProvider, {
           type: "api",
-          key: result.key,
+          key: result.key ?? key,
         })
         prompts.log.success("Login successful")
       }
@@ -299,7 +309,7 @@ export const ProvidersLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh().catch(() => {})
+        await ModelsDev.refresh(true).catch(() => {})
 
         const config = await Config.get()
 
@@ -345,7 +355,6 @@ export const ProvidersLoginCommand = cmd({
               value: x.id,
               hint: {
                 opencode: "recommended",
-                anthropic: "API key",
                 openai: "ChatGPT Plus/Pro or API key",
               }[x.id],
             })),

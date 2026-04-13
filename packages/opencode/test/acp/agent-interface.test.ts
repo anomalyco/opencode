@@ -36,7 +36,7 @@ describe("acp.agent interface compliance", () => {
     "setSessionConfigOption",
     "authenticate",
     // Unstable - SDK checks these with unstable_ prefix
-    "unstable_listSessions",
+    "listSessions",
     "unstable_forkSession",
     "unstable_resumeSession",
     "unstable_setSessionModel",
