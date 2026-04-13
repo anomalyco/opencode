@@ -97,11 +97,18 @@ export namespace LLM {
     const [language, cfg, provider, info] = await Effect.runPromise(
       Effect.gen(function* () {
         const auth = yield* Auth.Service
-        const [language, cfg, provider] = yield* Effect.promise(() =>
-          Promise.all([Provider.getLanguage(input.model), Config.get(), Provider.getProvider(input.model.providerID)]),
+        const cfg = yield* Config.Service
+        const provider = yield* Provider.Service
+        return yield* Effect.all(
+          [
+            provider.getLanguage(input.model),
+            cfg.get(),
+            provider.getProvider(input.model.providerID),
+            auth.get(input.model.providerID),
+          ],
+          { concurrency: "unbounded" },
         )
-        return [language, cfg, provider, yield* auth.get(input.model.providerID)] as const
-      }).pipe(Effect.provide(Auth.defaultLayer)),
+      }).pipe(Effect.provide(Layer.mergeAll(Auth.defaultLayer, Config.defaultLayer, Provider.defaultLayer))),
     )
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && info?.type === "oauth"
