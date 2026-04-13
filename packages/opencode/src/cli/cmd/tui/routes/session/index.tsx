@@ -1443,7 +1443,17 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
-    return props.part.text.replace("[REDACTED]", "").trim()
+    let text = props.part.text.replace("[REDACTED]", "").trim()
+    // Normalize newlines for models that stream each token with its own newline
+    // (e.g., zhipu/glm). Preserve paragraph breaks (\n\n) but collapse single
+    // newlines that are just token boundaries into spaces.
+    text = text
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{2,}/g, "\x00PARA\x00") // Protect paragraph breaks
+      .replace(/\n/g, " ")                 // Single newlines → space
+      .replace(/\x00PARA\x00/g, "\n\n")    // Restore paragraph breaks
+      .replace(/ {2,}/g, " ")              // Collapse multiple spaces
+    return text
   })
   return (
     <Show when={content() && ctx.showThinking()}>

@@ -212,6 +212,17 @@ export namespace SessionProcessor {
         })
 
         const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: StreamEvent) {
+          // Finalize a merged reasoning part (for models that emit per-token reasoning chunks)
+          function* finalizeReasoning() {
+            const entry = (ctx as any)._lastReasoningEntry
+            if (!entry) return
+            entry.text = entry.text.trimEnd()
+            entry.time = { ...entry.time, end: Date.now() }
+            yield* session.updatePart(entry)
+            ;(ctx as any)._lastReasoningPartId = undefined
+            ;(ctx as any)._lastReasoningEntry = undefined
+          }
+
           switch (value.type) {
             case "start":
               yield* status.set(ctx.sessionID, { type: "busy" })
@@ -219,6 +230,17 @@ export namespace SessionProcessor {
 
             case "reasoning-start":
               if (value.id in ctx.reasoningMap) return
+              // Some models (e.g., zhipu/glm) emit a separate reasoning-start/delta/end
+              // cycle for every single token. Merge consecutive reasoning chunks into
+              // one part to avoid per-token line rendering in the TUI.
+              if ((ctx as any)._lastReasoningPartId) {
+                // Reuse the previous reasoning part — map this new id to the same part
+                const prev = (ctx as any)._lastReasoningEntry
+                if (prev) {
+                  ctx.reasoningMap[value.id] = prev
+                  return
+                }
+              }
               ctx.reasoningMap[value.id] = {
                 id: PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
@@ -228,6 +250,8 @@ export namespace SessionProcessor {
                 time: { start: Date.now() },
                 metadata: value.providerMetadata,
               }
+              ;(ctx as any)._lastReasoningPartId = ctx.reasoningMap[value.id].id
+              ;(ctx as any)._lastReasoningEntry = ctx.reasoningMap[value.id]
               yield* session.updatePart(ctx.reasoningMap[value.id])
               return
 
@@ -246,10 +270,10 @@ export namespace SessionProcessor {
 
             case "reasoning-end":
               if (!(value.id in ctx.reasoningMap)) return
-              ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
-              ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
+              // Don't trimEnd or finalize yet — more reasoning chunks may follow.
+              // Just clean up the map entry for this id but keep the part reference
+              // alive via _lastReasoningEntry for potential reuse.
               if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-              yield* session.updatePart(ctx.reasoningMap[value.id])
               delete ctx.reasoningMap[value.id]
               return
 
@@ -352,6 +376,7 @@ export namespace SessionProcessor {
               return
 
             case "finish-step": {
+              yield* finalizeReasoning()
               const usage = Session.getUsage({
                 model: ctx.model,
                 usage: value.usage,
@@ -399,6 +424,7 @@ export namespace SessionProcessor {
             }
 
             case "text-start":
+              yield* finalizeReasoning()
               ctx.currentText = {
                 id: PartID.ascending(),
                 messageID: ctx.assistantMessage.id,

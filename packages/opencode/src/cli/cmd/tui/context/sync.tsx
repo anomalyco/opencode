@@ -314,7 +314,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               const part = draft[result.index]
               const field = event.properties.field as keyof typeof part
               const existing = part[field] as string | undefined
-              ;(part[field] as string) = (existing ?? "") + event.properties.delta
+              const delta = event.properties.delta
+              ;(part[field] as string) = (existing ?? "") + delta
             }),
           )
           break
