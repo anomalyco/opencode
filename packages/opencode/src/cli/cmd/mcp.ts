@@ -361,7 +361,6 @@ export const McpLogoutCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Logout")
 
-        const authPath = path.join(Global.Path.data, "mcp-auth.json")
         const credentials = await AppRuntime.runPromise(McpAuth.Service.use((auth) => auth.all()))
         const serverNames = Object.keys(credentials)
 
@@ -717,6 +716,11 @@ export const McpDebugCommand = cmd({
 
             // Try to discover OAuth metadata
             const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
+            const auth = await AppRuntime.runPromise(
+              Effect.gen(function* () {
+                return yield* McpAuth.Service
+              }),
+            )
             const authProvider = new McpOAuthProvider(
               serverName,
               serverConfig.url,
@@ -729,6 +733,7 @@ export const McpDebugCommand = cmd({
               {
                 onRedirect: async () => {},
               },
+              auth,
             )
 
             prompts.log.info("Testing OAuth flow (without completing authorization)...")

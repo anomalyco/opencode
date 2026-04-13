@@ -474,10 +474,14 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const params = c.req.valid("param")
-        const result = await SessionSummary.diff({
-          sessionID: params.sessionID,
-          messageID: query.messageID,
-        })
+        const result = await AppRuntime.runPromise(
+          SessionSummary.Service.use((summary) =>
+            summary.diff({
+              sessionID: params.sessionID,
+              messageID: query.messageID,
+            }),
+          ),
+        )
         return c.json(result)
       },
     )
@@ -550,11 +554,12 @@ export const SessionRoutes = lazy(() =>
         const session = await Session.get(sessionID)
         await SessionRevert.cleanup(session)
         const msgs = await Session.messages({ sessionID })
-        let currentAgent = await Agent.defaultAgent()
+        const defaultAgent = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.defaultAgent()))
+        let currentAgent = defaultAgent
         for (let i = msgs.length - 1; i >= 0; i--) {
           const info = msgs[i].info
           if (info.role === "user") {
-            currentAgent = info.agent || (await Agent.defaultAgent())
+            currentAgent = info.agent || defaultAgent
             break
           }
         }
