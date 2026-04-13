@@ -76,6 +76,25 @@ describe("Ripgrep.Service", () => {
     expect(result.items[0]?.lines.text).toContain("needle")
   })
 
+  test("search supports explicit file targets", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "match.ts"), "const value = 'needle'\n")
+        await Bun.write(path.join(dir, "skip.ts"), "const value = 'needle'\n")
+      },
+    })
+
+    const file = path.join(tmp.path, "match.ts")
+    const result = await Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      return yield* rg.search({ cwd: tmp.path, pattern: "needle", file: [file] })
+    }).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromise)
+
+    expect(result.partial).toBe(false)
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]?.path.text).toBe(file)
+  })
+
   test("files returns stream of filenames", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
