@@ -43,7 +43,6 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
       expect(reloadSpy).toHaveBeenCalledTimes(1)
-      expect(reloadSpy.mock.calls[0]?.[0]?.init).toBe(InstanceBootstrap)
       expect(seen.some((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed")).toBe(
         true,
       )

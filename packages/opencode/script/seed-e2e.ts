@@ -1,3 +1,5 @@
+import { AppRuntime } from "@/effect/app-runtime"
+
 const dir = process.env.OPENCODE_E2E_PROJECT_DIR ?? process.cwd()
 const title = process.env.OPENCODE_E2E_SESSION_TITLE ?? "E2E Session"
 const text = process.env.OPENCODE_E2E_MESSAGE ?? "Seeded for UI e2e"
@@ -20,7 +22,7 @@ const seed = async () => {
   try {
     await Instance.provide({
       directory: dir,
-      init: InstanceBootstrap,
+      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         await Config.waitForDependencies()
         await ToolRegistry.ids()
