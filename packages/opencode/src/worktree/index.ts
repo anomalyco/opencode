@@ -20,6 +20,7 @@ import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -266,7 +267,7 @@ export namespace Worktree {
         const booted = yield* Effect.promise(() =>
           Instance.provide({
             directory: info.directory,
-            init: InstanceBootstrap,
+            init: () => AppRuntime.runPromise(InstanceBootstrap),
             fn: () => undefined,
           })
             .then(() => true)
