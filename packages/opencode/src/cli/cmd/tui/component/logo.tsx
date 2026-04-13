@@ -411,6 +411,7 @@ export function Logo() {
     const line = {
       t: new Date().toISOString(),
       event,
+      box: box ? { id: box.id, num: box.num } : null,
       hold: holdItem ? { x: holdItem.x, y: holdItem.y, at: Math.round(holdItem.at), glyph: holdItem.glyph } : null,
       ...extra,
     }
@@ -490,7 +491,7 @@ export function Logo() {
     setHold(undefined)
     setRelease({ x, y, at: t, glyph: item.glyph, level, rise })
     if (item.glyph !== undefined) {
-      setGlow({ glyph: item.glyph, at: t, force: lerp(0.04, 1.5, rise * level) })
+      setGlow({ glyph: item.glyph, at: t, force: lerp(0.18, 1.5, rise * level) })
     }
     setRings((list) => [
       ...list,
@@ -498,14 +499,14 @@ export function Logo() {
         x: x + 0.5,
         y: y * 2 + 1,
         at: t,
-        force: lerp(1, 2.55, level),
+        force: lerp(0.82, 2.55, level),
         kick: lerp(0.32, 0.32 + KICK, level),
       },
     ])
     setNow(t)
     note("burst", { x, y, age: Math.round(age), rise: Number(rise.toFixed(3)), level: Number(level.toFixed(3)) })
     start()
-    Sound.pulse()
+    Sound.pulse(lerp(0.8, 1, level))
   }
 
   const frame = createMemo(() => {
@@ -614,7 +615,15 @@ export function Logo() {
 
   const mouse = (evt: MouseEvent) => {
     if (!box) return
-    note("mouse", { type: evt.type, button: evt.button, x: evt.x - box.x, y: evt.y - box.y })
+    note("mouse", {
+      type: evt.type,
+      button: evt.button,
+      x: evt.x - box.x,
+      y: evt.y - box.y,
+      target: evt.target ? { id: evt.target.id, num: evt.target.num } : null,
+      source: evt.source ? { id: evt.source.id, num: evt.source.num } : null,
+      dragging: evt.isDragging ?? false,
+    })
     if ((evt.type === "down" || evt.type === "drag") && evt.button === 0) {
       const x = evt.x - box.x
       const y = evt.y - box.y
@@ -636,7 +645,16 @@ export function Logo() {
   }
 
   return (
-    <box ref={(item: BoxRenderable) => (box = item)} onMouse={mouse}>
+    <box ref={(item: BoxRenderable) => (box = item)}>
+      <box
+        position="absolute"
+        top={0}
+        left={0}
+        width={FULL[0]?.length ?? 0}
+        height={FULL.length}
+        zIndex={1}
+        onMouse={mouse}
+      />
       <For each={logo.left}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>

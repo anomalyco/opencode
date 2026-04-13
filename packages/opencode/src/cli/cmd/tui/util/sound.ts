@@ -120,10 +120,10 @@ export namespace Sound {
     }, delay)
   }
 
-  export function pulse() {
+  export function pulse(scale = 1) {
     stop(140)
     const file = FILE[shot++ % FILE.length]
-    void Promise.resolve(play(file, 0.4)).catch(() => undefined)
+    void Promise.resolve(play(file, 0.26 + 0.14 * scale)).catch(() => undefined)
   }
 
   export function dispose() {
