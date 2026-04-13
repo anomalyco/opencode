@@ -813,7 +813,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       return yield* Effect.gen(function* () {
         try {
-          const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
+          const cfg = yield* Effect.promise(Instance.bind(() => SandboxSpawn.settings()))
           const blocked = SandboxSpawn.excludedText(input.command, cfg.excluded_commands)
           if (blocked) {
             throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
@@ -904,7 +904,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             })
             const exit = yield* Effect.gen(function* () {
               const handle = yield* spawner.spawn(proc)
-              yield* Effect.forkScoped(
+              const stdout = yield* Effect.forkScoped(
                 Stream.runForEach(Stream.decodeText(handle.stdout), (chunk) =>
                   Effect.sync(() => {
                     output += chunk
@@ -915,7 +915,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   }),
                 ),
               )
-              yield* Effect.forkScoped(
+              const err = yield* Effect.forkScoped(
                 Stream.runForEach(Stream.decodeText(handle.stderr), (chunk) =>
                   Effect.sync(() => {
                     stderr += chunk
@@ -927,7 +927,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   }),
                 ),
               )
-              return yield* handle.exitCode
+              const code = yield* handle.exitCode
+              yield* Fiber.await(stdout)
+              yield* Fiber.await(err)
+              return code
             }).pipe(
               Effect.scoped,
               Effect.onInterrupt(() =>

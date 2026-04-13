@@ -17,7 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
-import { Cause, Effect, Exit, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { SandboxSpawn } from "@/sandbox/spawn"
@@ -424,7 +424,6 @@ export const BashTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
-    const sandbox = yield* Effect.promise(() => SandboxSpawn.settings())
 
     const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
@@ -610,18 +609,17 @@ export const BashTool = Tool.define(
           Effect.gen(function* () {
             const handle = yield* spawner.spawn(proc)
 
-            yield* Effect.forkScoped(
+            const out = yield* Effect.forkScoped(
               Stream.runForEach(Stream.decodeText(handle.stdout), (chunk) => {
                 return write(chunk)
               }),
             )
-            yield* Effect.forkScoped(
+            const err = yield* Effect.forkScoped(
               Stream.runForEach(Stream.decodeText(handle.stderr), (chunk) => {
                 stderr += chunk
                 return write(chunk)
               }),
             )
-
             const abort = Effect.callback<void>((resume) => {
               if (ctx.abort.aborted) return resume(Effect.void)
               const handler = () => resume(Effect.void)
@@ -645,6 +643,9 @@ export const BashTool = Tool.define(
               timedOut = true
               yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
             }
+
+            yield* Fiber.await(out)
+            yield* Fiber.await(err)
 
             return exit.kind === "exit" ? exit.code : null
           }),
@@ -794,6 +795,10 @@ export const BashTool = Tool.define(
       Effect.sync(() => {
         const shell = Shell.acceptable()
         const name = Shell.name(shell)
+        let dir = process.cwd()
+        try {
+          dir = Instance.directory
+        } catch {}
         const chain =
           name === "powershell"
             ? "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell 5.1 does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
@@ -801,7 +806,7 @@ export const BashTool = Tool.define(
         log.info("bash tool using shell", { shell })
 
         return {
-          description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+          description: DESCRIPTION.replaceAll("${directory}", dir)
             .replaceAll("${os}", process.platform)
             .replaceAll("${shell}", name)
             .replaceAll("${chaining}", chain)
@@ -809,9 +814,7 @@ export const BashTool = Tool.define(
             .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES))
             .replaceAll(
               "${unsandboxed}",
-              sandbox.allow_unsandboxed_retry
-                ? "\n\nIf you know a command needs to run outside the sandbox before the first attempt, put `# opencode:unsandboxed <reason>` on the first non-empty line of the command. This asks for the separate `bash:unsandboxed` permission before execution while keeping the normal bash tool schema unchanged."
-                : "",
+              "\n\nIf sandbox settings allow unsandboxed retries and you know a command needs to run outside the sandbox before the first attempt, put `# opencode:unsandboxed <reason>` on the first non-empty line of the command. This asks for the separate `bash:unsandboxed` permission before execution while keeping the normal bash tool schema unchanged.",
             ),
           parameters: Parameters,
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
@@ -825,7 +828,7 @@ export const BashTool = Tool.define(
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
-              const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
+              const cfg = yield* Effect.promise(Instance.bind(() => SandboxSpawn.settings()))
               const ps = PS.has(name)
               const root = yield* parse(command, ps)
               const scan = yield* collect(root, cwd, ps, shell, cfg.excluded_commands)
