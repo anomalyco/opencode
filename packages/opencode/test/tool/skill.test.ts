@@ -1,3 +1,4 @@
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Skill } from "../../src/skill"
@@ -11,8 +12,9 @@ import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "../../src/tool/registry"
-import { tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance, tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { testEffect } from "../lib/effect"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: SessionID.make("ses_test"),
@@ -28,85 +30,94 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
+const node = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
+
+const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
+
 describe("tool.skill", () => {
-  test("description lists skill location URL", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        const skillDir = path.join(dir, ".opencode", "skill", "tool-skill")
-        await Bun.write(
-          path.join(skillDir, "SKILL.md"),
-          `---
+  it.live("description lists skill location URL", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const skill = path.join(dir, ".opencode", "skill", "tool-skill")
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(skill, "SKILL.md"),
+              `---
 name: tool-skill
 description: Skill for tool tests.
 ---
 
 # Tool Skill
 `,
-        )
-      },
-    })
+            ),
+          )
+          const home = process.env.OPENCODE_TEST_HOME
+          process.env.OPENCODE_TEST_HOME = dir
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              process.env.OPENCODE_TEST_HOME = home
+            }),
+          )
+          const registry = yield* ToolRegistry.Service
+          const desc =
+            (yield* registry.tools({
+              providerID: "opencode" as any,
+              modelID: "gpt-5" as any,
+              agent: { name: "build", mode: "primary", permission: [], options: {} },
+            })).find((tool) => tool.id === SkillTool.id)?.description ?? ""
+          expect(desc).toContain("**tool-skill**: Skill for tool tests.")
+        }),
+      { git: true },
+    ),
+  )
 
-    const home = process.env.OPENCODE_TEST_HOME
-    process.env.OPENCODE_TEST_HOME = tmp.path
-
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const desc = await ToolRegistry.tools({
-            providerID: "opencode" as any,
-            modelID: "gpt-5" as any,
-            agent: { name: "build", mode: "primary" as const, permission: [], options: {} },
-          }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
-          expect(desc).toContain(`**tool-skill**: Skill for tool tests.`)
-        },
-      })
-    } finally {
-      process.env.OPENCODE_TEST_HOME = home
-    }
-  })
-
-  test("description sorts skills by name and is stable across calls", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        for (const [name, description] of [
-          ["zeta-skill", "Zeta skill."],
-          ["alpha-skill", "Alpha skill."],
-          ["middle-skill", "Middle skill."],
-        ]) {
-          const skillDir = path.join(dir, ".opencode", "skill", name)
-          await Bun.write(
-            path.join(skillDir, "SKILL.md"),
-            `---
+  it.live("description sorts skills by name and is stable across calls", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          for (const [name, description] of [
+            ["zeta-skill", "Zeta skill."],
+            ["alpha-skill", "Alpha skill."],
+            ["middle-skill", "Middle skill."],
+          ]) {
+            const skill = path.join(dir, ".opencode", "skill", name)
+            yield* Effect.promise(() =>
+              Bun.write(
+                path.join(skill, "SKILL.md"),
+                `---
 name: ${name}
 description: ${description}
 ---
 
 # ${name}
 `,
+              ),
+            )
+          }
+          const home = process.env.OPENCODE_TEST_HOME
+          process.env.OPENCODE_TEST_HOME = dir
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              process.env.OPENCODE_TEST_HOME = home
+            }),
           )
-        }
-      },
-    })
 
-    const home = process.env.OPENCODE_TEST_HOME
-    process.env.OPENCODE_TEST_HOME = tmp.path
-
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
           const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
-          const load = () =>
-            ToolRegistry.tools({
-              providerID: "opencode" as any,
-              modelID: "gpt-5" as any,
-              agent,
-            }).then((tools) => tools.find((tool) => tool.id === SkillTool.id)?.description ?? "")
-          const first = await load()
-          const second = await load()
+          const registry = yield* ToolRegistry.Service
+          const load = Effect.fnUntraced(function* () {
+            return (
+              (yield* registry.tools({
+                providerID: "opencode" as any,
+                modelID: "gpt-5" as any,
+                agent,
+              })).find((tool) => tool.id === SkillTool.id)?.description ?? ""
+            )
+          })
+          const first = yield* load()
+          const second = yield* load()
 
           expect(first).toBe(second)
 
@@ -117,12 +128,10 @@ description: ${description}
           expect(alpha).toBeGreaterThan(-1)
           expect(middle).toBeGreaterThan(alpha)
           expect(zeta).toBeGreaterThan(middle)
-        },
-      })
-    } finally {
-      process.env.OPENCODE_TEST_HOME = home
-    }
-  })
+        }),
+      { git: true },
+    ),
+  )
 
   test("execute returns skill content block with files", async () => {
     await using tmp = await tmpdir({

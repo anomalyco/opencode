@@ -18,6 +18,7 @@ const seed = async () => {
   const { Project } = await import("../src/project/project")
   const { ModelID, ProviderID } = await import("../src/provider/schema")
   const { ToolRegistry } = await import("../src/tool/registry")
+  const { Effect } = await import("effect")
 
   try {
     await Instance.provide({
@@ -25,7 +26,12 @@ const seed = async () => {
       init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         await Config.waitForDependencies()
-        await ToolRegistry.ids()
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const registry = yield* ToolRegistry.Service
+            yield* registry.ids()
+          }),
+        )
 
         const session = await Session.create({ title })
         const messageID = MessageID.ascending()

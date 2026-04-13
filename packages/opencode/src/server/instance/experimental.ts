@@ -162,7 +162,13 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await ToolRegistry.ids())
+        const ids = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const registry = yield* ToolRegistry.Service
+            return yield* registry.ids()
+          }),
+        )
+        return c.json(ids)
       },
     )
     .get(
@@ -205,11 +211,17 @@ export const ExperimentalRoutes = lazy(() =>
       ),
       async (c) => {
         const { provider, model } = c.req.valid("query")
-        const tools = await ToolRegistry.tools({
-          providerID: ProviderID.make(provider),
-          modelID: ModelID.make(model),
-          agent: await Agent.get(await Agent.defaultAgent()),
-        })
+        const tools = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            const registry = yield* ToolRegistry.Service
+            return yield* registry.tools({
+              providerID: ProviderID.make(provider),
+              modelID: ModelID.make(model),
+              agent: yield* agents.get(yield* agents.defaultAgent()),
+            })
+          }),
+        )
         return c.json(
           tools.map((t) => ({
             id: t.id,
