@@ -209,6 +209,9 @@ export namespace ProviderTransform {
       copilot: {
         copilot_cache_control: { type: "ephemeral" },
       },
+      alibaba: {
+        cacheControl: { type: "ephemeral" },
+      },
     }
 
     for (const msg of unique([...system, ...final])) {
@@ -285,7 +288,8 @@ export namespace ProviderTransform {
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
+        model.api.npm === "@ai-sdk/anthropic" ||
+        model.api.npm === "@ai-sdk/alibaba") &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
       msgs = applyCaching(msgs, model)
@@ -774,7 +778,10 @@ export namespace ProviderTransform {
       result["chat_template_args"] = { enable_thinking: true }
     }
 
-    if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    if (
+      ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
+      input.model.api.npm === "@ai-sdk/openai-compatible"
+    ) {
       result["thinking"] = {
         type: "enabled",
         clear_thinking: false,

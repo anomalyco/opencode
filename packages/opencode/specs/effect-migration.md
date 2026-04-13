@@ -23,7 +23,7 @@ export namespace Foo {
     readonly get: (id: FooID) => Effect.Effect<FooInfo, FooError>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Foo") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Foo") {}
 
   export const layer = Layer.effect(
     Service,
@@ -178,7 +178,9 @@ That is fine for leaf files like `schema.ts`. Keep the service surface in the ow
 
 ## Migration checklist
 
-Fully migrated (single namespace, InstanceState where needed, flattened facade):
+Service-shape migrated (single namespace, traced methods, `InstanceState` where needed).
+
+This checklist is only about the service shape migration. Many of these services still keep `makeRuntime(...)` plus async facade exports; that facade-removal phase is tracked separately in [Destroying the facades](#destroying-the-facades).
 
 - [x] `Account` — `account/index.ts`
 - [x] `Agent` — `agent/agent.ts`
@@ -217,62 +219,66 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 - [x] `SessionSummary` — `session/summary.ts`
 - [x] `SessionRevert` — `session/revert.ts`
 - [x] `Instruction` — `session/instruction.ts`
+- [x] `SystemPrompt` — `session/system.ts`
 - [x] `Provider` — `provider/provider.ts`
 - [x] `Storage` — `storage/storage.ts`
+- [x] `ShareNext` — `share/share-next.ts`
+- [x] `SessionTodo` — `session/todo.ts`
 
-Still open:
+Still open at the service-shape level:
 
-- [ ] `SessionTodo` — `session/todo.ts`
-- [ ] `ShareNext` — `share/share-next.ts`
-- [ ] `SyncEvent` — `sync/index.ts`
-- [ ] `Workspace` — `control-plane/workspace.ts`
+- [ ] `SyncEvent` — `sync/index.ts` (deferred pending sync with James)
+- [ ] `Workspace` — `control-plane/workspace.ts` (deferred pending sync with James)
 
 ## Tool interface → Effect
 
-Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `init` and `execute` return `Effect` instead of `Promise`. This lets tool implementations compose natively with the Effect pipeline rather than being wrapped in `Effect.promise()` at the call site. Requires:
+`Tool.Def.execute` and `Tool.Info.init` already return `Effect` on this branch, and the current tools in `src/tool/*.ts` have been migrated to the Effect-native `Tool.define(...)` shape.
 
-1. Migrate each tool to return Effects
-2. Update `Tool.define()` factory to work with Effects
-3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing
+The remaining work here is follow-on cleanup rather than the top-level tool interface migration:
+
+1. Remove internal `Effect.promise(...)` bridges where practical
+2. Keep replacing raw platform helpers with Effect services inside tool bodies
+3. Update remaining callers and tests to prefer `yield* info.init()` / `Tool.init(...)` over older Promise-oriented patterns
 
 ### Tool migration details
 
-Until the tool interface itself returns `Effect`, use this transitional pattern for migrated tools:
+With `Tool.Info.init()` now effectful, use this transitional pattern for migrated tools that still need Promise-based boundaries internally:
 
 - `Tool.defineEffect(...)` should `yield*` the services the tool depends on and close over them in the returned tool definition.
-- Keep the bridge at the Promise boundary only. Prefer a single `Effect.runPromise(...)` in the temporary `async execute(...)` implementation, and move the inner logic into `Effect.fn(...)` helpers instead of scattering `runPromise` islands through the tool body.
+- Keep the bridge at the Promise boundary only inside the tool body when required by external APIs. Do not return Promise-based init callbacks from `Tool.define()`.
 - If a tool starts requiring new services, wire them into `ToolRegistry.defaultLayer` so production callers resolve the same dependencies as tests.
 
 Tool tests should use the existing Effect helpers in `packages/opencode/test/lib/effect.ts`:
 
 - Use `testEffect(...)` / `it.live(...)` instead of creating fake local wrappers around effectful tools.
-- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* Effect.promise(() => info.init())`.
+- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* info.init()`.
 - Run tests inside a real instance with `provideTmpdirInstance(...)` or `provideInstance(tmpdirScoped(...))` so instance-scoped services resolve exactly as they do in production.
 
 This keeps migrated tool tests aligned with the production service graph today, and makes the eventual `Tool.Info` → `Effect` cleanup mostly mechanical later.
 
 Individual tools, ordered by value:
 
-- [ ] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
-- [ ] `bash.ts` — HIGH: shell orchestration, quoting, timeout handling, output capture
-- [x] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
-- [ ] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
-- [ ] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
-- [ ] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events
-- [ ] `codesearch.ts` — MEDIUM: HTTP + SSE + manual timeout → HttpClient + Effect.timeout
-- [ ] `webfetch.ts` — MEDIUM: fetch with UA retry, size limits → HttpClient
-- [ ] `websearch.ts` — MEDIUM: MCP over HTTP → HttpClient
-- [ ] `batch.ts` — MEDIUM: parallel execution, per-call error recovery → Effect.all
-- [ ] `task.ts` — MEDIUM: task state management
-- [ ] `ls.ts` — MEDIUM: bounded directory listing over ripgrep-backed traversal
-- [ ] `multiedit.ts` — MEDIUM: sequential edit orchestration over `edit.ts`
-- [ ] `glob.ts` — LOW: simple async generator
-- [ ] `lsp.ts` — LOW: dispatch switch over LSP operations
-- [ ] `question.ts` — LOW: prompt wrapper
-- [ ] `skill.ts` — LOW: skill tool adapter
-- [ ] `todo.ts` — LOW: todo persistence wrapper
-- [ ] `invalid.ts` — LOW: invalid-tool fallback
-- [ ] `plan.ts` — LOW: plan file operations
+- [x] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
+- [x] `bash.ts` — HIGH: shell orchestration, quoting, timeout handling, output capture
+- [x] `read.ts` — HIGH: effectful interface migrated; still has raw fs/readline internals tracked below
+- [x] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
+- [x] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
+- [x] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events
+- [x] `codesearch.ts` — MEDIUM: HTTP + SSE + manual timeout → HttpClient + Effect.timeout
+- [x] `webfetch.ts` — MEDIUM: fetch with UA retry, size limits → HttpClient
+- [x] `websearch.ts` — MEDIUM: MCP over HTTP → HttpClient
+- [x] `task.ts` — MEDIUM: task state management
+- [x] `ls.ts` — MEDIUM: bounded directory listing over ripgrep-backed traversal
+- [x] `multiedit.ts` — MEDIUM: sequential edit orchestration over `edit.ts`
+- [x] `glob.ts` — LOW: simple async generator
+- [x] `lsp.ts` — LOW: dispatch switch over LSP operations
+- [x] `question.ts` — LOW: prompt wrapper
+- [x] `skill.ts` — LOW: skill tool adapter
+- [x] `todo.ts` — LOW: todo persistence wrapper
+- [x] `invalid.ts` — LOW: invalid-tool fallback
+- [x] `plan.ts` — LOW: plan file operations
+
+`batch.ts` was removed from `src/tool/` and is no longer tracked here.
 
 ## Effect service adoption in already-migrated code
 
@@ -280,25 +286,21 @@ Some already-effectified areas still use raw `Filesystem.*` or `Process.spawn` i
 
 ### `Filesystem.*` → `AppFileSystem.Service` (yield in layer)
 
-- [ ] `file/index.ts` — 1 remaining `Filesystem.readText()` call in untracked diff handling
-- [ ] `config/config.ts` — 5 remaining `Filesystem.*` calls in `installDependencies()`
-- [ ] `provider/provider.ts` — 1 remaining `Filesystem.readJson()` call for recent model state
+- [x] `config/config.ts` — `installDependencies()` now uses `AppFileSystem`
+- [x] `provider/provider.ts` — recent model state now reads via `AppFileSystem.Service`
 
 ### `Process.spawn` → `ChildProcessSpawner` (yield in layer)
 
-- [ ] `format/formatter.ts` — 2 remaining `Process.spawn()` checks (`air`, `uv`)
+- [x] `format/formatter.ts` — direct `Process.spawn()` checks removed (`air`, `uv`)
 - [ ] `lsp/server.ts` — multiple `Process.spawn()` installs/download helpers
 
 ## Filesystem consolidation
 
-`util/filesystem.ts` (raw fs wrapper) is currently imported by **34 files**. The effectified `AppFileSystem` service (`filesystem/index.ts`) is currently imported by **15 files**. As services and tools are effectified, they should switch from `Filesystem.*` to yielding `AppFileSystem.Service` — this happens naturally during each migration, not as a separate effort.
-
-Similarly, **21 files** still import raw `fs` or `fs/promises` directly. These should migrate to `AppFileSystem` or `Filesystem.*` as they're touched.
+`util/filesystem.ts` is still used widely across `src/`, and raw `fs` / `fs/promises` imports still exist in multiple tooling and infrastructure files. As services and tools are effectified, they should switch from `Filesystem.*` to yielding `AppFileSystem.Service` where possible — this should happen naturally during each migration, not as a separate sweep.
 
 Current raw fs users that will convert during tool migration:
 
 - `tool/read.ts` — fs.createReadStream, readline
-- `tool/apply_patch.ts` — fs/promises
 - `file/ripgrep.ts` — fs/promises
 - `patch/index.ts` — fs, fs/promises
 
@@ -308,3 +310,81 @@ Current raw fs users that will convert during tool migration:
 - [ ] `util/flock.ts` — file-based distributed lock with heartbeat → Effect.repeat + addFinalizer
 - [ ] `util/process.ts` — child process spawn wrapper → return Effect instead of Promise
 - [ ] `util/lazy.ts` — replace uses in Effect code with Effect.cached; keep for sync-only code
+
+## Destroying the facades
+
+This phase is still broadly open. As of 2026-04-11 there are still 31 `makeRuntime(...)` call sites under `src/`, and many service namespaces still export async facade helpers like `export async function read(...) { return runPromise(...) }`.
+
+These facades exist because cyclic imports used to force each service to build its own independent runtime. Now that the layer DAG is acyclic and `AppRuntime` (`src/effect/app-runtime.ts`) composes everything into one `ManagedRuntime`, we're removing them.
+
+### Process
+
+For each service, the migration is roughly:
+
+1. **Find callers.** `grep -n "Namespace\.(methodA|methodB|...)"` across `src/` and `test/`. Skip the service file itself.
+2. **Migrate production callers.** For each effectful caller that does `Effect.tryPromise(() => Namespace.method(...))`:
+   - Add the service to the caller's layer R type (`Layer.Layer<Self, never, ... | Namespace.Service>`)
+   - Yield it at the top of the layer: `const ns = yield* Namespace.Service`
+   - Replace `Effect.tryPromise(() => Namespace.method(...))` with `yield* ns.method(...)` (or `ns.method(...).pipe(Effect.orElseSucceed(...))` for the common fallback case)
+   - Add `Layer.provide(Namespace.defaultLayer)` to the caller's own `defaultLayer` chain
+3. **Fix tests that used the caller's raw `.layer`.** Any test that composes `Caller.layer` (not `defaultLayer`) needs to also provide the newly-required service tag. The fastest fix is usually switching to `Caller.defaultLayer` since it now pulls in the new dependency.
+4. **Migrate test callers of the facade.** Tests calling `Namespace.method(...)` directly get converted to full effectful style using `testEffect(Namespace.defaultLayer)` + `it.live` / `it.effect` + `yield* svc.method(...)`. Don't wrap the test body in `Effect.promise(async () => {...})` — do the whole thing in `Effect.gen` and use `AppFileSystem.Service` / `tmpdirScoped` / `Effect.addFinalizer` for what used to be raw `fs` / `Bun.write` / `try/finally`.
+5. **Delete the facades.** Once `grep` shows zero callers, remove the `export async function` block AND the `makeRuntime(...)` line from the service namespace. Also remove the now-unused `import { makeRuntime }`.
+
+### Pitfalls
+
+- **Layer caching inside tests.** `testEffect(layer)` constructs the Storage (or whatever) service once and memoizes it. If a test then tries `inner.pipe(Effect.provide(customStorage))` to swap in a differently-configured Storage, the outer cached one wins and the inner provision is a no-op. Fix: wrap the overriding layer in `Layer.fresh(...)`, which forces a new instance to be built instead of hitting the memoMap cache. This lets a single `testEffect(...)` serve both simple and per-test-customized cases.
+- **`Effect.tryPromise` → `yield*` drops the Promise layer.** The old code was `Effect.tryPromise(() => Storage.read(...))` — a `tryPromise` wrapper because the facade returned a Promise. The new code is `yield* storage.read(...)` directly — the service method already returns an Effect, so no wrapper is needed. Don't reach for `Effect.promise` or `Effect.tryPromise` during migration; if you're using them on a service method call, you're doing it wrong.
+- **Raw `.layer` test callers break silently in the type checker.** When you add a new R requirement to a service's `.layer`, any test that composes it raw (not `defaultLayer`) becomes under-specified. `tsgo` will flag this — the error looks like `Type 'Storage.Service' is not assignable to type '... | Service | TestConsole'`. Usually the fix is to switch that composition to `defaultLayer`, or add `Layer.provide(NewDep.defaultLayer)` to the custom composition.
+- **Tests that do async setup with `fs`, `Bun.write`, `tmpdir`.** Convert these to `AppFileSystem.Service` calls inside `Effect.gen`, and use `tmpdirScoped()` instead of `tmpdir()` so cleanup happens via the scope finalizer. For file operations on the actual filesystem (not via a service), a small helper like `const writeJson = Effect.fnUntraced(function* (file, value) { const fs = yield* AppFileSystem.Service; yield* fs.makeDirectory(path.dirname(file), { recursive: true }); yield* fs.writeFileString(file, JSON.stringify(value, null, 2)) })` keeps the migration tests clean.
+
+### Migration log
+
+- `SessionStatus` — migrated 2026-04-11. Replaced the last route and retry-policy callers with `AppRuntime.runPromise(SessionStatus.Service.use(...))` and removed the `makeRuntime(...)` facade.
+- `ShareNext` — migrated 2026-04-11. Swapped remaining async callers to `AppRuntime.runPromise(ShareNext.Service.use(...))`, removed the `makeRuntime(...)` facade, and kept instance bootstrap on the shared app runtime.
+- `SessionTodo` — migrated 2026-04-10. Already matched the target service shape in `session/todo.ts`: single namespace, traced Effect methods, and no `makeRuntime(...)` facade remained; checklist updated to reflect the completed migration.
+- `Storage` — migrated 2026-04-10. One production caller (`Session.diff`) and all storage.test.ts tests converted to effectful style. Facades and `makeRuntime` removed.
+- `SessionRunState` — migrated 2026-04-11. Single caller in `server/routes/session.ts` converted; facade removed.
+- `Account` — migrated 2026-04-11. Callers in `server/routes/experimental.ts` and `cli/cmd/account.ts` converted; facade removed.
+- `Instruction` — migrated 2026-04-11. Test-only callers converted; facade removed.
+- `FileTime` — migrated 2026-04-11. Test-only callers converted; facade removed.
+- `FileWatcher` — migrated 2026-04-11. Callers in `project/bootstrap.ts` and test converted; facade removed.
+- `Question` — migrated 2026-04-11. Callers in `server/routes/question.ts` and test converted; facade removed.
+- `Truncate` — migrated 2026-04-11. Caller in `tool/tool.ts` and test converted; facade removed.
+
+## Route handler effectification
+
+Route handlers should wrap their entire body in a single `AppRuntime.runPromise(Effect.gen(...))` call, yielding services from context rather than calling facades one-by-one. This eliminates multiple `runPromise` round-trips and lets handlers compose naturally.
+
+```ts
+// Before — one facade call per service
+;async (c) => {
+  await SessionRunState.assertNotBusy(id)
+  await Session.removeMessage({ sessionID: id, messageID })
+  return c.json(true)
+}
+
+// After — one Effect.gen, yield services from context
+;async (c) => {
+  await AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const state = yield* SessionRunState.Service
+      const session = yield* Session.Service
+      yield* state.assertNotBusy(id)
+      yield* session.removeMessage({ sessionID: id, messageID })
+    }),
+  )
+  return c.json(true)
+}
+```
+
+When migrating, always use `{ concurrency: "unbounded" }` with `Effect.all` — route handlers should run independent service calls in parallel, not sequentially.
+
+Route files to convert (each handler that calls facades should be wrapped):
+
+- [ ] `server/routes/session.ts` — heaviest; uses Session, SessionPrompt, SessionRevert, SessionCompaction, SessionShare, SessionSummary, SessionRunState, Agent, Permission, Bus
+- [ ] `server/routes/global.ts` — uses Config, Project, Provider, Vcs, Snapshot, Agent
+- [ ] `server/routes/provider.ts` — uses Provider, Auth, Config
+- [ ] `server/routes/question.ts` — uses Question
+- [ ] `server/routes/pty.ts` — uses Pty
+- [ ] `server/routes/experimental.ts` — uses Account, ToolRegistry, Agent, MCP, Config

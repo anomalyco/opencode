@@ -1,5 +1,5 @@
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { Bus } from "../bus"
 import { Snapshot } from "../snapshot"
@@ -29,7 +29,7 @@ export namespace SessionRevert {
     readonly cleanup: (session: Session.Info) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionRevert") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRevert") {}
 
   export const layer = Layer.effect(
     Service,

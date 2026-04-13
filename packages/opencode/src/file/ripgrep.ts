@@ -114,7 +114,7 @@ export namespace Ripgrep {
   }
 
   export interface Interface {
-    readonly files: (input: FilesInput) => Effect.Effect<AsyncIterable<string>>
+    readonly files: (input: FilesInput) => Stream.Stream<string, Error>
     readonly tree: (input: TreeInput) => Effect.Effect<string, Error>
     readonly search: (input: SearchInput) => Effect.Effect<Row[], Error>
   }
@@ -481,9 +481,7 @@ export namespace Ripgrep {
         return useWorker ? filesWorker(input) : filesDirect(input)
       }
 
-      const files: Interface["files"] = Effect.fn("Ripgrep.files")(function* (input: FilesInput) {
-        return yield* Stream.toAsyncIterableEffect(source(input))
-      })
+      const files: Interface["files"] = (input) => source(input)
 
       const tree: Interface["tree"] = Effect.fn("Ripgrep.tree")(function* (input: TreeInput) {
         log.info("tree", input)
@@ -557,7 +555,7 @@ export namespace Ripgrep {
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function files(input: FilesInput) {
-    return runPromise((svc) => svc.files(input))
+    return runPromise((svc) => Stream.toAsyncIterableEffect(svc.files(input)))
   }
 
   export function tree(input: TreeInput) {

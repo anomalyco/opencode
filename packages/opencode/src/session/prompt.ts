@@ -43,10 +43,11 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { TaskTool } from "@/tool/task"
+import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 
 // @ts-ignore
@@ -64,6 +65,7 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
+  const elog = EffectLogger.create({ service: "session.prompt" })
 
   export interface Interface {
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -74,7 +76,7 @@ export namespace SessionPrompt {
     readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionPrompt") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
 
   export const layer = Layer.effect(
     Service,
@@ -100,9 +102,17 @@ export namespace SessionPrompt {
       const instruction = yield* Instruction.Service
       const state = yield* SessionRunState.Service
       const revert = yield* SessionRevert.Service
+      const sys = yield* SystemPrompt.Service
+      const llm = yield* LLM.Service
+
+      const run = {
+        promise: <A, E>(effect: Effect.Effect<A, E>) =>
+          Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
+        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
+      }
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-        log.info("cancel", { sessionID })
+        yield* elog.info("cancel", { sessionID })
         yield* state.cancel(sessionID)
       })
 
@@ -172,21 +182,24 @@ export namespace SessionPrompt {
         const msgs = onlySubtasks
           ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
           : yield* MessageV2.toModelMessagesEffect(context, mdl)
-        const text = yield* Effect.promise(async (signal) => {
-          const result = await LLM.stream({
+        const text = yield* llm
+          .stream({
             agent: ag,
             user: firstInfo,
             system: [],
             small: true,
             tools: {},
             model: mdl,
-            abort: signal,
             sessionID: input.session.id,
             retries: 2,
             messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
           })
-          return result.text
-        })
+          .pipe(
+            Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
+            Stream.map((e) => e.text),
+            Stream.mkString,
+            Effect.orDie,
+          )
         const cleaned = text
           .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
           .split("\n")
@@ -196,11 +209,7 @@ export namespace SessionPrompt {
         const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
         yield* sessions
           .setTitle({ sessionID: input.session.id, title: t })
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.sync(() => log.error("failed to generate title", { error: Cause.squash(cause) })),
-            ),
-          )
+          .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
       })
 
       const insertReminders = Effect.fn("SessionPrompt.insertReminders")(function* (input: {
@@ -356,34 +365,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           abort: options.abortSignal!,
           messageID: input.processor.message.id,
           callID: options.toolCallId,
-          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
-            Effect.runPromise(
-              input.processor.updateToolCall(options.toolCallId, (match) => {
-                if (!["running", "pending"].includes(match.state.status)) return match
-                return {
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: { start: Date.now() },
-                  },
-                }
-              }),
-            ),
+            input.processor.updateToolCall(options.toolCallId, (match) => {
+              if (!["running", "pending"].includes(match.state.status)) return match
+              return {
+                ...match,
+                state: {
+                  title: val.title,
+                  metadata: val.metadata,
+                  status: "running",
+                  input: args,
+                  time: { start: Date.now() },
+                },
+              }
+            }),
           ask: (req) =>
-            Effect.runPromise(
-              permission.ask({
+            permission
+              .ask({
                 ...req,
                 sessionID: input.session.id,
                 tool: { messageID: input.processor.message.id, callID: options.toolCallId },
                 ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-              }),
-            ),
+              })
+              .pipe(Effect.orDie),
         })
 
         for (const item of yield* registry.tools({
@@ -397,7 +404,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             description: item.description,
             inputSchema: jsonSchema(schema as any),
             execute(args, options) {
-              return Effect.runPromise(
+              return run.promise(
                 Effect.gen(function* () {
                   const ctx = context(args, options)
                   yield* plugin.trigger(
@@ -405,7 +412,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
                     { args },
                   )
-                  const result = yield* Effect.promise(() => item.execute(args, ctx))
+                  const result = yield* item.execute(args, ctx)
                   const output = {
                     ...result,
                     attachments: result.attachments?.map((attachment) => ({
@@ -438,7 +445,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const transformed = ProviderTransform.schema(input.model, schema)
           item.inputSchema = jsonSchema(transformed)
           item.execute = (args, opts) =>
-            Effect.runPromise(
+            run.promise(
               Effect.gen(function* () {
                 const ctx = context(args, opts)
                 yield* plugin.trigger(
@@ -446,7 +453,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
                   { args },
                 )
-                yield* Effect.promise(() => ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] }))
+                yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
                 const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
                   execute(args, opts),
                 )
@@ -578,63 +585,61 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         let error: Error | undefined
-        const result = yield* Effect.promise((signal) =>
-          taskTool
-            .execute(taskArgs, {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID,
-              abort: signal,
-              callID: part.callID,
-              extra: { bypassAgentCheck: true },
-              messages: msgs,
-              metadata(val: { title?: string; metadata?: Record<string, any> }) {
-                return Effect.runPromise(
-                  Effect.gen(function* () {
-                    part = yield* sessions.updatePart({
-                      ...part,
-                      type: "tool",
-                      state: { ...part.state, ...val },
-                    } satisfies MessageV2.ToolPart)
-                  }),
-                )
-              },
-              ask(req: any) {
-                return Effect.runPromise(
-                  permission.ask({
-                    ...req,
-                    sessionID,
-                    ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
-                  }),
-                )
-              },
-            })
-            .catch((e) => {
-              error = e instanceof Error ? e : new Error(String(e))
-              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-              return undefined
-            }),
-        ).pipe(
-          Effect.onInterrupt(() =>
-            Effect.gen(function* () {
-              assistantMessage.finish = "tool-calls"
-              assistantMessage.time.completed = Date.now()
-              yield* sessions.updateMessage(assistantMessage)
-              if (part.state.status === "running") {
-                yield* sessions.updatePart({
+        const taskAbort = new AbortController()
+        const result = yield* taskTool
+          .execute(taskArgs, {
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            sessionID,
+            abort: taskAbort.signal,
+            callID: part.callID,
+            extra: { bypassAgentCheck: true, promptOps },
+            messages: msgs,
+            metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
+              Effect.gen(function* () {
+                part = yield* sessions.updatePart({
                   ...part,
-                  state: {
-                    status: "error",
-                    error: "Cancelled",
-                    time: { start: part.state.time.start, end: Date.now() },
-                    metadata: part.state.metadata,
-                    input: part.state.input,
-                  },
+                  type: "tool",
+                  state: { ...part.state, ...val },
                 } satisfies MessageV2.ToolPart)
-              }
+              }),
+            ask: (req: any) =>
+              permission
+                .ask({
+                  ...req,
+                  sessionID,
+                  ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                })
+                .pipe(Effect.orDie),
+          })
+          .pipe(
+            Effect.catchCause((cause) => {
+              const defect = Cause.squash(cause)
+              error = defect instanceof Error ? defect : new Error(String(defect))
+              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+              return Effect.void
             }),
-          ),
-        )
+            Effect.onInterrupt(() =>
+              Effect.gen(function* () {
+                taskAbort.abort()
+                assistantMessage.finish = "tool-calls"
+                assistantMessage.time.completed = Date.now()
+                yield* sessions.updateMessage(assistantMessage)
+                if (part.state.status === "running") {
+                  yield* sessions.updatePart({
+                    ...part,
+                    state: {
+                      status: "error",
+                      error: "Cancelled",
+                      time: { start: part.state.time.start, end: Date.now() },
+                      metadata: part.state.metadata,
+                      input: part.state.input,
+                    },
+                  } satisfies MessageV2.ToolPart)
+                }
+              }),
+            ),
+          )
 
         const attachments = result?.attachments?.map((attachment) => ({
           ...attachment,
@@ -857,7 +862,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               output += chunk
               if (part.state.status === "running") {
                 part.state.metadata = { output, description: "" }
-                void Effect.runFork(sessions.updatePart(part))
+                void run.fork(sessions.updatePart(part))
               }
             }),
           )
@@ -902,12 +907,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
-        const model = yield* Effect.promise(async () => {
-          for await (const item of MessageV2.stream(sessionID)) {
-            if (item.info.role === "user" && item.info.model) return item.info.model
-          }
-        })
-        if (model) return model
+        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+        if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
         return yield* provider.defaultModel()
       })
 
@@ -1039,19 +1040,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
                 const { read } = yield* registry.named()
-                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) =>
-                  Effect.promise((signal: AbortSignal) =>
-                    read.execute(args, {
+                const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) => {
+                  const controller = new AbortController()
+                  return read
+                    .execute(args, {
                       sessionID: input.sessionID,
-                      abort: signal,
+                      abort: controller.signal,
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, ...extra },
                       messages: [],
-                      metadata: async () => {},
-                      ask: async () => {},
-                    }),
-                  )
+                      metadata: () => Effect.void,
+                      ask: () => Effect.void,
+                    })
+                    .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
+                }
 
                 if (part.mime === "text/plain") {
                   let offset: number | undefined
@@ -1288,27 +1291,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
 
-      const lastAssistant = (sessionID: SessionID) =>
-        Effect.promise(async () => {
-          let latest: MessageV2.WithParts | undefined
-          for await (const item of MessageV2.stream(sessionID)) {
-            latest ??= item
-            if (item.info.role !== "user") return item
-          }
-          if (latest) return latest
-          throw new Error("Impossible")
-        })
+      const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
+        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
+        if (Option.isSome(match)) return match.value
+        const msgs = yield* sessions.messages({ sessionID, limit: 1 })
+        if (msgs.length > 0) return msgs[0]
+        throw new Error("Impossible")
+      })
 
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
           const ctx = yield* InstanceState.context
+          const slog = elog.with({ sessionID })
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
-            log.info("loop", { step, sessionID })
+            yield* slog.info("loop", { step })
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
@@ -1344,7 +1345,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
-              log.info("exiting loop", { sessionID })
+              yield* slog.info("exiting loop")
               break
             }
 
@@ -1466,8 +1467,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
               const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                Effect.promise(() => SystemPrompt.skills(agent)),
-                Effect.promise(() => SystemPrompt.environment(model)),
+                sys.skills(agent),
+                Effect.sync(() => sys.environment(model)),
                 instruction.system().pipe(Effect.orDie),
                 MessageV2.toModelMessagesEffect(msgs, model),
               ])
@@ -1540,7 +1541,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
 
       const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        log.info("command", input)
+        yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
         const cmd = yield* commands.get(input.command)
         if (!cmd) {
           const available = (yield* commands.list()).map((c) => c.name)
@@ -1655,6 +1656,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return result
       })
 
+      const promptOps: TaskPromptOps = {
+        cancel: (sessionID) => run.fork(cancel(sessionID)),
+        resolvePromptParts: (template) => resolvePromptParts(template),
+        prompt: (input) => prompt(input),
+      }
+
       return Service.of({
         cancel,
         prompt,
@@ -1666,7 +1673,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }),
   )
 
-  const defaultLayer = Layer.suspend(() =>
+  export const defaultLayer = Layer.suspend(() =>
     layer.pipe(
       Layer.provide(SessionRunState.defaultLayer),
       Layer.provide(SessionStatus.defaultLayer),
@@ -1685,9 +1692,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(SessionRevert.defaultLayer),
-      Layer.provide(Agent.defaultLayer),
-      Layer.provide(Bus.layer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(
+        Layer.mergeAll(
+          Agent.defaultLayer,
+          SystemPrompt.defaultLayer,
+          LLM.defaultLayer,
+          Bus.layer,
+          CrossSpawnSpawner.defaultLayer,
+        ),
+      ),
     ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)

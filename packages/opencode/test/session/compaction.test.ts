@@ -1005,6 +1005,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1023,7 +1032,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1039,6 +1056,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         anthropic: {
@@ -1059,7 +1085,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         anthropic: {},
@@ -1078,7 +1112,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        reasoningTokens: 100,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 400,
+          reasoningTokens: 100,
+        },
       },
     })
 
@@ -1104,7 +1146,15 @@ describe("session.getUsage", () => {
         inputTokens: 0,
         outputTokens: 1_000_000,
         totalTokens: 1_000_000,
-        reasoningTokens: 250_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 750_000,
+          reasoningTokens: 250_000,
+        },
       },
     })
 
@@ -1121,6 +1171,15 @@ describe("session.getUsage", () => {
         inputTokens: 0,
         outputTokens: 0,
         totalTokens: 0,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1148,6 +1207,15 @@ describe("session.getUsage", () => {
         inputTokens: 1_000_000,
         outputTokens: 100_000,
         totalTokens: 1_100_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
     })
 
@@ -1163,7 +1231,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       }
       if (npm === "@ai-sdk/amazon-bedrock") {
         const result = Session.getUsage({
@@ -1214,7 +1290,15 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        cachedInputTokens: 200,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
       },
       metadata: {
         vertex: {

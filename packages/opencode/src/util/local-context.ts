@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "async_hooks"
 
-export namespace Context {
+export namespace LocalContext {
   export class NotFound extends Error {
     constructor(public override readonly name: string) {
       super(`No context found for ${name}`)
