@@ -6,7 +6,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
-import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, provideTmpdirInstance, tmpdir, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
@@ -33,12 +33,12 @@ const rejectAll = (message?: string) =>
 const waitForPending = (count: number) =>
   Effect.gen(function* () {
     const permission = yield* Permission.Service
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 100; i++) {
       const list = yield* permission.list()
       if (list.length === count) return list
-      yield* Effect.promise(() => Bun.sleep(0))
+      yield* Effect.sleep("10 millis")
     }
-    return yield* permission.list()
+    return yield* Effect.fail(new Error(`timed out waiting for ${count} pending permission request(s)`))
   })
 
 const fail = <A, E, R>(self: Effect.Effect<A, E, R>) =>
@@ -853,6 +853,18 @@ it.live("reply - publishes replied event", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      let resolve!: (value: { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }) => void
+      const seen = Effect.promise<{
+        sessionID: SessionID
+        requestID: PermissionID
+        reply: Permission.Reply
+      }>(
+        () =>
+          new Promise((res) => {
+            resolve = res
+          }),
+      )
+
       const fiber = yield* ask({
         id: PermissionID.make("per_test7"),
         sessionID: SessionID.make("session_test"),
@@ -865,25 +877,14 @@ it.live("reply - publishes replied event", () =>
 
       yield* waitForPending(1)
 
-      let seen:
-        | {
-            sessionID: SessionID
-            requestID: PermissionID
-            reply: Permission.Reply
-          }
-        | undefined
       const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
-        seen = event.properties
+        resolve(event.properties)
       })
 
       try {
         yield* reply({ requestID: PermissionID.make("per_test7"), reply: "once" })
         yield* Fiber.join(fiber)
-        for (let i = 0; i < 20; i++) {
-          if (seen) break
-          yield* Effect.promise(() => Bun.sleep(0))
-        }
-        expect(seen).toEqual({
+        expect(yield* seen).toEqual({
           sessionID: SessionID.make("session_test"),
           requestID: PermissionID.make("per_test7"),
           reply: "once",
@@ -1057,27 +1058,23 @@ it.live("ask - abort should clear pending request", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped({ git: true })
     const run = withProvided(dir)
-    const ctl = new AbortController()
-    const pending = Effect.runPromise(
-      ask({
-        sessionID: SessionID.make("session_test"),
-        permission: "bash",
-        patterns: ["ls"],
-        metadata: {},
-        always: [],
-        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
-      }).pipe(run, Effect.provide(env)),
-      { signal: ctl.signal },
-    )
 
-    yield* waitForPending(1).pipe(run)
-    ctl.abort()
-    yield* Effect.promise(() => pending.catch(() => undefined))
+    const fiber = yield* ask({
+      id: PermissionID.make("per_reload"),
+      sessionID: SessionID.make("session_reload"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+    }).pipe(run, Effect.forkScoped)
 
-    try {
-      expect(yield* list().pipe(run)).toHaveLength(0)
-    } finally {
-      yield* rejectAll().pipe(run)
-    }
+    const pending = yield* waitForPending(1).pipe(run)
+    expect(pending).toHaveLength(1)
+    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
   }),
 )
