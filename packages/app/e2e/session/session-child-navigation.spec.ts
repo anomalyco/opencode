@@ -37,6 +37,17 @@ test("task tool child-session link does not trigger stale show errors", async ({
         .filter({ hasText: /open child session/i })
         .first()
       await expect(card).toBeVisible({ timeout: 30_000 })
+      await expect
+        .poll(() => card.locator('[data-component="task-tool-state"]').textContent().then((value) => value ?? ""), {
+          timeout: 30_000,
+        })
+        .toMatch(/queued|running|completed/i)
+      await expect
+        .poll(
+          () => card.locator('[data-component="task-tool-elapsed"]').textContent().then((value) => value ?? "").catch(() => ""),
+          { timeout: 30_000 },
+        )
+        .toMatch(/^(?:\d+s|\d+m \d+s) elapsed$/i)
       await card.click()
 
       await expect(page).toHaveURL(new RegExp(`/session/${child.sessionID}(?:[/?#]|$)`), { timeout: 30_000 })
