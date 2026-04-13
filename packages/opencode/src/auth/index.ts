@@ -1,6 +1,5 @@
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, Context } from "effect"
-import { makeRuntime } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
 import { AppFileSystem } from "../filesystem"
@@ -89,22 +88,4 @@ export namespace Auth {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(providerID: string) {
-    return runPromise((service) => service.get(providerID))
-  }
-
-  export async function all(): Promise<Record<string, Info>> {
-    return runPromise((service) => service.all())
-  }
-
-  export async function set(key: string, info: Info) {
-    return runPromise((service) => service.set(key, info))
-  }
-
-  export async function remove(key: string) {
-    return runPromise((service) => service.remove(key))
-  }
 }
