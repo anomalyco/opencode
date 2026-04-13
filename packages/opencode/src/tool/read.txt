@@ -11,4 +11,5 @@ Usage:
 - Any line longer than 2000 characters is truncated.
 - Call this tool in parallel when you know there are multiple files you want to read.
 - Avoid tiny repeated slices (30 line chunks). If you need more context, read a larger window.
-- This tool can read image files and PDFs and return them as file attachments.
+- This tool can read images, PDFs, audio, and video files and return them as file attachments when the file type and size are supported.
+- Oversized binary attachments fail explicitly instead of being returned as text or truncated base64. The default attachment limit is 256 MB and can be changed with OPENCODE_READ_MAX_ATTACHMENT_BYTES.

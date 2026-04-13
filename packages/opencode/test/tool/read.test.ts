@@ -1,10 +1,12 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
+import { truncate as resize } from "fs/promises"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { AppFileSystem } from "../../src/filesystem"
 import { FileTime } from "../../src/file/time"
+import { Flag } from "../../src/flag/flag"
 import { LSP } from "../../src/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
@@ -406,6 +408,69 @@ describe("tool.read truncation", () => {
       expect(result.attachments?.[0]).not.toHaveProperty("id")
       expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
       expect(result.attachments?.[0]).not.toHaveProperty("messageID")
+    }),
+  )
+
+  it.live("attaches PDFs, video, and audio as file attachments", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cases = [
+        { file: "doc.pdf", mime: "application/pdf", msg: "PDF read successfully" },
+        { file: "clip.mp4", mime: "video/mp4", msg: "Video read successfully" },
+        { file: "clip.webm", mime: "video/webm", msg: "Video read successfully" },
+        { file: "sound.mp3", mime: "audio/mpeg", msg: "Audio read successfully" },
+      ]
+
+      yield* Effect.forEach(
+        cases,
+        (item) =>
+          Effect.gen(function* () {
+            yield* put(path.join(dir, item.file), "media")
+            const result = yield* exec(dir, { filePath: path.join(dir, item.file) })
+
+            expect(result.output).toBe(item.msg)
+            expect(result.metadata.preview).toBe(item.msg)
+            expect(result.metadata.truncated).toBe(false)
+            expect(result.attachments).toBeDefined()
+            expect(result.attachments?.[0].type).toBe("file")
+            expect(result.attachments?.[0].mime).toBe(item.mime)
+            expect(result.attachments?.[0].url).toStartWith(`data:${item.mime};base64,`)
+          }),
+        { concurrency: "unbounded" },
+      )
+    }),
+  )
+
+  it.live("rejects oversized media attachments before reading content", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const file = path.join(dir, "large.mp4")
+      yield* put(file, "")
+      yield* Effect.promise(() => resize(file, 256 * 1024 * 1024 + 1))
+
+      const err = yield* fail(dir, { filePath: file })
+      expect(err.message).toContain("Cannot attach video file larger than 256.0 MB")
+      expect(err.message).toContain(file)
+    }),
+  )
+
+  it.live("uses OPENCODE_READ_MAX_ATTACHMENT_BYTES for media attachment limit", () =>
+    Effect.gen(function* () {
+      const prev = Flag.OPENCODE_READ_MAX_ATTACHMENT_BYTES
+      try {
+        // @ts-expect-error tests can override static env flags
+        Flag.OPENCODE_READ_MAX_ATTACHMENT_BYTES = 4
+        const dir = yield* tmpdirScoped()
+        const file = path.join(dir, "small.mp4")
+        yield* put(file, "media")
+
+        const err = yield* fail(dir, { filePath: file })
+        expect(err.message).toContain("Cannot attach video file larger than 4 B")
+        expect(err.message).toContain("(5 B)")
+      } finally {
+        // @ts-expect-error tests can override static env flags
+        Flag.OPENCODE_READ_MAX_ATTACHMENT_BYTES = prev
+      }
     }),
   )
 

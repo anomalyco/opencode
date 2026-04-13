@@ -107,6 +107,16 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+describe("session.message-v2.isMedia", () => {
+  test("classifies images, PDFs, video, and audio as media", () => {
+    expect(MessageV2.isMedia("image/png")).toBe(true)
+    expect(MessageV2.isMedia("application/pdf")).toBe(true)
+    expect(MessageV2.isMedia("video/mp4")).toBe(true)
+    expect(MessageV2.isMedia("audio/mpeg")).toBe(true)
+    expect(MessageV2.isMedia("text/plain")).toBe(false)
+  })
+})
+
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", async () => {
     const input: MessageV2.WithParts[] = [
@@ -270,6 +280,16 @@ describe("session.message-v2.toModelMessage", () => {
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const next = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    } as Provider.Model
 
     const input: MessageV2.WithParts[] = [
       {
@@ -319,7 +339,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, next)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -353,6 +373,194 @@ describe("session.message-v2.toModelMessage", () => {
               ],
             },
             providerOptions: { openai: { tool: "meta" } },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("injects video tool attachments even for providers with image/pdf tool results", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const next = {
+      ...model,
+      api: {
+        ...model.api,
+        npm: "@ai-sdk/anthropic",
+      },
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          video: true,
+        },
+      },
+    } as Provider.Model
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "read video",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/clip.mp4" },
+              output: "Video read successfully",
+              title: "clip.mp4",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-1"),
+                  type: "file",
+                  mime: "video/mp4",
+                  filename: "clip.mp4",
+                  url: "data:video/mp4;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, next)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "read video" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "read",
+            input: { filePath: "/tmp/clip.mp4" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "read",
+            output: { type: "text", value: "Video read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          {
+            type: "file",
+            data: "data:video/mp4;base64,Zm9v",
+            filename: "clip.mp4",
+            mediaType: "video/mp4",
+          },
+        ],
+      },
+    ])
+  })
+
+  test("reports unsupported media tool attachments as text", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "read video",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/clip.mp4" },
+              output: "Video read successfully",
+              title: "clip.mp4",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-1"),
+                  type: "file",
+                  mime: "video/mp4",
+                  filename: "clip.mp4",
+                  url: "data:video/mp4;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "read video" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "read",
+            input: { filePath: "/tmp/clip.mp4" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "read",
+            output: { type: "text", value: "Video read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          {
+            type: "text",
+            text: 'ERROR: Cannot read "clip.mp4" (this model does not support video input). Inform the user.',
           },
         ],
       },

@@ -1,5 +1,6 @@
 import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
+import { UnsupportedFunctionalityError } from "@ai-sdk/provider"
 
 describe("system messages", () => {
   test("should convert system message content to string", () => {
@@ -114,6 +115,79 @@ describe("user messages", () => {
         ],
       },
     ])
+  })
+
+  test("should convert messages with video parts from Uint8Array", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Watch this" },
+          {
+            type: "file",
+            data: new Uint8Array([0, 1, 2, 3]),
+            mediaType: "video/mp4",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Watch this" },
+          {
+            type: "video_url",
+            video_url: { url: "data:video/mp4;base64,AAECAw==" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("should handle URL-based videos", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            data: new URL("https://example.com/clip.mp4"),
+            mediaType: "video/mp4",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "video_url",
+            video_url: { url: "https://example.com/clip.mp4" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("should reject unsupported file parts", () => {
+    expect(() =>
+      convertToCopilotMessages([
+        {
+          role: "user",
+          content: [
+            {
+              type: "file",
+              data: new Uint8Array([0, 1, 2, 3]),
+              mediaType: "application/octet-stream",
+            },
+          ],
+        },
+      ]),
+    ).toThrow(UnsupportedFunctionalityError)
   })
 
   test("should handle multiple text parts without flattening", () => {

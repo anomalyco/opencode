@@ -12,12 +12,14 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
+import { Flag } from "../flag/flag"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+const MAX_ATTACHMENT_BYTES = 256 * 1024 * 1024
 
 const parameters = z.object({
   filePath: z.string().describe("The absolute path to the file or directory to read"),
@@ -146,10 +148,19 @@ export const ReadTool = Tool.define(
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
       const mime = AppFileSystem.mimeType(filepath)
-      const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-      const isPdf = mime === "application/pdf"
-      if (isImage || isPdf) {
-        const msg = `${isImage ? "Image" : "PDF"} read successfully`
+      const attach = attachable(mime)
+      if (attach) {
+        const bytes = Number(stat.size)
+        const max = Flag.OPENCODE_READ_MAX_ATTACHMENT_BYTES ?? MAX_ATTACHMENT_BYTES
+        if (bytes > max) {
+          return yield* Effect.fail(
+            new Error(
+              `Cannot attach ${attach} file larger than ${format(max)}: ${filepath} (${format(bytes)})`,
+            ),
+          )
+        }
+
+        const msg = `${attach[0]!.toUpperCase()}${attach.slice(1)} read successfully`
         return {
           title,
           output: msg,
@@ -263,6 +274,21 @@ async function lines(filepath: string, opts: { limit: number; offset: number }) 
   }
 
   return { raw, count, cut, more, offset: opts.offset }
+}
+
+function attachable(mime: string): "image" | "PDF" | "video" | "audio" | undefined {
+  if (mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet") return "image"
+  if (mime === "application/pdf") return "PDF"
+  if (mime.startsWith("video/")) return "video"
+  if (mime.startsWith("audio/")) return "audio"
+  return undefined
+}
+
+function format(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
 async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {

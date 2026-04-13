@@ -25,10 +25,46 @@ interface FetchDecompressionError extends Error {
 }
 
 export namespace MessageV2 {
-  export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
+  export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media file(s) from tool result:"
 
   export function isMedia(mime: string) {
-    return mime.startsWith("image/") || mime === "application/pdf"
+    return (
+      mime.startsWith("image/") ||
+      mime.startsWith("video/") ||
+      mime.startsWith("audio/") ||
+      mime === "application/pdf"
+    )
+  }
+
+  type Modality = Exclude<keyof Provider.Model["capabilities"]["input"], "text">
+
+  function modality(mime: string): Modality | undefined {
+    if (mime.startsWith("image/")) return "image"
+    if (mime.startsWith("video/")) return "video"
+    if (mime.startsWith("audio/")) return "audio"
+    if (mime === "application/pdf") return "pdf"
+    return undefined
+  }
+
+  function accepts(model: Provider.Model, mime: string) {
+    const kind = modality(mime)
+    return kind ? model.capabilities.input[kind] : false
+  }
+
+  function toolable(model: Provider.Model, mime: string) {
+    const kind = modality(mime)
+    if (!kind) return false
+    if (!accepts(model, mime)) return false
+    if (kind === "audio" || kind === "video") return false
+    if (model.api.npm === "@ai-sdk/anthropic") return true
+    if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") return kind === "image"
+    if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
+    if (model.api.npm === "@ai-sdk/google") {
+      const id = model.api.id.toLowerCase()
+      return id.includes("gemini-3") && !id.includes("gemini-2")
+    }
+    return false
   }
 
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -589,26 +625,6 @@ export namespace MessageV2 {
   ) {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
-    // Track media from tool results that need to be injected as user messages
-    // for providers that don't support media in tool results.
-    //
-    // OpenAI-compatible APIs only support string content in tool results, so we need
-    // to extract media and inject as user messages. Other SDKs (anthropic, google,
-    // bedrock) handle type: "content" with media parts natively.
-    //
-    // Only apply this workaround if the model actually supports image input -
-    // otherwise there's no point extracting images.
-    const supportsMediaInToolResults = (() => {
-      if (model.api.npm === "@ai-sdk/anthropic") return true
-      if (model.api.npm === "@ai-sdk/openai") return true
-      if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
-      if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
-      if (model.api.npm === "@ai-sdk/google") {
-        const id = model.api.id.toLowerCase()
-        return id.includes("gemini-3") && !id.includes("gemini-2")
-      }
-      return false
-    })()
 
     const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
       const output = options.output
@@ -694,7 +710,8 @@ export namespace MessageV2 {
 
       if (msg.info.role === "assistant") {
         const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
-        const media: Array<{ mime: string; url: string }> = []
+        const media: Array<{ mime: string; url: string; filename?: string }> = []
+        const errors: string[] = []
 
         if (
           msg.info.error &&
@@ -727,14 +744,27 @@ export namespace MessageV2 {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
               const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
-              // For providers that don't support media in tool results, extract media files
-              // (images, PDFs) to be sent as a separate user message
-              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-              const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
-              if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                media.push(...mediaAttachments)
+              // Some providers only support specific media types in tool results.
+              // Route the rest through a user message where model modality support is explicit.
+              const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || toolable(model, a.mime))
+              const userAttachments = attachments.filter(
+                (a) => isMedia(a.mime) && accepts(model, a.mime) && !toolable(model, a.mime),
+              )
+              const badAttachments = attachments.filter((a) => isMedia(a.mime) && !accepts(model, a.mime))
+              if (userAttachments.length > 0) {
+                media.push(...userAttachments)
               }
-              const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
+              if (badAttachments.length > 0) {
+                errors.push(
+                  ...badAttachments.map((a) => {
+                    const kind = modality(a.mime)
+                    const name = a.filename ? `"${a.filename}"` : (kind ?? a.mime)
+                    return kind
+                      ? `ERROR: Cannot read ${name} (this model does not support ${kind} input). Inform the user.`
+                      : `ERROR: Cannot read ${name}. Inform the user.`
+                  }),
+                )
+              }
 
               const output =
                 finalAttachments.length > 0
@@ -802,8 +832,8 @@ export namespace MessageV2 {
         if (assistantMessage.parts.length > 0) {
           result.push(assistantMessage)
           // Inject pending media as a user message for providers that don't support
-          // media (images, PDFs) in tool results
-          if (media.length > 0) {
+          // media in tool results.
+          if (media.length > 0 || errors.length > 0) {
             result.push({
               id: MessageID.ascending(),
               role: "user",
@@ -812,10 +842,15 @@ export namespace MessageV2 {
                   type: "text" as const,
                   text: SYNTHETIC_ATTACHMENT_PROMPT,
                 },
+                ...errors.map((text) => ({
+                  type: "text" as const,
+                  text,
+                })),
                 ...media.map((attachment) => ({
                   type: "file" as const,
                   url: attachment.url,
                   mediaType: attachment.mime,
+                  filename: attachment.filename,
                 })),
               ],
             })

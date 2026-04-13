@@ -56,11 +56,22 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
                     },
                     ...partMetadata,
                   }
-                } else {
-                  throw new UnsupportedFunctionalityError({
-                    functionality: `file part media type ${part.mediaType}`,
-                  })
                 }
+                if (part.mediaType.startsWith("video/")) {
+                  return {
+                    type: "video_url",
+                    video_url: {
+                      url:
+                        part.data instanceof URL
+                          ? part.data.toString()
+                          : `data:${part.mediaType};base64,${convertToBase64(part.data)}`,
+                    },
+                    ...partMetadata,
+                  }
+                }
+                throw new UnsupportedFunctionalityError({
+                  functionality: `file part media type ${part.mediaType}`,
+                })
               }
             }
           }),

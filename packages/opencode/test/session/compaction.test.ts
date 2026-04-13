@@ -678,6 +678,15 @@ describe("session.compaction.process", () => {
           filename: "cat.png",
           url: "https://example.com/cat.png",
         })
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: replay.id,
+          sessionID: session.id,
+          type: "file",
+          mime: "video/mp4",
+          filename: "clip.mp4",
+          url: "https://example.com/clip.mp4",
+        })
         const msg = await user(session.id, "current")
         const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
@@ -701,6 +710,9 @@ describe("session.compaction.process", () => {
           expect(last?.parts.some((part) => part.type === "file")).toBe(false)
           expect(
             last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
+          ).toBe(true)
+          expect(
+            last?.parts.some((part) => part.type === "text" && part.text.includes("Attached video/mp4: clip.mp4")),
           ).toBe(true)
         } finally {
           await rt.dispose()
