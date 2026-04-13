@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
+import { AppRuntime } from "../../effect/app-runtime"
 import { File } from "../../file"
 import { Ripgrep } from "../../file/ripgrep"
 import { LSP } from "../../lsp"
@@ -34,12 +35,10 @@ export const FileRoutes = lazy(() =>
       ),
       async (c) => {
         const pattern = c.req.valid("query").pattern
-        const result = await Ripgrep.search({
-          cwd: Instance.directory,
-          pattern,
-          limit: 10,
-        })
-        return c.json(result)
+        const result = await AppRuntime.runPromise(
+          Ripgrep.Service.use((svc) => svc.search({ cwd: Instance.directory, pattern, limit: 10 })),
+        )
+        return c.json(result.items)
       },
     )
     .get(
