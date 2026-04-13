@@ -1,11 +1,11 @@
 import z from "zod"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import * as Stream from "effect/Stream"
 import { Tool } from "./tool"
-import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { AppFileSystem } from "../filesystem"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
@@ -17,6 +17,8 @@ const MAX_LINE_LENGTH = 2000
 export const GrepTool = Tool.define(
   "grep",
   Effect.gen(function* () {
+    const fs = yield* AppFileSystem.Service
+    const rg = yield* Ripgrep.Service
     const spawner = yield* ChildProcessSpawner
 
     return {
@@ -47,7 +49,7 @@ export const GrepTool = Tool.define(
           searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
           yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
 
-          const rgPath = yield* Effect.promise(() => Ripgrep.filepath())
+          const rgPath = yield* rg.path()
           const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
           if (params.include) {
             args.push("--glob", params.include)
@@ -94,29 +96,34 @@ export const GrepTool = Tool.define(
 
           // Handle both Unix (\n) and Windows (\r\n) line endings
           const lines = output.trim().split(/\r?\n/)
-          const matches = []
+          const matches = (yield* Effect.forEach(
+            lines,
+            Effect.fnUntraced(function* (line) {
+              if (!line) return []
 
-          for (const line of lines) {
-            if (!line) continue
+              const [file, raw, ...rest] = line.split("|")
+              if (!file || !raw || rest.length === 0) return []
 
-            const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
-            if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
+              const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (!info || info.type === "Directory") return []
 
-            const lineNum = parseInt(lineNumStr, 10)
-            const lineText = lineTextParts.join("|")
+              return [
+                {
+                  path: file,
+                  mtime:
+                    info.mtime.pipe(
+                      Option.map((time) => time.getTime()),
+                      Option.getOrElse(() => 0),
+                    ) ?? 0,
+                  line: parseInt(raw, 10),
+                  text: rest.join("|"),
+                },
+              ]
+            }),
+            { concurrency: "unbounded" },
+          )).flat()
 
-            const stats = Filesystem.stat(filePath)
-            if (!stats) continue
-
-            matches.push({
-              path: filePath,
-              modTime: stats.mtime.getTime(),
-              lineNum,
-              lineText,
-            })
-          }
-
-          matches.sort((a, b) => b.modTime - a.modTime)
+          matches.sort((a, b) => b.mtime - a.mtime)
 
           const limit = 100
           const truncated = matches.length > limit
@@ -143,10 +150,8 @@ export const GrepTool = Tool.define(
               outputLines.push(`${match.path}:`)
             }
             const truncatedLineText =
-              match.lineText.length > MAX_LINE_LENGTH
-                ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..."
-                : match.lineText
-            outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
+              match.text.length > MAX_LINE_LENGTH ? match.text.substring(0, MAX_LINE_LENGTH) + "..." : match.text
+            outputLines.push(`  Line ${match.line}: ${truncatedLineText}`)
           }
 
           if (truncated) {

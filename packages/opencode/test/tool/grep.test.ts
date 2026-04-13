@@ -8,9 +8,17 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Truncate } from "../../src/tool/truncate"
 import { Agent } from "../../src/agent/agent"
+import { Ripgrep } from "../../src/file/ripgrep"
+import { AppFileSystem } from "../../src/filesystem"
 
 const runtime = ManagedRuntime.make(
-  Layer.mergeAll(CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
+  Layer.mergeAll(
+    CrossSpawnSpawner.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Ripgrep.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
 )
 
 function initGrep() {

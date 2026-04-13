@@ -282,6 +282,7 @@ export namespace Ripgrep {
   }
 
   export interface Interface {
+    readonly path: () => Effect.Effect<string>
     readonly files: (input: {
       cwd: string
       glob?: string[]
@@ -298,6 +299,9 @@ export namespace Ripgrep {
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner
       const afs = yield* AppFileSystem.Service
+      const bin = Effect.fn("Ripgrep.path")(function* () {
+        return yield* Effect.promise(() => filepath())
+      })
 
       const files = Effect.fn("Ripgrep.files")(function* (input: {
         cwd: string
@@ -306,7 +310,7 @@ export namespace Ripgrep {
         follow?: boolean
         maxDepth?: number
       }) {
-        const rgPath = yield* Effect.promise(() => filepath())
+        const rgPath = yield* bin()
         const isDir = yield* afs.isDir(input.cwd)
         if (!isDir) {
           return yield* Effect.die(
@@ -334,6 +338,7 @@ export namespace Ripgrep {
       })
 
       return Service.of({
+        path: bin,
         files: (input) => Stream.unwrap(files(input)),
       })
     }),
