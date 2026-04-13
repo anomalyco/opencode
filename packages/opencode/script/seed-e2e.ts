@@ -25,7 +25,7 @@ const seed = async () => {
       directory: dir,
       init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
-        await Config.waitForDependencies()
+        await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.waitForDependencies()))
         await AppRuntime.runPromise(
           Effect.gen(function* () {
             const registry = yield* ToolRegistry.Service

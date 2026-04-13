@@ -146,12 +146,14 @@ function makeHttp() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(Layer.provide(SessionSummary.defaultLayer), Layer.provideMerge(deps))
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
+    SessionSummary.defaultLayer,
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(SessionSummary.defaultLayer),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
       Layer.provideMerge(proc),
@@ -200,6 +202,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
     Effect.fnUntraced(function* ({ dir, llm }) {
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
 
       const session = yield* sessions.create({
         title: "snapshot race test",
@@ -244,9 +247,9 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       expect(tool?.state.status).toBe("completed")
 
       // Poll for diff — summarize() is fire-and-forget
-      let diff: Awaited<ReturnType<typeof SessionSummary.diff>> = []
+      let diff: Array<{ file: string }> = []
       for (let i = 0; i < 50; i++) {
-        diff = yield* Effect.promise(() => SessionSummary.diff({ sessionID: session.id }))
+        diff = yield* summary.diff({ sessionID: session.id })
         if (diff.length > 0) break
         yield* Effect.sleep("100 millis")
       }

@@ -474,10 +474,14 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const params = c.req.valid("param")
-        const result = await SessionSummary.diff({
-          sessionID: params.sessionID,
-          messageID: query.messageID,
-        })
+        const result = await AppRuntime.runPromise(
+          SessionSummary.Service.use((summary) =>
+            summary.diff({
+              sessionID: params.sessionID,
+              messageID: query.messageID,
+            }),
+          ),
+        )
         return c.json(result)
       },
     )
@@ -547,27 +551,38 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        const session = await Session.get(sessionID)
-        await SessionRevert.cleanup(session)
-        const msgs = await Session.messages({ sessionID })
-        let currentAgent = await Agent.defaultAgent()
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const info = msgs[i].info
-          if (info.role === "user") {
-            currentAgent = info.agent || (await Agent.defaultAgent())
-            break
-          }
-        }
-        await SessionCompaction.create({
-          sessionID,
-          agent: currentAgent,
-          model: {
-            providerID: body.providerID,
-            modelID: body.modelID,
-          },
-          auto: body.auto,
-        })
-        await SessionPrompt.loop({ sessionID })
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const revert = yield* SessionRevert.Service
+            const compact = yield* SessionCompaction.Service
+            const prompt = yield* SessionPrompt.Service
+            const agent = yield* Agent.Service
+
+            yield* revert.cleanup(yield* session.get(sessionID))
+            const msgs = yield* session.messages({ sessionID })
+            const defaultAgent = yield* agent.defaultAgent()
+            let currentAgent = defaultAgent
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const info = msgs[i].info
+              if (info.role === "user") {
+                currentAgent = info.agent || defaultAgent
+                break
+              }
+            }
+
+            yield* compact.create({
+              sessionID,
+              agent: currentAgent,
+              model: {
+                providerID: body.providerID,
+                modelID: body.modelID,
+              },
+              auto: body.auto,
+            })
+            yield* prompt.loop({ sessionID })
+          }),
+        )
         return c.json(true)
       },
     )
@@ -985,10 +1000,14 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         log.info("revert", c.req.valid("json"))
-        const session = await SessionRevert.revert({
-          sessionID,
-          ...c.req.valid("json"),
-        })
+        const session = await AppRuntime.runPromise(
+          SessionRevert.Service.use((svc) =>
+            svc.revert({
+              sessionID,
+              ...c.req.valid("json"),
+            }),
+          ),
+        )
         return c.json(session)
       },
     )
@@ -1018,7 +1037,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = await SessionRevert.unrevert({ sessionID })
+        const session = await AppRuntime.runPromise(SessionRevert.Service.use((svc) => svc.unrevert({ sessionID })))
         return c.json(session)
       },
     )

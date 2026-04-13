@@ -1,6 +1,5 @@
 import z from "zod"
 import { Effect, Layer, Context } from "effect"
-import { makeRuntime } from "@/effect/run-service"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
@@ -159,17 +158,8 @@ export namespace SessionSummary {
     ),
   )
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const summarize = (input: { sessionID: SessionID; messageID: MessageID }) =>
-    void runPromise((svc) => svc.summarize(input)).catch(() => {})
-
   export const DiffInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod.optional(),
   })
-
-  export async function diff(input: z.infer<typeof DiffInput>) {
-    return runPromise((svc) => svc.diff(input))
-  }
 }

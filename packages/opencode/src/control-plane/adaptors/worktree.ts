@@ -1,18 +1,18 @@
 import z from "zod"
 import { Worktree } from "@/worktree"
-import { type Adaptor, WorkspaceInfo } from "../types"
+import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
 
-const Config = WorkspaceInfo.extend({
-  name: WorkspaceInfo.shape.name.unwrap(),
+const WorktreeConfig = z.object({
+  name: WorkspaceInfo.shape.name,
   branch: WorkspaceInfo.shape.branch.unwrap(),
   directory: WorkspaceInfo.shape.directory.unwrap(),
 })
 
-type Config = z.infer<typeof Config>
-
-export const WorktreeAdaptor: Adaptor = {
+export const WorktreeAdaptor: WorkspaceAdaptor = {
+  name: "Worktree",
+  description: "Create a git worktree",
   async configure(info) {
-    const worktree = await Worktree.makeWorktreeInfo(info.name ?? undefined)
+    const worktree = await Worktree.makeWorktreeInfo(undefined)
     return {
       ...info,
       name: worktree.name,
@@ -21,7 +21,7 @@ export const WorktreeAdaptor: Adaptor = {
     }
   },
   async create(info) {
-    const config = Config.parse(info)
+    const config = WorktreeConfig.parse(info)
     await Worktree.createFromInfo({
       name: config.name,
       directory: config.directory,
@@ -29,11 +29,11 @@ export const WorktreeAdaptor: Adaptor = {
     })
   },
   async remove(info) {
-    const config = Config.parse(info)
+    const config = WorktreeConfig.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
   target(info) {
-    const config = Config.parse(info)
+    const config = WorktreeConfig.parse(info)
     return {
       type: "local",
       directory: config.directory,

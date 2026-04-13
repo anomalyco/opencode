@@ -2,9 +2,12 @@ import z from "zod"
 import type { ZodObject } from "zod"
 import { EventEmitter } from "events"
 import { Database, eq } from "@/storage/db"
+import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { Instance } from "@/project/instance"
 import { EventSequenceTable, EventTable } from "./event.sql"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
 
@@ -36,8 +39,6 @@ export namespace SyncEvent {
   const versions = new Map<string, number>()
   let frozen = false
   let convertEvent: (type: string, event: Event["data"]) => Promise<Record<string, unknown>> | Record<string, unknown>
-
-  const Bus = new EventEmitter<{ event: [{ def: Definition; event: Event }] }>()
 
   export function reset() {
     frozen = false
@@ -140,11 +141,6 @@ export namespace SyncEvent {
       }
 
       Database.effect(() => {
-        Bus.emit("event", {
-          def,
-          event,
-        })
-
         if (options?.publish) {
           const result = convertEvent(def.type, event.data)
           if (result instanceof Promise) {
@@ -154,6 +150,17 @@ export namespace SyncEvent {
           } else {
             ProjectBus.publish({ type: def.type, properties: def.schema }, result)
           }
+
+          GlobalBus.emit("event", {
+            directory: Instance.directory,
+            project: Instance.project.id,
+            workspace: WorkspaceContext.workspaceID,
+            payload: {
+              type: "sync",
+              name: versionedType(def.type, def.version),
+              ...event,
+            },
+          })
         }
       })
     })
@@ -235,31 +242,23 @@ export namespace SyncEvent {
     })
   }
 
-  export function subscribeAll(handler: (event: { def: Definition; event: Event }) => void) {
-    Bus.on("event", handler)
-    return () => Bus.off("event", handler)
-  }
-
   export function payloads() {
-    return z
-      .union(
-        registry
-          .entries()
-          .map(([type, def]) => {
-            return z
-              .object({
-                type: z.literal(type),
-                aggregate: z.literal(def.aggregate),
-                data: def.schema,
-              })
-              .meta({
-                ref: "SyncEvent" + "." + def.type,
-              })
+    return registry
+      .entries()
+      .map(([type, def]) => {
+        return z
+          .object({
+            type: z.literal("sync"),
+            name: z.literal(type),
+            id: z.string(),
+            seq: z.number(),
+            aggregateID: z.literal(def.aggregate),
+            data: def.schema,
           })
-          .toArray() as any,
-      )
-      .meta({
-        ref: "SyncEvent",
+          .meta({
+            ref: "SyncEvent" + "." + def.type,
+          })
       })
+      .toArray()
   }
 }
