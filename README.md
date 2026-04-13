@@ -137,5 +137,13 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 - A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
 
 ---
+## Community Plugins
 
+### WSL Windows Notifications
+
+Get native Windows toast notifications when using OpenCode inside WSL.
+
+Uses `powershell.exe` and BurntToast to bridge Linux and Windows notifications.
+
+Repo: https://github.com/captainmmd1304/opencode-wsl-notifications
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
