@@ -642,6 +642,8 @@ export function Markdown(
     const cache = cacheMode({ highlight: local.highlight, chunked: local.chunked, math: local.math })
     const current = mode()
     const key = hash ? `${cache}:${current}:${hash}` : undefined
+    // During streaming, render math incrementally for completed paragraphs
+    const streamingMath = local.streaming ? "full" : (mathReady() ? "full" : "defer")
     return {
       markdown,
       normalized,
@@ -652,7 +654,7 @@ export function Markdown(
       streaming: !!local.streaming,
       highlight: local.highlight,
       chunked: local.chunked,
-      math: mathReady() ? "full" : "defer",
+      math: streamingMath,
     }
   })
 
@@ -675,7 +677,9 @@ export function Markdown(
         input.mode === "lite"
           ? marked.parseLite
           : input.mode === "fast"
-            ? marked.parseFast
+            ? input.math === "full" && marked.parse
+              ? marked.parse  // Use full parser with math during streaming
+              : marked.parseFast
             : input.math === "defer" && marked.parseNoMath
               ? marked.parseNoMath
               : marked.parse
