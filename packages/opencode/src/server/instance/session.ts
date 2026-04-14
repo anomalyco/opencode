@@ -212,7 +212,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.create.schema),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await SessionShare.create(body)
+        const session = await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.create(body)))
         return c.json(session)
       },
     )
@@ -437,8 +437,14 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await SessionShare.share(sessionID)
-        const session = await Session.get(sessionID)
+        const session = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const share = yield* SessionShare.Service
+            const session = yield* Session.Service
+            yield* share.share(sessionID)
+            return yield* session.get(sessionID)
+          }),
+        )
         return c.json(session)
       },
     )
@@ -511,8 +517,14 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await SessionShare.unshare(sessionID)
-        const session = await Session.get(sessionID)
+        const session = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const share = yield* SessionShare.Service
+            const session = yield* Session.Service
+            yield* share.unshare(sessionID)
+            return yield* session.get(sessionID)
+          }),
+        )
         return c.json(session)
       },
     )

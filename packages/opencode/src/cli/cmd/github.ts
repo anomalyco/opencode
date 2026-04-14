@@ -564,7 +564,7 @@ export const GithubRunCommand = cmd({
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
-          await SessionShare.share(session.id)
+          await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.share(session.id)))
           return session.id.slice(-8)
         })()
         console.log("opencode session", session.id)

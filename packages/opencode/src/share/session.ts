@@ -1,8 +1,6 @@
-import { makeRuntime } from "@/effect/run-service"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { SyncEvent } from "@/sync"
-import { fn } from "@/util/fn"
 import { Effect, Layer, Scope, Context } from "effect"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
@@ -58,10 +56,4 @@ export namespace SessionShare {
     Layer.provide(Session.defaultLayer),
     Layer.provide(Config.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const create = fn(Session.create.schema, (input) => runPromise((svc) => svc.create(input)))
-  export const share = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.share(sessionID)))
-  export const unshare = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.unshare(sessionID)))
 }
