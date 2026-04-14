@@ -1,6 +1,6 @@
-import type { Target } from "@/control-plane/types"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
+import { Log } from "@/util/log"
 
 const hop = new Set([
   "connection",
@@ -20,6 +20,7 @@ type Msg = string | ArrayBuffer | Uint8Array
 function headers(req: Request, extra?: HeadersInit) {
   const out = new Headers(req.headers)
   for (const key of hop) out.delete(key)
+  out.delete("accept-encoding")
   out.delete("x-opencode-directory")
   out.delete("x-opencode-workspace")
   if (!extra) return out
@@ -98,31 +99,63 @@ const app = (upgrade: UpgradeWebSocket) =>
   )
 
 export namespace ServerProxy {
-  export function http(target: Extract<Target, { type: "remote" }>, req: Request) {
+  const log = Log.Default.clone().tag("service", "server-proxy")
+
+  export function http(url: string | URL, extra: HeadersInit | undefined, req: Request) {
+    console.log("proxy http request", {
+      method: req.method,
+      request: req.url,
+      url: String(url),
+    })
     return fetch(
-      new Request(target.url, {
+      new Request(url, {
         method: req.method,
-        headers: headers(req, target.headers),
+        headers: headers(req, extra),
         body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
         redirect: "manual",
         signal: req.signal,
       }),
-    )
+    ).then((res) => {
+      const next = new Headers(res.headers)
+      next.delete("content-encoding")
+      next.delete("content-length")
+
+      console.log("proxy http response", {
+        method: req.method,
+        request: req.url,
+        url: String(url),
+        status: res.status,
+        statusText: res.statusText,
+      })
+      return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: next,
+      })
+    })
   }
 
   export function websocket(
     upgrade: UpgradeWebSocket,
-    target: Extract<Target, { type: "remote" }>,
+    target: string | URL,
+    extra: HeadersInit | undefined,
     req: Request,
     env: unknown,
   ) {
-    const url = new URL(req.url)
-    url.pathname = "/__workspace_ws"
-    url.search = ""
+    const proxy = new URL(req.url)
+    proxy.pathname = "/__workspace_ws"
+    proxy.search = ""
     const next = new Headers(req.headers)
-    next.set("x-opencode-proxy-url", socket(target.url))
+    next.set("x-opencode-proxy-url", socket(target))
+    for (const [key, value] of new Headers(extra).entries()) {
+      next.set(key, value)
+    }
+    log.info("proxy websocket", {
+      request: req.url,
+      target: String(target),
+    })
     return app(upgrade).fetch(
-      new Request(url, {
+      new Request(proxy, {
         method: req.method,
         headers: next,
         signal: req.signal,
