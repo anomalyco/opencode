@@ -6,7 +6,6 @@ import { Log } from "@/util/log"
 import { LocalContext } from "../util/local-context"
 import { Project } from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
-import { State } from "./state"
 
 export interface InstanceContext {
   directory: string
@@ -113,13 +112,10 @@ export const Instance = {
   restore<R>(ctx: InstanceContext, fn: () => R): R {
     return context.provide(ctx, fn)
   },
-  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
-    return State.create(() => Instance.directory, init, dispose)
-  },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await disposeInstance(directory)
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
 
@@ -141,7 +137,7 @@ export const Instance = {
     const directory = Instance.directory
     const project = Instance.project
     Log.Default.info("disposing instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await disposeInstance(directory)
     cache.delete(directory)
 
     GlobalBus.emit("event", {
