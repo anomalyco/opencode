@@ -239,6 +239,7 @@ export namespace SessionProcessor {
               if (!(value.id in ctx.reasoningMap)) return
               ctx.reasoningMap[value.id].text += value.text
               if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+              Profiler.appendReasoning(ctx.sessionID, value.text)
               yield* session.updatePartDelta({
                 sessionID: ctx.reasoningMap[value.id].sessionID,
                 messageID: ctx.reasoningMap[value.id].messageID,
@@ -289,6 +290,7 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
+              Profiler.appendToolCall(ctx.sessionID, value.toolName, value.input)
               yield* updateToolCall(value.toolCallId, (match) => ({
                 ...match,
                 tool: value.toolName,
@@ -370,7 +372,6 @@ export namespace SessionProcessor {
                 tokens: usage.tokens,
                 cost: usage.cost,
                 finishReason: value.finishReason,
-                output: ctx.currentText?.text ?? "",
               })
               yield* session.updatePart({
                 id: PartID.ascending(),
@@ -429,6 +430,7 @@ export namespace SessionProcessor {
               if (!ctx.currentText) return
               ctx.currentText.text += value.text
               if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+              Profiler.appendText(ctx.sessionID, value.text)
               yield* session.updatePartDelta({
                 sessionID: ctx.currentText.sessionID,
                 messageID: ctx.currentText.messageID,

@@ -9,7 +9,6 @@ export namespace Profiler {
     sessionID: string
     messageID: string
     agent: string
-    step?: number
     provider: string
     modelID: string
     apiModelID: string
@@ -19,6 +18,9 @@ export namespace Profiler {
     messageCount: number
     tools: string[]
     startTime: number
+    text: string
+    reasoning: string
+    toolCalls: { tool: string; input: unknown }[]
   }
 
   const pending = new Map<string, RequestData>()
@@ -55,7 +57,28 @@ export namespace Profiler {
       ...input,
       timestamp: new Date().toISOString(),
       startTime: Date.now(),
+      text: "",
+      reasoning: "",
+      toolCalls: [],
     })
+  }
+
+  export function appendText(sessionID: string, delta: string) {
+    if (!enabled()) return
+    const req = pending.get(sessionID)
+    if (req) req.text += delta
+  }
+
+  export function appendReasoning(sessionID: string, delta: string) {
+    if (!enabled()) return
+    const req = pending.get(sessionID)
+    if (req) req.reasoning += delta
+  }
+
+  export function appendToolCall(sessionID: string, tool: string, input: unknown) {
+    if (!enabled()) return
+    const req = pending.get(sessionID)
+    if (req) req.toolCalls.push({ tool, input })
   }
 
   export function endRequest(input: {
@@ -69,7 +92,6 @@ export namespace Profiler {
     }
     cost: number
     finishReason: string
-    output: string
   }) {
     if (!enabled()) return
     const req = pending.get(input.sessionID)
@@ -92,7 +114,11 @@ export namespace Profiler {
       tokens: input.tokens,
       cost: input.cost,
       finishReason: input.finishReason,
-      output: input.output,
+      output: {
+        text: req.text,
+        reasoning: req.reasoning,
+        toolCalls: req.toolCalls,
+      },
       durationMs: Date.now() - req.startTime,
     }
 
