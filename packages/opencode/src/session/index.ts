@@ -8,7 +8,7 @@ import { type ProviderMetadata } from "ai"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
-import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt, sql } from "../storage/db"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
 import { PartTable, SessionTable } from "./session.sql"
@@ -706,7 +706,9 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(
+        sql`(${SessionTable.directory} = ${input.directory} OR ${SessionTable.directory} LIKE ${path.join(input.directory, "%")})`,
+      )
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))

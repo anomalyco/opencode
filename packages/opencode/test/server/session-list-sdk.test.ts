@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 describe("session.list with sdk directory", () => {
-  test("v2 does not implicitly filter by current directory", async () => {
+  test("v2 implicitly filters by current directory subtree", async () => {
     await using tmp = await tmpdir({ git: true })
     const dir = `${tmp.path}/.dmux/worktrees/a`
     await mkdir(dir, { recursive: true })
@@ -44,11 +44,11 @@ describe("session.list with sdk directory", () => {
     const res = await sdk.session.list({ search: key })
     const ids = (res.data ?? []).map((item) => item.id)
 
-    expect(ids).toContain(root.id)
+    expect(ids).not.toContain(root.id)
     expect(ids).toContain(child.id)
   })
 
-  test("v1 does not implicitly filter by current directory", async () => {
+  test("v1 implicitly filters by current directory subtree", async () => {
     await using tmp = await tmpdir({ git: true })
     const dir = `${tmp.path}/.dmux/worktrees/a`
     await mkdir(dir, { recursive: true })
@@ -77,7 +77,95 @@ describe("session.list with sdk directory", () => {
     const res = await sdk.session.list()
     const ids = (res.data ?? []).map((item) => item.id)
 
-    expect(ids).toContain(root.id)
+    expect(ids).not.toContain(root.id)
     expect(ids).toContain(child.id)
+  })
+})
+
+describe("session.list with ancestor directory filtering", () => {
+  test("v2 allows ancestors but not siblings", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const a = `${tmp.path}/.worktrees/a`
+    const b = `${tmp.path}/.worktrees/b`
+    await mkdir(a, { recursive: true })
+    await mkdir(b, { recursive: true })
+
+    const key = `ancestor-v2-${Date.now()}`
+    const sa = await Instance.provide({
+      directory: a,
+      fn: async () => Session.create({ title: `${key}-a` }),
+    })
+    const sb = await Instance.provide({
+      directory: b,
+      fn: async () => Session.create({ title: `${key}-b` }),
+    })
+
+    const app = Server.Default().app
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = new Request(input, init)
+      return app.request(req)
+    }) as typeof globalThis.fetch
+
+    const root = v2({
+      baseUrl: "http://opencode.internal",
+      directory: tmp.path,
+      fetch: fetcher,
+    })
+    const child = v2({
+      baseUrl: "http://opencode.internal",
+      directory: b,
+      fetch: fetcher,
+    })
+
+    const rootIds = ((await root.session.list()).data ?? []).map((item) => item.id)
+    const childIds = ((await child.session.list()).data ?? []).map((item) => item.id)
+
+    expect(rootIds).toContain(sa.id)
+    expect(rootIds).toContain(sb.id)
+    expect(childIds).toContain(sb.id)
+    expect(childIds).not.toContain(sa.id)
+  })
+
+  test("v1 allows ancestors but not siblings", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const a = `${tmp.path}/.worktrees/a`
+    const b = `${tmp.path}/.worktrees/b`
+    await mkdir(a, { recursive: true })
+    await mkdir(b, { recursive: true })
+
+    const key = `ancestor-v1-${Date.now()}`
+    const sa = await Instance.provide({
+      directory: a,
+      fn: async () => Session.create({ title: `${key}-a` }),
+    })
+    const sb = await Instance.provide({
+      directory: b,
+      fn: async () => Session.create({ title: `${key}-b` }),
+    })
+
+    const app = Server.Default().app
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = new Request(input, init)
+      return app.request(req)
+    }) as typeof globalThis.fetch
+
+    const root = v1({
+      baseUrl: "http://opencode.internal",
+      directory: tmp.path,
+      fetch: fetcher,
+    })
+    const child = v1({
+      baseUrl: "http://opencode.internal",
+      directory: b,
+      fetch: fetcher,
+    })
+
+    const rootIds = ((await root.session.list()).data ?? []).map((item) => item.id)
+    const childIds = ((await child.session.list()).data ?? []).map((item) => item.id)
+
+    expect(rootIds).toContain(sa.id)
+    expect(rootIds).toContain(sb.id)
+    expect(childIds).toContain(sb.id)
+    expect(childIds).not.toContain(sa.id)
   })
 })

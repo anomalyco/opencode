@@ -17,7 +17,6 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
   const url = new URL(request.url)
-  const isSessionRequest = /\/session\/?$/.test(url.pathname)
   let changed = false
 
   for (const [name, key] of [
@@ -25,10 +24,6 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
     ["x-opencode-workspace", "workspace"],
   ] as const) {
     const hasExplicitSearchParameter = url.searchParams.has(key)
-    if (isSessionRequest) {
-      // Keep implicit directory context in headers so /session is not accidentally directory-filtered.
-      if (key === "directory" && !hasExplicitSearchParameter) continue
-    }
 
     const value = pick(
       request.headers.get(name),
