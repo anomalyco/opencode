@@ -454,18 +454,9 @@ export namespace ACP {
             }
           }
           if (part.type !== "text" && part.type !== "file") return
-          const msg = await this.sdk.session
-            .message(
-              { sessionID: part.sessionID, messageID: part.messageID, directory: session.cwd },
-              { throwOnError: true },
-            )
-            .then((x) => x.data)
-            .catch((err) => {
-              log.error("failed to fetch message for user chunk", { error: err })
-              return undefined
-            })
-          if (!msg || msg.info.role !== "user") return
-          await this.processMessage({ info: msg.info, parts: [part] })
+          // ACP clients already know the prompt they just submitted, so replaying
+          // live user parts duplicates the message. We still replay user history in
+          // loadSession() and forkSession() via processMessage().
           return
         }
 
