@@ -46,7 +46,6 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
-import { attach, makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 
@@ -108,9 +107,8 @@ export namespace SessionPrompt {
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
-          Effect.runPromise(attach(effect).pipe(Effect.provide(EffectLogger.layer))),
-        fork: <A, E>(effect: Effect.Effect<A, E>) =>
-          Effect.runFork(attach(effect).pipe(Effect.provide(EffectLogger.layer))),
+          Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
+        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
       }
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
@@ -1709,8 +1707,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ),
     ),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod.optional(),
@@ -1778,25 +1774,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
-  export async function prompt(input: PromptInput) {
-    return runPromise((svc) => svc.prompt(PromptInput.parse(input)))
-  }
-
-  export async function resolvePromptParts(template: string) {
-    return runPromise((svc) => svc.resolvePromptParts(z.string().parse(template)))
-  }
-
-  export async function cancel(sessionID: SessionID) {
-    return runPromise((svc) => svc.cancel(SessionID.zod.parse(sessionID)))
-  }
-
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
   })
-
-  export async function loop(input: z.infer<typeof LoopInput>) {
-    return runPromise((svc) => svc.loop(LoopInput.parse(input)))
-  }
 
   export const ShellInput = z.object({
     sessionID: SessionID.zod,
@@ -1811,10 +1791,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     command: z.string(),
   })
   export type ShellInput = z.infer<typeof ShellInput>
-
-  export async function shell(input: ShellInput) {
-    return runPromise((svc) => svc.shell(ShellInput.parse(input)))
-  }
 
   export const CommandInput = z.object({
     messageID: MessageID.zod.optional(),
@@ -1838,10 +1814,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       .optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
-
-  export async function command(input: CommandInput) {
-    return runPromise((svc) => svc.command(CommandInput.parse(input)))
-  }
 
   /** @internal Exported for testing */
   export function createStructuredOutputTool(input: {

@@ -341,13 +341,17 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        await SessionPrompt.command({
-          sessionID,
-          messageID: body.messageID,
-          model: body.providerID + "/" + body.modelID,
-          command: Command.Default.INIT,
-          arguments: "",
-        })
+        await AppRuntime.runPromise(
+          SessionPrompt.Service.use((svc) =>
+            svc.command({
+              sessionID,
+              messageID: body.messageID,
+              model: body.providerID + "/" + body.modelID,
+              command: Command.Default.INIT,
+              arguments: "",
+            }),
+          ),
+        )
         return c.json(true)
       },
     )
@@ -407,7 +411,7 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        await SessionPrompt.cancel(c.req.valid("param").sessionID)
+        await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.cancel(c.req.valid("param").sessionID)))
         return c.json(true)
       },
     )
@@ -875,7 +879,9 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
+          const msg = await AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+          )
           stream.write(JSON.stringify(msg))
         })
       },
@@ -904,7 +910,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
+        AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID }))).catch((err) => {
           log.error("prompt_async failed", { sessionID, error: err })
           Bus.publish(Session.Event.Error, {
             sessionID,
@@ -948,7 +954,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        const msg = await SessionPrompt.command({ ...body, sessionID })
+        const msg = await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.command({ ...body, sessionID })))
         return c.json(msg)
       },
     )
@@ -980,7 +986,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        const msg = await SessionPrompt.shell({ ...body, sessionID })
+        const msg = await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.shell({ ...body, sessionID })))
         return c.json(msg)
       },
     )
