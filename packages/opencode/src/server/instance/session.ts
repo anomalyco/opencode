@@ -666,18 +666,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const sessionID = c.req.valid("param").sessionID
-        if (query.limit === undefined) {
-          const messages = await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const session = yield* Session.Service
-              yield* session.get(sessionID)
-              return yield* session.messages({ sessionID })
-            }),
-          )
-          return c.json(messages)
-        }
-
-        if (query.limit === 0) {
+        if (query.limit === undefined || query.limit === 0) {
           const messages = await AppRuntime.runPromise(
             Effect.gen(function* () {
               const session = yield* Session.Service
