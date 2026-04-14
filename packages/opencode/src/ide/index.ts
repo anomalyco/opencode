@@ -1,9 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { spawn } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
-import { Process } from "@/util/process"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },
@@ -52,11 +52,13 @@ export namespace Ide {
     const cmd = SUPPORTED_IDES.find((i) => i.name === ide)?.cmd
     if (!cmd) throw new Error(`Unknown IDE: ${ide}`)
 
-    const p = await Process.run([cmd, "--install-extension", "sst-dev.opencode"], {
-      nothrow: true,
+    const p = spawn([cmd, "--install-extension", "sst-dev.opencode"], {
+      stdout: "pipe",
+      stderr: "pipe",
     })
-    const stdout = p.stdout.toString()
-    const stderr = p.stderr.toString()
+    await p.exited
+    const stdout = await new Response(p.stdout).text()
+    const stderr = await new Response(p.stderr).text()
 
     log.info("installed", {
       ide,
@@ -64,7 +66,7 @@ export namespace Ide {
       stderr,
     })
 
-    if (p.code !== 0) {
+    if (p.exitCode !== 0) {
       throw new InstallFailedError({ stderr })
     }
     if (stdout.includes("already installed")) {

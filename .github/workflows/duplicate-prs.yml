@@ -1,0 +1,65 @@
+name: Duplicate PR Check
+
+on:
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  check-duplicates:
+    if: |
+      github.event.pull_request.user.login != 'actions-user' &&
+      github.event.pull_request.user.login != 'opencode' &&
+      github.event.pull_request.user.login != 'rekram1-node' &&
+      github.event.pull_request.user.login != 'thdxr' &&
+      github.event.pull_request.user.login != 'kommander' &&
+      github.event.pull_request.user.login != 'jayair' &&
+      github.event.pull_request.user.login != 'fwang' &&
+      github.event.pull_request.user.login != 'adamdotdevin' &&
+      github.event.pull_request.user.login != 'iamdavidhill' &&
+      github.event.pull_request.user.login != 'opencode-agent[bot]'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Build prompt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "Check for duplicate PRs related to this new PR:"
+            echo ""
+            echo "CURRENT_PR_NUMBER: $PR_NUMBER"
+            echo ""
+            echo "Title: $(gh pr view "$PR_NUMBER" --json title --jq .title)"
+            echo ""
+            echo "Description:"
+            gh pr view "$PR_NUMBER" --json body --jq .body
+          } > pr_info.txt
+
+      - name: Check for duplicate PRs
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          COMMENT=$(bun script/duplicate-pr.ts -f pr_info.txt "Check the attached file for PR details and search for duplicates")
+
+          gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
+
+          $COMMENT"

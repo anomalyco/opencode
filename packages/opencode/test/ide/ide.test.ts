@@ -2,7 +2,7 @@ import { describe, expect, test, afterEach } from "bun:test"
 import { Ide } from "../../src/ide"
 
 describe("ide", () => {
-  const original = { ...process.env }
+  const original = structuredClone(process.env)
 
   afterEach(() => {
     Object.keys(process.env).forEach((key) => {

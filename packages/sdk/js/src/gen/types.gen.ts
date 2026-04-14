@@ -1554,7 +1554,7 @@ export type FileNode = {
 }
 
 export type FileContent = {
-  type: "text" | "binary"
+  type: "text"
   content: string
   diff?: string
   patch?: {

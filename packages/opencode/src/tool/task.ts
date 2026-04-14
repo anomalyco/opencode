@@ -2,48 +2,49 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
 import { Session } from "../session"
-import { SessionID, MessageID } from "../session/schema"
+import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
+import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
-import type { SessionPrompt } from "../session/prompt"
+import { SessionPrompt } from "../session/prompt"
+import { iife } from "@/util/iife"
+import { defer } from "@/util/defer"
 import { Config } from "../config/config"
-import { Effect } from "effect"
-import { Log } from "@/util/log"
-
-export interface TaskPromptOps {
-  cancel(sessionID: SessionID): void
-  resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
-  prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
-}
-
-const id = "task"
+import { PermissionNext } from "@/permission/next"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
-  task_id: z
-    .string()
-    .describe(
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-    )
-    .optional(),
+  session_id: z.string().describe("Existing Task session to continue").optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
-export const TaskTool = Tool.define(
-  id,
-  Effect.gen(function* () {
-    const agent = yield* Agent.Service
-    const config = yield* Config.Service
-    const sessions = yield* Session.Service
+export const TaskTool = Tool.define("task", async (ctx) => {
+  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
-    const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
-      const cfg = yield* config.get()
+  // Filter agents by permissions if agent provided
+  const caller = ctx?.agent
+  const accessibleAgents = caller
+    ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
+    : agents
 
+  const description = DESCRIPTION.replace(
+    "{agents}",
+    accessibleAgents
+      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+      .join("\n"),
+  )
+  return {
+    description,
+    parameters,
+    async execute(params: z.infer<typeof parameters>, ctx) {
+      const config = await Config.get()
+
+      // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
-        yield* ctx.ask({
-          permission: id,
+        await ctx.ask({
+          permission: "task",
           patterns: [params.subagent_type],
           always: ["*"],
           metadata: {
@@ -53,124 +54,135 @@ export const TaskTool = Tool.define(
         })
       }
 
-      const next = yield* agent.get(params.subagent_type)
-      if (!next) {
-        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
-      }
+      const agent = await Agent.get(params.subagent_type)
+      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
-      const canTask = next.permission.some((rule) => rule.permission === id)
-      const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
+      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
 
-      const taskID = params.task_id
-      const session = taskID
-        ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
-        : undefined
-      const nextSession =
-        session ??
-        (yield* sessions.create({
+      const session = await iife(async () => {
+        if (params.session_id) {
+          const found = await Session.get(params.session_id).catch(() => {})
+          if (found) return found
+        }
+
+        return await Session.create({
           parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
+          title: params.description + ` (@${agent.name} subagent)`,
           permission: [
-            ...(canTodo
+            {
+              permission: "todowrite",
+              pattern: "*",
+              action: "deny",
+            },
+            {
+              permission: "todoread",
+              pattern: "*",
+              action: "deny",
+            },
+            ...(hasTaskPermission
               ? []
               : [
                   {
-                    permission: "todowrite" as const,
+                    permission: "task" as const,
                     pattern: "*" as const,
                     action: "deny" as const,
                   },
                 ]),
-            ...(canTask
-              ? []
-              : [
-                  {
-                    permission: id,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(cfg.experimental?.primary_tools?.map((item) => ({
+            ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
               action: "allow" as const,
-              permission: item,
+              permission: t,
             })) ?? []),
           ],
-        }))
+        })
+      })
+      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      ctx.metadata({
+        title: params.description,
+        metadata: {
+          sessionId: session.id,
+        },
+      })
 
-      const model = next.model ?? {
+      const messageID = Identifier.ascending("message")
+      const parts: Record<string, { id: string; tool: string; state: { status: string; title?: string } }> = {}
+      const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+        if (evt.properties.part.sessionID !== session.id) return
+        if (evt.properties.part.messageID === messageID) return
+        if (evt.properties.part.type !== "tool") return
+        const part = evt.properties.part
+        parts[part.id] = {
+          id: part.id,
+          tool: part.tool,
+          state: {
+            status: part.state.status,
+            title: part.state.status === "completed" ? part.state.title : undefined,
+          },
+        }
+        ctx.metadata({
+          title: params.description,
+          metadata: {
+            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
+            sessionId: session.id,
+          },
+        })
+      })
+
+      const model = agent.model ?? {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }
 
-      yield* ctx.metadata({
+      function cancel() {
+        SessionPrompt.cancel(session.id)
+      }
+      ctx.abort.addEventListener("abort", cancel)
+      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+
+      const result = await SessionPrompt.prompt({
+        messageID,
+        sessionID: session.id,
+        model: {
+          modelID: model.modelID,
+          providerID: model.providerID,
+        },
+        agent: agent.name,
+        tools: {
+          todowrite: false,
+          todoread: false,
+          ...(hasTaskPermission ? {} : { task: false }),
+          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+        },
+        parts: promptParts,
+      })
+      unsub()
+      const messages = await Session.messages({ sessionID: session.id })
+      const summary = messages
+        .filter((x) => x.info.role === "assistant")
+        .flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+        .map((part) => ({
+          id: part.id,
+          tool: part.tool,
+          state: {
+            status: part.state.status,
+            title: part.state.status === "completed" ? part.state.title : undefined,
+          },
+        }))
+      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+
+      const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
+
+      return {
         title: params.description,
         metadata: {
-          sessionId: nextSession.id,
-          model,
+          summary,
+          sessionId: session.id,
         },
-      })
-
-      const ops = ctx.extra?.promptOps as TaskPromptOps
-      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
-
-      const messageID = MessageID.ascending()
-
-      function cancel() {
-        ops.cancel(nextSession.id)
+        output,
       }
-
-      return yield* Effect.acquireUseRelease(
-        Effect.sync(() => {
-          ctx.abort.addEventListener("abort", cancel)
-        }),
-        () =>
-          Effect.gen(function* () {
-            const parts = yield* ops.resolvePromptParts(params.prompt)
-            const result = yield* ops.prompt({
-              messageID,
-              sessionID: nextSession.id,
-              model: {
-                modelID: model.modelID,
-                providerID: model.providerID,
-              },
-              agent: next.name,
-              tools: {
-                ...(canTodo ? {} : { todowrite: false }),
-                ...(canTask ? {} : { task: false }),
-                ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
-              },
-              parts,
-            })
-
-            return {
-              title: params.description,
-              metadata: {
-                sessionId: nextSession.id,
-                model,
-              },
-              output: [
-                `task_id: ${nextSession.id} (for resuming to continue this task if needed)`,
-                "",
-                "<task_result>",
-                result.parts.findLast((item) => item.type === "text")?.text ?? "",
-                "</task_result>",
-              ].join("\n"),
-            }
-          }),
-        () =>
-          Effect.sync(() => {
-            ctx.abort.removeEventListener("abort", cancel)
-          }),
-      )
-    })
-
-    return {
-      description: DESCRIPTION,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
-    }
-  }),
-)
+    },
+  }
+})

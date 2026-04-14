@@ -15,17 +15,9 @@ To create a new `AGENTS.md` file, you can run the `/init` command in opencode.
 You should commit your project's `AGENTS.md` file to Git.
 :::
 
-`/init` scans the important files in your repo, may ask a couple of targeted questions when the codebase cannot answer them, and then creates or updates `AGENTS.md` with concise project-specific guidance.
+This will scan your project and all its contents to understand what the project is about and generate an `AGENTS.md` file with it. This helps opencode to navigate the project better.
 
-It focuses on the things future agent sessions are most likely to need:
-
-- build, lint, and test commands
-- command order and focused verification steps when they matter
-- architecture and repo structure that are not obvious from filenames alone
-- project-specific conventions, setup quirks, and operational gotchas
-- references to existing instruction sources like Cursor or Copilot rules
-
-If you already have an `AGENTS.md`, `/init` will improve it in place instead of blindly replacing it.
+If you have an existing `AGENTS.md` file, this will try to add to it.
 
 ---
 
@@ -96,7 +88,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 When opencode starts, it looks for rule files in this order:
 
-1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`)
+1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md`)
 2. **Global file** at `~/.config/opencode/AGENTS.md`
 3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
 

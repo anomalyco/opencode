@@ -3,11 +3,9 @@ import { createMemo, Match, Show, Switch, createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
-import { IconAlipay, IconCreditCard, IconStripe, IconUpi, IconWechat } from "~/component/icon"
+import { IconCreditCard, IconStripe } from "~/component/icon"
 import styles from "./billing-section.module.css"
 import { createCheckoutUrl, formatBalance, queryBillingInfo } from "../../common"
-import { useI18n } from "~/context/i18n"
-import { localizeError } from "~/lib/form-error"
 
 const createSessionUrl = action(async (workspaceID: string, returnUrl: string) => {
   "use server"
@@ -28,7 +26,6 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 
 export function BillingSection() {
   const params = useParams()
-  const i18n = useI18n()
   // ORIGINAL CODE - COMMENTED OUT FOR TESTING
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const checkoutAction = useAction(createCheckoutUrl)
@@ -140,18 +137,16 @@ export function BillingSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>{i18n.t("workspace.billing.title")}</h2>
+        <h2>Billing</h2>
         <p>
-          {i18n.t("workspace.billing.subtitle.beforeLink")}{" "}
-          <a href="mailto:contact@anoma.ly">{i18n.t("workspace.billing.contactUs")}</a>{" "}
-          {i18n.t("workspace.billing.subtitle.afterLink")}
+          Manage payments methods. <a href="mailto:contact@anoma.ly">Contact us</a> if you have any questions.
         </p>
       </div>
       <div data-slot="section-content">
         <div data-slot="balance-display">
           <div data-slot="balance-amount">
             <span data-slot="balance-value">${balance()}</span>
-            <span data-slot="balance-label">{i18n.t("workspace.billing.currentBalance")}</span>
+            <span data-slot="balance-label">Current Balance</span>
           </div>
           <Show when={billingInfo()?.customerID}>
             <div data-slot="balance-right-section">
@@ -160,7 +155,7 @@ export function BillingSection() {
                 fallback={
                   <div data-slot="add-balance-form-container">
                     <div data-slot="add-balance-form">
-                      <label>{i18n.t("workspace.billing.add")}</label>
+                      <label>Add $</label>
                       <input
                         data-component="input"
                         type="number"
@@ -171,11 +166,11 @@ export function BillingSection() {
                           setStore("addBalanceAmount", e.currentTarget.value)
                           checkoutSubmission.clear()
                         }}
-                        placeholder={i18n.t("workspace.billing.enterAmount")}
+                        placeholder="Enter amount"
                       />
                       <div data-slot="form-actions">
                         <button data-color="ghost" type="button" onClick={() => hideAddBalanceForm()}>
-                          {i18n.t("common.cancel")}
+                          Cancel
                         </button>
                         <button
                           data-color="primary"
@@ -183,20 +178,18 @@ export function BillingSection() {
                           disabled={!store.addBalanceAmount || checkoutSubmission.pending || store.checkoutRedirecting}
                           onClick={onClickCheckout}
                         >
-                          {checkoutSubmission.pending || store.checkoutRedirecting
-                            ? i18n.t("workspace.billing.loading")
-                            : i18n.t("workspace.billing.addAction")}
+                          {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Add"}
                         </button>
                       </div>
                     </div>
                     <Show when={checkoutSubmission.result && (checkoutSubmission.result as any).error}>
-                      {(err: any) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
+                      {(err: any) => <div data-slot="form-error">{err()}</div>}
                     </Show>
                   </div>
                 }
               >
                 <button data-color="primary" onClick={() => showAddBalanceForm()}>
-                  {i18n.t("workspace.billing.addBalance")}
+                  Add Balance
                 </button>
               </Show>
               <div data-slot="credit-card">
@@ -204,15 +197,6 @@ export function BillingSection() {
                   <Switch fallback={<IconCreditCard style={{ width: "24px", height: "24px" }} />}>
                     <Match when={billingInfo()?.paymentMethodType === "link"}>
                       <IconStripe style={{ width: "24px", height: "24px" }} />
-                    </Match>
-                    <Match when={billingInfo()?.paymentMethodType === "alipay"}>
-                      <IconAlipay style={{ width: "24px", height: "24px" }} />
-                    </Match>
-                    <Match when={billingInfo()?.paymentMethodType === "wechat_pay"}>
-                      <IconWechat style={{ width: "24px", height: "24px" }} />
-                    </Match>
-                    <Match when={billingInfo()?.paymentMethodType === "upi"}>
-                      <IconUpi style={{ width: "auto", height: "16px" }} />
                     </Match>
                   </Switch>
                 </div>
@@ -225,13 +209,7 @@ export function BillingSection() {
                       </Show>
                     </Match>
                     <Match when={billingInfo()?.paymentMethodType === "link"}>
-                      <span data-slot="type">{i18n.t("workspace.billing.linkedToStripe")}</span>
-                    </Match>
-                    <Match when={billingInfo()?.paymentMethodType === "alipay"}>
-                      <span data-slot="type">{i18n.t("workspace.billing.alipay")}</span>
-                    </Match>
-                    <Match when={billingInfo()?.paymentMethodType === "wechat_pay"}>
-                      <span data-slot="type">{i18n.t("workspace.billing.wechat")}</span>
+                      <span data-slot="type">Linked to Stripe</span>
                     </Match>
                   </Switch>
                 </div>
@@ -240,9 +218,7 @@ export function BillingSection() {
                   disabled={sessionSubmission.pending || store.sessionRedirecting}
                   onClick={onClickSession}
                 >
-                  {sessionSubmission.pending || store.sessionRedirecting
-                    ? i18n.t("workspace.billing.loading")
-                    : i18n.t("workspace.billing.manage")}
+                  {sessionSubmission.pending || store.sessionRedirecting ? "Loading..." : "Manage"}
                 </button>
               </div>
             </div>
@@ -255,9 +231,7 @@ export function BillingSection() {
             disabled={checkoutSubmission.pending || store.checkoutRedirecting}
             onClick={onClickCheckout}
           >
-            {checkoutSubmission.pending || store.checkoutRedirecting
-              ? i18n.t("workspace.billing.loading")
-              : i18n.t("workspace.billing.enable")}
+            {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable Billing"}
           </button>
         </Show>
       </div>

@@ -1,42 +1,28 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { GlobalEvent, Event } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
-  subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
+  on: (handler: (event: Event) => void) => () => void
 }
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: {
-    url: string
-    directory?: string
-    fetch?: typeof fetch
-    headers?: RequestInit["headers"]
-    events?: EventSource
-  }) => {
+  init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
     const abort = new AbortController()
-    let sse: AbortController | undefined
-
-    function createSDK() {
-      return createOpencodeClient({
-        baseUrl: props.url,
-        signal: abort.signal,
-        directory: props.directory,
-        fetch: props.fetch,
-        headers: props.headers,
-      })
-    }
-
-    let sdk = createSDK()
+    const sdk = createOpencodeClient({
+      baseUrl: props.url,
+      signal: abort.signal,
+      directory: props.directory,
+      fetch: props.fetch,
+    })
 
     const emitter = createGlobalEmitter<{
-      event: GlobalEvent
+      [key in Event["type"]]: Extract<Event, { type: key }>
     }>()
 
-    let queue: GlobalEvent[] = []
+    let queue: Event[] = []
     let timer: Timer | undefined
     let last = 0
 
@@ -49,12 +35,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
         for (const event of events) {
-          emitter.emit("event", event)
+          emitter.emit(event.type, event)
         }
       })
     }
 
-    const handleEvent = (event: GlobalEvent) => {
+    const handleEvent = (event: Event) => {
       queue.push(event)
       const elapsed = Date.now() - last
 
@@ -68,49 +54,41 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       flush()
     }
 
-    function startSSE() {
-      sse?.abort()
-      const ctrl = new AbortController()
-      sse = ctrl
-      ;(async () => {
-        while (true) {
-          if (abort.signal.aborted || ctrl.signal.aborted) break
-          const events = await sdk.global.event({ signal: ctrl.signal })
-
-          for await (const event of events.stream) {
-            if (ctrl.signal.aborted) break
-            handleEvent(event)
-          }
-
-          if (timer) clearTimeout(timer)
-          if (queue.length > 0) flush()
-        }
-      })().catch(() => {})
-    }
-
     onMount(async () => {
+      // If an event source is provided, use it instead of SSE
       if (props.events) {
-        const unsub = await props.events.subscribe(handleEvent)
+        const unsub = props.events.on(handleEvent)
         onCleanup(unsub)
-      } else {
-        startSSE()
+        return
+      }
+
+      // Fall back to SSE
+      while (true) {
+        if (abort.signal.aborted) break
+        const events = await sdk.event.subscribe(
+          {},
+          {
+            signal: abort.signal,
+          },
+        )
+
+        for await (const event of events.stream) {
+          handleEvent(event)
+        }
+
+        // Flush any remaining events
+        if (timer) clearTimeout(timer)
+        if (queue.length > 0) {
+          flush()
+        }
       }
     })
 
     onCleanup(() => {
       abort.abort()
-      sse?.abort()
       if (timer) clearTimeout(timer)
     })
 
-    return {
-      get client() {
-        return sdk
-      },
-      directory: props.directory,
-      event: emitter,
-      fetch: props.fetch ?? fetch,
-      url: props.url,
-    }
+    return { client: sdk, event: emitter, url: props.url }
   },
 })

@@ -4,6 +4,7 @@ export * from "drizzle-orm"
 import { Client } from "@planetscale/database"
 
 import { MySqlTransaction, type MySqlTransactionConfig } from "drizzle-orm/mysql-core"
+import type { ExtractTablesWithRelations } from "drizzle-orm"
 import type { PlanetScalePreparedQueryHKT, PlanetscaleQueryResultHKT } from "drizzle-orm/planetscale-serverless"
 import { Context } from "../context"
 import { memo } from "../util/memo"
@@ -13,7 +14,7 @@ export namespace Database {
     PlanetscaleQueryResultHKT,
     PlanetScalePreparedQueryHKT,
     Record<string, never>,
-    any
+    ExtractTablesWithRelations<Record<string, never>>
   >
 
   const client = memo(() => {
@@ -22,7 +23,7 @@ export namespace Database {
       username: Resource.Database.username,
       password: Resource.Database.password,
     })
-    const db = drizzle({ client: result })
+    const db = drizzle(result, {})
     return db
   })
 

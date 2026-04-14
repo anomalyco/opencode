@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
-import { fileURLToPath } from "url"
 
-const dir = fileURLToPath(new URL("..", import.meta.url))
+const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
 import { $ } from "bun"

@@ -1,82 +1,71 @@
 import {
   AssistantMessage,
-  type SnapshotFileDiff,
+  FilePart,
   Message as MessageType,
   Part as PartType,
+  type PermissionRequest,
+  TextPart,
+  ToolPart,
 } from "@opencode-ai/sdk/v2/client"
-import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
-import { useFileComponent } from "../context/file"
+import { useDiffComponent } from "../context/diff"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
-import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
-import { Card } from "./card"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { DiffChanges } from "./diff-changes"
+import { Message, Part } from "./message-part"
+import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { DiffChanges } from "./diff-changes"
+import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { TextShimmer } from "./text-shimmer"
-import { SessionRetry } from "./session-retry"
-import { TextReveal } from "./text-reveal"
+import { Card } from "./card"
+import { Dynamic } from "solid-js/web"
+import { Button } from "./button"
+import { Spinner } from "./spinner"
+import { createStore } from "solid-js/store"
+import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
-import { useI18n } from "../context/i18n"
-import { normalize } from "./session-diff"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-}
+function computeStatusFromPart(part: PartType | undefined): string | undefined {
+  if (!part) return undefined
 
-function unwrap(message: string) {
-  const text = message.replace(/^Error:\s*/, "").trim()
-
-  const parse = (value: string) => {
-    try {
-      return JSON.parse(value) as unknown
-    } catch {
-      return undefined
+  if (part.type === "tool") {
+    switch (part.tool) {
+      case "task":
+        return "Delegating work"
+      case "todowrite":
+      case "todoread":
+        return "Planning next steps"
+      case "read":
+        return "Gathering context"
+      case "list":
+      case "grep":
+      case "glob":
+        return "Searching the codebase"
+      case "webfetch":
+        return "Searching the web"
+      case "edit":
+      case "write":
+        return "Making edits"
+      case "bash":
+        return "Running commands"
+      default:
+        return undefined
     }
   }
-
-  const read = (value: string) => {
-    const first = parse(value)
-    if (typeof first !== "string") return first
-    return parse(first.trim())
+  if (part.type === "reasoning") {
+    const text = part.text ?? ""
+    const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
+    if (match) return `Thinking · ${match[1].trim()}`
+    return "Thinking"
   }
-
-  let json = read(text)
-
-  if (json === undefined) {
-    const start = text.indexOf("{")
-    const end = text.lastIndexOf("}")
-    if (start !== -1 && end > start) {
-      json = read(text.slice(start, end + 1))
-    }
+  if (part.type === "text") {
+    return "Gathering thoughts"
   }
-
-  if (!record(json)) return message
-
-  const err = record(json.error) ? json.error : undefined
-  if (err) {
-    const type = typeof err.type === "string" ? err.type : undefined
-    const msg = typeof err.message === "string" ? err.message : undefined
-    if (type && msg) return `${type}: ${msg}`
-    if (msg) return msg
-    if (type) return type
-    const code = typeof err.code === "string" ? err.code : undefined
-    if (code) return code
-  }
-
-  const msg = typeof json.message === "string" ? json.message : undefined
-  if (msg) return msg
-
-  const reason = typeof json.error === "string" ? json.error : undefined
-  if (reason) return reason
-
-  return message
+  return undefined
 }
 
 function same<T>(a: readonly T[], b: readonly T[]) {
@@ -85,75 +74,57 @@ function same<T>(a: readonly T[], b: readonly T[]) {
   return a.every((x, i) => x === b[i])
 }
 
-function list<T>(value: T[] | undefined | null, fallback: T[]) {
-  if (Array.isArray(value)) return value
-  return fallback
+function isAttachment(part: PartType | undefined) {
+  if (part?.type !== "file") return false
+  const mime = (part as FilePart).mime ?? ""
+  return mime.startsWith("image/") || mime === "application/pdf"
 }
 
-const hidden = new Set(["todowrite"])
+function AssistantMessageItem(props: {
+  message: AssistantMessage
+  responsePartId: string | undefined
+  hideResponsePart: boolean
+  hideReasoning: boolean
+}) {
+  const data = useData()
+  const emptyParts: PartType[] = []
+  const msgParts = createMemo(() => data.store.part[props.message.id] ?? emptyParts)
+  const lastTextPart = createMemo(() => {
+    const parts = msgParts()
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i]
+      if (part?.type === "text") return part as TextPart
+    }
+    return undefined
+  })
 
-function partState(part: PartType, showReasoningSummaries: boolean) {
-  if (part.type === "tool") {
-    if (hidden.has(part.tool)) return
-    if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
-    return "visible" as const
-  }
-  if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined
-  if (part.type === "reasoning") {
-    if (showReasoningSummaries && part.text?.trim()) return "visible" as const
-    return
-  }
-  if (PART_MAPPING[part.type]) return "visible" as const
-  return
-}
+  const filteredParts = createMemo(() => {
+    let parts = msgParts()
 
-function clean(value: string) {
-  return value
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
-    .replace(/[*_~]+/g, "")
-    .trim()
-}
+    if (props.hideReasoning) {
+      parts = parts.filter((part) => part?.type !== "reasoning")
+    }
 
-function heading(text: string) {
-  const markdown = text.replace(/\r\n?/g, "\n")
+    if (!props.hideResponsePart) return parts
 
-  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
-  if (html?.[1]) {
-    const value = clean(html[1].replace(/<[^>]+>/g, " "))
-    if (value) return value
-  }
+    const responsePartId = props.responsePartId
+    if (!responsePartId) return parts
+    if (responsePartId !== lastTextPart()?.id) return parts
 
-  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
-  if (atx?.[1]) {
-    const value = clean(atx[1])
-    if (value) return value
-  }
+    return parts.filter((part) => part?.id !== responsePartId)
+  })
 
-  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
-  if (setext?.[1]) {
-    const value = clean(setext[1])
-    if (value) return value
-  }
-
-  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
-  if (strong?.[1]) {
-    const value = clean(strong[1])
-    if (value) return value
-  }
+  return <Message message={props.message} parts={filteredParts()} />
 }
 
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
+    sessionTitle?: string
     messageID: string
-    messages?: MessageType[]
-    actions?: UserActions
-    showReasoningSummaries?: boolean
-    shellToolDefaultOpen?: boolean
-    editToolDefaultOpen?: boolean
-    active?: boolean
-    status?: SessionStatus
+    lastUserMessageID?: string
+    stepsExpanded?: boolean
+    onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -163,110 +134,77 @@ export function SessionTurn(
   }>,
 ) {
   const data = useData()
-  const i18n = useI18n()
-  const fileComponent = useFileComponent()
+  const diffComponent = useDiffComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
+  const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyDiffs: SnapshotFileDiff[] = []
+  const emptyPermissions: PermissionRequest[] = []
+  const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
+  const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
 
   const messageIndex = createMemo(() => {
-    const messages = allMessages() ?? emptyMessages
+    const messages = allMessages()
     const result = Binary.search(messages, props.messageID, (m) => m.id)
+    if (!result.found) return -1
 
-    const index = result.found ? result.index : messages.findIndex((m) => m.id === props.messageID)
-    if (index < 0) return -1
+    const msg = messages[result.index]
+    if (msg.role !== "user") return -1
 
-    const msg = messages[index]
-    if (!msg || msg.role !== "user") return -1
-
-    return index
+    return result.index
   })
 
   const message = createMemo(() => {
     const index = messageIndex()
     if (index < 0) return undefined
 
-    const messages = allMessages() ?? emptyMessages
-    const msg = messages[index]
+    const msg = allMessages()[index]
     if (!msg || msg.role !== "user") return undefined
 
     return msg
   })
 
-  const pending = createMemo(() => {
-    if (typeof props.active === "boolean") return
-    const messages = allMessages() ?? emptyMessages
-    return messages.findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
+  const lastUserMessageID = createMemo(() => {
+    if (props.lastUserMessageID) return props.lastUserMessageID
+
+    const messages = allMessages()
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg?.role === "user") return msg.id
+    }
+    return undefined
   })
 
-  const pendingUser = createMemo(() => {
-    const item = pending()
-    if (!item?.parentID) return
-    const messages = allMessages() ?? emptyMessages
-    const result = Binary.search(messages, item.parentID, (m) => m.id)
-    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
-    if (!msg || msg.role !== "user") return
-    return msg
-  })
-
-  const active = createMemo(() => {
-    if (typeof props.active === "boolean") return props.active
-    const msg = message()
-    const parent = pendingUser()
-    if (!msg || !parent) return false
-    return parent.id === msg.id
-  })
+  const isLastUserMessage = createMemo(() => props.messageID === lastUserMessageID())
 
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
-    return list(data.store.part?.[msg.id], emptyParts)
+    return data.store.part[msg.id] ?? emptyParts
   })
 
-  const compaction = createMemo(() => parts().find((part) => part.type === "compaction"))
-
-  const diffs = createMemo(() => {
-    const files = message()?.summary?.diffs
-    if (!files?.length) return emptyDiffs
-
-    const seen = new Set<string>()
-    return files
-      .reduceRight<SnapshotFileDiff[]>((result, diff) => {
-        if (seen.has(diff.file)) return result
-        seen.add(diff.file)
-        result.push(diff)
-        return result
-      }, [])
-      .reverse()
+  const attachmentParts = createMemo(() => {
+    const msgParts = parts()
+    if (msgParts.length === 0) return emptyFiles
+    return msgParts.filter((part) => isAttachment(part)) as FilePart[]
   })
-  const MAX_FILES = 10
-  const edited = createMemo(() => diffs().length)
-  const [state, setState] = createStore({
-    showAll: false,
-    expanded: [] as string[],
+
+  const stickyParts = createMemo(() => {
+    const msgParts = parts()
+    if (msgParts.length === 0) return emptyParts
+    if (attachmentParts().length === 0) return msgParts
+    return msgParts.filter((part) => !isAttachment(part))
   })
-  const showAll = () => state.showAll
-  const expanded = () => state.expanded
-  const overflow = createMemo(() => Math.max(0, edited() - MAX_FILES))
-  const visible = createMemo(() => (showAll() ? diffs() : diffs().slice(0, MAX_FILES)))
-  const toggleAll = () => {
-    autoScroll.pause()
-    setState("showAll", !showAll())
-  }
 
   const assistantMessages = createMemo(
     () => {
       const msg = message()
       if (!msg) return emptyAssistant
 
-      const messages = allMessages() ?? emptyMessages
+      const messages = allMessages()
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
@@ -283,100 +221,262 @@ export function SessionTurn(
     { equals: same },
   )
 
-  const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
-  const divider = createMemo(() => {
-    if (compaction()) return i18n.t("ui.messagePart.compaction")
-    if (interrupted()) return i18n.t("ui.message.interrupted")
-    return ""
-  })
-  const error = createMemo(
-    () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
-  )
-  const showAssistantCopyPartID = createMemo(() => {
-    const messages = assistantMessages()
+  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
 
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]
-      if (!message) continue
+  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
 
-      const parts = list(data.store.part?.[message.id], emptyParts)
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const part = parts[j]
-        if (!part || part.type !== "text" || !part.text?.trim()) continue
-        return part.id
+  const lastTextPart = createMemo(() => {
+    const msgs = assistantMessages()
+    for (let mi = msgs.length - 1; mi >= 0; mi--) {
+      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
+      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+        const part = msgParts[pi]
+        if (part?.type === "text") return part as TextPart
       }
     }
-
     return undefined
   })
-  const errorText = createMemo(() => {
-    const msg = error()?.data?.message
-    if (typeof msg === "string") return unwrap(msg)
-    if (msg === undefined || msg === null) return ""
-    return unwrap(String(msg))
+
+  const hasSteps = createMemo(() => {
+    for (const m of assistantMessages()) {
+      const msgParts = data.store.part[m.id]
+      if (!msgParts) continue
+      for (const p of msgParts) {
+        if (p?.type === "tool") return true
+      }
+    }
+    return false
   })
 
-  const status = createMemo(() => {
-    if (props.status !== undefined) return props.status
-    if (typeof props.active === "boolean" && !props.active) return idle
-    return data.store.session_status[props.sessionID] ?? idle
-  })
-  const working = createMemo(() => status().type !== "idle" && active())
-  const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
+  const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
+  const permissionCount = createMemo(() => permissions().length)
+  const nextPermission = createMemo(() => permissions()[0])
 
-  const assistantCopyPartID = createMemo(() => {
-    if (working()) return null
-    return showAssistantCopyPartID() ?? null
-  })
-  const turnDurationMs = createMemo(() => {
-    const start = message()?.time.created
-    if (typeof start !== "number") return undefined
+  const permissionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyPermissionParts
 
-    const end = assistantMessages().reduce<number | undefined>((max, item) => {
-      const completed = item.time.completed
-      if (typeof completed !== "number") return max
-      if (max === undefined) return completed
-      return Math.max(max, completed)
-    }, undefined)
+    const next = nextPermission()
+    if (!next || !next.tool) return emptyPermissionParts
 
-    if (typeof end !== "number") return undefined
-    if (end < start) return undefined
-    return end - start
+    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    if (!message) return emptyPermissionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
+    }
+
+    return emptyPermissionParts
   })
-  const assistantDerived = createMemo(() => {
-    let visible = 0
-    let reason: string | undefined
-    const show = showReasoningSummaries()
-    for (const message of assistantMessages()) {
-      for (const part of list(data.store.part?.[message.id], emptyParts)) {
-        if (partState(part, show) === "visible") {
-          visible++
+
+  const shellModePart = createMemo(() => {
+    const p = parts()
+    if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
+
+    const msgs = assistantMessages()
+    if (msgs.length !== 1) return
+
+    const msgParts = data.store.part[msgs[0].id] ?? emptyParts
+    if (msgParts.length !== 1) return
+
+    const assistantPart = msgParts[0]
+    if (assistantPart?.type === "tool" && assistantPart.tool === "bash") return assistantPart
+  })
+
+  const isShellMode = createMemo(() => !!shellModePart())
+
+  const rawStatus = createMemo(() => {
+    const msgs = assistantMessages()
+    let last: PartType | undefined
+    let currentTask: ToolPart | undefined
+
+    for (let mi = msgs.length - 1; mi >= 0; mi--) {
+      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
+      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+        const part = msgParts[pi]
+        if (!part) continue
+        if (!last) last = part
+
+        if (
+          part.type === "tool" &&
+          part.tool === "task" &&
+          part.state &&
+          "metadata" in part.state &&
+          part.state.metadata?.sessionId &&
+          part.state.status === "running"
+        ) {
+          currentTask = part as ToolPart
+          break
         }
-        if (part.type === "reasoning" && part.text) {
-          const h = heading(part.text)
-          if (h) reason = h
+      }
+      if (currentTask) break
+    }
+
+    const taskSessionId =
+      currentTask?.state && "metadata" in currentTask.state
+        ? (currentTask.state.metadata?.sessionId as string | undefined)
+        : undefined
+
+    if (taskSessionId) {
+      const taskMessages = data.store.message[taskSessionId] ?? emptyMessages
+      for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
+        const msg = taskMessages[mi]
+        if (!msg || msg.role !== "assistant") continue
+
+        const msgParts = data.store.part[msg.id] ?? emptyParts
+        for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+          const part = msgParts[pi]
+          if (part) return computeStatusFromPart(part)
         }
       }
     }
-    return { visible, reason }
+
+    return computeStatusFromPart(last)
   })
-  const assistantVisible = createMemo(() => assistantDerived().visible)
-  const reasoningHeading = createMemo(() => assistantDerived().reason)
-  const showThinking = createMemo(() => {
-    if (!working() || !!error()) return false
-    if (status().type === "retry") return false
-    if (showReasoningSummaries()) return assistantVisible() === 0
-    return true
+
+  const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
+  const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+  const retry = createMemo(() => {
+    const s = status()
+    if (s.type !== "retry") return
+    return s
   })
+
+  const response = createMemo(() => lastTextPart()?.text)
+  const responsePartId = createMemo(() => lastTextPart()?.id)
+  const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
+  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
+
+  const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
+  const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
+
+  const updateStickyHeight = (height: number) => {
+    const root = rootRef()
+    if (!root) return
+    const next = Math.ceil(height)
+    root.style.setProperty("--session-turn-sticky-height", `${next}px`)
+  }
+
+  function duration() {
+    const msg = message()
+    if (!msg) return ""
+    const completed = lastAssistantMessage()?.time.completed
+    const from = DateTime.fromMillis(msg.time.created)
+    const to = completed ? DateTime.fromMillis(completed) : DateTime.now()
+    const interval = Interval.fromDateTimes(from, to)
+    const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
+
+    return interval.toDuration(unit).normalize().toHuman({
+      notation: "compact",
+      unitDisplay: "narrow",
+      compactDisplay: "short",
+      showZeros: false,
+    })
+  }
 
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
-    overflowAnchor: "dynamic",
+  })
+
+  createResizeObserver(
+    () => stickyRef(),
+    ({ height }) => {
+      updateStickyHeight(height)
+    },
+  )
+
+  createEffect(() => {
+    const root = rootRef()
+    if (!root) return
+    const sticky = stickyRef()
+    if (!sticky) {
+      root.style.setProperty("--session-turn-sticky-height", "0px")
+      return
+    }
+    updateStickyHeight(sticky.getBoundingClientRect().height)
+  })
+
+  const diffInit = 20
+  const diffBatch = 20
+
+  const [store, setStore] = createStore({
+    retrySeconds: 0,
+    diffsOpen: [] as string[],
+    diffLimit: diffInit,
+    status: rawStatus(),
+    duration: duration(),
+  })
+
+  createEffect(
+    on(
+      () => message()?.id,
+      () => {
+        setStore("diffsOpen", [])
+        setStore("diffLimit", diffInit)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    const r = retry()
+    if (!r) {
+      setStore("retrySeconds", 0)
+      return
+    }
+    const updateSeconds = () => {
+      const next = r.next
+      if (next) setStore("retrySeconds", Math.max(0, Math.round((next - Date.now()) / 1000)))
+    }
+    updateSeconds()
+    const timer = setInterval(updateSeconds, 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  createEffect(() => {
+    const timer = setInterval(() => {
+      setStore("duration", duration())
+    }, 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  createEffect(
+    on(permissionCount, (count, prev) => {
+      if (!count) return
+      if (prev !== undefined && count <= prev) return
+      autoScroll.forceScrollToBottom()
+    }),
+  )
+
+  let lastStatusChange = Date.now()
+  let statusTimeout: number | undefined
+  createEffect(() => {
+    const newStatus = rawStatus()
+    if (newStatus === store.status || !newStatus) return
+
+    const timeSinceLastChange = Date.now() - lastStatusChange
+    if (timeSinceLastChange >= 2500) {
+      setStore("status", newStatus)
+      lastStatusChange = Date.now()
+      if (statusTimeout) {
+        clearTimeout(statusTimeout)
+        statusTimeout = undefined
+      }
+    } else {
+      if (statusTimeout) clearTimeout(statusTimeout)
+      statusTimeout = setTimeout(() => {
+        setStore("status", rawStatus())
+        lastStatusChange = Date.now()
+        statusTimeout = undefined
+      }, 2500 - timeSinceLastChange) as unknown as number
+    }
   })
 
   return (
-    <div data-component="session-turn" class={props.classes?.root}>
+    <div data-component="session-turn" class={props.classes?.root} ref={setRootRef}>
       <div
         ref={autoScroll.scrollRef}
         onScroll={autoScroll.handleScroll}
@@ -385,146 +485,192 @@ export function SessionTurn(
       >
         <div onClick={autoScroll.handleInteraction}>
           <Show when={message()}>
-            <div
-              ref={autoScroll.contentRef}
-              data-message={message()!.id}
-              data-slot="session-turn-message-container"
-              class={props.classes?.container}
-            >
-              <div data-slot="session-turn-message-content" aria-live="off">
-                <Message message={message()!} parts={parts()} actions={props.actions} />
-              </div>
-              <Show when={divider()}>
-                <div data-slot="session-turn-compaction">
-                  <MessageDivider label={divider()} />
-                </div>
-              </Show>
-              <Show when={assistantMessages().length > 0}>
-                <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
-                  <AssistantParts
-                    messages={assistantMessages()}
-                    showAssistantCopyPartID={assistantCopyPartID()}
-                    turnDurationMs={turnDurationMs()}
-                    working={working()}
-                    showReasoningSummaries={showReasoningSummaries()}
-                    shellToolDefaultOpen={props.shellToolDefaultOpen}
-                    editToolDefaultOpen={props.editToolDefaultOpen}
-                  />
-                </div>
-              </Show>
-              <Show when={showThinking()}>
-                <div data-slot="session-turn-thinking">
-                  <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                  <Show when={!showReasoningSummaries()}>
-                    <TextReveal
-                      text={reasoningHeading()}
-                      class="session-turn-thinking-heading"
-                      travel={25}
-                      duration={700}
-                    />
-                  </Show>
-                </div>
-              </Show>
-              <SessionRetry status={status()} show={active()} />
-              <Show when={edited() > 0 && !working()}>
-                <div
-                  data-slot="session-turn-diffs"
-                  data-component="session-turn-diffs-group"
-                  data-show-all={showAll() || undefined}
-                >
-                  <div data-slot="session-turn-diffs-header">
-                    <span data-slot="session-turn-diffs-label">
-                      {edited()} {i18n.t("ui.sessionTurn.diffs.changed")}{" "}
-                      {i18n.t(edited() === 1 ? "ui.common.file.one" : "ui.common.file.other")}
-                    </span>
-                    <DiffChanges changes={diffs()} />
-                    <Show when={overflow() > 0}>
-                      <span data-slot="session-turn-diffs-toggle" onClick={toggleAll}>
-                        {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
-                      </span>
-                    </Show>
-                  </div>
-                  <div data-component="session-turn-diffs-content">
-                    <Accordion
-                      multiple
-                      style={{ "--sticky-accordion-offset": "44px" }}
-                      value={expanded()}
-                      onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
-                    >
-                      <For each={visible()}>
-                        {(diff) => {
-                          const view = normalize(diff)
-                          const active = createMemo(() => expanded().includes(diff.file))
-                          const [shown, setShown] = createSignal(false)
-
-                          createEffect(
-                            on(
-                              active,
-                              (value) => {
-                                if (!value) {
-                                  setShown(false)
-                                  return
-                                }
-
-                                requestAnimationFrame(() => {
-                                  if (!active()) return
-                                  setShown(true)
-                                })
-                              },
-                              { defer: true },
-                            ),
-                          )
-
-                          return (
-                            <Accordion.Item value={diff.file}>
-                              <StickyAccordionHeader>
-                                <Accordion.Trigger>
-                                  <div data-slot="session-turn-diff-trigger">
-                                    <span data-slot="session-turn-diff-path">
-                                      <Show when={diff.file.includes("/")}>
-                                        <span data-slot="session-turn-diff-directory">
-                                          {`\u202A${getDirectory(diff.file)}\u202C`}
-                                        </span>
-                                      </Show>
-                                      <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
-                                    </span>
-                                    <div data-slot="session-turn-diff-meta">
-                                      <span data-slot="session-turn-diff-changes">
-                                        <DiffChanges changes={diff} />
-                                      </span>
-                                      <span data-slot="session-turn-diff-chevron">
-                                        <Icon name="chevron-down" size="small" />
-                                      </span>
-                                    </div>
-                                  </div>
-                                </Accordion.Trigger>
-                              </StickyAccordionHeader>
-                              <Accordion.Content>
-                                <Show when={shown()}>
-                                  <div data-slot="session-turn-diff-view" data-scrollable>
-                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
-                                  </div>
-                                </Show>
-                              </Accordion.Content>
-                            </Accordion.Item>
-                          )
-                        }}
-                      </For>
-                    </Accordion>
-                    <Show when={!showAll() && overflow() > 0}>
-                      <div data-slot="session-turn-diffs-more" onClick={toggleAll}>
-                        {i18n.t("ui.sessionTurn.diffs.more", { count: String(overflow()) })}
+            {(msg) => (
+              <div
+                ref={autoScroll.contentRef}
+                data-message={msg().id}
+                data-slot="session-turn-message-container"
+                class={props.classes?.container}
+              >
+                <Switch>
+                  <Match when={isShellMode()}>
+                    <Part part={shellModePart()!} message={msg()} defaultOpen />
+                  </Match>
+                  <Match when={true}>
+                    <Show when={attachmentParts().length > 0}>
+                      <div data-slot="session-turn-attachments">
+                        <Message message={msg()} parts={attachmentParts()} />
                       </div>
                     </Show>
-                  </div>
-                </div>
-              </Show>
-              <Show when={error()}>
-                <Card variant="error" class="error-card">
-                  {errorText()}
-                </Card>
-              </Show>
-            </div>
+                    <div data-slot="session-turn-sticky" ref={setStickyRef}>
+                      {/* User Message */}
+                      <div data-slot="session-turn-message-content">
+                        <Message message={msg()} parts={stickyParts()} />
+                      </div>
+
+                      {/* Trigger (sticky) */}
+                      <Show when={working() || hasSteps()}>
+                        <div data-slot="session-turn-response-trigger">
+                          <Button
+                            data-expandable={assistantMessages().length > 0}
+                            data-slot="session-turn-collapsible-trigger-content"
+                            variant="ghost"
+                            size="small"
+                            onClick={props.onStepsExpandedToggle ?? (() => {})}
+                          >
+                            <Show when={working()}>
+                              <Spinner />
+                            </Show>
+                            <Switch>
+                              <Match when={retry()}>
+                                <span data-slot="session-turn-retry-message">
+                                  {(() => {
+                                    const r = retry()
+                                    if (!r) return ""
+                                    return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                                  })()}
+                                </span>
+                                <span data-slot="session-turn-retry-seconds">
+                                  · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                                </span>
+                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                              </Match>
+                              <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
+                              <Match when={props.stepsExpanded}>Hide steps</Match>
+                              <Match when={!props.stepsExpanded}>Show steps</Match>
+                            </Switch>
+                            <span>·</span>
+                            <span>{store.duration}</span>
+                            <Show when={assistantMessages().length > 0}>
+                              <Icon name="chevron-grabber-vertical" size="small" />
+                            </Show>
+                          </Button>
+                        </div>
+                      </Show>
+                    </div>
+                    {/* Response */}
+                    <Show when={props.stepsExpanded && assistantMessages().length > 0}>
+                      <div data-slot="session-turn-collapsible-content-inner">
+                        <For each={assistantMessages()}>
+                          {(assistantMessage) => (
+                            <AssistantMessageItem
+                              message={assistantMessage}
+                              responsePartId={responsePartId()}
+                              hideResponsePart={hideResponsePart()}
+                              hideReasoning={!working()}
+                            />
+                          )}
+                        </For>
+                        <Show when={error()}>
+                          <Card variant="error" class="error-card">
+                            {error()?.data?.message as string}
+                          </Card>
+                        </Show>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && permissionParts().length > 0}>
+                      <div data-slot="session-turn-permission-parts">
+                        <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    {/* Response */}
+                    <Show when={!working() && (response() || hasDiffs())}>
+                      <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-summary-header">
+                          <h2 data-slot="session-turn-summary-title">Response</h2>
+                          <Markdown
+                            data-slot="session-turn-markdown"
+                            data-diffs={hasDiffs()}
+                            text={response() ?? ""}
+                            cacheKey={responsePartId()}
+                          />
+                        </div>
+                        <Accordion
+                          data-slot="session-turn-accordion"
+                          multiple
+                          value={store.diffsOpen}
+                          onChange={(value) => {
+                            if (!Array.isArray(value)) return
+                            setStore("diffsOpen", value)
+                          }}
+                        >
+                          <For each={(data.store.session_diff?.[props.sessionID] ?? []).slice(0, store.diffLimit)}>
+                            {(diff) => (
+                              <Accordion.Item value={diff.file}>
+                                <StickyAccordionHeader>
+                                  <Accordion.Trigger>
+                                    <div data-slot="session-turn-accordion-trigger-content">
+                                      <div data-slot="session-turn-file-info">
+                                        <FileIcon
+                                          node={{ path: diff.file, type: "file" }}
+                                          data-slot="session-turn-file-icon"
+                                        />
+                                        <div data-slot="session-turn-file-path">
+                                          <Show when={diff.file.includes("/")}>
+                                            <span data-slot="session-turn-directory">
+                                              {getDirectory(diff.file)}&lrm;
+                                            </span>
+                                          </Show>
+                                          <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
+                                        </div>
+                                      </div>
+                                      <div data-slot="session-turn-accordion-actions">
+                                        <DiffChanges changes={diff} />
+                                        <Icon name="chevron-grabber-vertical" size="small" />
+                                      </div>
+                                    </div>
+                                  </Accordion.Trigger>
+                                </StickyAccordionHeader>
+                                <Accordion.Content data-slot="session-turn-accordion-content">
+                                  <Show when={store.diffsOpen.includes(diff.file!)}>
+                                    <Dynamic
+                                      component={diffComponent}
+                                      before={{
+                                        name: diff.file!,
+                                        contents: diff.before!,
+                                      }}
+                                      after={{
+                                        name: diff.file!,
+                                        contents: diff.after!,
+                                      }}
+                                    />
+                                  </Show>
+                                </Accordion.Content>
+                              </Accordion.Item>
+                            )}
+                          </For>
+                        </Accordion>
+                        <Show when={(data.store.session_diff?.[props.sessionID]?.length ?? 0) > store.diffLimit}>
+                          <Button
+                            data-slot="session-turn-accordion-more"
+                            variant="ghost"
+                            size="small"
+                            onClick={() => {
+                              const total = data.store.session_diff?.[props.sessionID]?.length ?? 0
+                              setStore("diffLimit", (limit) => {
+                                const next = limit + diffBatch
+                                if (next > total) return total
+                                return next
+                              })
+                            }}
+                          >
+                            Show more changes (
+                            {(data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit})
+                          </Button>
+                        </Show>
+                      </div>
+                    </Show>
+                    <Show when={error() && !props.stepsExpanded}>
+                      <Card variant="error" class="error-card">
+                        {error()?.data?.message as string}
+                      </Card>
+                    </Show>
+                  </Match>
+                </Switch>
+              </div>
+            )}
           </Show>
           {props.children}
         </div>

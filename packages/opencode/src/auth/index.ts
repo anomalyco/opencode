@@ -1,91 +1,73 @@
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, Context } from "effect"
-import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
-import { AppFileSystem } from "../filesystem"
+import fs from "fs/promises"
+import z from "zod"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-const file = path.join(Global.Path.data, "auth.json")
-
-const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
-
 export namespace Auth {
-  export class Oauth extends Schema.Class<Oauth>("OAuth")({
-    type: Schema.Literal("oauth"),
-    refresh: Schema.String,
-    access: Schema.String,
-    expires: Schema.Number,
-    accountId: Schema.optional(Schema.String),
-    enterpriseUrl: Schema.optional(Schema.String),
-  }) {}
+  export const Oauth = z
+    .object({
+      type: z.literal("oauth"),
+      refresh: z.string(),
+      access: z.string(),
+      expires: z.number(),
+      accountId: z.string().optional(),
+      enterpriseUrl: z.string().optional(),
+    })
+    .meta({ ref: "OAuth" })
 
-  export class Api extends Schema.Class<Api>("ApiAuth")({
-    type: Schema.Literal("api"),
-    key: Schema.String,
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  }) {}
+  export const Api = z
+    .object({
+      type: z.literal("api"),
+      key: z.string(),
+    })
+    .meta({ ref: "ApiAuth" })
 
-  export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
-    type: Schema.Literal("wellknown"),
-    key: Schema.String,
-    token: Schema.String,
-  }) {}
+  export const WellKnown = z
+    .object({
+      type: z.literal("wellknown"),
+      key: z.string(),
+      token: z.string(),
+    })
+    .meta({ ref: "WellKnownAuth" })
 
-  const _Info = Schema.Union([Oauth, Api, WellKnown]).annotate({ discriminator: "type", identifier: "Auth" })
-  export const Info = Object.assign(_Info, { zod: zod(_Info) })
-  export type Info = Schema.Schema.Type<typeof _Info>
+  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
+  export type Info = z.infer<typeof Info>
 
-  export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  }) {}
+  const filepath = path.join(Global.Path.data, "auth.json")
 
-  export interface Interface {
-    readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthError>
-    readonly all: () => Effect.Effect<Record<string, Info>, AuthError>
-    readonly set: (key: string, info: Info) => Effect.Effect<void, AuthError>
-    readonly remove: (key: string) => Effect.Effect<void, AuthError>
+  export async function get(providerID: string) {
+    const auth = await all()
+    return auth[providerID]
   }
 
-  export class Service extends Context.Service<Service, Interface>()("@opencode/Auth") {}
+  export async function all(): Promise<Record<string, Info>> {
+    const file = Bun.file(filepath)
+    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
+    return Object.entries(data).reduce(
+      (acc, [key, value]) => {
+        const parsed = Info.safeParse(value)
+        if (!parsed.success) return acc
+        acc[key] = parsed.data
+        return acc
+      },
+      {} as Record<string, Info>,
+    )
+  }
 
-  export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
-      const decode = Schema.decodeUnknownOption(Info)
+  export async function set(key: string, info: Info) {
+    const file = Bun.file(filepath)
+    const data = await all()
+    await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2))
+    await fs.chmod(file.name!, 0o600)
+  }
 
-      const all = Effect.fn("Auth.all")(function* () {
-        const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
-        return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
-      })
-
-      const get = Effect.fn("Auth.get")(function* (providerID: string) {
-        return (yield* all())[providerID]
-      })
-
-      const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
-        const norm = key.replace(/\/+$/, "")
-        const data = yield* all()
-        if (norm !== key) delete data[key]
-        delete data[norm + "/"]
-        yield* fsys
-          .writeJson(file, { ...data, [norm]: info }, 0o600)
-          .pipe(Effect.mapError(fail("Failed to write auth data")))
-      })
-
-      const remove = Effect.fn("Auth.remove")(function* (key: string) {
-        const norm = key.replace(/\/+$/, "")
-        const data = yield* all()
-        delete data[key]
-        delete data[norm]
-        yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
-      })
-
-      return Service.of({ get, all, set, remove })
-    }),
-  )
-
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+  export async function remove(key: string) {
+    const file = Bun.file(filepath)
+    const data = await all()
+    delete data[key]
+    await Bun.write(file, JSON.stringify(data, null, 2))
+    await fs.chmod(file.name!, 0o600)
+  }
 }

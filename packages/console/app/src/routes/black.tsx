@@ -1,22 +1,16 @@
 import { A, createAsync, RouteSectionProps } from "@solidjs/router"
-import { Title, Meta } from "@solidjs/meta"
+import { Title, Meta, Link } from "@solidjs/meta"
 import { createMemo, createSignal } from "solid-js"
 import { github } from "~/lib/github"
 import { config } from "~/config"
-import { useLanguage } from "~/context/language"
-import { LanguagePicker } from "~/component/language-picker"
-import { useI18n } from "~/context/i18n"
 import Spotlight, { defaultConfig, type SpotlightAnimationState } from "~/component/spotlight"
-import { LocaleLinks } from "~/component/locale-links"
 import "./black.css"
 
 export default function BlackLayout(props: RouteSectionProps) {
-  const language = useLanguage()
-  const i18n = useI18n()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
-      ? new Intl.NumberFormat(language.tag(language.locale()), {
+      ? new Intl.NumberFormat("en-US", {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()!.stars!)
@@ -69,23 +63,32 @@ export default function BlackLayout(props: RouteSectionProps) {
 
   return (
     <div data-page="black">
-      <Title>{i18n.t("black.meta.title")}</Title>
-      <Meta name="description" content={i18n.t("black.meta.description")} />
-      <LocaleLinks path="/black" />
+      <Title>OpenCode Black | Access all the world's best coding models</Title>
+      <Meta
+        name="description"
+        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
+      />
+      <Link rel="canonical" href={`${config.baseUrl}/black`} />
       <Meta property="og:type" content="website" />
-      <Meta property="og:url" content={`${config.baseUrl}${language.route("/black")}`} />
-      <Meta property="og:title" content={i18n.t("black.meta.title")} />
-      <Meta property="og:description" content={i18n.t("black.meta.description")} />
+      <Meta property="og:url" content={`${config.baseUrl}/black`} />
+      <Meta property="og:title" content="OpenCode Black | Access all the world's best coding models" />
+      <Meta
+        property="og:description"
+        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
+      />
       <Meta property="og:image" content="/social-share-black.png" />
       <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={i18n.t("black.meta.title")} />
-      <Meta name="twitter:description" content={i18n.t("black.meta.description")} />
+      <Meta name="twitter:title" content="OpenCode Black | Access all the world's best coding models" />
+      <Meta
+        name="twitter:description"
+        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
+      />
       <Meta name="twitter:image" content="/social-share-black.png" />
 
       <Spotlight config={spotlightConfig} class="header-spotlight" onAnimationFrame={handleAnimationFrame} />
 
       <header data-component="header">
-        <A href={language.route("/")} data-component="header-logo">
+        <A href="/" data-component="header-logo">
           <svg xmlns="http://www.w3.org/2000/svg" width="179" height="32" viewBox="0 0 179 32" fill="none">
             <title>opencode</title>
             <g clip-path="url(#clip0_3654_210259)">
@@ -153,8 +156,8 @@ export default function BlackLayout(props: RouteSectionProps) {
       </header>
       <main data-component="content">
         <div data-slot="hero">
-          <h1>{i18n.t("black.hero.title")}</h1>
-          <p>{i18n.t("black.hero.subtitle")}</p>
+          <h1>Access all the world's best coding models</h1>
+          <p>Including Claude, GPT, Gemini and more</p>
         </div>
         <div data-slot="hero-black" style={svgLightingStyle()}>
           <svg width="591" height="90" viewBox="0 0 591 90" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -263,15 +266,14 @@ export default function BlackLayout(props: RouteSectionProps) {
             ©{new Date().getFullYear()} <a href="https://anoma.ly">Anomaly</a>
           </span>
           <a href={config.github.repoUrl} target="_blank">
-            {i18n.t("nav.github")} <span data-slot="github-stars">[{starCount()}]</span>
+            GitHub <span data-slot="github-stars">[{starCount()}]</span>
           </a>
-          <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
-          <LanguagePicker align="right" />
+          <a href="/docs">Docs</a>
           <span>
-            <A href={language.route("/legal/privacy-policy")}>{i18n.t("legal.privacy")}</A>
+            <A href="/legal/privacy-policy">Privacy</A>
           </span>
           <span>
-            <A href={language.route("/legal/terms-of-service")}>{i18n.t("legal.terms")}</A>
+            <A href="/legal/terms-of-service">Terms</A>
           </span>
         </div>
         <span data-slot="anomaly-alt">

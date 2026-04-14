@@ -6,11 +6,9 @@ import { usePrompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
-import { showToast } from "@opencode-ai/ui/toast"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { useLanguage } from "@/context/language"
 
 interface ForkableMessage {
   id: string
@@ -29,7 +27,6 @@ export const DialogFork: Component = () => {
   const sdk = useSDK()
   const prompt = usePrompt()
   const dialog = useDialog()
-  const language = useLanguage()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -62,35 +59,25 @@ export const DialogFork: Component = () => {
     if (!sessionID) return
 
     const parts = sync.data.part[item.id] ?? []
-    const restored = extractPromptFromParts(parts, {
-      directory: sdk.directory,
-      attachmentName: language.t("common.attachment"),
-    })
-    const dir = base64Encode(sdk.directory)
+    const restored = extractPromptFromParts(parts, { directory: sdk.directory })
 
-    sdk.client.session
-      .fork({ sessionID, messageID: item.id })
-      .then((forked) => {
-        if (!forked.data) {
-          showToast({ title: language.t("common.requestFailed") })
-          return
-        }
-        dialog.close()
-        prompt.set(restored, undefined, { dir, id: forked.data.id })
-        navigate(`/${dir}/session/${forked.data.id}`)
+    dialog.close()
+
+    sdk.client.session.fork({ sessionID, messageID: item.id }).then((forked) => {
+      if (!forked.data) return
+      navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
+      requestAnimationFrame(() => {
+        prompt.set(restored)
       })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
+    })
   }
 
   return (
-    <Dialog title={language.t("command.session.fork")}>
+    <Dialog title="Fork from message">
       <List
         class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
-        search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.fork.empty")}
+        search={{ placeholder: "Search", autofocus: true }}
+        emptyMessage="No messages to fork from"
         key={(x) => x.id}
         items={messages}
         filterKeys={["text"]}
@@ -98,8 +85,12 @@ export const DialogFork: Component = () => {
       >
         {(item) => (
           <div class="w-full flex items-center gap-2">
-            <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-            <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+            <span class="truncate flex-1 min-w-0 text-left" style={{ "font-weight": "400" }}>
+              {item.text}
+            </span>
+            <span class="text-text-weak shrink-0" style={{ "font-weight": "400" }}>
+              {item.time}
+            </span>
           </div>
         )}
       </List>

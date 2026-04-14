@@ -3,7 +3,6 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createSignal, For, Show } from "solid-js"
 import { Database, desc, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { BenchmarkTable } from "@opencode-ai/console-core/schema/benchmark.sql.js"
-import { useI18n } from "~/context/i18n"
 
 interface TaskSource {
   repo: string
@@ -101,33 +100,32 @@ function formatDuration(ms: number): string {
 
 export default function BenchDetail() {
   const params = useParams()
-  const i18n = useI18n()
   const [benchmarkId, taskId] = (params.id ?? "").split(":")
   const task = createAsync(() => queryTaskDetail(benchmarkId, taskId))
 
   return (
     <main data-page="bench-detail">
-      <Title>{i18n.t("bench.detail.title", { task: taskId })}</Title>
+      <Title>Benchmark - {taskId}</Title>
       <div style={{ padding: "1rem" }}>
-        <Show when={task()} fallback={<p>{i18n.t("bench.detail.notFound")}</p>}>
+        <Show when={task()} fallback={<p>Task not found</p>}>
           <div style={{ "margin-bottom": "1rem" }}>
             <div>
-              <strong>{i18n.t("bench.detail.labels.agent")}: </strong>
-              {task()?.agent ?? i18n.t("bench.detail.na")}
+              <strong>Agent: </strong>
+              {task()?.agent ?? "N/A"}
             </div>
             <div>
-              <strong>{i18n.t("bench.detail.labels.model")}: </strong>
-              {task()?.model ?? i18n.t("bench.detail.na")}
+              <strong>Model: </strong>
+              {task()?.model ?? "N/A"}
             </div>
             <div>
-              <strong>{i18n.t("bench.detail.labels.task")}: </strong>
+              <strong>Task: </strong>
               {task()!.task.id}
             </div>
           </div>
 
           <div style={{ "margin-bottom": "1rem" }}>
             <div>
-              <strong>{i18n.t("bench.detail.labels.repo")}: </strong>
+              <strong>Repo: </strong>
               <a
                 href={`https://github.com/${task()!.task.source.repo}`}
                 target="_blank"
@@ -138,7 +136,7 @@ export default function BenchDetail() {
               </a>
             </div>
             <div>
-              <strong>{i18n.t("bench.detail.labels.from")}: </strong>
+              <strong>From: </strong>
               <a
                 href={`https://github.com/${task()!.task.source.repo}/commit/${task()!.task.source.from}`}
                 target="_blank"
@@ -149,7 +147,7 @@ export default function BenchDetail() {
               </a>
             </div>
             <div>
-              <strong>{i18n.t("bench.detail.labels.to")}: </strong>
+              <strong>To: </strong>
               <a
                 href={`https://github.com/${task()!.task.source.repo}/commit/${task()!.task.source.to}`}
                 target="_blank"
@@ -163,13 +161,11 @@ export default function BenchDetail() {
 
           <Show when={task()?.task.prompts && task()!.task.prompts!.length > 0}>
             <div style={{ "margin-bottom": "1rem" }}>
-              <strong>{i18n.t("bench.detail.labels.prompt")}:</strong>
+              <strong>Prompt:</strong>
               <For each={task()!.task.prompts}>
                 {(p) => (
                   <div style={{ "margin-top": "0.5rem" }}>
-                    <div style={{ "font-size": "0.875rem", color: "#666" }}>
-                      {i18n.t("bench.detail.labels.commit")}: {p.commit.slice(0, 7)}
-                    </div>
+                    <div style={{ "font-size": "0.875rem", color: "#666" }}>Commit: {p.commit.slice(0, 7)}</div>
                     <p style={{ "margin-top": "0.25rem", "white-space": "pre-wrap" }}>{p.prompt}</p>
                   </div>
                 )}
@@ -181,35 +177,33 @@ export default function BenchDetail() {
 
           <div style={{ "margin-bottom": "1rem" }}>
             <div>
-              <strong>{i18n.t("bench.detail.labels.averageDuration")}: </strong>
-              {task()?.averageDuration ? formatDuration(task()!.averageDuration!) : i18n.t("bench.detail.na")}
+              <strong>Average Duration: </strong>
+              {task()?.averageDuration ? formatDuration(task()!.averageDuration!) : "N/A"}
             </div>
             <div>
-              <strong>{i18n.t("bench.detail.labels.averageScore")}: </strong>
-              {task()?.averageScore?.toFixed(3) ?? i18n.t("bench.detail.na")}
+              <strong>Average Score: </strong>
+              {task()?.averageScore?.toFixed(3) ?? "N/A"}
             </div>
             <div>
-              <strong>{i18n.t("bench.detail.labels.averageCost")}: </strong>
-              {task()?.averageUsage?.cost ? `$${task()!.averageUsage!.cost.toFixed(4)}` : i18n.t("bench.detail.na")}
+              <strong>Average Cost: </strong>
+              {task()?.averageUsage?.cost ? `$${task()!.averageUsage!.cost.toFixed(4)}` : "N/A"}
             </div>
           </div>
 
           <Show when={task()?.summary}>
             <div style={{ "margin-bottom": "1rem" }}>
-              <strong>{i18n.t("bench.detail.labels.summary")}:</strong>
+              <strong>Summary:</strong>
               <p style={{ "margin-top": "0.5rem", "white-space": "pre-wrap" }}>{task()!.summary}</p>
             </div>
           </Show>
 
           <Show when={task()?.runs && task()!.runs!.length > 0}>
             <div style={{ "margin-bottom": "1rem" }}>
-              <strong>{i18n.t("bench.detail.labels.runs")}:</strong>
+              <strong>Runs:</strong>
               <table style={{ "margin-top": "0.5rem", "border-collapse": "collapse", width: "100%" }}>
                 <thead>
                   <tr>
-                    <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>
-                      {i18n.t("bench.detail.table.run")}
-                    </th>
+                    <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Run</th>
                     <th
                       style={{
                         border: "1px solid #ccc",
@@ -218,14 +212,10 @@ export default function BenchDetail() {
                         "white-space": "nowrap",
                       }}
                     >
-                      {i18n.t("bench.detail.table.score")}
+                      Score (Base - Penalty)
                     </th>
-                    <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>
-                      {i18n.t("bench.detail.table.cost")}
-                    </th>
-                    <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>
-                      {i18n.t("bench.detail.table.duration")}
-                    </th>
+                    <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Cost</th>
+                    <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Duration</th>
                     <For each={task()!.runs![0]?.scoreDetails}>
                       {(detail) => (
                         <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>
@@ -244,10 +234,10 @@ export default function BenchDetail() {
                           {run.score.final.toFixed(3)} ({run.score.base.toFixed(3)} - {run.score.penalty.toFixed(3)})
                         </td>
                         <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
-                          {run.usage?.cost ? `$${run.usage.cost.toFixed(4)}` : i18n.t("bench.detail.na")}
+                          {run.usage?.cost ? `$${run.usage.cost.toFixed(4)}` : "N/A"}
                         </td>
                         <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
-                          {run.duration ? formatDuration(run.duration) : i18n.t("bench.detail.na")}
+                          {run.duration ? formatDuration(run.duration) : "N/A"}
                         </td>
                         <For each={run.scoreDetails}>
                           {(detail) => (
@@ -275,17 +265,17 @@ export default function BenchDetail() {
               <For each={task()!.runs}>
                 {(run, index) => (
                   <div style={{ "margin-top": "1rem" }}>
-                    <h3 style={{ margin: "0 0 0.5rem 0" }}>{i18n.t("bench.detail.run.title", { n: index() + 1 })}</h3>
+                    <h3 style={{ margin: "0 0 0.5rem 0" }}>Run {index() + 1}</h3>
                     <div>
-                      <strong>{i18n.t("bench.detail.labels.score")}: </strong>
-                      {run.score.final.toFixed(3)} ({i18n.t("bench.detail.labels.base")}: {run.score.base.toFixed(3)} -{" "}
-                      {i18n.t("bench.detail.labels.penalty")}: {run.score.penalty.toFixed(3)})
+                      <strong>Score: </strong>
+                      {run.score.final.toFixed(3)} (Base: {run.score.base.toFixed(3)} - Penalty:{" "}
+                      {run.score.penalty.toFixed(3)})
                     </div>
                     <For each={run.scoreDetails}>
                       {(detail) => (
                         <div style={{ "margin-top": "1rem", "padding-left": "1rem", "border-left": "2px solid #ccc" }}>
                           <div>
-                            {detail.criterion} ({i18n.t("bench.detail.labels.weight")}: {detail.weight}){" "}
+                            {detail.criterion} (weight: {detail.weight}){" "}
                             <For each={detail.judges}>
                               {(judge) => (
                                 <span
@@ -360,7 +350,7 @@ export default function BenchDetail() {
                   onClick={() => setJsonExpanded(!jsonExpanded())}
                 >
                   <span style={{ "margin-right": "0.5rem" }}>{jsonExpanded() ? "▼" : "▶"}</span>
-                  {i18n.t("bench.detail.rawJson")}
+                  Raw JSON
                 </button>
                 <Show when={jsonExpanded()}>
                   <pre>{JSON.stringify(task(), null, 2)}</pre>

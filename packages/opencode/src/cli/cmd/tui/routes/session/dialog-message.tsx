@@ -5,7 +5,6 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
-import { strip } from "@tui/component/prompt/part"
 
 export function DialogMessage(props: {
   messageID: string
@@ -41,7 +40,7 @@ export function DialogMessage(props: {
                   if (part.type === "text") {
                     if (!part.synthetic) agg.input += part.text
                   }
-                  if (part.type === "file") agg.parts.push(strip(part))
+                  if (part.type === "file") agg.parts.push(part)
                   return agg
                 },
                 { input: "", parts: [] as PromptInfo["parts"] },

@@ -7,13 +7,11 @@ import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import styles from "./reload-section.module.css"
 import { queryBillingInfo } from "../../common"
-import { useI18n } from "~/context/i18n"
-import { formError, formErrorReloadAmountMin, formErrorReloadTriggerMin, localizeError } from "~/lib/form-error"
 
 const reload = action(async (form: FormData) => {
   "use server"
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  if (!workspaceID) return { error: "Workspace ID is required" }
   return json(await withActor(() => Billing.reload(), workspaceID), {
     revalidate: queryBillingInfo.key,
   })
@@ -22,7 +20,7 @@ const reload = action(async (form: FormData) => {
 const setReload = action(async (form: FormData) => {
   "use server"
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  if (!workspaceID) return { error: "Workspace ID is required" }
   const reloadValue = form.get("reload")?.toString() === "true"
   const amountStr = form.get("reloadAmount")?.toString()
   const triggerStr = form.get("reloadTrigger")?.toString()
@@ -32,9 +30,9 @@ const setReload = action(async (form: FormData) => {
 
   if (reloadValue) {
     if (reloadAmount === null || reloadAmount < Billing.RELOAD_AMOUNT_MIN)
-      return { error: formErrorReloadAmountMin(Billing.RELOAD_AMOUNT_MIN) }
+      return { error: `Reload amount must be at least $${Billing.RELOAD_AMOUNT_MIN}` }
     if (reloadTrigger === null || reloadTrigger < Billing.RELOAD_TRIGGER_MIN)
-      return { error: formErrorReloadTriggerMin(Billing.RELOAD_TRIGGER_MIN) }
+      return { error: `Balance trigger must be at least $${Billing.RELOAD_TRIGGER_MIN}` }
   }
 
   return json(
@@ -60,7 +58,6 @@ const setReload = action(async (form: FormData) => {
 
 export function ReloadSection() {
   const params = useParams()
-  const i18n = useI18n()
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const setReloadSubmission = useSubmission(setReload)
   const reloadSubmission = useSubmission(reload)
@@ -102,26 +99,23 @@ export function ReloadSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>{i18n.t("workspace.reload.title")}</h2>
+        <h2>Auto Reload</h2>
         <div data-slot="title-row">
           <Show
             when={billingInfo()?.reload}
             fallback={
               <p>
-                {i18n.t("workspace.reload.disabled.before")} <b>{i18n.t("workspace.reload.disabled.state")}</b>.{" "}
-                {i18n.t("workspace.reload.disabled.after")}
+                Auto reload is <b>disabled</b>. Enable to automatically reload when balance is low.
               </p>
             }
           >
             <p>
-              {i18n.t("workspace.reload.enabled.before")} <b>{i18n.t("workspace.reload.enabled.state")}</b>.{" "}
-              {i18n.t("workspace.reload.enabled.middle")} <b>${billingInfo()?.reloadAmount}</b> (+${processingFee()}{" "}
-              {i18n.t("workspace.reload.processingFee")}) {i18n.t("workspace.reload.enabled.after")}{" "}
-              <b>${billingInfo()?.reloadTrigger}</b>.
+              Auto reload is <b>enabled</b>. We'll reload <b>${billingInfo()?.reloadAmount}</b> (+${processingFee()}{" "}
+              processing fee) when balance reaches <b>${billingInfo()?.reloadTrigger}</b>.
             </p>
           </Show>
           <button data-color="primary" type="button" onClick={() => show()}>
-            {billingInfo()?.reload ? i18n.t("workspace.reload.edit") : i18n.t("workspace.reload.enable")}
+            {billingInfo()?.reload ? "Edit" : "Enable"}
           </button>
         </div>
       </div>
@@ -129,7 +123,7 @@ export function ReloadSection() {
         <form action={setReload} method="post" data-slot="create-form">
           <div data-slot="form-field">
             <label>
-              <span data-slot="field-label">{i18n.t("workspace.reload.enableAutoReload")}</span>
+              <span data-slot="field-label">Enable Auto Reload</span>
               <div data-slot="toggle-container">
                 <label data-slot="model-toggle-label">
                   <input
@@ -147,7 +141,7 @@ export function ReloadSection() {
 
           <div data-slot="input-row">
             <div data-slot="input-field">
-              <p>{i18n.t("workspace.reload.reloadAmount")}</p>
+              <p>Reload $</p>
               <input
                 data-component="input"
                 name="reloadAmount"
@@ -161,7 +155,7 @@ export function ReloadSection() {
               />
             </div>
             <div data-slot="input-field">
-              <p>{i18n.t("workspace.reload.whenBalanceReaches")}</p>
+              <p>When balance reaches $</p>
               <input
                 data-component="input"
                 name="reloadTrigger"
@@ -177,39 +171,38 @@ export function ReloadSection() {
           </div>
 
           <Show when={setReloadSubmission.result && (setReloadSubmission.result as any).error}>
-            {(err: any) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
+            {(err: any) => <div data-slot="form-error">{err()}</div>}
           </Show>
           <input type="hidden" name="workspaceID" value={params.id} />
           <div data-slot="form-actions">
             <button type="button" data-color="ghost" onClick={() => hide()}>
-              {i18n.t("common.cancel")}
+              Cancel
             </button>
             <button type="submit" data-color="primary" disabled={setReloadSubmission.pending}>
-              {setReloadSubmission.pending ? i18n.t("workspace.reload.saving") : i18n.t("workspace.reload.save")}
+              {setReloadSubmission.pending ? "Saving..." : "Save"}
             </button>
           </div>
         </form>
       </Show>
-      <Show when={billingInfo()?.reloadError}>
+      <Show when={billingInfo()?.reload && billingInfo()?.reloadError}>
         <div data-slot="section-content">
           <div data-slot="reload-error">
             <p>
-              {i18n.t("workspace.reload.failedAt")}{" "}
-              {billingInfo()?.timeReloadError!.toLocaleString(undefined, {
+              Reload failed at{" "}
+              {billingInfo()?.timeReloadError!.toLocaleString("en-US", {
                 month: "short",
                 day: "numeric",
                 hour: "numeric",
                 minute: "2-digit",
                 second: "2-digit",
               })}
-              . {i18n.t("workspace.reload.reason")}{" "}
-              {localizeError(i18n.t, billingInfo()?.reloadError ?? undefined).replace(/\.$/, "")}.{" "}
-              {i18n.t("workspace.reload.updatePaymentMethod")}
+              . Reason: {billingInfo()?.reloadError?.replace(/\.$/, "")}. Please update your payment method and try
+              again.
             </p>
             <form action={reload} method="post" data-slot="create-form">
               <input type="hidden" name="workspaceID" value={params.id} />
               <button data-color="ghost" type="submit" disabled={reloadSubmission.pending}>
-                {reloadSubmission.pending ? i18n.t("workspace.reload.retrying") : i18n.t("workspace.reload.retry")}
+                {reloadSubmission.pending ? "Retrying..." : "Retry"}
               </button>
             </form>
           </div>

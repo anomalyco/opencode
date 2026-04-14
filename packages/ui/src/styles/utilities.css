@@ -10,6 +10,19 @@
   /*   background-color: var(--color-primary); */
   /*   color: var(--color-background); */
   /* } */
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--surface-float-base);
+    border-radius: var(--radius-md);
+  }
+
+  * {
+    scrollbar-color: var(--surface-float-base) transparent;
+  }
 }
 
 .no-scrollbar {

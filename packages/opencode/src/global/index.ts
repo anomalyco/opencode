@@ -2,7 +2,6 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../util/filesystem"
 
 const app = "opencode"
 
@@ -18,7 +17,7 @@ export namespace Global {
       return process.env.OPENCODE_TEST_HOME || os.homedir()
     },
     data,
-    bin: path.join(cache, "bin"),
+    bin: path.join(data, "bin"),
     log: path.join(data, "log"),
     cache,
     config,
@@ -34,9 +33,11 @@ await Promise.all([
   fs.mkdir(Global.Path.bin, { recursive: true }),
 ])
 
-const CACHE_VERSION = "21"
+const CACHE_VERSION = "18"
 
-const version = await Filesystem.readText(path.join(Global.Path.cache, "version")).catch(() => "0")
+const version = await Bun.file(path.join(Global.Path.cache, "version"))
+  .text()
+  .catch(() => "0")
 
 if (version !== CACHE_VERSION) {
   try {
@@ -50,5 +51,5 @@ if (version !== CACHE_VERSION) {
       ),
     )
   } catch (e) {}
-  await Filesystem.write(path.join(Global.Path.cache, "version"), CACHE_VERSION)
+  await Bun.file(path.join(Global.Path.cache, "version")).write(CACHE_VERSION)
 }

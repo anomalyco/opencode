@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
-import { fileURLToPath } from "url"
 
-const dir = fileURLToPath(new URL("..", import.meta.url))
+const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
 await $`bun tsc`

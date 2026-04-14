@@ -1,4 +1,4 @@
-name: notify-discord
+name: discord
 
 on:
   release:

@@ -33,13 +33,7 @@ export type UsageInfo = {
   cacheWrite1hTokens?: number
 }
 
-export type ProviderHelper = (input: {
-  reqModel: string
-  providerModel: string
-  adjustCacheUsage?: boolean
-  safetyIdentifier?: string
-  workspaceID?: string
-}) => {
+export type ProviderHelper = (input: { reqModel: string; providerModel: string }) => {
   format: ZenData.Format
   modifyUrl: (providerApi: string, isStream?: boolean) => string
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
@@ -164,19 +158,6 @@ export interface CommonChunk {
     completion_tokens?: number
     total_tokens?: number
     prompt_tokens_details?: { cached_tokens?: number }
-  }
-}
-
-export function buildCostChunk(format: ZenData.Format, cost: string): string {
-  switch (format) {
-    case "anthropic":
-      return `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`
-    case "openai":
-      return `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`
-    case "oa-compat":
-      return `data: ${JSON.stringify({ choices: [], cost })}\n\n`
-    default:
-      return `data: ${JSON.stringify({ type: "ping", cost })}\n\n`
   }
 }
 

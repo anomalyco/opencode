@@ -85,10 +85,10 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 32px;
+        gap: 48px;
 
         @media (max-width: 55rem) {
-          gap: 24px;
+          gap: 32px;
         }
 
         @media (max-width: 48rem) {
@@ -114,7 +114,6 @@
             border-radius: 4px;
             font-weight: 500;
             text-decoration: none;
-            white-space: nowrap;
 
             @media (max-width: 55rem) {
               display: none;
@@ -316,8 +315,7 @@
 
   /* Download Hero Section */
   [data-component="download-hero"] {
-    /* display: grid; */
-    display: none;
+    display: grid;
     grid-template-columns: 260px 1fr;
     gap: 4rem;
     padding-bottom: 2rem;

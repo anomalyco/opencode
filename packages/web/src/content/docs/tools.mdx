@@ -95,7 +95,7 @@ Create new files or overwrite existing ones.
 Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
 
 :::note
-The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`, `multiedit`).
+The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
@@ -191,7 +191,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
-### apply_patch
+### patch
 
 Apply patches to files.
 
@@ -206,12 +206,8 @@ Apply patches to files.
 
 This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
 
-When handling `tool.execute.before` or `tool.execute.after` hooks, check `input.tool === "apply_patch"` (not `"patch"`).
-
-`apply_patch` uses `output.args.patchText` instead of `output.args.filePath`. Paths are embedded in marker lines within `patchText` and are relative to the project root (for example: `*** Add File: src/new-file.ts`, `*** Update File: src/existing.ts`, `*** Move to: src/renamed.ts`, `*** Delete File: src/obsolete.ts`).
-
 :::note
-The `apply_patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`, `multiedit`).
+The `patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
@@ -252,6 +248,27 @@ This tool is disabled for subagents by default, but you can enable it manually. 
 
 ---
 
+### todoread
+
+Read existing todo lists.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
+
+:::note
+This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
+:::
+
+---
+
 ### webfetch
 
 Fetch web content.
@@ -266,40 +283,6 @@ Fetch web content.
 ```
 
 Allows the LLM to fetch and read web pages. Useful for looking up documentation or researching online resources.
-
----
-
-### websearch
-
-Search the web for information.
-
-:::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
-
-To enable when launching OpenCode:
-
-```bash
-OPENCODE_ENABLE_EXA=1 opencode
-```
-
-:::
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "websearch": "allow"
-  }
-}
-```
-
-Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
-
-No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
-
-:::tip
-Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
-:::
 
 ---
 

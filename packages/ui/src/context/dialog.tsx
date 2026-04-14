@@ -1,10 +1,8 @@
 import {
   createContext,
-  createEffect,
   createRoot,
   createSignal,
   getOwner,
-  onCleanup,
   type Owner,
   type ParentProps,
   runWithOwner,
@@ -12,7 +10,6 @@ import {
   type JSX,
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
-import { makeEventListener } from "@solid-primitives/event-listener"
 
 type DialogElement = () => JSX.Element
 
@@ -22,90 +19,41 @@ type Active = {
   dispose: () => void
   owner: Owner
   onClose?: () => void
-  setClosing: (closing: boolean) => void
 }
 
 const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [active, setActive] = createSignal<Active | undefined>()
-  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
-  const lock = { value: false }
-
-  onCleanup(() => {
-    if (timer.current === undefined) return
-    clearTimeout(timer.current)
-    timer.current = undefined
-  })
 
   const close = () => {
     const current = active()
-    if (!current || lock.value) return
-    lock.value = true
+    if (!current) return
     current.onClose?.()
-    current.setClosing(true)
-
-    const id = current.id
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-
-    timer.current = setTimeout(() => {
-      timer.current = undefined
-      current.dispose()
-      if (active()?.id === id) setActive(undefined)
-      lock.value = false
-    }, 100)
+    current.dispose()
+    setActive(undefined)
   }
 
-  createEffect(() => {
-    if (!active()) return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      close()
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    makeEventListener(window, "keydown", onKeyDown, { capture: true })
-  })
-
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    // Immediately dispose any existing dialog when showing a new one
-    const current = active()
-    if (current) {
-      current.dispose()
-      setActive(undefined)
-    }
-
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-    lock.value = false
+    close()
 
     const id = Math.random().toString(36).slice(2)
     let dispose: (() => void) | undefined
-    let setClosing: ((closing: boolean) => void) | undefined
 
     const node = runWithOwner(owner, () =>
-      createRoot((d: () => void) => {
+      createRoot((d) => {
         dispose = d
-        const [closing, setClosingSignal] = createSignal(false)
-        setClosing = setClosingSignal
         return (
           <Kobalte
             modal
-            open={!closing()}
-            onOpenChange={(open: boolean) => {
+            open={true}
+            onOpenChange={(open) => {
               if (open) return
               close()
             }}
           >
             <Kobalte.Portal>
-              <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
+              <Kobalte.Overlay data-component="dialog-overlay" />
               {element()}
             </Kobalte.Portal>
           </Kobalte>
@@ -113,9 +61,9 @@ function init() {
       }),
     )
 
-    if (!dispose || !setClosing) return
+    if (!dispose) return
 
-    setActive({ id, node, dispose, owner, onClose, setClosing })
+    setActive({ id, node, dispose, owner, onClose })
   }
 
   return {

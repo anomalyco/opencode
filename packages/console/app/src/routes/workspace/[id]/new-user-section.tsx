@@ -5,7 +5,6 @@ import { Key } from "@opencode-ai/console-core/key.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import styles from "./new-user-section.module.css"
-import { useI18n } from "~/context/i18n"
 
 const getUsageInfo = query(async (workspaceID: string) => {
   "use server"
@@ -21,7 +20,6 @@ const listKeys = query(async (workspaceID: string) => {
 
 export function NewUserSection() {
   const params = useParams()
-  const i18n = useI18n()
   const [copiedKey, setCopiedKey] = createSignal(false)
   const keys = createAsync(() => listKeys(params.id!))
   const usage = createAsync(() => getUsageInfo(params.id!))
@@ -44,16 +42,16 @@ export function NewUserSection() {
       <div class={styles.root}>
         <div data-component="feature-grid">
           <div data-slot="feature">
-            <h3>{i18n.t("workspace.newUser.feature.tested.title")}</h3>
-            <p>{i18n.t("workspace.newUser.feature.tested.body")}</p>
+            <h3>Tested & Verified Models</h3>
+            <p>We've benchmarked and tested models specifically for coding agents to ensure the best performance.</p>
           </div>
           <div data-slot="feature">
-            <h3>{i18n.t("workspace.newUser.feature.quality.title")}</h3>
-            <p>{i18n.t("workspace.newUser.feature.quality.body")}</p>
+            <h3>Highest Quality</h3>
+            <p>Access models configured for optimal performance - no downgrades or routing to cheaper providers.</p>
           </div>
           <div data-slot="feature">
-            <h3>{i18n.t("workspace.newUser.feature.lockin.title")}</h3>
-            <p>{i18n.t("workspace.newUser.feature.lockin.body")}</p>
+            <h3>No Lock-in</h3>
+            <p>Use Zen with any coding agent, and continue using other providers with opencode whenever you want.</p>
           </div>
         </div>
 
@@ -70,17 +68,17 @@ export function NewUserSection() {
                     setCopiedKey(true)
                     setTimeout(() => setCopiedKey(false), 2000)
                   }}
-                  title={i18n.t("workspace.newUser.copyApiKey")}
+                  title="Copy API key"
                 >
                   <Show
                     when={copiedKey()}
                     fallback={
                       <>
-                        <IconCopy style={{ width: "16px", height: "16px" }} /> {i18n.t("workspace.newUser.copyKey")}
+                        <IconCopy style={{ width: "16px", height: "16px" }} /> Copy Key
                       </>
                     }
                   >
-                    <IconCheck style={{ width: "16px", height: "16px" }} /> {i18n.t("workspace.newUser.copied")}
+                    <IconCheck style={{ width: "16px", height: "16px" }} /> Copied!
                   </Show>
                 </button>
               </div>
@@ -90,15 +88,13 @@ export function NewUserSection() {
 
         <div data-component="next-steps">
           <ol>
-            <li>{i18n.t("workspace.newUser.step.enableBilling")}</li>
+            <li>Enable billing</li>
             <li>
-              {i18n.t("workspace.newUser.step.login.before")} <code>opencode auth login</code>{" "}
-              {i18n.t("workspace.newUser.step.login.after")}
+              Run <code>opencode auth login</code> and select opencode
             </li>
-            <li>{i18n.t("workspace.newUser.step.pasteKey")}</li>
+            <li>Paste your API key</li>
             <li>
-              {i18n.t("workspace.newUser.step.models.before")} <code>/models</code>{" "}
-              {i18n.t("workspace.newUser.step.models.after")}
+              Start opencode and run <code>/models</code> to select a model
             </li>
           </ol>
         </div>

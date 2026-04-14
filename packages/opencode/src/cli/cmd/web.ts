@@ -37,7 +37,7 @@ export const WebCommand = cmd({
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = await resolveNetworkOptions(args)
-    const server = await Server.listen(opts)
+    const server = Server.listen(opts)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
@@ -63,7 +63,7 @@ export const WebCommand = cmd({
         UI.println(
           UI.Style.TEXT_INFO_BOLD + "  mDNS:              ",
           UI.Style.TEXT_NORMAL,
-          `${opts.mdnsDomain}:${server.port}`,
+          `opencode.local:${server.port}`,
         )
       }
 

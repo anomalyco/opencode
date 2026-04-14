@@ -56,7 +56,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       setStore("active", order[nextIndex])
       evt.preventDefault()
     }
-    if (evt.name === "space" || evt.name === " ") {
+    if (evt.name === "space") {
       if (store.active === "thinking") setStore("thinking", !store.thinking)
       if (store.active === "toolDetails") setStore("toolDetails", !store.toolDetails)
       if (store.active === "assistantMetadata") setStore("assistantMetadata", !store.assistantMetadata)
@@ -68,7 +68,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   onMount(() => {
     dialog.setSize("medium")
     setTimeout(() => {
-      if (!textarea || textarea.isDestroyed) return
       textarea.focus()
     }, 1)
     textarea.gotoLineEnd()
@@ -80,9 +79,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Export Options
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
+        <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
         <box>
@@ -100,13 +97,9 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           }}
           height={3}
           keyBindings={[{ name: "return", action: "submit" }]}
-          ref={(val: TextareaRenderable) => {
-            textarea = val
-            val.traits = { status: "FILENAME" }
-          }}
+          ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.defaultFilename}
           placeholder="Enter filename"
-          placeholderColor={theme.textMuted}
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}

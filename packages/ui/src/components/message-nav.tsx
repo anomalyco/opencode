@@ -1,8 +1,7 @@
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { ComponentProps, For, Match, Show, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { Tooltip } from "./tooltip"
-import { useI18n } from "../context/i18n"
+import { Tooltip } from "@kobalte/core/tooltip"
 
 export function MessageNav(
   props: ComponentProps<"ul"> & {
@@ -13,7 +12,6 @@ export function MessageNav(
     getLabel?: (message: UserMessage) => string | undefined
   },
 ) {
-  const i18n = useI18n()
   const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "getLabel"])
 
   const content = () => (
@@ -50,10 +48,7 @@ export function MessageNav(
                       data-slot="message-nav-title-preview"
                       data-active={message.id === local.current?.id || undefined}
                     >
-                      <Show
-                        when={local.getLabel?.(message) ?? message.summary?.title}
-                        fallback={i18n.t("ui.messageNav.newMessage")}
-                      >
+                      <Show when={local.getLabel?.(message) ?? message.summary?.title} fallback="New message">
                         {local.getLabel?.(message) ?? message.summary?.title}
                       </Show>
                     </div>
@@ -70,20 +65,15 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <Tooltip
-          openDelay={0}
-          placement="right-start"
-          gutter={-40}
-          shift={-10}
-          overlap
-          contentClass="message-nav-tooltip"
-          value={
-            <div data-slot="message-nav-tooltip-content">
-              <MessageNav {...props} size="normal" class="" />
-            </div>
-          }
-        >
-          {content()}
+        <Tooltip openDelay={0} closeDelay={300} placement="right-start" gutter={-40} shift={-10} overlap>
+          <Tooltip.Trigger as="div">{content()}</Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content data-slot="message-nav-tooltip">
+              <div data-slot="message-nav-tooltip-content">
+                <MessageNav {...props} size="normal" class="" />
+              </div>
+            </Tooltip.Content>
+          </Tooltip.Portal>
         </Tooltip>
       </Match>
       <Match when={local.size === "normal"}>{content()}</Match>

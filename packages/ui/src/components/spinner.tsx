@@ -41,7 +41,6 @@ export function Spinner(props: {
               animation: square.corner
                 ? undefined
                 : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
-              "animation-fill-mode": square.corner ? undefined : "both",
               "animation-delay": square.corner ? undefined : `${square.delay}s`,
             }}
           />

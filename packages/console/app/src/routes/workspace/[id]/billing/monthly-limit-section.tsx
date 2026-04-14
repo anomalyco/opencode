@@ -5,17 +5,15 @@ import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import styles from "./monthly-limit-section.module.css"
 import { queryBillingInfo } from "../../common"
-import { useI18n } from "~/context/i18n"
-import { formError, localizeError } from "~/lib/form-error"
 
 const setMonthlyLimit = action(async (form: FormData) => {
   "use server"
   const limit = form.get("limit")?.toString()
-  if (!limit) return { error: formError.limitRequired }
+  if (!limit) return { error: "Limit is required." }
   const numericLimit = parseInt(limit)
-  if (numericLimit < 0) return { error: formError.monthlyLimitInvalid }
+  if (numericLimit < 0) return { error: "Set a valid monthly limit." }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  if (!workspaceID) return { error: "Workspace ID is required." }
   return json(
     await withActor(
       () =>
@@ -30,7 +28,6 @@ const setMonthlyLimit = action(async (form: FormData) => {
 
 export function MonthlyLimitSection() {
   const params = useParams()
-  const i18n = useI18n()
   const submission = useSubmission(setMonthlyLimit)
   const [store, setStore] = createStore({ show: false })
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
@@ -64,8 +61,8 @@ export function MonthlyLimitSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>{i18n.t("workspace.monthlyLimit.title")}</h2>
-        <p>{i18n.t("workspace.monthlyLimit.subtitle")}</p>
+        <h2>Monthly Limit</h2>
+        <p>Set a monthly usage limit for your account.</p>
       </div>
       <div data-slot="section-content">
         <div data-slot="balance">
@@ -84,51 +81,42 @@ export function MonthlyLimitSection() {
                     data-component="input"
                     name="limit"
                     type="number"
-                    placeholder={i18n.t("workspace.monthlyLimit.placeholder")}
+                    placeholder="50"
                   />
                   <Show when={submission.result && submission.result.error}>
-                    {(err) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
+                    {(err) => <div data-slot="form-error">{err()}</div>}
                   </Show>
                 </div>
                 <input type="hidden" name="workspaceID" value={params.id} />
                 <div data-slot="form-actions">
                   <button type="reset" data-color="ghost" onClick={() => hide()}>
-                    {i18n.t("common.cancel")}
+                    Cancel
                   </button>
                   <button type="submit" data-color="primary" disabled={submission.pending}>
-                    {submission.pending
-                      ? i18n.t("workspace.monthlyLimit.setting")
-                      : i18n.t("workspace.monthlyLimit.set")}
+                    {submission.pending ? "Setting..." : "Set"}
                   </button>
                 </div>
               </form>
             }
           >
             <button data-color="primary" onClick={() => show()}>
-              {billingInfo()?.monthlyLimit
-                ? i18n.t("workspace.monthlyLimit.edit")
-                : i18n.t("workspace.monthlyLimit.set")}
+              {billingInfo()?.monthlyLimit ? "Edit Limit" : "Set Limit"}
             </button>
           </Show>
         </div>
-        <Show
-          when={billingInfo()?.monthlyLimit}
-          fallback={<p data-slot="usage-status">{i18n.t("workspace.monthlyLimit.noLimit")}</p>}
-        >
+        <Show when={billingInfo()?.monthlyLimit} fallback={<p data-slot="usage-status">No usage limit set.</p>}>
           <p data-slot="usage-status">
-            {i18n.t("workspace.monthlyLimit.currentUsage.beforeMonth")}{" "}
-            {new Date().toLocaleDateString(undefined, { month: "long", timeZone: "UTC" })}{" "}
-            {i18n.t("workspace.monthlyLimit.currentUsage.beforeAmount")}
+            Current usage for {new Date().toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })} is $
             {(() => {
               const dateLastUsed = billingInfo()?.timeMonthlyUsageUpdated
               if (!dateLastUsed) return "0"
 
-              const current = new Date().toLocaleDateString(undefined, {
+              const current = new Date().toLocaleDateString("en-US", {
                 year: "numeric",
                 month: "long",
                 timeZone: "UTC",
               })
-              const lastUsed = dateLastUsed.toLocaleDateString(undefined, {
+              const lastUsed = dateLastUsed.toLocaleDateString("en-US", {
                 year: "numeric",
                 month: "long",
                 timeZone: "UTC",

@@ -63,7 +63,7 @@
     "success": { "dark": "darkGreen", "light": "lightGreen" },
     "info": { "dark": "darkTeal", "light": "lightTeal" },
     "text": { "dark": "darkText", "light": "lightText" },
-    "textMuted": { "dark": "darkOverlay2", "light": "lightOverlay2" },
+    "textMuted": { "dark": "darkSubtext1", "light": "lightSubtext1" },
     "background": { "dark": "darkBase", "light": "lightBase" },
     "backgroundPanel": { "dark": "darkMantle", "light": "lightMantle" },
     "backgroundElement": { "dark": "darkCrust", "light": "lightCrust" },

@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "1.4.3",
+  "version": "1.1.27",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -15,11 +15,8 @@
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-clipboard-manager": "~2",
-    "@tauri-apps/plugin-deep-link": "~2",
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "~2",
@@ -30,8 +27,7 @@
     "@tauri-apps/plugin-updater": "~2",
     "@tauri-apps/plugin-http": "~2",
     "@tauri-apps/plugin-window-state": "~2",
-    "solid-js": "catalog:",
-    "@solidjs/meta": "catalog:"
+    "solid-js": "catalog:"
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",

@@ -2,7 +2,6 @@ import { splitProps, type JSX } from "solid-js"
 
 export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onResize"> {
   direction: "horizontal" | "vertical"
-  edge?: "start" | "end"
   size: number
   min: number
   max: number
@@ -14,7 +13,6 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
 export function ResizeHandle(props: ResizeHandleProps) {
   const [local, rest] = splitProps(props, [
     "direction",
-    "edge",
     "size",
     "min",
     "max",
@@ -27,7 +25,6 @@ export function ResizeHandle(props: ResizeHandleProps) {
 
   const handleMouseDown = (e: MouseEvent) => {
     e.preventDefault()
-    const edge = local.edge ?? (local.direction === "vertical" ? "start" : "end")
     const start = local.direction === "horizontal" ? e.clientX : e.clientY
     const startSize = local.size
     let current = startSize
@@ -37,14 +34,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const pos = local.direction === "horizontal" ? moveEvent.clientX : moveEvent.clientY
-      const delta =
-        local.direction === "vertical"
-          ? edge === "end"
-            ? pos - start
-            : start - pos
-          : edge === "start"
-            ? start - pos
-            : pos - start
+      const delta = local.direction === "vertical" ? start - pos : pos - start
       current = startSize + delta
       const clamped = Math.min(local.max, Math.max(local.min, current))
       local.onResize(clamped)
@@ -71,7 +61,6 @@ export function ResizeHandle(props: ResizeHandleProps) {
       {...rest}
       data-component="resize-handle"
       data-direction={local.direction}
-      data-edge={local.edge ?? (local.direction === "vertical" ? "start" : "end")}
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,

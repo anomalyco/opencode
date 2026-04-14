@@ -6,7 +6,6 @@ import { UserMenu } from "./user-menu"
 import { withActor } from "~/context/auth.withActor"
 import { User } from "@opencode-ai/console-core/user.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
-import { useLanguage } from "~/context/language"
 
 const getUserEmail = query(async (workspaceID: string) => {
   "use server"
@@ -19,13 +18,12 @@ const getUserEmail = query(async (workspaceID: string) => {
 
 export default function WorkspaceLayout(props: RouteSectionProps) {
   const params = useParams()
-  const language = useLanguage()
   const userEmail = createAsync(() => getUserEmail(params.id!))
   return (
     <main data-page="workspace">
       <header data-component="workspace-header">
         <div data-slot="header-brand">
-          <A href={language.route("/")} data-component="site-title">
+          <A href="/" data-component="site-title">
             <IconWorkspaceLogo />
           </A>
           <WorkspacePicker />

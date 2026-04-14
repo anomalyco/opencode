@@ -1,11 +1,11 @@
 import path from "path"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
-import { createStore, produce, unwrap } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
+import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart, FilePart, TextPart, SkillPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
   input: string
@@ -13,6 +13,7 @@ export type PromptInfo = {
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | Omit<SkillPart, "id" | "messageID" | "sessionID">
     | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
         source?: {
           text: {
@@ -30,9 +31,9 @@ const MAX_HISTORY_ENTRIES = 50
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
-    const historyPath = path.join(Global.Path.state, "prompt-history.jsonl")
+    const historyFile = Bun.file(path.join(Global.Path.state, "prompt-history.jsonl"))
     onMount(async () => {
-      const text = await Filesystem.readText(historyPath).catch(() => "")
+      const text = await historyFile.text().catch(() => "")
       const lines = text
         .split("\n")
         .filter(Boolean)
@@ -51,7 +52,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       // Rewrite file with only valid entries to self-heal corruption
       if (lines.length > 0) {
         const content = lines.map((line) => JSON.stringify(line)).join("\n") + "\n"
-        writeFile(historyPath, content).catch(() => {})
+        writeFile(historyFile.name!, content).catch(() => {})
       }
     })
 
@@ -82,7 +83,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         return store.history.at(store.index)
       },
       append(item: PromptInfo) {
-        const entry = structuredClone(unwrap(item))
+        const entry = clone(item)
         let trimmed = false
         setStore(
           produce((draft) => {
@@ -97,11 +98,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
         if (trimmed) {
           const content = store.history.map((line) => JSON.stringify(line)).join("\n") + "\n"
-          writeFile(historyPath, content).catch(() => {})
+          writeFile(historyFile.name!, content).catch(() => {})
           return
         }
 
-        appendFile(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        appendFile(historyFile.name!, JSON.stringify(entry) + "\n").catch(() => {})
       },
     }
   },

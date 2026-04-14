@@ -45,7 +45,8 @@ rustPlatform.buildRustPackage (finalAttrs: {
     rustc
     jq
     makeWrapper
-  ] ++ lib.optionals stdenv.hostPlatform.isLinux [ wrapGAppsHook4 ];
+  ]
+  ++ lib.optionals stdenv.hostPlatform.isLinux [ wrapGAppsHook4 ];
 
   buildInputs = lib.optionals stdenv.isLinux [
     dbus
@@ -60,7 +61,6 @@ rustPlatform.buildRustPackage (finalAttrs: {
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
     gst_all_1.gst-plugins-good
-    gst_all_1.gst-plugins-bad
   ];
 
   strictDeps = true;

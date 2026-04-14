@@ -13,10 +13,7 @@ import { Installation } from "../../installation"
 import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
-import { Filesystem } from "../../util/filesystem"
 import { Bus } from "../../bus"
-import { AppRuntime } from "../../effect/app-runtime"
-import { Effect } from "effect"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -52,47 +49,6 @@ function isMcpRemote(config: McpEntry): config is McpRemote {
   return isMcpConfigured(config) && config.type === "remote"
 }
 
-function configuredServers(config: Config.Info) {
-  return Object.entries(config.mcp ?? {}).filter((entry): entry is [string, McpConfigured] => isMcpConfigured(entry[1]))
-}
-
-function oauthServers(config: Config.Info) {
-  return configuredServers(config).filter(
-    (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
-  )
-}
-
-async function listState() {
-  return AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const cfg = yield* Config.Service
-      const mcp = yield* MCP.Service
-      const config = yield* cfg.get()
-      const statuses = yield* mcp.status()
-      const stored = yield* Effect.all(
-        Object.fromEntries(configuredServers(config).map(([name]) => [name, mcp.hasStoredTokens(name)])),
-        { concurrency: "unbounded" },
-      )
-      return { config, statuses, stored }
-    }),
-  )
-}
-
-async function authState() {
-  return AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const cfg = yield* Config.Service
-      const mcp = yield* MCP.Service
-      const config = yield* cfg.get()
-      const auth = yield* Effect.all(
-        Object.fromEntries(oauthServers(config).map(([name]) => [name, mcp.getAuthStatus(name)])),
-        { concurrency: "unbounded" },
-      )
-      return { config, auth }
-    }),
-  )
-}
-
 export const McpCommand = cmd({
   command: "mcp",
   describe: "manage MCP (Model Context Protocol) servers",
@@ -118,8 +74,13 @@ export const McpListCommand = cmd({
         UI.empty()
         prompts.intro("MCP Servers")
 
-        const { config, statuses, stored } = await listState()
-        const servers = configuredServers(config)
+        const config = await Config.get()
+        const mcpServers = config.mcp ?? {}
+        const statuses = await MCP.status()
+
+        const servers = Object.entries(mcpServers).filter((entry): entry is [string, McpConfigured] =>
+          isMcpConfigured(entry[1]),
+        )
 
         if (servers.length === 0) {
           prompts.log.warn("No MCP servers configured")
@@ -130,7 +91,7 @@ export const McpListCommand = cmd({
         for (const [name, serverConfig] of servers) {
           const status = statuses[name]
           const hasOAuth = isMcpRemote(serverConfig) && !!serverConfig.oauth
-          const hasStoredTokens = stored[name]
+          const hasStoredTokens = await MCP.hasStoredTokens(name)
 
           let statusIcon: string
           let statusText: string
@@ -190,11 +151,15 @@ export const McpAuthCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Authentication")
 
-        const { config, auth } = await authState()
+        const config = await Config.get()
         const mcpServers = config.mcp ?? {}
-        const servers = oauthServers(config)
 
-        if (servers.length === 0) {
+        // Get OAuth-capable servers (remote servers with oauth not explicitly disabled)
+        const oauthServers = Object.entries(mcpServers).filter(
+          (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
+        )
+
+        if (oauthServers.length === 0) {
           prompts.log.warn("No OAuth-capable MCP servers configured")
           prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in opencode.json:")
           prompts.log.info(`
@@ -211,17 +176,19 @@ export const McpAuthCommand = cmd({
         let serverName = args.name
         if (!serverName) {
           // Build options with auth status
-          const options = servers.map(([name, cfg]) => {
-            const authStatus = auth[name]
-            const icon = getAuthStatusIcon(authStatus)
-            const statusText = getAuthStatusText(authStatus)
-            const url = cfg.url
-            return {
-              label: `${icon} ${name} (${statusText})`,
-              value: name,
-              hint: url,
-            }
-          })
+          const options = await Promise.all(
+            oauthServers.map(async ([name, cfg]) => {
+              const authStatus = await MCP.getAuthStatus(name)
+              const icon = getAuthStatusIcon(authStatus)
+              const statusText = getAuthStatusText(authStatus)
+              const url = cfg.url
+              return {
+                label: `${icon} ${name} (${statusText})`,
+                value: name,
+                hint: url,
+              }
+            }),
+          )
 
           const selected = await prompts.select({
             message: "Select MCP server to authenticate",
@@ -245,8 +212,7 @@ export const McpAuthCommand = cmd({
         }
 
         // Check if already authenticated
-        const authStatus =
-          auth[serverName] ?? (await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.getAuthStatus(serverName))))
+        const authStatus = await MCP.getAuthStatus(serverName)
         if (authStatus === "authenticated") {
           const confirm = await prompts.confirm({
             message: `${serverName} already has valid credentials. Re-authenticate?`,
@@ -273,7 +239,7 @@ export const McpAuthCommand = cmd({
         })
 
         try {
-          const status = await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.authenticate(serverName)))
+          const status = await MCP.authenticate(serverName)
 
           if (status.status === "connected") {
             spinner.stop("Authentication successful!")
@@ -322,17 +288,22 @@ export const McpAuthListCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Status")
 
-        const { config, auth } = await authState()
-        const servers = oauthServers(config)
+        const config = await Config.get()
+        const mcpServers = config.mcp ?? {}
 
-        if (servers.length === 0) {
+        // Get OAuth-capable servers
+        const oauthServers = Object.entries(mcpServers).filter(
+          (entry): entry is [string, McpRemote] => isMcpRemote(entry[1]) && entry[1].oauth !== false,
+        )
+
+        if (oauthServers.length === 0) {
           prompts.log.warn("No OAuth-capable MCP servers configured")
           prompts.outro("Done")
           return
         }
 
-        for (const [name, serverConfig] of servers) {
-          const authStatus = auth[name]
+        for (const [name, serverConfig] of oauthServers) {
+          const authStatus = await MCP.getAuthStatus(name)
           const icon = getAuthStatusIcon(authStatus)
           const statusText = getAuthStatusText(authStatus)
           const url = serverConfig.url
@@ -340,7 +311,7 @@ export const McpAuthListCommand = cmd({
           prompts.log.info(`${icon} ${name} ${UI.Style.TEXT_DIM}${statusText}\n    ${UI.Style.TEXT_DIM}${url}`)
         }
 
-        prompts.outro(`${servers.length} OAuth-capable server(s)`)
+        prompts.outro(`${oauthServers.length} OAuth-capable server(s)`)
       },
     })
   },
@@ -361,7 +332,8 @@ export const McpLogoutCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Logout")
 
-        const credentials = await AppRuntime.runPromise(McpAuth.Service.use((auth) => auth.all()))
+        const authPath = path.join(Global.Path.data, "mcp-auth.json")
+        const credentials = await McpAuth.all()
         const serverNames = Object.keys(credentials)
 
         if (serverNames.length === 0) {
@@ -399,7 +371,7 @@ export const McpLogoutCommand = cmd({
           return
         }
 
-        await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.removeAuth(serverName)))
+        await MCP.removeAuth(serverName)
         prompts.log.success(`Removed OAuth credentials for ${serverName}`)
         prompts.outro("Done")
       },
@@ -416,7 +388,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   }
 
   for (const candidate of candidates) {
-    if (await Filesystem.exists(candidate)) {
+    if (await Bun.file(candidate).exists()) {
       return candidate
     }
   }
@@ -426,9 +398,11 @@ async function resolveConfigPath(baseDir: string, global = false) {
 }
 
 async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: string) {
+  const file = Bun.file(configPath)
+
   let text = "{}"
-  if (await Filesystem.exists(configPath)) {
-    text = await Filesystem.readText(configPath)
+  if (await file.exists()) {
+    text = await file.text()
   }
 
   // Use jsonc-parser to modify while preserving comments
@@ -437,7 +411,7 @@ async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: s
   })
   const result = applyEdits(text, edits)
 
-  await Filesystem.write(configPath, result)
+  await Bun.write(configPath, result)
 
   return configPath
 }
@@ -622,7 +596,7 @@ export const McpDebugCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Debug")
 
-        const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+        const config = await Config.get()
         const mcpServers = config.mcp ?? {}
         const serverName = args.name
 
@@ -649,18 +623,10 @@ export const McpDebugCommand = cmd({
         prompts.log.info(`URL: ${serverConfig.url}`)
 
         // Check stored auth status
-        const { authStatus, entry } = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const mcp = yield* MCP.Service
-            const auth = yield* McpAuth.Service
-            return {
-              authStatus: yield* mcp.getAuthStatus(serverName),
-              entry: yield* auth.get(serverName),
-            }
-          }),
-        )
+        const authStatus = await MCP.getAuthStatus(serverName)
         prompts.log.info(`Auth status: ${getAuthStatusIcon(authStatus)} ${getAuthStatusText(authStatus)}`)
 
+        const entry = await McpAuth.get(serverName)
         if (entry?.tokens) {
           prompts.log.info(`  Access token: ${entry.tokens.accessToken.substring(0, 20)}...`)
           if (entry.tokens.expiresAt) {
@@ -716,11 +682,6 @@ export const McpDebugCommand = cmd({
 
             // Try to discover OAuth metadata
             const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
-            const auth = await AppRuntime.runPromise(
-              Effect.gen(function* () {
-                return yield* McpAuth.Service
-              }),
-            )
             const authProvider = new McpOAuthProvider(
               serverName,
               serverConfig.url,
@@ -728,12 +689,10 @@ export const McpDebugCommand = cmd({
                 clientId: oauthConfig?.clientId,
                 clientSecret: oauthConfig?.clientSecret,
                 scope: oauthConfig?.scope,
-                redirectUri: oauthConfig?.redirectUri,
               },
               {
                 onRedirect: async () => {},
               },
-              auth,
             )
 
             prompts.log.info("Testing OAuth flow (without completing authorization)...")

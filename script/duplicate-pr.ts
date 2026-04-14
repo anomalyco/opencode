@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import path from "path"
-import { pathToFileURL } from "bun"
 import { createOpencode } from "@opencode-ai/sdk"
 import { parseArgs } from "util"
 
@@ -50,7 +49,7 @@ Examples:
       }
       parts.push({
         type: "file",
-        url: pathToFileURL(resolved).href,
+        url: `file://${resolved}`,
         filename: path.basename(resolved),
         mime: "text/plain",
       })

@@ -1,14 +1,13 @@
 import z from "zod"
 import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
-import { logo as glyphs } from "./logo"
 
 export namespace UI {
-  const wordmark = [
-    `⠀                                ▄     `,
-    `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
-    `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
-    `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+  const LOGO = [
+    [`                    `, `             ▄     `],
+    [`█▀▀█ █▀▀█ █▀▀█ █▀▀▄ `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`],
+    [`█░░█ █░░█ █▀▀▀ █░░█ `, `█░░░ █░░█ █░░█ █▀▀▀`],
+    [`▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ `, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`],
   ]
 
   export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -32,12 +31,12 @@ export namespace UI {
 
   export function println(...message: string[]) {
     print(...message)
-    process.stderr.write(EOL)
+    Bun.stderr.write(EOL)
   }
 
   export function print(...message: string[]) {
     blank = false
-    process.stderr.write(message.join(" "))
+    Bun.stderr.write(message.join(" "))
   }
 
   let blank = false
@@ -48,60 +47,15 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
-    if (!process.stdout.isTTY && !process.stderr.isTTY) {
-      const result = []
-      for (const row of wordmark) {
-        if (pad) result.push(pad)
-        result.push(row)
-        result.push(EOL)
-      }
-      return result.join("").trimEnd()
-    }
-
-    const result: string[] = []
-    const reset = "\x1b[0m"
-    const left = {
-      fg: "\x1b[90m",
-      shadow: "\x1b[38;5;235m",
-      bg: "\x1b[48;5;235m",
-    }
-    const right = {
-      fg: reset,
-      shadow: "\x1b[38;5;238m",
-      bg: "\x1b[48;5;238m",
-    }
-    const gap = " "
-    const draw = (line: string, fg: string, shadow: string, bg: string) => {
-      const parts: string[] = []
-      for (const char of line) {
-        if (char === "_") {
-          parts.push(bg, " ", reset)
-          continue
-        }
-        if (char === "^") {
-          parts.push(fg, bg, "▀", reset)
-          continue
-        }
-        if (char === "~") {
-          parts.push(shadow, "▀", reset)
-          continue
-        }
-        if (char === " ") {
-          parts.push(" ")
-          continue
-        }
-        parts.push(fg, char, reset)
-      }
-      return parts.join("")
-    }
-    glyphs.left.forEach((row, index) => {
+    const result = []
+    for (const row of LOGO) {
       if (pad) result.push(pad)
-      result.push(draw(row, left.fg, left.shadow, left.bg))
-      result.push(gap)
-      const other = glyphs.right[index] ?? ""
-      result.push(draw(other, right.fg, right.shadow, right.bg))
+      result.push(Bun.color("gray", "ansi"))
+      result.push(row[0])
+      result.push("\x1b[0m")
+      result.push(row[1])
       result.push(EOL)
-    })
+    }
     return result.join("").trimEnd()
   }
 
@@ -121,9 +75,6 @@ export namespace UI {
   }
 
   export function error(message: string) {
-    if (message.startsWith("Error: ")) {
-      message = message.slice("Error: ".length)
-    }
     println(Style.TEXT_DANGER_BOLD + "Error: " + Style.TEXT_NORMAL + message)
   }
 

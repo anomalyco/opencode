@@ -2,7 +2,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /* deno-fmt-ignore-file */
-/* biome-ignore-all lint: auto-generated */
 
 /// <reference path="../../sst-env.d.ts" />
 

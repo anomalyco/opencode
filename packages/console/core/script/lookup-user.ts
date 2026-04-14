@@ -1,65 +1,22 @@
 import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import {
-  BillingTable,
-  PaymentTable,
-  SubscriptionTable,
-  BlackPlans,
-  UsageTable,
-  LiteTable,
-} from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable, UsageTable } from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
-import { KeyTable } from "../src/schema/key.sql.js"
 import { BlackData } from "../src/black.js"
 import { centsToMicroCents } from "../src/util/price.js"
 import { getWeekBounds } from "../src/util/date.js"
-import { ModelTable } from "../src/schema/model.sql.js"
 
 // get input from command line
 const identifier = process.argv[2]
-const verbose = process.argv[process.argv.length - 1] === "-v"
 if (!identifier) {
-  console.error("Usage: bun lookup-user.ts <email|workspaceID|apiKey> [-v]")
+  console.error("Usage: bun lookup-user.ts <email|workspaceID>")
   process.exit(1)
 }
 
-// loop up by workspace ID
 if (identifier.startsWith("wrk_")) {
   await printWorkspace(identifier)
-}
-// lookup by API key ID
-else if (identifier.startsWith("key_")) {
-  const key = await Database.use((tx) =>
-    tx
-      .select()
-      .from(KeyTable)
-      .where(eq(KeyTable.id, identifier))
-      .then((rows) => rows[0]),
-  )
-  if (!key) {
-    console.error("API key not found")
-    process.exit(1)
-  }
-  await printWorkspace(key.workspaceID)
-}
-// lookup by API key value
-else if (identifier.startsWith("sk-")) {
-  const key = await Database.use((tx) =>
-    tx
-      .select()
-      .from(KeyTable)
-      .where(eq(KeyTable.key, identifier))
-      .then((rows) => rows[0]),
-  )
-  if (!key) {
-    console.error("API key not found")
-    process.exit(1)
-  }
-  await printWorkspace(key.workspaceID)
-}
-// lookup by email
-else {
+} else {
   const authData = await Database.use(async (tx) =>
     tx.select().from(AuthTable).where(eq(AuthTable.subject, identifier)),
   )
@@ -81,13 +38,11 @@ else {
         workspaceID: UserTable.workspaceID,
         workspaceName: WorkspaceTable.name,
         role: UserTable.role,
-        black: SubscriptionTable.timeCreated,
-        lite: LiteTable.timeCreated,
+        subscribed: SubscriptionTable.timeCreated,
       })
       .from(UserTable)
       .rightJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
       .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
-      .leftJoin(LiteTable, eq(LiteTable.userID, UserTable.id))
       .where(eq(UserTable.accountID, accountID))
       .then((rows) =>
         rows.map((row) => ({
@@ -95,8 +50,7 @@ else {
           workspaceID: row.workspaceID,
           workspaceName: row.workspaceName,
           role: row.role,
-          black: formatDate(row.black),
-          lite: formatDate(row.lite),
+          subscribed: formatDate(row.subscribed),
         })),
       ),
   )
@@ -132,10 +86,8 @@ async function printWorkspace(workspaceID: string) {
         timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
         timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
         timeSubscriptionCreated: SubscriptionTable.timeCreated,
-        subscription: BillingTable.subscription,
       })
       .from(UserTable)
-      .innerJoin(BillingTable, eq(BillingTable.workspaceID, workspace.id))
       .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
       .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
       .where(eq(UserTable.workspaceID, workspace.id))
@@ -163,37 +115,29 @@ async function printWorkspace(workspaceID: string) {
         balance: BillingTable.balance,
         customerID: BillingTable.customerID,
         reload: BillingTable.reload,
-        blackSubscriptionID: BillingTable.subscriptionID,
-        blackSubscription: {
+        subscriptionID: BillingTable.subscriptionID,
+        subscription: {
           plan: BillingTable.subscriptionPlan,
           booked: BillingTable.timeSubscriptionBooked,
           enrichment: BillingTable.subscription,
         },
-        timeBlackSubscriptionSelected: BillingTable.timeSubscriptionSelected,
-        liteSubscriptionID: BillingTable.liteSubscriptionID,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
       .then(
         (rows) =>
           rows.map((row) => ({
+            ...row,
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
-            reload: row.reload ? "yes" : "no",
-            customerID: row.customerID,
-            GO: row.liteSubscriptionID,
-            Black: row.blackSubscriptionID
+            subscription: row.subscriptionID
               ? [
-                  `Black ${row.blackSubscription.enrichment!.plan}`,
-                  row.blackSubscription.enrichment!.seats > 1
-                    ? `X ${row.blackSubscription.enrichment!.seats} seats`
-                    : "",
-                  row.blackSubscription.enrichment!.coupon
-                    ? `(coupon: ${row.blackSubscription.enrichment!.coupon})`
-                    : "",
-                  `(ref: ${row.blackSubscriptionID})`,
+                  `Black ${row.subscription.enrichment!.plan}`,
+                  row.subscription.enrichment!.seats > 1 ? `X ${row.subscription.enrichment!.seats} seats` : "",
+                  row.subscription.enrichment!.coupon ? `(coupon: ${row.subscription.enrichment!.coupon})` : "",
+                  `(ref: ${row.subscriptionID})`,
                 ].join(" ")
-              : row.blackSubscription.booked
-                ? `Waitlist ${row.blackSubscription.plan} plan${row.timeBlackSubscriptionSelected ? " (selected)" : ""}`
+              : row.subscription.booked
+                ? `Waitlist ${row.subscription.plan} plan`
                 : undefined,
           }))[0],
       ),
@@ -224,68 +168,33 @@ async function printWorkspace(workspaceID: string) {
       ),
   )
 
-  if (verbose) {
-    await printTable("28-Day Usage", (tx) =>
-      tx
-        .select({
-          date: sql<string>`DATE(${UsageTable.timeCreated})`.as("date"),
-          requests: sql<number>`COUNT(*)`.as("requests"),
-          inputTokens: sql<number>`SUM(${UsageTable.inputTokens})`.as("input_tokens"),
-          outputTokens: sql<number>`SUM(${UsageTable.outputTokens})`.as("output_tokens"),
-          reasoningTokens: sql<number>`SUM(${UsageTable.reasoningTokens})`.as("reasoning_tokens"),
-          cacheReadTokens: sql<number>`SUM(${UsageTable.cacheReadTokens})`.as("cache_read_tokens"),
-          cacheWrite5mTokens: sql<number>`SUM(${UsageTable.cacheWrite5mTokens})`.as("cache_write_5m_tokens"),
-          cacheWrite1hTokens: sql<number>`SUM(${UsageTable.cacheWrite1hTokens})`.as("cache_write_1h_tokens"),
-          cost: sql<number>`SUM(${UsageTable.cost})`.as("cost"),
-        })
-        .from(UsageTable)
-        .where(
-          and(
-            eq(UsageTable.workspaceID, workspace.id),
-            sql`${UsageTable.timeCreated} >= DATE_SUB(NOW(), INTERVAL 28 DAY)`,
-          ),
-        )
-        .groupBy(sql`DATE(${UsageTable.timeCreated})`)
-        .orderBy(sql`DATE(${UsageTable.timeCreated}) DESC`)
-        .then((rows) => {
-          const totalCost = rows.reduce((sum, r) => sum + Number(r.cost), 0)
-          const mapped = rows.map((row) => ({
-            ...row,
-            cost: `$${(Number(row.cost) / 100000000).toFixed(2)}`,
-          }))
-          if (mapped.length > 0) {
-            mapped.push({
-              date: "TOTAL",
-              requests: null as any,
-              inputTokens: null as any,
-              outputTokens: null as any,
-              reasoningTokens: null as any,
-              cacheReadTokens: null as any,
-              cacheWrite5mTokens: null as any,
-              cacheWrite1hTokens: null as any,
-              cost: `$${(totalCost / 100000000).toFixed(2)}`,
-            })
-          }
-          return mapped
-        }),
-    )
-    await printTable("Disabled Models", (tx) =>
-      tx
-        .select({
-          model: ModelTable.model,
-          timeCreated: ModelTable.timeCreated,
-        })
-        .from(ModelTable)
-        .where(eq(ModelTable.workspaceID, workspace.id))
-        .orderBy(sql`${ModelTable.timeCreated} DESC`)
-        .then((rows) =>
-          rows.map((row) => ({
-            model: row.model,
-            timeCreated: formatDate(row.timeCreated),
-          })),
-        ),
-    )
-  }
+  /*
+  await printTable("Usage", (tx) =>
+    tx
+      .select({
+        model: UsageTable.model,
+        provider: UsageTable.provider,
+        inputTokens: UsageTable.inputTokens,
+        outputTokens: UsageTable.outputTokens,
+        reasoningTokens: UsageTable.reasoningTokens,
+        cacheReadTokens: UsageTable.cacheReadTokens,
+        cacheWrite5mTokens: UsageTable.cacheWrite5mTokens,
+        cacheWrite1hTokens: UsageTable.cacheWrite1hTokens,
+        cost: UsageTable.cost,
+        timeCreated: UsageTable.timeCreated,
+      })
+      .from(UsageTable)
+      .where(eq(UsageTable.workspaceID, workspace.id))
+      .orderBy(sql`${UsageTable.timeCreated} DESC`)
+      .limit(10)
+      .then((rows) =>
+        rows.map((row) => ({
+          ...row,
+          cost: `$${(row.cost / 100000000).toFixed(2)}`,
+        })),
+      ),
+  )
+        */
 }
 
 function formatMicroCents(value: number | null | undefined) {
@@ -314,20 +223,17 @@ function formatRetryTime(seconds: number) {
 }
 
 function getSubscriptionStatus(row: {
-  subscription: {
-    plan: (typeof BlackPlans)[number]
-  } | null
   timeSubscriptionCreated: Date | null
   fixedUsage: number | null
   rollingUsage: number | null
   timeFixedUpdated: Date | null
   timeRollingUpdated: Date | null
 }) {
-  if (!row.timeSubscriptionCreated || !row.subscription) {
+  if (!row.timeSubscriptionCreated) {
     return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
   }
 
-  const black = BlackData.getLimits({ plan: row.subscription.plan })
+  const black = BlackData.get()
   const now = new Date()
   const week = getWeekBounds(now)
 

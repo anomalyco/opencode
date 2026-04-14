@@ -2,8 +2,6 @@ import { sortBy, pipe } from "remeda"
 
 export namespace Wildcard {
   export function match(str: string, pattern: string) {
-    if (str) str = str.replaceAll("\\", "/")
-    if (pattern) pattern = pattern.replaceAll("\\", "/")
     let escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
       .replace(/\*/g, ".*") // * becomes .*
@@ -15,8 +13,7 @@ export namespace Wildcard {
       escaped = escaped.slice(0, -3) + "( .*)?"
     }
 
-    const flags = process.platform === "win32" ? "si" : "s"
-    return new RegExp("^" + escaped + "$", flags).test(str)
+    return new RegExp("^" + escaped + "$", "s").test(str)
   }
 
   export function all(input: string, patterns: Record<string, any>) {

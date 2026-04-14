@@ -1,13 +1,11 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
-import { AppRuntime } from "@/effect/app-runtime"
 import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
 import { Provider } from "../../provider/provider"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../util/filesystem"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
@@ -15,7 +13,19 @@ import type { Argv } from "yargs"
 
 type AgentMode = "all" | "primary" | "subagent"
 
-const AVAILABLE_TOOLS = ["bash", "read", "write", "edit", "list", "glob", "grep", "webfetch", "task", "todowrite"]
+const AVAILABLE_TOOLS = [
+  "bash",
+  "read",
+  "write",
+  "edit",
+  "list",
+  "glob",
+  "grep",
+  "webfetch",
+  "task",
+  "todowrite",
+  "todoread",
+]
 
 const AgentCreateCommand = cmd({
   command: "create",
@@ -111,9 +121,7 @@ const AgentCreateCommand = cmd({
         const spinner = prompts.spinner()
         spinner.start("Generating agent configuration...")
         const model = args.model ? Provider.parseModel(args.model) : undefined
-        const generated = await AppRuntime.runPromise(
-          Agent.Service.use((svc) => svc.generate({ description, model })),
-        ).catch((error) => {
+        const generated = await Agent.generate({ description, model }).catch((error) => {
           spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
           if (isFullyNonInteractive) process.exit(1)
           throw new UI.CancelledError()
@@ -194,7 +202,8 @@ const AgentCreateCommand = cmd({
 
         await fs.mkdir(targetPath, { recursive: true })
 
-        if (await Filesystem.exists(filePath)) {
+        const file = Bun.file(filePath)
+        if (await file.exists()) {
           if (isFullyNonInteractive) {
             console.error(`Error: Agent file already exists: ${filePath}`)
             process.exit(1)
@@ -203,7 +212,7 @@ const AgentCreateCommand = cmd({
           throw new UI.CancelledError()
         }
 
-        await Filesystem.write(filePath, content)
+        await Bun.write(filePath, content)
 
         if (isFullyNonInteractive) {
           console.log(filePath)
@@ -223,7 +232,7 @@ const AgentListCommand = cmd({
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
-        const agents = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
+        const agents = await Agent.list()
         const sortedAgents = agents.sort((a, b) => {
           if (a.native !== b.native) {
             return a.native ? -1 : 1

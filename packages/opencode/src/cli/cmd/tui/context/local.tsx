@@ -12,7 +12,6 @@ import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { Filesystem } from "@/util/filesystem"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -36,7 +35,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
-      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -50,14 +48,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.warning,
         theme.primary,
         theme.error,
-        theme.info,
       ])
       return {
         list() {
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents()[0]
+          return agents().find((x) => x.name === agentStore.current)!
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
@@ -78,16 +75,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
-          const index = visibleAgents().findIndex((x) => x.name === name)
+          const all = sync.data.agent
+          const agent = all.find((x) => x.name === name)
+          if (agent?.color) return RGBA.fromHex(agent.color)
+          const index = all.findIndex((x) => x.name === name)
           if (index === -1) return colors()[0]
-          const agent = visibleAgents()[index]
-
-          if (agent?.color) {
-            const color = agent.color
-            if (color.startsWith("#")) return RGBA.fromHex(color)
-            // already validated by config, just satisfying TS here
-            return theme[color as keyof typeof theme] as RGBA
-          }
           return colors()[index % colors().length]
         },
       }
@@ -120,7 +112,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
 
-      const filePath = path.join(Global.Path.state, "model.json")
+      const file = Bun.file(path.join(Global.Path.state, "model.json"))
       const state = {
         pending: false,
       }
@@ -131,15 +123,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
         state.pending = false
-        Filesystem.writeJson(filePath, {
-          recent: modelStore.recent,
-          favorite: modelStore.favorite,
-          variant: modelStore.variant,
-        })
+        Bun.write(
+          file,
+          JSON.stringify({
+            recent: modelStore.recent,
+            favorite: modelStore.favorite,
+            variant: modelStore.variant,
+          }),
+        )
       }
 
-      Filesystem.readJson(filePath)
-        .then((x: any) => {
+      file
+        .json()
+        .then((x) => {
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
@@ -321,17 +317,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         variant: {
-          selected() {
+          current() {
             const m = currentModel()
             if (!m) return undefined
             const key = `${m.providerID}/${m.modelID}`
             return modelStore.variant[key]
-          },
-          current() {
-            const v = this.selected()
-            if (!v) return undefined
-            if (!this.list().includes(v)) return undefined
-            return v
           },
           list() {
             const m = currentModel()
@@ -345,7 +335,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = currentModel()
             if (!m) return
             const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value ?? "default")
+            setModelStore("variant", key, value)
             save()
           },
           cycle() {

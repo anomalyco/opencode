@@ -1,44 +1,31 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { decode64 } from "@/utils/base64"
+import { base64Decode } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
-export const popularProviders = [
-  "opencode",
-  "opencode-go",
-  "anthropic",
-  "github-copilot",
-  "openai",
-  "google",
-  "openrouter",
-  "vercel",
-]
-const popularProviderSet = new Set(popularProviders)
+export const popularProviders = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
 
 export function useProviders() {
   const globalSync = useGlobalSync()
   const params = useParams()
-  const dir = createMemo(() => decode64(params.dir) ?? "")
-  const providers = () => {
-    if (dir()) {
-      const [projectStore] = globalSync.child(dir())
-      if (projectStore.provider_ready) return projectStore.provider
+  const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const providers = createMemo(() => {
+    if (currentDirectory()) {
+      const [projectStore] = globalSync.child(currentDirectory())
+      return projectStore.provider
     }
     return globalSync.data.provider
-  }
+  })
+  const connected = createMemo(() => providers().all.filter((p) => providers().connected.includes(p.id)))
+  const paid = createMemo(() =>
+    connected().filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input)),
+  )
+  const popular = createMemo(() => providers().all.filter((p) => popularProviders.includes(p.id)))
   return {
-    all: () => providers().all,
-    default: () => providers().default,
-    popular: () => providers().all.filter((p) => popularProviderSet.has(p.id)),
-    connected: () => {
-      const connected = new Set(providers().connected)
-      return providers().all.filter((p) => connected.has(p.id))
-    },
-    paid: () => {
-      const connected = new Set(providers().connected)
-      return providers().all.filter(
-        (p) => connected.has(p.id) && (p.id !== "opencode" || Object.values(p.models).some((m) => m.cost?.input)),
-      )
-    },
+    all: createMemo(() => providers().all),
+    default: createMemo(() => providers().default),
+    popular,
+    connected,
+    paid,
   }
 }

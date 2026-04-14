@@ -1,22 +1,20 @@
 import { createMemo } from "solid-js"
+import { useSync } from "@tui/context/sync"
 import { Keybind } from "@/util/keybind"
 import { pipe, mapValues } from "remeda"
-import type { TuiConfig } from "@/config/tui"
+import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 import type { ParsedKey, Renderable } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createSimpleContext } from "./helper"
-import { useTuiConfig } from "./tui-config"
-
-export type KeybindKey = keyof NonNullable<TuiConfig.Info["keybinds"]> & string
 
 export const { use: useKeybind, provider: KeybindProvider } = createSimpleContext({
   name: "Keybind",
   init: () => {
-    const config = useTuiConfig()
-    const keybinds = createMemo<Record<string, Keybind.Info[]>>(() => {
+    const sync = useSync()
+    const keybinds = createMemo(() => {
       return pipe(
-        (config.keybinds ?? {}) as Record<string, string>,
+        sync.data.config.keybinds ?? {},
         mapValues((value) => Keybind.parse(value)),
       )
     })
@@ -36,8 +34,9 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         timeout = setTimeout(() => {
           if (!store.leader) return
           leader(false)
-          if (!focus || focus.isDestroyed) return
-          focus.focus()
+          if (focus) {
+            focus.focus()
+          }
         }, 2000)
         return
       }
@@ -80,24 +79,21 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         }
         return Keybind.fromParsedKey(evt, store.leader)
       },
-      match(key: string, evt: ParsedKey) {
-        const list = keybinds()[key] ?? Keybind.parse(key)
-        if (!list.length) return false
+      match(key: keyof KeybindsConfig, evt: ParsedKey) {
+        const keybind = keybinds()[key]
+        if (!keybind) return false
         const parsed: Keybind.Info = result.parse(evt)
-        for (const item of list) {
-          if (Keybind.match(item, parsed)) {
+        for (const key of keybind) {
+          if (Keybind.match(key, parsed)) {
             return true
           }
         }
-        return false
       },
-      print(key: string) {
-        const first = keybinds()[key]?.at(0) ?? Keybind.parse(key).at(0)
+      print(key: keyof KeybindsConfig) {
+        const first = keybinds()[key]?.at(0)
         if (!first) return ""
-        const text = Keybind.toString(first)
-        const lead = keybinds().leader?.[0]
-        if (!lead) return text
-        return text.replace("<leader>", Keybind.toString(lead))
+        const result = Keybind.toString(first)
+        return result.replace("<leader>", Keybind.toString(keybinds().leader![0]!))
       },
     }
     return result

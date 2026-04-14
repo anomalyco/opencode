@@ -1,10 +1,6 @@
 import path from "path"
-import { Effect } from "effect"
-import { EffectLogger } from "@/effect/logger"
-import { InstanceState } from "@/effect/instance-state"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
-import { AppFileSystem } from "../filesystem"
 
 type Kind = "file" | "directory"
 
@@ -13,37 +9,24 @@ type Options = {
   kind?: Kind
 }
 
-export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
-  ctx: Tool.Context,
-  target?: string,
-  options?: Options,
-) {
+export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
   if (!target) return
 
   if (options?.bypass) return
 
-  const ins = yield* InstanceState.context
-  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
-  if (Instance.containsPath(full, ins)) return
+  if (Instance.containsPath(target)) return
 
   const kind = options?.kind ?? "file"
-  const dir = kind === "directory" ? full : path.dirname(full)
-  const glob =
-    process.platform === "win32"
-      ? AppFileSystem.normalizePathPattern(path.join(dir, "*"))
-      : path.join(dir, "*").replaceAll("\\", "/")
+  const parentDir = kind === "directory" ? target : path.dirname(target)
+  const glob = path.join(parentDir, "*")
 
-  yield* ctx.ask({
+  await ctx.ask({
     permission: "external_directory",
     patterns: [glob],
     always: [glob],
     metadata: {
-      filepath: full,
-      parentDir: dir,
+      filepath: target,
+      parentDir,
     },
   })
-})
-
-export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
-  return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options).pipe(Effect.provide(EffectLogger.layer)))
 }

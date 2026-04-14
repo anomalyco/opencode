@@ -21,9 +21,7 @@ export function DialogHelp() {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Help
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-          esc/enter
-        </text>
+        <text fg={theme.textMuted}>esc/enter</text>
       </box>
       <box paddingBottom={1}>
         <text fg={theme.textMuted}>

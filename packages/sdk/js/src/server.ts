@@ -1,6 +1,5 @@
-import launch from "cross-spawn"
+import { spawn } from "node:child_process"
 import { type Config } from "./gen/types.gen.js"
-import { stop, bindAbort } from "./process.js"
 
 export type ServerOptions = {
   hostname?: string
@@ -32,38 +31,29 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = launch(`opencode`, args, {
+  const proc = spawn(`opencode`, args, {
+    signal: options.signal,
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
     },
   })
-  let clear = () => {}
 
   const url = await new Promise<string>((resolve, reject) => {
     const id = setTimeout(() => {
-      clear()
-      stop(proc)
       reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
     }, options.timeout)
     let output = ""
-    let resolved = false
     proc.stdout?.on("data", (chunk) => {
-      if (resolved) return
       output += chunk.toString()
       const lines = output.split("\n")
       for (const line of lines) {
         if (line.startsWith("opencode server listening")) {
           const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
           if (!match) {
-            clear()
-            stop(proc)
-            clearTimeout(id)
-            reject(new Error(`Failed to parse server url from output: ${line}`))
-            return
+            throw new Error(`Failed to parse server url from output: ${line}`)
           }
           clearTimeout(id)
-          resolved = true
           resolve(match[1]!)
           return
         }
@@ -84,17 +74,18 @@ export async function createOpencodeServer(options?: ServerOptions) {
       clearTimeout(id)
       reject(error)
     })
-    clear = bindAbort(proc, options.signal, () => {
-      clearTimeout(id)
-      reject(options.signal?.reason)
-    })
+    if (options.signal) {
+      options.signal.addEventListener("abort", () => {
+        clearTimeout(id)
+        reject(new Error("Aborted"))
+      })
+    }
   })
 
   return {
     url,
     close() {
-      clear()
-      stop(proc)
+      proc.kill()
     },
   }
 }
@@ -115,7 +106,8 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = launch(`opencode`, args, {
+  const proc = spawn(`opencode`, args, {
+    signal: options?.signal,
     stdio: "inherit",
     env: {
       ...process.env,
@@ -123,12 +115,9 @@ export function createOpencodeTui(options?: TuiOptions) {
     },
   })
 
-  const clear = bindAbort(proc, options?.signal)
-
   return {
     close() {
-      clear()
-      stop(proc)
+      proc.kill()
     },
   }
 }

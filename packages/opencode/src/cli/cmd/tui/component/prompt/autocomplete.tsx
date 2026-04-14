@@ -1,13 +1,10 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
-import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
-import { getScrollAcceleration } from "../../util/scroll"
-import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -51,7 +48,7 @@ function extractLineRange(input: string) {
 export type AutocompleteRef = {
   onInput: (value: string) => void
   onKeyDown: (e: KeyEvent) => void
-  visible: false | "@" | "/"
+  visible: false | "@" | "/" | "$"
 }
 
 export type AutocompleteOption = {
@@ -75,6 +72,7 @@ export function Autocomplete(props: {
   ref: (ref: AutocompleteRef) => void
   fileStyleId: number
   agentStyleId: number
+  skillStyleId: number
   promptPartTypeId: () => number
 }) {
   const sdk = useSDK()
@@ -83,7 +81,6 @@ export function Autocomplete(props: {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
-  const tuiConfig = useTuiConfig()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -133,16 +130,6 @@ export function Autocomplete(props: {
     return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
-  // filter() reads reactive props.value plus non-reactive cursor/text state.
-  // On keypress those can be briefly out of sync, so filter() may return an empty/partial string.
-  // Copy it into search in an effect because effects run after reactive updates have been rendered and painted
-  // so the input has settled and all consumers read the same stable value.
-  const [search, setSearch] = createSignal("")
-  createEffect(() => {
-    const next = filter()
-    setSearch(next ? next : "")
-  })
-
   // When the filter changes due to how TUI works, the mousemove might still be triggered
   // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
   // that the mouseover event doesn't trigger when filtering.
@@ -157,7 +144,8 @@ export function Autocomplete(props: {
 
     const charAfterCursor = props.value.at(currentCursorOffset)
     const needsSpace = charAfterCursor !== " "
-    const append = "@" + text + (needsSpace ? " " : "")
+    const prefix = part.type === "skill" ? "$" : "@"
+    const append = prefix + text + (needsSpace ? " " : "")
 
     input.cursorOffset = store.index
     const startCursor = input.logicalCursor
@@ -167,11 +155,18 @@ export function Autocomplete(props: {
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText(append)
 
-    const virtualText = "@" + text
+    const virtualText = prefix + text
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
-    const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
+    const styleId =
+      part.type === "file"
+        ? props.fileStyleId
+        : part.type === "agent"
+          ? props.agentStyleId
+          : part.type === "skill"
+            ? props.skillStyleId
+            : undefined
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
@@ -210,6 +205,10 @@ export function Autocomplete(props: {
         part.source.start = extmarkStart
         part.source.end = extmarkEnd
         part.source.value = virtualText
+      } else if (part.type === "skill" && part.source) {
+        part.source.start = extmarkStart
+        part.source.end = extmarkEnd
+        part.source.value = virtualText
       }
       const partIndex = draft.parts.length
       draft.parts.push(part)
@@ -222,7 +221,7 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => search(),
+    () => filter(),
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
@@ -250,18 +249,17 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            const baseDir = (sync.path.directory || process.cwd()).replace(/\/+$/, "")
-            const fullPath = `${baseDir}/${item}`
-            const urlObj = pathToFileURL(fullPath)
+            let url = `file://${process.cwd()}/${item}`
             let filename = item
             if (lineRange && !item.endsWith("/")) {
               filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+              const urlObj = new URL(url)
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))
               }
+              url = urlObj.toString()
             }
-            const url = urlObj.href
 
             const isDir = item.endsWith("/")
             return {
@@ -356,14 +354,43 @@ export function Autocomplete(props: {
       )
   })
 
+  const skills = createMemo((): AutocompleteOption[] => {
+    const results = sync.data.skill.map(
+      (skill): AutocompleteOption => ({
+        display: skill.name,
+        value: skill.name,
+        description: skill.description,
+        onSelect: () => {
+          insertPart(skill.name, {
+            type: "skill",
+            name: skill.name,
+            source: {
+              start: 0,
+              end: 0,
+              value: "$" + skill.name,
+            },
+          })
+        },
+      }),
+    )
+
+    results.sort((a, b) => a.display.localeCompare(b.display))
+
+    const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
+    if (!max) return results
+    const maxDisplay = Math.min(max!, 20)
+    return results.map((item) => ({
+      ...item,
+      display: item.display.length > 20 ? item.display.slice(0, 17) + "... " : item.display.padEnd(maxDisplay + 1),
+    }))
+  })
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
-      if (serverCommand.source === "skill") continue
-      const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
-        display: "/" + serverCommand.name + label,
+        display: "/" + serverCommand.name + (serverCommand.mcp ? " (MCP)" : ""),
         description: serverCommand.description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
@@ -389,13 +416,18 @@ export function Autocomplete(props: {
     const filesValue = files()
     const agentsValue = agents()
     const commandsValue = commands()
+    const skillsValue = skills()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...agentsValue, ...(filesValue || []), ...mcpResources()]
+        : store.visible === "$"
+          ? [...skillsValue]
+          : [...commandsValue]
 
-    const searchValue = search()
+    const currentFilter = filter()
 
-    if (!searchValue) {
+    if (!currentFilter) {
       return mixed
     }
 
@@ -403,7 +435,7 @@ export function Autocomplete(props: {
       return prev
     }
 
-    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
+    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
       keys: [
         (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
         "description",
@@ -413,7 +445,7 @@ export function Autocomplete(props: {
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
-        if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
+        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
           score *= 2
         }
         const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
@@ -478,7 +510,7 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
-  function show(mode: "@" | "/") {
+  function show(mode: "@" | "/" | "$") {
     command.keybinds(false)
     setStore({
       visible: mode,
@@ -534,13 +566,25 @@ export function Autocomplete(props: {
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
         const text = value.slice(0, offset)
         const idx = text.lastIndexOf("@")
-        if (idx === -1) return
+        if (idx !== -1) {
+          const between = text.slice(idx)
+          const before = idx === 0 ? undefined : value[idx - 1]
+          if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+            show("@")
+            setStore("index", idx)
+            return
+          }
+        }
 
-        const between = text.slice(idx)
-        const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
-          show("@")
-          setStore("index", idx)
+        // Check for "$" trigger - find the nearest "$" before cursor with no whitespace between
+        const dollarIdx = text.lastIndexOf("$")
+        if (dollarIdx !== -1) {
+          const between = text.slice(dollarIdx)
+          const before = dollarIdx === 0 ? undefined : value[dollarIdx - 1]
+          if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+            show("$")
+            setStore("index", dollarIdx)
+          }
         }
       },
       onKeyDown(e: KeyEvent) {
@@ -595,6 +639,14 @@ export function Autocomplete(props: {
           if (e.name === "/") {
             if (props.input().cursorOffset === 0) show("/")
           }
+
+          if (e.name === "$") {
+            const cursorOffset = props.input().cursorOffset
+            const charBeforeCursor =
+              cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
+            if (canTrigger) show("$")
+          }
         }
       },
     })
@@ -608,7 +660,6 @@ export function Autocomplete(props: {
   })
 
   let scroll: ScrollBoxRenderable
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
     <box
@@ -626,7 +677,6 @@ export function Autocomplete(props: {
         backgroundColor={theme.backgroundMenu}
         height={height()}
         scrollbarOptions={{ visible: false }}
-        scrollAcceleration={scrollAcceleration()}
       >
         <Index
           each={options()}

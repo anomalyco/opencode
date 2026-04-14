@@ -1,3 +1,2 @@
 [test]
-root = "./src"
 preload = ["./happydom.ts"]

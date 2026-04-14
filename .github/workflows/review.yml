@@ -1,4 +1,4 @@
-name: review
+name: Guidelines Check
 
 on:
   issue_comment:

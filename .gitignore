@@ -5,7 +5,6 @@ node_modules
 .env
 .idea
 .vscode
-.codex
 *~
 playground
 tmp
@@ -17,7 +16,7 @@ ts-dist
 /result
 refs
 Session.vim
-/opencode.json
+opencode.json
 a.out
 target
 .scripts
@@ -25,7 +24,5 @@ target
 
 # Local dev files
 opencode-dev
-UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
-tsconfig.tsbuildinfo

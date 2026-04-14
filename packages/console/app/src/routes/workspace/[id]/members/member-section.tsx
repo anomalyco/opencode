@@ -7,9 +7,6 @@ import { UserRole } from "@opencode-ai/console-core/schema/user.sql.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { User } from "@opencode-ai/console-core/user.js"
 import { RoleDropdown } from "./role-dropdown"
-import { useI18n } from "~/context/i18n"
-import { useLanguage } from "~/context/language"
-import { formError, localizeError } from "~/lib/form-error"
 
 const listMembers = query(async (workspaceID: string) => {
   "use server"
@@ -25,14 +22,14 @@ const listMembers = query(async (workspaceID: string) => {
 const inviteMember = action(async (form: FormData) => {
   "use server"
   const email = form.get("email")?.toString().trim()
-  if (!email) return { error: formError.emailRequired }
+  if (!email) return { error: "Email is required" }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  if (!workspaceID) return { error: "Workspace ID is required" }
   const role = form.get("role")?.toString() as (typeof UserRole)[number]
-  if (!role) return { error: formError.roleRequired }
+  if (!role) return { error: "Role is required" }
   const limit = form.get("limit")?.toString()
   const monthlyLimit = limit && limit.trim() !== "" ? parseInt(limit) : null
-  if (monthlyLimit !== null && monthlyLimit < 0) return { error: formError.monthlyLimitInvalid }
+  if (monthlyLimit !== null && monthlyLimit < 0) return { error: "Set a valid monthly limit" }
   return json(
     await withActor(
       () =>
@@ -48,9 +45,9 @@ const inviteMember = action(async (form: FormData) => {
 const removeMember = action(async (form: FormData) => {
   "use server"
   const id = form.get("id")?.toString()
-  if (!id) return { error: formError.idRequired }
+  if (!id) return { error: "ID is required" }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  if (!workspaceID) return { error: "Workspace ID is required" }
   return json(
     await withActor(
       () =>
@@ -67,14 +64,14 @@ const updateMember = action(async (form: FormData) => {
   "use server"
 
   const id = form.get("id")?.toString()
-  if (!id) return { error: formError.idRequired }
+  if (!id) return { error: "ID is required" }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  if (!workspaceID) return { error: "Workspace ID is required" }
   const role = form.get("role")?.toString() as (typeof UserRole)[number]
-  if (!role) return { error: formError.roleRequired }
+  if (!role) return { error: "Role is required" }
   const limit = form.get("limit")?.toString()
   const monthlyLimit = limit && limit.trim() !== "" ? parseInt(limit) : null
-  if (monthlyLimit !== null && monthlyLimit < 0) return { error: formError.monthlyLimitInvalid }
+  if (monthlyLimit !== null && monthlyLimit < 0) return { error: "Set a valid monthly limit" }
 
   return json(
     await withActor(
@@ -88,14 +85,7 @@ const updateMember = action(async (form: FormData) => {
   )
 }, "member.update")
 
-function MemberRow(props: {
-  member: any
-  workspaceID: string
-  actorID: string
-  actorRole: string
-  roleOptions: { value: string; label: string; description: string }[]
-}) {
-  const i18n = useI18n()
+function MemberRow(props: { member: any; workspaceID: string; actorID: string; actorRole: string }) {
   const submission = useSubmission(updateMember)
   const isCurrentUser = () => props.actorID === props.member.id
   const isAdmin = () => props.actorRole === "admin"
@@ -130,12 +120,12 @@ function MemberRow(props: {
       const dateLastUsed = props.member.timeMonthlyUsageUpdated
       if (!dateLastUsed) return 0
 
-      const current = new Date().toLocaleDateString(undefined, {
+      const current = new Date().toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
         timeZone: "UTC",
       })
-      const lastUsed = dateLastUsed.toLocaleDateString(undefined, {
+      const lastUsed = dateLastUsed.toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
         timeZone: "UTC",
@@ -143,22 +133,18 @@ function MemberRow(props: {
       return current === lastUsed ? (props.member.monthlyUsage ?? 0) : 0
     })()
 
-    const limit = props.member.monthlyLimit
-      ? `$${props.member.monthlyLimit}`
-      : i18n.t("workspace.members.noLimitLowercase")
+    const limit = props.member.monthlyLimit ? `$${props.member.monthlyLimit}` : "no limit"
     return `$${(currentUsage / 100000000).toFixed(2)} / ${limit}`
   }
-
-  const roleLabel = (value: string) => props.roleOptions.find((option) => option.value === value)?.label ?? value
 
   return (
     <tr>
       <td data-slot="member-email">{props.member.authEmail ?? props.member.email}</td>
       <td data-slot="member-role">
-        <Show when={store.editing && !isCurrentUser()} fallback={<span>{roleLabel(props.member.role)}</span>}>
+        <Show when={store.editing && !isCurrentUser()} fallback={<span>{props.member.role}</span>}>
           <RoleDropdown
             value={store.selectedRole}
-            options={props.roleOptions}
+            options={roleOptions}
             onChange={(value) => setStore("selectedRole", value as (typeof UserRole)[number])}
           />
         </Show>
@@ -170,12 +156,12 @@ function MemberRow(props: {
             type="number"
             value={store.limit}
             onInput={(e) => setStore("limit", e.currentTarget.value)}
-            placeholder={i18n.t("workspace.members.noLimit")}
+            placeholder="No limit"
             min="0"
           />
         </Show>
       </td>
-      <td data-slot="member-joined">{props.member.timeSeen ? "" : i18n.t("workspace.members.invited")}</td>
+      <td data-slot="member-joined">{props.member.timeSeen ? "" : "invited"}</td>
       <Show when={isAdmin()}>
         <td data-slot="member-actions">
           <Show
@@ -183,13 +169,13 @@ function MemberRow(props: {
             fallback={
               <>
                 <button data-color="ghost" onClick={() => show()}>
-                  {i18n.t("workspace.members.edit")}
+                  Edit
                 </button>
                 <Show when={!isCurrentUser()}>
                   <form action={removeMember} method="post">
                     <input type="hidden" name="id" value={props.member.id} />
                     <input type="hidden" name="workspaceID" value={props.workspaceID} />
-                    <button data-color="ghost">{i18n.t("workspace.members.delete")}</button>
+                    <button data-color="ghost">Delete</button>
                   </form>
                 </Show>
               </>
@@ -201,11 +187,11 @@ function MemberRow(props: {
               <input type="hidden" name="role" value={store.selectedRole} />
               <input type="hidden" name="limit" value={store.limit} />
               <button type="submit" data-color="ghost" disabled={submission.pending}>
-                {submission.pending ? i18n.t("workspace.members.saving") : i18n.t("workspace.members.save")}
+                {submission.pending ? "Saving..." : "Save"}
               </button>
               <Show when={!submission.pending}>
                 <button type="button" data-color="ghost" onClick={() => hide()}>
-                  {i18n.t("common.cancel")}
+                  Cancel
                 </button>
               </Show>
             </form>
@@ -216,10 +202,13 @@ function MemberRow(props: {
   )
 }
 
+const roleOptions = [
+  { value: "admin", description: "Can manage models, members, and billing" },
+  { value: "member", description: "Can only generate API keys for themselves" },
+]
+
 export function MemberSection() {
   const params = useParams()
-  const i18n = useI18n()
-  const language = useLanguage()
   const data = createAsync(() => listMembers(params.id!))
   const submission = useSubmission(inviteMember)
   const [store, setStore] = createStore({
@@ -229,19 +218,6 @@ export function MemberSection() {
   })
 
   let input: HTMLInputElement
-
-  const roleOptions = [
-    {
-      value: "admin",
-      label: i18n.t("workspace.members.role.admin"),
-      description: i18n.t("workspace.members.role.adminDescription"),
-    },
-    {
-      value: "member",
-      label: i18n.t("workspace.members.role.member"),
-      description: i18n.t("workspace.members.role.memberDescription"),
-    },
-  ]
 
   createEffect(() => {
     if (!submission.pending && submission.result && !submission.result.error) {
@@ -267,20 +243,20 @@ export function MemberSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>{i18n.t("workspace.members.title")}</h2>
+        <h2>Members</h2>
         <div data-slot="title-row">
-          <p>{i18n.t("workspace.members.subtitle")}</p>
+          <p>Manage workspace members and their permissions.</p>
           <Show when={data()?.actorRole === "admin"}>
             <button data-color="primary" onClick={() => show()}>
-              {i18n.t("workspace.members.invite")}
+              Invite Member
             </button>
           </Show>
         </div>
       </div>
       <div data-slot="beta-notice">
-        {i18n.t("workspace.members.beta.beforeLink")}{" "}
-        <a href={language.route("/docs/zen/#for-teams")} target="_blank" rel="noopener noreferrer">
-          {i18n.t("common.learnMore")}
+        Workspaces are free for teams during the beta.{" "}
+        <a href="/docs/zen/#for-teams" target="_blank" rel="noopener noreferrer">
+          Learn more
         </a>
         .
       </div>
@@ -288,17 +264,17 @@ export function MemberSection() {
         <form action={inviteMember} method="post" data-slot="create-form">
           <div data-slot="input-row">
             <div data-slot="input-field">
-              <p>{i18n.t("workspace.members.form.invitee")}</p>
+              <p>Invitee</p>
               <input
                 ref={(r) => (input = r)}
                 data-component="input"
                 name="email"
                 type="text"
-                placeholder={i18n.t("workspace.members.form.emailPlaceholder")}
+                placeholder="Enter email"
               />
             </div>
             <div data-slot="input-field">
-              <p>{i18n.t("workspace.members.form.role")}</p>
+              <p>Role</p>
               <RoleDropdown
                 value={store.selectedRole}
                 options={roleOptions}
@@ -306,12 +282,12 @@ export function MemberSection() {
               />
             </div>
             <div data-slot="input-field">
-              <p>{i18n.t("workspace.members.form.monthlyLimit")}</p>
+              <p>Monthly spending limit</p>
               <input
                 data-component="input"
                 name="limit"
                 type="number"
-                placeholder={i18n.t("workspace.members.noLimit")}
+                placeholder="No limit"
                 value={store.limit}
                 onInput={(e) => setStore("limit", e.currentTarget.value)}
                 min="0"
@@ -319,16 +295,16 @@ export function MemberSection() {
             </div>
           </div>
           <Show when={submission.result && submission.result.error}>
-            {(err) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
+            {(err) => <div data-slot="form-error">{err()}</div>}
           </Show>
           <input type="hidden" name="role" value={store.selectedRole} />
           <input type="hidden" name="workspaceID" value={params.id} />
           <div data-slot="form-actions">
             <button type="reset" data-color="ghost" onClick={() => hide()}>
-              {i18n.t("common.cancel")}
+              Cancel
             </button>
             <button type="submit" data-color="primary" disabled={submission.pending}>
-              {submission.pending ? i18n.t("workspace.members.inviting") : i18n.t("workspace.members.invite")}
+              {submission.pending ? "Inviting..." : "Invite"}
             </button>
           </div>
         </form>
@@ -337,9 +313,9 @@ export function MemberSection() {
         <table data-slot="members-table-element">
           <thead>
             <tr>
-              <th>{i18n.t("workspace.members.table.email")}</th>
-              <th>{i18n.t("workspace.members.table.role")}</th>
-              <th>{i18n.t("workspace.members.table.monthLimit")}</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Month limit</th>
               <th></th>
               <Show when={data()?.actorRole === "admin"}>
                 <th></th>
@@ -355,7 +331,6 @@ export function MemberSection() {
                     workspaceID={params.id!}
                     actorID={data()!.actorID}
                     actorRole={data()!.actorRole}
-                    roleOptions={roleOptions}
                   />
                 )}
               </For>

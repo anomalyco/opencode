@@ -1,0 +1,138 @@
+name: Update Nix Hashes
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+      - "flake.lock"
+      - ".github/workflows/update-nix-hashes.yml"
+  pull_request:
+    paths:
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+      - "flake.lock"
+      - ".github/workflows/update-nix-hashes.yml"
+
+jobs:
+  update-node-modules-hashes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      TITLE: node_modules hashes
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Configure git
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Action"
+
+      - name: Pull latest changes
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          git pull --rebase --autostash origin "$BRANCH"
+
+      - name: Compute all node_modules hashes
+        run: |
+          set -euo pipefail
+
+          HASH_FILE="nix/hashes.json"
+          SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
+
+          if [ ! -f "$HASH_FILE" ]; then
+            mkdir -p "$(dirname "$HASH_FILE")"
+            echo '{"nodeModules":{}}' > "$HASH_FILE"
+          fi
+
+          for SYSTEM in $SYSTEMS; do
+            echo "Computing hash for ${SYSTEM}..."
+            BUILD_LOG=$(mktemp)
+            trap 'rm -f "$BUILD_LOG"' EXIT
+
+            # The updater derivations use fakeHash, so they will fail and reveal the correct hash
+            UPDATER_ATTR=".#packages.x86_64-linux.${SYSTEM}_node_modules"
+
+            nix build "$UPDATER_ATTR" --no-link 2>&1 | tee "$BUILD_LOG" || true
+
+            CORRECT_HASH="$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)"
+
+            if [ -z "$CORRECT_HASH" ]; then
+              CORRECT_HASH="$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)"
+            fi
+
+            if [ -z "$CORRECT_HASH" ]; then
+              echo "Failed to determine correct node_modules hash for ${SYSTEM}."
+              cat "$BUILD_LOG"
+              exit 1
+            fi
+
+            echo "  ${SYSTEM}: ${CORRECT_HASH}"
+            jq --arg sys "$SYSTEM" --arg h "$CORRECT_HASH" \
+              '.nodeModules[$sys] = $h' "$HASH_FILE" > "${HASH_FILE}.tmp"
+            mv "${HASH_FILE}.tmp" "$HASH_FILE"
+          done
+
+          echo "All hashes computed:"
+          cat "$HASH_FILE"
+
+      - name: Commit ${{ env.TITLE }} changes
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          HASH_FILE="nix/hashes.json"
+          echo "Checking for changes..."
+
+          summarize() {
+            local status="$1"
+            {
+              echo "### Nix $TITLE"
+              echo ""
+              echo "- ref: ${GITHUB_REF_NAME}"
+              echo "- status: ${status}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
+              echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          FILES=("$HASH_FILE")
+          STATUS="$(git status --short -- "${FILES[@]}" || true)"
+          if [ -z "$STATUS" ]; then
+            echo "No changes detected."
+            summarize "no changes"
+            exit 0
+          fi
+
+          echo "Changes detected:"
+          echo "$STATUS"
+          git add "${FILES[@]}"
+          git commit -m "Update $TITLE"
+
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          git pull --rebase --autostash origin "$BRANCH"
+          git push origin HEAD:"$BRANCH"
+          echo "Changes pushed successfully"
+
+          summarize "committed $(git rev-parse --short HEAD)"

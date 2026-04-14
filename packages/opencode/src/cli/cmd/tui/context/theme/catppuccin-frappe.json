@@ -62,8 +62,8 @@
       "light": "frappeText"
     },
     "textMuted": {
-      "dark": "frappeOverlay2",
-      "light": "frappeOverlay2"
+      "dark": "frappeSubtext1",
+      "light": "frappeSubtext1"
     },
     "background": {
       "dark": "frappeBase",

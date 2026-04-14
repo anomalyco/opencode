@@ -1,6 +1,5 @@
 import type { Argv } from "yargs"
 import { Session } from "../../session"
-import { SessionID } from "../../session/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
@@ -18,8 +17,8 @@ export const ExportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
-      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
+      let sessionID = args.sessionID
+      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}`)
 
       if (!sessionID) {
         UI.empty()
@@ -59,7 +58,7 @@ export const ExportCommand = cmd({
           throw new UI.CancelledError()
         }
 
-        sessionID = selectedSession
+        sessionID = selectedSession as string
 
         prompts.outro("Exporting session...", {
           output: process.stderr,
@@ -68,7 +67,7 @@ export const ExportCommand = cmd({
 
       try {
         const sessionInfo = await Session.get(sessionID!)
-        const messages = await Session.messages({ sessionID: sessionInfo.id })
+        const messages = await Session.messages({ sessionID: sessionID! })
 
         const exportData = {
           info: sessionInfo,

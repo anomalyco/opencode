@@ -12,16 +12,15 @@ type Usage = {
   total_tokens?: number
 }
 
-export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
+export const openaiHelper: ProviderHelper = () => ({
   format: "openai",
   modifyUrl: (providerApi: string) => providerApi + "/responses",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
-  modifyBody: (body: Record<string, any>) => ({
-    ...body,
-    ...(workspaceID ? { safety_identifier: workspaceID } : {}),
-  }),
+  modifyBody: (body: Record<string, any>) => {
+    return body
+  },
   createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
