@@ -1881,6 +1881,12 @@ export function MessageTimeline(props: {
     const active = createMemo(() => activeMessageID() === item.messageID)
     const isRecentTail = createMemo(() => item.index >= rendered().length - 3)
 
+    // Initialize signals and refs first
+    let rootRef: HTMLDivElement | undefined
+    let stop: (() => void) | undefined
+    let raf: number | undefined
+    const [nearViewport, setNearViewport] = createSignal(true)
+
     // Turn priority tiers for render optimization
     const tier = createMemo<"active" | "recent" | "near" | "far">(() => {
       if (active()) return "active"
@@ -1910,10 +1916,6 @@ export function MessageTimeline(props: {
       equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     })
     const commentCount = createMemo(() => comments().length)
-    let rootRef: HTMLDivElement | undefined
-    let stop: (() => void) | undefined
-    let raf: number | undefined
-    const [nearViewport, setNearViewport] = createSignal(true)
 
     const measure = () => {
       const next = rootRef?.offsetHeight
