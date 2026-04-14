@@ -1,3 +1,4 @@
+import { createOpencodeClient } from "@opencode-ai/sdk"
 import type { PluginInput, Hooks } from "@opencode-ai/plugin"
 import { parseConfig } from "./config"
 import { initDb, purgeExpired } from "./db"
@@ -18,6 +19,7 @@ export default {
     purgeExpired(db)
 
     const ref = { agents: undefined as Record<string, any> | undefined }
+    const v1fetch = (input.client as any)._client?.getConfig?.()?.fetch ?? globalThis.fetch
 
     return {
       config: async (cfg: any) => {
@@ -26,14 +28,21 @@ export default {
       event: createEventHook({ db, config }),
       "experimental.chat.system.transform": createSystemTransformHook({ db, config }),
       tool: {
-        agent_list: createAgentListTool(() => ref.agents),
+        agent_list: createAgentListTool({ configAgents: () => ref.agents, client: input.client as any }),
         session_list: createSessionListTool({
           client: input.client as any,
           db,
           serverUrl: input.serverUrl,
           getAgents: () => ref.agents,
         }),
-        session_send: createSessionSendTool({ client: input.client as any, db, config, getAgents: () => ref.agents }),
+        session_send: createSessionSendTool({
+          client: input.client as any,
+          db,
+          config,
+          getAgents: () => ref.agents,
+          createClientForDir: (dir: string) =>
+            createOpencodeClient({ baseUrl: "http://localhost:4096", directory: dir, fetch: v1fetch }),
+        }),
         session_read: createSessionReadTool({ db }),
         session_rename: createSessionRenameTool({ client: input.client as any }),
       },
