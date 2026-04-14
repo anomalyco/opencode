@@ -16,6 +16,7 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { ReloadTool } from "./reload"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -45,6 +46,8 @@ import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { InstanceLayer } from "@/project/instance-layer"
+import { InstanceStore } from "@/project/instance-store"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
@@ -105,6 +108,7 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const reloadtool = yield* ReloadTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -208,6 +212,7 @@ export const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          reload: Tool.init(reloadtool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -230,6 +235,7 @@ export const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.reload,
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
@@ -331,6 +337,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(FSUtil.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),
+      Layer.provide(InstanceLayer.layer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
@@ -429,6 +436,7 @@ export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer
   Instruction.node,
   FSUtil.node,
   EventV2Bridge.node,
+  InstanceStore.node,
   httpClient,
   CrossSpawnSpawner.node,
   Format.node,

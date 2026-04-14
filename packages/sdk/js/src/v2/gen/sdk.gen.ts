@@ -18,10 +18,14 @@ import type {
   CommandListErrors,
   CommandListResponses,
   Config as Config3,
+  ConfigBootstrapCompleteErrors,
+  ConfigBootstrapCompleteResponses,
   ConfigGetErrors,
   ConfigGetResponses,
   ConfigProvidersErrors,
   ConfigProvidersResponses,
+  ConfigReloadErrors,
+  ConfigReloadResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
   EventSubscribeResponses,
@@ -1479,6 +1483,72 @@ export class Config2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ConfigProvidersResponses, ConfigProvidersErrors, ThrowOnError>({
       url: "/config/providers",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reload configuration
+   *
+   * Reload OpenCode configuration files and plugins without restarting the client.
+   */
+  public reload<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ConfigReloadResponses, ConfigReloadErrors, ThrowOnError>({
+      url: "/config/reload",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Complete config reload bootstrap
+   *
+   * Release the reload blocker after the TUI has bootstrapped against the new instance.
+   */
+  public bootstrapComplete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      cycle?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "cycle" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ConfigBootstrapCompleteResponses,
+      ConfigBootstrapCompleteErrors,
+      ThrowOnError
+    >({
+      url: "/config/bootstrap-complete",
       ...options,
       ...params,
     })

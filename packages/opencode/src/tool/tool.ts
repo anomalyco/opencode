@@ -49,6 +49,7 @@ export interface ExecuteResult<M extends Metadata = Metadata> {
   title: string
   metadata: M
   output: string
+  stopSession?: boolean
   attachments?: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[]
 }
 

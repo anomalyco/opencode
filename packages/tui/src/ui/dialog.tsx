@@ -1,4 +1,4 @@
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
@@ -7,6 +7,7 @@ import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { useSync } from "../context/sync"
 
 export function Dialog(
   props: ParentProps<{
@@ -181,6 +182,26 @@ export function DialogProvider(props: ParentProps) {
   const renderer = useRenderer()
   const toast = useToast()
   const clipboard = useClipboard()
+  const dimensions = useTerminalDimensions()
+  const { theme } = useTheme()
+  const sync = useSync()
+
+  useKeyboard((evt) => {
+    if (!sync.data.reloading) return
+    evt.preventDefault()
+    evt.stopPropagation()
+  })
+
+  let wasReloading = false
+  createEffect(() => {
+    if (sync.data.reloading) {
+      wasReloading = true
+      return
+    }
+    if (!wasReloading) return
+    wasReloading = false
+    toast.show({ message: "Reloaded configuration", variant: "success" })
+  })
 
   function copySelection() {
     const text = renderer.getSelection()?.getSelectedText()
@@ -213,6 +234,23 @@ export function DialogProvider(props: ParentProps) {
           <Dialog onClose={() => value.clear()} size={value.size}>
             {value.stack.at(-1)!.element}
           </Dialog>
+        </Show>
+        <Show when={sync.data.reloading}>
+          <box
+            width={dimensions().width}
+            height={dimensions().height}
+            position="absolute"
+            zIndex={4000}
+            left={0}
+            top={0}
+            alignItems="center"
+            paddingTop={Math.max(0, Math.floor(dimensions().height / 4))}
+            backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+          >
+            <box backgroundColor={theme.backgroundPanel} paddingX={3} paddingY={1} borderStyle="rounded">
+              <text>Reloading configuration...</text>
+            </box>
+          </box>
         </Show>
       </box>
     </ctx.Provider>

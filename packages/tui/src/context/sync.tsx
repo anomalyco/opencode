@@ -103,6 +103,8 @@ export const {
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      reloadPending: boolean
+      reloading: boolean
     }>({
       provider_next: {
         all: [],
@@ -133,11 +135,14 @@ export const {
       mcp_resource: {},
       formatter: [],
       vcs: undefined,
+      reloadPending: false,
+      reloading: false,
     })
 
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
+    let bootstrapCycle = 0
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
@@ -169,6 +174,35 @@ export const {
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
+          break
+        case "config.reload.pending":
+          setStore("reloadPending", event.properties.pending)
+          break
+        case "config.reload.executing":
+          if (typeof event.properties.bootstrapCycle === "number") bootstrapCycle = event.properties.bootstrapCycle
+          batch(() => {
+            setStore("reloadPending", false)
+            setStore("reloading", event.properties.executing)
+          })
+          break
+        case "config.reload.done":
+          batch(() => {
+            setStore("reloadPending", false)
+            setStore("reloading", false)
+          })
+          if (event.properties.resumeSessionID) {
+            void sdk.client.session
+              .prompt({
+                sessionID: event.properties.resumeSessionID,
+                parts: [
+                  {
+                    type: "text",
+                    text: "Configuration has been reloaded successfully. Continue where you left off.",
+                  },
+                ],
+              })
+              .catch(() => {})
+          }
           break
         case "permission.replied": {
           const requests = store.permission[event.properties.sessionID]
@@ -434,6 +468,7 @@ export const {
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
+      const cycle = bootstrapCycle
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
 
@@ -498,6 +533,7 @@ export const {
           })
         })
         .then(() => {
+          void sdk.client.config.bootstrapComplete({ workspace, cycle: String(cycle) }).catch(() => {})
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
@@ -521,6 +557,7 @@ export const {
           })
         })
         .catch(async (e) => {
+          void sdk.client.config.bootstrapComplete({ workspace, cycle: String(cycle) }).catch(() => {})
           console.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,

@@ -349,12 +349,19 @@ export const layer = Layer.effect(
 
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
-      ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
+      ): {
+        title: string
+        metadata: Record<string, any>
+        output: string
+        stopSession?: boolean
+        attachments?: SessionV1.FilePart[]
+      } => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
             metadata: isRecord(value.result.value.metadata) ? value.result.value.metadata : {},
             output: value.result.value.output,
+            stopSession: value.result.value.stopSession === true,
             attachments: Array.isArray(value.result.value.attachments)
               ? value.result.value.attachments.filter(isFilePart)
               : undefined,
@@ -643,6 +650,7 @@ export const layer = Layer.effect(
                 })
             }
             yield* completeToolCall(value.id, output)
+            if (output.stopSession) ctx.blocked = true
             return
           }
 

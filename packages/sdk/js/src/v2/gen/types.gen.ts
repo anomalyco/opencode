@@ -77,13 +77,16 @@ export type Event =
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
   | EventProjectUpdated
+  | EventVcsBranchUpdated
+  | EventConfigReloadPending
+  | EventConfigReloadExecuting
+  | EventConfigReloadDone
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
-  | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventWorkspaceStatus
@@ -1516,6 +1519,35 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "vcs.branch.updated"
+        properties: {
+          branch?: string
+        }
+      }
+    | {
+        id: string
+        type: "config.reload.pending"
+        properties: {
+          pending: boolean
+        }
+      }
+    | {
+        id: string
+        type: "config.reload.executing"
+        properties: {
+          executing: boolean
+          bootstrapCycle?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+    | {
+        id: string
+        type: "config.reload.done"
+        properties: {
+          resumeSessionID?: string
+        }
+      }
+    | {
+        id: string
         type: "session.status"
         properties: {
           sessionID: string
@@ -1564,13 +1596,6 @@ export type GlobalEvent = {
         type: "session.compacted"
         properties: {
           sessionID: string
-        }
-      }
-    | {
-        id: string
-        type: "vcs.branch.updated"
-        properties: {
-          branch?: string
         }
       }
     | {
@@ -5021,6 +5046,39 @@ export type EventProjectUpdated = {
   }
 }
 
+export type EventVcsBranchUpdated = {
+  id: string
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type EventConfigReloadPending = {
+  id: string
+  type: "config.reload.pending"
+  properties: {
+    pending: boolean
+  }
+}
+
+export type EventConfigReloadExecuting = {
+  id: string
+  type: "config.reload.executing"
+  properties: {
+    executing: boolean
+    bootstrapCycle?: number | "NaN" | "Infinity" | "-Infinity"
+  }
+}
+
+export type EventConfigReloadDone = {
+  id: string
+  type: "config.reload.done"
+  properties: {
+    resumeSessionID?: string
+  }
+}
+
 export type EventSessionStatus = {
   id: string
   type: "session.status"
@@ -5076,14 +5134,6 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
-  }
-}
-
-export type EventVcsBranchUpdated = {
-  id: string
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
   }
 }
 
@@ -5552,6 +5602,68 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type ConfigReloadData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/reload"
+}
+
+export type ConfigReloadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigReloadError = ConfigReloadErrors[keyof ConfigReloadErrors]
+
+export type ConfigReloadResponses = {
+  /**
+   * Configuration reload request result
+   */
+  200: {
+    success: boolean
+    immediate: boolean
+  }
+}
+
+export type ConfigReloadResponse = ConfigReloadResponses[keyof ConfigReloadResponses]
+
+export type ConfigBootstrapCompleteData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    cycle?: string
+  }
+  url: "/config/bootstrap-complete"
+}
+
+export type ConfigBootstrapCompleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigBootstrapCompleteError = ConfigBootstrapCompleteErrors[keyof ConfigBootstrapCompleteErrors]
+
+export type ConfigBootstrapCompleteResponses = {
+  /**
+   * Bootstrap completion result
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type ConfigBootstrapCompleteResponse = ConfigBootstrapCompleteResponses[keyof ConfigBootstrapCompleteResponses]
 
 export type ExperimentalCapabilitiesGetData = {
   body?: never

@@ -1,13 +1,32 @@
 import { Config } from "@/config/config"
+import { ConfigReload } from "@/config/reload"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Provider } from "@/provider/provider"
+import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
+} from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/config"
+void ConfigReload.Event
+
+export const ConfigReloadResponse = Schema.Struct({
+  success: Schema.Boolean,
+  immediate: Schema.Boolean,
+})
+export const ConfigBootstrapCompleteQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  cycle: Schema.optional(Schema.NumberFromString),
+})
+export const ConfigBootstrapCompleteResponse = Schema.Struct({
+  success: Schema.Boolean,
+})
 
 export const ConfigApi = HttpApi.make("config")
   .add(
@@ -43,6 +62,26 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.providers",
             summary: "List config providers",
             description: "Get a list of all configured AI providers and their default models.",
+          }),
+        ),
+        HttpApiEndpoint.post("reload", `${root}/reload`, {
+          query: WorkspaceRoutingQuery,
+          success: described(ConfigReloadResponse, "Configuration reload request result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.reload",
+            summary: "Reload configuration",
+            description: "Reload OpenCode configuration files and plugins without restarting the client.",
+          }),
+        ),
+        HttpApiEndpoint.post("bootstrapComplete", `${root}/bootstrap-complete`, {
+          query: ConfigBootstrapCompleteQuery,
+          success: described(ConfigBootstrapCompleteResponse, "Bootstrap completion result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.bootstrapComplete",
+            summary: "Complete config reload bootstrap",
+            description: "Release the reload blocker after the TUI has bootstrapped against the new instance.",
           }),
         ),
       )

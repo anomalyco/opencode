@@ -779,6 +779,10 @@ export type KeybindsConfig = {
    */
   app_exit?: string
   /**
+   * Reload configuration
+   */
+  app_reload?: string
+  /**
    * Open external editor
    */
   editor_open?: string

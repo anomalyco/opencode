@@ -130,6 +130,7 @@ export const make = <A, E = never>(
           }
           case "Idle": {
             const done = yield* Deferred.make<A, E | Cancelled>()
+            yield* onBusy
             const run = yield* startRun(work, done)
             return [awaitDone(done), { _tag: "Running", run }] as const
           }
