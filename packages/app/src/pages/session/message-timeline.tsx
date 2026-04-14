@@ -1317,6 +1317,7 @@ export function MessageTimeline(props: {
     let rootRef: HTMLDivElement | undefined
     let stop: (() => void) | undefined
     let raf: number | undefined
+    const [nearViewport, setNearViewport] = createSignal(true)
 
     const measure = () => {
       const next = rootRef?.offsetHeight
@@ -1349,6 +1350,36 @@ export function MessageTimeline(props: {
       })
     })
 
+    // Near-viewport detection for turn-level suspension
+    createEffect(() => {
+      if (!rootRef || !viewport) return
+      // Always keep active turn and recent tail turns mounted
+      if (active() || eager()) {
+        setNearViewport(true)
+        return
+      }
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            setNearViewport(entry.isIntersecting)
+          }
+        },
+        {
+          root: viewport,
+          rootMargin: "1200px 0px",
+        },
+      )
+      observer.observe(rootRef)
+      onCleanup(() => observer.disconnect())
+    })
+
+    const shouldRenderTurn = createMemo(() => {
+      // Always render active turn and recent tail
+      if (active() || eager()) return true
+      // Render if near viewport
+      return nearViewport()
+    })
+
     onCleanup(() => stop?.())
 
     return (
@@ -1370,66 +1401,80 @@ export function MessageTimeline(props: {
         }}
         style={itemStyle(props.centered)}
       >
-        <Show when={commentCount() > 0}>
-          <div class="w-full px-4 md:px-5 pb-2">
-            <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-              <div class="flex w-max min-w-full justify-end gap-2">
-                <Index each={comments()}>
-                  {(commentAccessor: () => MessageComment) => {
-                    const comment = createMemo(() => commentAccessor())
-                    return (
-                      <Show when={comment()}>
-                        {(c) => (
-                          <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                            <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                              <FileIcon node={{ path: c().path, type: "file" }} class="size-3.5 shrink-0" />
-                              <span class="truncate">{getFilename(c().path)}</span>
-                              <Show when={c().selection}>
-                                {(selection) => (
-                                  <span class="shrink-0 text-text-weak">
-                                    {selection().startLine === selection().endLine
-                                      ? `:${selection().startLine}`
-                                      : `:${selection().startLine}-${selection().endLine}`}
-                                  </span>
-                                )}
-                              </Show>
+        <Show
+          when={shouldRenderTurn()}
+          fallback={
+            <div
+              class="w-full"
+              style={{
+                height: `${estimateTurnHeight(item.messageID)}px`,
+                "min-height": `${estimateTurnHeight(item.messageID)}px`,
+              }}
+              aria-hidden="true"
+            />
+          }
+        >
+          <Show when={commentCount() > 0}>
+            <div class="w-full px-4 md:px-5 pb-2">
+              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                <div class="flex w-max min-w-full justify-end gap-2">
+                  <Index each={comments()}>
+                    {(commentAccessor: () => MessageComment) => {
+                      const comment = createMemo(() => commentAccessor())
+                      return (
+                        <Show when={comment()}>
+                          {(c) => (
+                            <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                              <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                <FileIcon node={{ path: c().path, type: "file" }} class="size-3.5 shrink-0" />
+                                <span class="truncate">{getFilename(c().path)}</span>
+                                <Show when={c().selection}>
+                                  {(selection) => (
+                                    <span class="shrink-0 text-text-weak">
+                                      {selection().startLine === selection().endLine
+                                        ? `:${selection().startLine}`
+                                        : `:${selection().startLine}-${selection().endLine}`}
+                                    </span>
+                                  )}
+                                </Show>
+                              </div>
+                              <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                {c().comment}
+                              </div>
                             </div>
-                            <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                              {c().comment}
-                            </div>
-                          </div>
-                        )}
-                      </Show>
-                    )
-                  }}
-                </Index>
+                          )}
+                        </Show>
+                      )
+                    }}
+                  </Index>
+                </div>
               </div>
             </div>
-          </div>
+          </Show>
+          <SessionTurn
+            sessionID={sessionID() ?? ""}
+            messageID={item.messageID}
+            messages={messages()}
+            actions={props.actions}
+            autoScroll={false}
+            fill={false}
+            active={active()}
+            status={active() ? sessionStatus() : undefined}
+            showReasoningSummaries={settings.general.showReasoningSummaries()}
+            showCustomHookParts={settings.general.showCustomHookParts()}
+            shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+            editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+            markdownEager={eager()}
+            markdownViewport={viewport}
+            markdownHighlight={highlight()}
+            markdownMath={math()}
+            classes={{
+              root: "min-w-0 w-full relative",
+              content: "flex flex-col justify-between !overflow-visible",
+              container: "w-full px-4 md:px-5",
+            }}
+          />
         </Show>
-        <SessionTurn
-          sessionID={sessionID() ?? ""}
-          messageID={item.messageID}
-          messages={messages()}
-          actions={props.actions}
-          autoScroll={false}
-          fill={false}
-          active={active()}
-          status={active() ? sessionStatus() : undefined}
-          showReasoningSummaries={settings.general.showReasoningSummaries()}
-          showCustomHookParts={settings.general.showCustomHookParts()}
-          shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-          editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-          markdownEager={eager()}
-          markdownViewport={viewport}
-          markdownHighlight={highlight()}
-          markdownMath={math()}
-          classes={{
-            root: "min-w-0 w-full relative",
-            content: "flex flex-col justify-between !overflow-visible",
-            container: "w-full px-4 md:px-5",
-          }}
-        />
       </div>
     )
   }
