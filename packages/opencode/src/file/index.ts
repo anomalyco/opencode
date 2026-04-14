@@ -1,8 +1,10 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Git } from "@/git"
 import { Effect, Layer, Context } from "effect"
+import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
@@ -342,6 +344,7 @@ export namespace File {
     Service,
     Effect.gen(function* () {
       const appFs = yield* AppFileSystem.Service
+      const rg = yield* Ripgrep.Service
       const git = yield* Git.Service
 
       const state = yield* InstanceState.make<State>(
@@ -381,7 +384,10 @@ export namespace File {
 
           next.dirs = Array.from(dirs).toSorted()
         } else {
-          const files = yield* Effect.promise(() => Array.fromAsync(Ripgrep.files({ cwd: Instance.directory })))
+          const files = yield* rg.files({ cwd: Instance.directory }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => [...chunk]),
+          )
           const seen = new Set<string>()
           for (const file of files) {
             next.files.push(file)
@@ -642,5 +648,31 @@ export namespace File {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+  )
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export function init() {
+    return runPromise((svc) => svc.init())
+  }
+
+  export async function status() {
+    return runPromise((svc) => svc.status())
+  }
+
+  export async function read(file: string): Promise<Content> {
+    return runPromise((svc) => svc.read(file))
+  }
+
+  export async function list(dir?: string) {
+    return runPromise((svc) => svc.list(dir))
+  }
+
+  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
+    return runPromise((svc) => svc.search(input))
+  }
 }
