@@ -1,5 +1,6 @@
 import { Server } from "../../server/server"
 import { Config } from "../../config/config"
+import { AppRuntime } from "../../effect/app-runtime"
 import { resolveLocale, t } from "../../i18n"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
@@ -19,7 +20,10 @@ export const ServeCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const locale = await bootstrap(process.cwd(), async () => resolveLocale((await Config.get()).locale))
+    const locale = await bootstrap(process.cwd(), async () => {
+      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+      return resolveLocale(config.locale)
+    })
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log(serveWarning(locale))
     }
