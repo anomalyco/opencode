@@ -3,39 +3,27 @@ import { memoMap } from "@/effect/run-service"
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
 import { lazy } from "@/util/lazy"
-import { QuestionReply, QuestionRequest, questionApi } from "@opencode-ai/server"
-import { Effect, Layer, Schema } from "effect"
+import { makeQuestionHandler, questionApi } from "@opencode-ai/server"
+import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/question"
 
-const QuestionLive = HttpApiBuilder.group(
-  questionApi,
-  "question",
-  Effect.fn("QuestionHttpApi.handlers")(function* (handlers) {
+const QuestionLive = makeQuestionHandler({
+  list: Effect.fn("QuestionHttpApi.host.list")(function* () {
     const svc = yield* Question.Service
-    const decode = Schema.decodeUnknownSync(Schema.Array(QuestionRequest))
-
-    const list = Effect.fn("QuestionHttpApi.list")(function* () {
-      return decode(yield* svc.list())
-    })
-
-    const reply = Effect.fn("QuestionHttpApi.reply")(function* (ctx: {
-      params: { requestID: string }
-      payload: Schema.Schema.Type<typeof QuestionReply>
-    }) {
-      yield* svc.reply({
-        requestID: QuestionID.make(ctx.params.requestID),
-        answers: ctx.payload.answers,
-      })
-      return true
-    })
-
-    return handlers.handle("list", list).handle("reply", reply)
+    return yield* svc.list()
   }),
-).pipe(Layer.provide(Question.defaultLayer))
+  reply: Effect.fn("QuestionHttpApi.host.reply")(function* (input) {
+    const svc = yield* Question.Service
+    yield* svc.reply({
+      requestID: QuestionID.make(input.requestID),
+      answers: input.answers,
+    })
+  }),
+}).pipe(Layer.provide(Question.defaultLayer))
 
 const web = lazy(() =>
   HttpRouter.toWebHandler(

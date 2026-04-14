@@ -10,7 +10,8 @@
     "./definition": "./src/definition/index.ts",
     "./definition/api": "./src/definition/api.ts",
     "./definition/question": "./src/definition/question.ts",
-    "./api": "./src/api/index.ts"
+    "./api": "./src/api/index.ts",
+    "./api/question": "./src/api/question.ts"
   },
   "files": [
     "dist"
