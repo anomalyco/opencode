@@ -37,7 +37,7 @@
   <a href="README.bn.md">বাংলা</a> |
   <a href="README.gr.md">Ελληνικά</a> |
   <a href="README.vi.md">Tiếng Việt</a> |
-    <a href="README.id.md">Bahasa Indonesia</a>
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
@@ -54,8 +54,8 @@ curl -fsSL https://opencode.ai/install | bash
 npm i -g opencode-ai@latest        # or bun/pnpm/yarn
 scoop install opencode             # Windows
 choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (rekomendasi, selalu termutakhirkan)
-brew install opencode              # macOS and Linux (official brew formula, sedikit kurang termutakhirkan)
+brew install anomalyco/tap/opencode # macOS and Linux (direkomendasikan, selalu terkini)
+brew install opencode              # macOS and Linux (formula brew resmi, diperbarui lebih jarang)
 sudo pacman -S opencode            # Arch Linux (Stabil)
 paru -S opencode-bin               # Arch Linux (Terakhir dari AUR)
 mise use -g opencode               # Berbagai jenis OS
