@@ -1,6 +1,6 @@
 import { Instance } from "@/project/instance"
 import { Project } from "@/project/project"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
 const root = "/experimental/httpapi/project"
@@ -51,6 +51,10 @@ const current = Effect.fn("ProjectHttpApi.current")(function* () {
   return Instance.project
 })
 
-export const ProjectLive = HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
-  handlers.handle("list", list).handle("current", current),
+export const ProjectLive = HttpApiBuilder.group(
+  ProjectApi,
+  "project",
+  Effect.fn("ProjectHttpApi.handlers")(function* (handlers) {
+    return handlers.handle("list", list).handle("current", current)
+  }),
 )
