@@ -6,6 +6,7 @@ import { Database } from "../../storage/db"
 import { SessionTable } from "../../session/session.sql"
 import { Project } from "../../project/project"
 import { Instance } from "../../project/instance"
+import { AppRuntime } from "@/effect/app-runtime"
 
 interface SessionStats {
   totalSessions: number
@@ -167,7 +168,9 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
     const batch = filteredSessions.slice(i, i + BATCH_SIZE)
 
     const batchPromises = batch.map(async (session) => {
-      const messages = await Session.messages({ sessionID: session.id })
+      const messages = await AppRuntime.runPromise(
+        Session.Service.use((svc) => svc.messages({ sessionID: session.id })),
+      )
 
       let sessionCost = 0
       let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }

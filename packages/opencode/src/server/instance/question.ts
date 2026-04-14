@@ -21,7 +21,7 @@ export const QuestionRoutes = lazy(() =>
             description: "List of pending questions",
             content: {
               "application/json": {
-                schema: resolver(Question.Request.array()),
+                schema: resolver(Question.Request.zod.array()),
               },
             },
           },
@@ -56,7 +56,7 @@ export const QuestionRoutes = lazy(() =>
           requestID: QuestionID.zod,
         }),
       ),
-      validator("json", Question.Reply),
+      validator("json", Question.Reply.zod),
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")

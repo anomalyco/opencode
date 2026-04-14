@@ -41,7 +41,7 @@ async function getSessionWorkspace(url: URL) {
   const id = getSessionID(url)
   if (!id) return null
 
-  const session = await Session.get(id).catch(() => undefined)
+  const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(id))).catch(() => undefined)
   return session?.workspaceID
 }
 

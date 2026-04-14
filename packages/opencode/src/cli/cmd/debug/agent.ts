@@ -123,45 +123,49 @@ function parseToolParams(input?: string) {
 }
 
 async function createToolContext(agent: Agent.Info) {
-  const session = await Session.create({ title: `Debug tool run (${agent.name})` })
-  const messageID = MessageID.ascending()
-  const model =
-    agent.model ??
-    (await AppRuntime.runPromise(
-      Effect.gen(function* () {
-        const provider = yield* Provider.Service
-        return yield* provider.defaultModel()
-      }),
-    ))
-  const now = Date.now()
-  const message: MessageV2.Assistant = {
-    id: messageID,
-    sessionID: session.id,
-    role: "assistant",
-    time: {
-      created: now,
-    },
-    parentID: messageID,
-    modelID: model.modelID,
-    providerID: model.providerID,
-    mode: "debug",
-    agent: agent.name,
-    path: {
-      cwd: Instance.directory,
-      root: Instance.worktree,
-    },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: {
-        read: 0,
-        write: 0,
-      },
-    },
-  }
-  await Session.updateMessage(message)
+  const { session, messageID } = await AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const result = yield* session.create({ title: `Debug tool run (${agent.name})` })
+      const messageID = MessageID.ascending()
+      const model = agent.model
+        ? agent.model
+        : yield* Effect.gen(function* () {
+            const provider = yield* Provider.Service
+            return yield* provider.defaultModel()
+          })
+      const now = Date.now()
+      const message: MessageV2.Assistant = {
+        id: messageID,
+        sessionID: result.id,
+        role: "assistant",
+        time: {
+          created: now,
+        },
+        parentID: messageID,
+        modelID: model.modelID,
+        providerID: model.providerID,
+        mode: "debug",
+        agent: agent.name,
+        path: {
+          cwd: Instance.directory,
+          root: Instance.worktree,
+        },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+      }
+      yield* session.updateMessage(message)
+      return { session: result, messageID }
+    }),
+  )
 
   const ruleset = Permission.merge(agent.permission, session.permission ?? [])
 

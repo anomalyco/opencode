@@ -33,31 +33,38 @@ const seed = async () => {
           }),
         )
 
-        const session = await Session.create({ title })
-        const messageID = MessageID.ascending()
-        const partID = PartID.ascending()
-        const message = {
-          id: messageID,
-          sessionID: session.id,
-          role: "user" as const,
-          time: { created: now },
-          agent: "build",
-          model: {
-            providerID: ProviderID.make(providerID),
-            modelID: ModelID.make(modelID),
-          },
-        }
-        const part = {
-          id: partID,
-          sessionID: session.id,
-          messageID,
-          type: "text" as const,
-          text,
-          time: { start: now },
-        }
-        await Session.updateMessage(message)
-        await Session.updatePart(part)
-        await Project.update({ projectID: Instance.project.id, name: "E2E Project" })
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const result = yield* session.create({ title })
+            const messageID = MessageID.ascending()
+            const partID = PartID.ascending()
+            const message = {
+              id: messageID,
+              sessionID: result.id,
+              role: "user" as const,
+              time: { created: now },
+              agent: "build",
+              model: {
+                providerID: ProviderID.make(providerID),
+                modelID: ModelID.make(modelID),
+              },
+            }
+            const part = {
+              id: partID,
+              sessionID: result.id,
+              messageID,
+              type: "text" as const,
+              text,
+              time: { start: now },
+            }
+            yield* session.updateMessage(message)
+            yield* session.updatePart(part)
+          }),
+        )
+        await AppRuntime.runPromise(
+          Project.Service.use((svc) => svc.update({ projectID: Instance.project.id, name: "E2E Project" })),
+        )
       },
     })
   } finally {

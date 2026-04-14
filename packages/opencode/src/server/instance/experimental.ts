@@ -18,6 +18,7 @@ import { lazy } from "../../util/lazy"
 import { Effect, Option } from "effect"
 import { WorkspaceRoutes } from "./workspace"
 import { Agent } from "@/agent/agent"
+import { HttpApiRoutes } from "./httpapi"
 
 const ConsoleOrgOption = z.object({
   accountID: z.string(),
@@ -39,6 +40,7 @@ const ConsoleSwitchBody = z.object({
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
+    .route("/httpapi", HttpApiRoutes())
     .get(
       "/console",
       describeRoute({
@@ -276,7 +278,7 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const sandboxes = await Project.sandboxes(Instance.project.id)
+        const sandboxes = await AppRuntime.runPromise(Project.Service.use((svc) => svc.sandboxes(Instance.project.id)))
         return c.json(sandboxes)
       },
     )
@@ -302,7 +304,9 @@ export const ExperimentalRoutes = lazy(() =>
       async (c) => {
         const body = c.req.valid("json")
         await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove(body)))
-        await Project.removeSandbox(Instance.project.id, body.directory)
+        await AppRuntime.runPromise(
+          Project.Service.use((svc) => svc.removeSandbox(Instance.project.id, body.directory)),
+        )
         return c.json(true)
       },
     )

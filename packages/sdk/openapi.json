@@ -4769,17 +4769,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "answers": {
-                    "description": "User answers in order of questions (each answer is an array of selected labels)",
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/QuestionAnswer"
-                    }
-                  }
-                },
-                "required": ["answers"]
+                "$ref": "#/components/schemas/QuestionReply"
               }
             }
           }
@@ -7859,16 +7849,26 @@
         },
         "required": ["question", "header", "options"]
       },
+      "QuestionTool": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "type": "string"
+          },
+          "callID": {
+            "type": "string"
+          }
+        },
+        "required": ["messageID", "callID"]
+      },
       "QuestionRequest": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^que.*"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses.*"
+            "type": "string"
           },
           "questions": {
             "description": "Questions to ask",
@@ -7878,17 +7878,7 @@
             }
           },
           "tool": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg.*"
-              },
-              "callID": {
-                "type": "string"
-              }
-            },
-            "required": ["messageID", "callID"]
+            "$ref": "#/components/schemas/QuestionTool"
           }
         },
         "required": ["id", "sessionID", "questions"]
@@ -7912,6 +7902,24 @@
           "type": "string"
         }
       },
+      "QuestionReplied": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            }
+          }
+        },
+        "required": ["sessionID", "requestID", "answers"]
+      },
       "Event.question.replied": {
         "type": "object",
         "properties": {
@@ -7920,27 +7928,22 @@
             "const": "question.replied"
           },
           "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionAnswer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"]
+            "$ref": "#/components/schemas/QuestionReplied"
           }
         },
         "required": ["type", "properties"]
+      },
+      "QuestionRejected": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "requestID": {
+            "type": "string"
+          }
+        },
+        "required": ["sessionID", "requestID"]
       },
       "Event.question.rejected": {
         "type": "object",
@@ -7950,18 +7953,7 @@
             "const": "question.rejected"
           },
           "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              }
-            },
-            "required": ["sessionID", "requestID"]
+            "$ref": "#/components/schemas/QuestionRejected"
           }
         },
         "required": ["type", "properties"]
@@ -12368,6 +12360,19 @@
           }
         },
         "required": ["type", "prompt", "description", "agent"]
+      },
+      "QuestionReply": {
+        "type": "object",
+        "properties": {
+          "answers": {
+            "description": "User answers in order of questions (each answer is an array of selected labels)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            }
+          }
+        },
+        "required": ["answers"]
       },
       "ProviderAuthMethod": {
         "type": "object",

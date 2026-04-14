@@ -264,6 +264,11 @@ export type QuestionInfo = {
   custom?: boolean
 }
 
+export type QuestionTool = {
+  messageID: string
+  callID: string
+}
+
 export type QuestionRequest = {
   id: string
   sessionID: string
@@ -271,10 +276,7 @@ export type QuestionRequest = {
    * Questions to ask
    */
   questions: Array<QuestionInfo>
-  tool?: {
-    messageID: string
-    callID: string
-  }
+  tool?: QuestionTool
 }
 
 export type EventQuestionAsked = {
@@ -284,21 +286,25 @@ export type EventQuestionAsked = {
 
 export type QuestionAnswer = Array<string>
 
+export type QuestionReplied = {
+  sessionID: string
+  requestID: string
+  answers: Array<QuestionAnswer>
+}
+
 export type EventQuestionReplied = {
   type: "question.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    answers: Array<QuestionAnswer>
-  }
+  properties: QuestionReplied
+}
+
+export type QuestionRejected = {
+  sessionID: string
+  requestID: string
 }
 
 export type EventQuestionRejected = {
   type: "question.rejected"
-  properties: {
-    sessionID: string
-    requestID: string
-  }
+  properties: QuestionRejected
 }
 
 export type Todo = {
@@ -1917,6 +1923,13 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+}
+
+export type QuestionReply = {
+  /**
+   * User answers in order of questions (each answer is an array of selected labels)
+   */
+  answers: Array<QuestionAnswer>
 }
 
 export type ProviderAuthMethod = {
@@ -4246,12 +4259,7 @@ export type QuestionListResponses = {
 export type QuestionListResponse = QuestionListResponses[keyof QuestionListResponses]
 
 export type QuestionReplyData = {
-  body?: {
-    /**
-     * User answers in order of questions (each answer is an array of selected labels)
-     */
-    answers: Array<QuestionAnswer>
-  }
+  body?: QuestionReply
   path: {
     requestID: string
   }

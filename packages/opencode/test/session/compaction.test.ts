@@ -3,6 +3,7 @@ import { APICallError } from "ai"
 import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as Stream from "effect/Stream"
 import path from "path"
+import z from "zod"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { Agent } from "../../src/agent/agent"
@@ -14,7 +15,7 @@ import { Log } from "../../src/util/log"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { provideTmpdirInstance, tmpdir } from "../fixture/fixture"
-import { Session } from "../../src/session"
+import { Session as SessionNs } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
@@ -28,6 +29,26 @@ import { testEffect } from "../lib/effect"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 
 Log.init({ print: false })
+
+function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
+  return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
+}
+
+const svc = {
+  ...SessionNs,
+  create(input?: SessionNs.CreateInput) {
+    return run(SessionNs.Service.use((svc) => svc.create(input)))
+  },
+  messages(input: z.output<typeof SessionNs.MessagesInput>) {
+    return run(SessionNs.Service.use((svc) => svc.messages(input)))
+  },
+  updateMessage<T extends MessageV2.Info>(msg: T) {
+    return run(SessionNs.Service.use((svc) => svc.updateMessage(msg)))
+  },
+  updatePart<T extends MessageV2.Part>(part: T) {
+    return run(SessionNs.Service.use((svc) => svc.updatePart(part)))
+  },
+}
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -80,7 +101,7 @@ function createModel(opts: {
 const wide = () => ProviderTest.fake({ model: createModel({ context: 100_000, output: 32_000 }) })
 
 async function user(sessionID: SessionID, text: string) {
-  const msg = await Session.updateMessage({
+  const msg = await svc.updateMessage({
     id: MessageID.ascending(),
     role: "user",
     sessionID,
@@ -88,7 +109,7 @@ async function user(sessionID: SessionID, text: string) {
     model: ref,
     time: { created: Date.now() },
   })
-  await Session.updatePart({
+  await svc.updatePart({
     id: PartID.ascending(),
     messageID: msg.id,
     sessionID,
@@ -119,12 +140,12 @@ async function assistant(sessionID: SessionID, parentID: MessageID, root: string
     time: { created: Date.now() },
     finish: "end_turn",
   }
-  await Session.updateMessage(msg)
+  await svc.updateMessage(msg)
   return msg
 }
 
 async function tool(sessionID: SessionID, messageID: MessageID, tool: string, output: string) {
-  return Session.updatePart({
+  return svc.updatePart({
     id: PartID.ascending(),
     messageID,
     sessionID,
@@ -171,7 +192,7 @@ function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer, p
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer, bus).pipe(
       Layer.provide(provider.layer),
-      Layer.provide(Session.defaultLayer),
+      Layer.provide(SessionNs.defaultLayer),
       Layer.provide(layer(result)),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(plugin),
@@ -191,9 +212,9 @@ const deps = Layer.mergeAll(
 )
 
 const env = Layer.mergeAll(
-  Session.defaultLayer,
+  SessionNs.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
-  SessionCompaction.layer.pipe(Layer.provide(Session.defaultLayer), Layer.provideMerge(deps)),
+  SessionCompaction.layer.pipe(Layer.provide(SessionNs.defaultLayer), Layer.provideMerge(deps)),
 )
 
 const it = testEffect(env)
@@ -227,7 +248,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
       Layer.provide(provider.layer),
-      Layer.provide(Session.defaultLayer),
+      Layer.provide(SessionNs.defaultLayer),
       Layer.provide(Snapshot.defaultLayer),
       Layer.provide(layer),
       Layer.provide(Permission.defaultLayer),
@@ -467,9 +488,9 @@ describe("session.compaction.create", () => {
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
-        const session = yield* Session.Service
+        const ssn = yield* SessionNs.Service
 
-        const info = yield* session.create({})
+        const info = yield* ssn.create({})
 
         yield* compact.create({
           sessionID: info.id,
@@ -479,7 +500,7 @@ describe("session.compaction.create", () => {
           overflow: true,
         })
 
-        const msgs = yield* session.messages({ sessionID: info.id })
+        const msgs = yield* ssn.messages({ sessionID: info.id })
         expect(msgs).toHaveLength(1)
         expect(msgs[0].info.role).toBe("user")
         expect(msgs[0].parts).toHaveLength(1)
@@ -499,9 +520,9 @@ describe("session.compaction.prune", () => {
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
-        const session = yield* Session.Service
-        const info = yield* session.create({})
-        const a = yield* session.updateMessage({
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const a = yield* ssn.updateMessage({
           id: MessageID.ascending(),
           role: "user",
           sessionID: info.id,
@@ -509,7 +530,7 @@ describe("session.compaction.prune", () => {
           model: ref,
           time: { created: Date.now() },
         })
-        yield* session.updatePart({
+        yield* ssn.updatePart({
           id: PartID.ascending(),
           messageID: a.id,
           sessionID: info.id,
@@ -536,8 +557,8 @@ describe("session.compaction.prune", () => {
           time: { created: Date.now() },
           finish: "end_turn",
         }
-        yield* session.updateMessage(b)
-        yield* session.updatePart({
+        yield* ssn.updateMessage(b)
+        yield* ssn.updatePart({
           id: PartID.ascending(),
           messageID: b.id,
           sessionID: info.id,
@@ -554,7 +575,7 @@ describe("session.compaction.prune", () => {
           },
         })
         for (const text of ["second", "third"]) {
-          const msg = yield* session.updateMessage({
+          const msg = yield* ssn.updateMessage({
             id: MessageID.ascending(),
             role: "user",
             sessionID: info.id,
@@ -562,7 +583,7 @@ describe("session.compaction.prune", () => {
             model: ref,
             time: { created: Date.now() },
           })
-          yield* session.updatePart({
+          yield* ssn.updatePart({
             id: PartID.ascending(),
             messageID: msg.id,
             sessionID: info.id,
@@ -573,7 +594,7 @@ describe("session.compaction.prune", () => {
 
         yield* compact.prune({ sessionID: info.id })
 
-        const msgs = yield* session.messages({ sessionID: info.id })
+        const msgs = yield* ssn.messages({ sessionID: info.id })
         const part = msgs.flatMap((msg) => msg.parts).find((part) => part.type === "tool")
         expect(part?.type).toBe("tool")
         expect(part?.state.status).toBe("completed")
@@ -589,9 +610,9 @@ describe("session.compaction.prune", () => {
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
-        const session = yield* Session.Service
-        const info = yield* session.create({})
-        const a = yield* session.updateMessage({
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const a = yield* ssn.updateMessage({
           id: MessageID.ascending(),
           role: "user",
           sessionID: info.id,
@@ -599,7 +620,7 @@ describe("session.compaction.prune", () => {
           model: ref,
           time: { created: Date.now() },
         })
-        yield* session.updatePart({
+        yield* ssn.updatePart({
           id: PartID.ascending(),
           messageID: a.id,
           sessionID: info.id,
@@ -626,8 +647,8 @@ describe("session.compaction.prune", () => {
           time: { created: Date.now() },
           finish: "end_turn",
         }
-        yield* session.updateMessage(b)
-        yield* session.updatePart({
+        yield* ssn.updateMessage(b)
+        yield* ssn.updatePart({
           id: PartID.ascending(),
           messageID: b.id,
           sessionID: info.id,
@@ -644,7 +665,7 @@ describe("session.compaction.prune", () => {
           },
         })
         for (const text of ["second", "third"]) {
-          const msg = yield* session.updateMessage({
+          const msg = yield* ssn.updateMessage({
             id: MessageID.ascending(),
             role: "user",
             sessionID: info.id,
@@ -652,7 +673,7 @@ describe("session.compaction.prune", () => {
             model: ref,
             time: { created: Date.now() },
           })
-          yield* session.updatePart({
+          yield* ssn.updatePart({
             id: PartID.ascending(),
             messageID: msg.id,
             sessionID: info.id,
@@ -663,7 +684,7 @@ describe("session.compaction.prune", () => {
 
         yield* compact.prune({ sessionID: info.id })
 
-        const msgs = yield* session.messages({ sessionID: info.id })
+        const msgs = yield* ssn.messages({ sessionID: info.id })
         const part = msgs.flatMap((msg) => msg.parts).find((part) => part.type === "tool")
         expect(part?.type).toBe("tool")
         if (part?.type === "tool" && part.state.status === "completed") {
@@ -680,12 +701,12 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
         const reply = await assistant(session.id, msg.id, tmp.path)
         const rt = runtime("continue")
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           await expect(
             rt.runPromise(
               SessionCompaction.Service.use((svc) =>
@@ -710,9 +731,9 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
-        const msgs = await Session.messages({ sessionID: session.id })
+        const msgs = await svc.messages({ sessionID: session.id })
         const done = defer()
         let seen = false
         const rt = runtime("continue", Plugin.defaultLayer, wide())
@@ -760,11 +781,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
         const rt = runtime("compact", Plugin.defaultLayer, wide())
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           const result = await rt.runPromise(
             SessionCompaction.Service.use((svc) =>
               svc.process({
@@ -776,7 +797,7 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const summary = (await Session.messages({ sessionID: session.id })).find(
+          const summary = (await svc.messages({ sessionID: session.id })).find(
             (msg) => msg.info.role === "assistant" && msg.info.summary,
           )
 
@@ -798,11 +819,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
         const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           const result = await rt.runPromise(
             SessionCompaction.Service.use((svc) =>
               svc.process({
@@ -814,7 +835,7 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const all = await Session.messages({ sessionID: session.id })
+          const all = await svc.messages({ sessionID: session.id })
           const last = all.at(-1)
 
           expect(result).toBe("continue")
@@ -838,11 +859,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
         const rt = runtime("continue", autocontinue(false), wide())
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           const result = await rt.runPromise(
             SessionCompaction.Service.use((svc) =>
               svc.process({
@@ -854,7 +875,7 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const all = await Session.messages({ sessionID: session.id })
+          const all = await svc.messages({ sessionID: session.id })
           const last = all.at(-1)
 
           expect(result).toBe("continue")
@@ -881,10 +902,10 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         await user(session.id, "root")
         const replay = await user(session.id, "image")
-        await Session.updatePart({
+        await svc.updatePart({
           id: PartID.ascending(),
           messageID: replay.id,
           sessionID: session.id,
@@ -896,7 +917,7 @@ describe("session.compaction.process", () => {
         const msg = await user(session.id, "current")
         const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           const result = await rt.runPromise(
             SessionCompaction.Service.use((svc) =>
               svc.process({
@@ -909,7 +930,7 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const last = (await Session.messages({ sessionID: session.id })).at(-1)
+          const last = (await svc.messages({ sessionID: session.id })).at(-1)
 
           expect(result).toBe("continue")
           expect(last?.info.role).toBe("user")
@@ -929,13 +950,13 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         await user(session.id, "earlier")
         const msg = await user(session.id, "current")
 
         const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           const result = await rt.runPromise(
             SessionCompaction.Service.use((svc) =>
               svc.process({
@@ -948,7 +969,7 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const last = (await Session.messages({ sessionID: session.id })).at(-1)
+          const last = (await svc.messages({ sessionID: session.id })).at(-1)
 
           expect(result).toBe("continue")
           expect(last?.info.role).toBe("user")
@@ -989,9 +1010,9 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
-        const msgs = await Session.messages({ sessionID: session.id })
+        const msgs = await svc.messages({ sessionID: session.id })
         const abort = new AbortController()
         const rt = liveRuntime(stub.layer, wide())
         let off: (() => void) | undefined
@@ -1063,9 +1084,9 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
-        const msgs = await Session.messages({ sessionID: session.id })
+        const msgs = await svc.messages({ sessionID: session.id })
         const abort = new AbortController()
         const rt = runtime("continue", plugin(ready), wide())
         let run: Promise<"continue" | "stop"> | undefined
@@ -1100,7 +1121,7 @@ describe("session.compaction.process", () => {
           abort.abort()
           expect(await run).toBe("stop")
 
-          const all = await Session.messages({ sessionID: session.id })
+          const all = await svc.messages({ sessionID: session.id })
           expect(all.some((msg) => msg.info.role === "assistant" && msg.info.summary)).toBe(false)
         } finally {
           abort.abort()
@@ -1165,11 +1186,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await svc.create({})
         const msg = await user(session.id, "hello")
         const rt = liveRuntime(stub.layer, wide())
         try {
-          const msgs = await Session.messages({ sessionID: session.id })
+          const msgs = await svc.messages({ sessionID: session.id })
           await rt.runPromise(
             SessionCompaction.Service.use((svc) =>
               svc.process({
@@ -1181,7 +1202,7 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const summary = (await Session.messages({ sessionID: session.id })).find(
+          const summary = (await svc.messages({ sessionID: session.id })).find(
             (item) => item.info.role === "assistant" && item.info.summary,
           )
 
@@ -1211,10 +1232,10 @@ describe("util.token.estimate", () => {
   })
 })
 
-describe("session.getUsage", () => {
+describe("SessionNs.getUsage", () => {
   test("normalizes standard usage to token format", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1000,
@@ -1241,7 +1262,7 @@ describe("session.getUsage", () => {
 
   test("extracts cached tokens to cache.read", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1000,
@@ -1265,7 +1286,7 @@ describe("session.getUsage", () => {
 
   test("handles anthropic cache write metadata", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1000,
@@ -1294,7 +1315,7 @@ describe("session.getUsage", () => {
   test("subtracts cached tokens for anthropic provider", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     // AI SDK v6 normalizes inputTokens to include cached tokens for all providers
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1000,
@@ -1321,7 +1342,7 @@ describe("session.getUsage", () => {
 
   test("separates reasoning tokens from output tokens", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1000,
@@ -1355,7 +1376,7 @@ describe("session.getUsage", () => {
         cache: { read: 0, write: 0 },
       },
     })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 0,
@@ -1380,7 +1401,7 @@ describe("session.getUsage", () => {
 
   test("handles undefined optional values gracefully", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 0,
@@ -1416,7 +1437,7 @@ describe("session.getUsage", () => {
         cache: { read: 0.3, write: 3.75 },
       },
     })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1_000_000,
@@ -1457,7 +1478,7 @@ describe("session.getUsage", () => {
         },
       }
       if (npm === "@ai-sdk/amazon-bedrock") {
-        const result = Session.getUsage({
+        const result = SessionNs.getUsage({
           model,
           usage,
           metadata: {
@@ -1478,7 +1499,7 @@ describe("session.getUsage", () => {
         return
       }
 
-      const result = Session.getUsage({
+      const result = SessionNs.getUsage({
         model,
         usage,
         metadata: {
@@ -1499,7 +1520,7 @@ describe("session.getUsage", () => {
 
   test("extracts cache write tokens from vertex metadata key", () => {
     const model = createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/google-vertex/anthropic" })
-    const result = Session.getUsage({
+    const result = SessionNs.getUsage({
       model,
       usage: {
         inputTokens: 1000,
