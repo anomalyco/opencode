@@ -1296,12 +1296,25 @@ export function MessageTimeline(props: {
 
   function TimelineItem(item: { messageID: string; index: number }) {
     const active = createMemo(() => activeMessageID() === item.messageID)
-    const eager = createMemo(() => active() || item.index >= rendered().length - 3)
-    const highlight = createMemo<"full" | "defer">(() => (active() ? "full" : "defer"))
+    const isRecentTail = createMemo(() => item.index >= rendered().length - 3)
+
+    // Turn priority tiers for render optimization
+    const tier = createMemo<"active" | "recent" | "near" | "far">(() => {
+      if (active()) return "active"
+      if (isRecentTail()) return "recent"
+      if (nearViewport()) return "near"
+      return "far"
+    })
+
+    // Map tiers to markdown/highlight/math props
+    const eager = createMemo(() => tier() === "active")
+    const highlight = createMemo<"full" | "defer">(() => (tier() === "active" ? "full" : "defer"))
     const math = createMemo<"full" | "defer">(() => {
       if (mathMode() !== "turn") return "full"
-      return eager() ? "full" : "defer"
+      // Only active tail gets full math immediately
+      return tier() === "active" ? "full" : "defer"
     })
+
     const messages = createMemo<MessageType[]>(
       (prev?: MessageType[]) => {
         if (active()) return turnMessages(sessionMessages(), item.messageID)
@@ -1354,7 +1367,7 @@ export function MessageTimeline(props: {
     createEffect(() => {
       if (!rootRef || !viewport) return
       // Always keep active turn and recent tail turns mounted
-      if (active() || eager()) {
+      if (active() || isRecentTail()) {
         setNearViewport(true)
         return
       }
@@ -1375,7 +1388,7 @@ export function MessageTimeline(props: {
 
     const shouldRenderTurn = createMemo(() => {
       // Always render active turn and recent tail
-      if (active() || eager()) return true
+      if (active() || isRecentTail()) return true
       // Render if near viewport
       return nearViewport()
     })
