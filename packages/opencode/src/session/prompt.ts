@@ -112,7 +112,7 @@ export namespace SessionPrompt {
       }
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-        yield* elog.info("cancel", { sessionID })
+        log.info("cancel", { sessionID })
         yield* state.cancel(sessionID)
       })
 
@@ -1302,14 +1302,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
           const ctx = yield* InstanceState.context
-          const slog = elog.with({ sessionID })
+          const slog = log.clone().tag("sessionID", sessionID)
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
-            yield* slog.info("loop", { step })
+            slog.info("loop", { step })
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
@@ -1345,7 +1345,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
-              yield* slog.info("exiting loop")
+              slog.info("exiting loop")
               break
             }
 
@@ -1544,7 +1544,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
 
       const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
+        log.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
         const cmd = yield* commands.get(input.command)
         if (!cmd) {
           const available = (yield* commands.list()).map((c) => c.name)
