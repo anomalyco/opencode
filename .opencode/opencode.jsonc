@@ -15,5 +15,110 @@
     "github-triage": false,
     "github-pr-search": false,
   },
-  "plugin": [["/Users/ryanho/Dev/opencode/packages/agent-comms-plugin", { "max_depth": 5, "max_retry": 2 }]],
+  "plugin": [
+    [
+      "/Users/ryanho/Dev/opencode/packages/agent-comms-plugin",
+      {
+        "max_depth": 5,
+        "max_retry": 2,
+      },
+    ],
+    // [
+    //   "/Users/ryanho/Dev/opencode/packages/agent-team",
+    //   {
+    //     "enabled": true,
+    //     "agents": {
+    //       "coder": {
+    //         "role": "coder",
+    //         "role_priority": 10,
+    //         "capabilities": {
+    //           "tools": ["read", "edit", "write", "bash", "glob", "grep", "list"],
+    //           "share_to_team": true,
+    //           "delegate": true,
+    //           "max_delegation_depth": 2,
+    //           "disk_quota_mb": 500,
+    //         },
+    //         "max_tasks_per_day": 50,
+    //         "disk_quota_mb": 500,
+    //       },
+    //       "reviewer": {
+    //         "role": "reviewer",
+    //         "role_priority": 20,
+    //         "capabilities": {
+    //           "tools": ["read", "glob", "grep", "list"],
+    //           "share_to_team": false,
+    //           "delegate": false,
+    //           "max_delegation_depth": 0,
+    //           "disk_quota_mb": 200,
+    //         },
+    //         "max_tasks_per_day": 30,
+    //         "disk_quota_mb": 200,
+    //       },
+    //       "architect": {
+    //         "role": "architect",
+    //         "role_priority": 30,
+    //         "capabilities": {
+    //           "tools": ["read", "glob", "grep", "list"],
+    //           "share_to_team": false,
+    //           "delegate": true,
+    //           "max_delegation_depth": 3,
+    //           "disk_quota_mb": 200,
+    //         },
+    //         "max_tasks_per_day": 20,
+    //         "disk_quota_mb": 200,
+    //       },
+    //       "tester": {
+    //         "role": "tester",
+    //         "role_priority": 10,
+    //         "capabilities": {
+    //           "tools": ["read", "edit", "bash", "glob", "grep", "list"],
+    //           "share_to_team": true,
+    //           "delegate": false,
+    //           "max_delegation_depth": 0,
+    //           "disk_quota_mb": 300,
+    //         },
+    //         "max_tasks_per_day": 40,
+    //         "disk_quota_mb": 300,
+    //       },
+    //     },
+    //     "humans": {
+    //       "hierarchy": ["admin", "developer"],
+    //     },
+    //     "human_authority": "advisory",
+    //     "limits": {
+    //       "max_agents": 8,
+    //       "max_concurrent_tasks": 4,
+    //       "max_delegation_depth": 3,
+    //       "max_messages_per_minute": 30,
+    //       "message_ttl_seconds": 86400,
+    //       "task_timeout_seconds": 1800,
+    //       "tool_execution_timeout_seconds": 60,
+    //     },
+    //     "budget": {
+    //       "daily_limit_usd": 50,
+    //       "per_agent_daily_usd": 15,
+    //       "per_task_max_usd": 5,
+    //       "per_task_max_tokens": 200000,
+    //     },
+    //     "gc": {
+    //       "cleanup_timeout_ms": 259200000,
+    //       "gc_interval_ms": 3600000,
+    //       "dead_letter_retention_days": 7,
+    //     },
+    //     "watchdog": {
+    //       "heartbeat_interval_ms": 30000,
+    //       "heartbeat_warning_ms": 60000,
+    //       "zombie_timeout_ms": 120000,
+    //       "reconnect_timeout_ms": 10000,
+    //     },
+    //     "protected_paths": [],
+    //     "git": {
+    //       "protected_branches": ["main", "dev"],
+    //       "denied_commands": ["push --force", "reset --hard"],
+    //       "pre_merge_validation": "bun test",
+    //     },
+    //   },
+    // ],
+    "superpowers@git+https://github.com/obra/superpowers.git",
+  ],
 }

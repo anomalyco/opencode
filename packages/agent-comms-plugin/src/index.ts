@@ -27,7 +27,12 @@ export default {
       "experimental.chat.system.transform": createSystemTransformHook({ db, config }),
       tool: {
         agent_list: createAgentListTool(() => ref.agents),
-        session_list: createSessionListTool({ client: input.client as any, db, getAgents: () => ref.agents }),
+        session_list: createSessionListTool({
+          client: input.client as any,
+          db,
+          serverUrl: input.serverUrl,
+          getAgents: () => ref.agents,
+        }),
         session_send: createSessionSendTool({ client: input.client as any, db, config, getAgents: () => ref.agents }),
         session_read: createSessionReadTool({ db }),
         session_rename: createSessionRenameTool({ client: input.client as any }),

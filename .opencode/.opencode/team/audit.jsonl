@@ -1,0 +1,4 @@
+{"ts":1776127994111,"agent":"coder","action":"agent.spawn","target":"/Users/ryanho/Dev/opencode/.opencode/.opencode/workspaces/workspace-coder"}
+{"ts":1776127994111,"agent":"reviewer","action":"agent.spawn","target":"/Users/ryanho/Dev/opencode/.opencode/.opencode/workspaces/workspace-reviewer"}
+{"ts":1776127994111,"agent":"architect","action":"agent.spawn","target":"/Users/ryanho/Dev/opencode/.opencode/.opencode/workspaces/workspace-architect"}
+{"ts":1776127994111,"agent":"tester","action":"agent.spawn","target":"/Users/ryanho/Dev/opencode/.opencode/.opencode/workspaces/workspace-tester"}

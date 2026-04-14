@@ -1,0 +1,27 @@
+{
+  "name": "@opencode-ai/plugin-agent-team",
+  "version": "0.0.1",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "bun test --timeout 30000",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./tui": "./src/tui.ts"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "workspace:*",
+    "@opentui/core": ">=0.1.97",
+    "@opentui/solid": ">=0.1.97",
+    "bun-types": "latest"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  }
+}

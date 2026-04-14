@@ -11,8 +11,9 @@
     "agent",
     "communication"
   ],
+  "main": "./dist/server.js",
   "exports": {
-    "./server": "./src/index.ts"
+    "./server": "./dist/server.js"
   },
   "files": [
     "dist"
@@ -20,7 +21,8 @@
   "scripts": {
     "test": "bun test --timeout 30000",
     "typecheck": "tsgo --noEmit",
-    "build": "bun run src/build.ts"
+    "build": "bun run script/build.ts",
+    "publish": "bun run script/publish.ts"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.0.0",
