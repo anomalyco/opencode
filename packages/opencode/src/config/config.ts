@@ -1572,6 +1572,10 @@ export const layer = Layer.effect(
     return state().then((x) => structuredClone(x.config))
   }
 
+  export async function live() {
+    return state().then((x) => x.config)
+  }
+
   export async function getGlobal() {
     return global()
   }
