@@ -498,6 +498,13 @@
         "typescript": "catalog:",
       },
     },
+    "packages/server": {
+      "name": "@opencode-ai/server",
+      "version": "1.4.3",
+      "devDependencies": {
+        "typescript": "catalog:",
+      },
+    },
     "packages/slack": {
       "name": "@opencode-ai/slack",
       "version": "1.4.3",
@@ -1532,6 +1539,8 @@
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
+
+    "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
 
     "@opencode-ai/slack": ["@opencode-ai/slack@workspace:packages/slack"],
 
