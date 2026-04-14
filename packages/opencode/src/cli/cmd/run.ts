@@ -5,6 +5,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { bootstrap } from "../bootstrap"
+import { resolveLocale, t } from "../../i18n"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
@@ -301,6 +302,7 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
+    const locale = resolveLocale(process.env.OPENCODE_LOCALE)
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
@@ -312,7 +314,7 @@ export const RunCommand = cmd({
         process.chdir(args.dir)
         return process.cwd()
       } catch {
-        UI.error("Failed to change directory to " + args.dir)
+        UI.error(t(locale, "cli.run.chdir_failed", { dir: args.dir }))
         process.exit(1)
       }
     })()
@@ -342,7 +344,7 @@ export const RunCommand = cmd({
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
     if (message.trim().length === 0 && !args.command) {
-      UI.error("You must provide a message or a command")
+      UI.error(t(locale, "cli.run.message_required"))
       process.exit(1)
     }
 
@@ -626,7 +628,7 @@ export const RunCommand = cmd({
 
       const sessionID = await session(sdk)
       if (!sessionID) {
-        UI.error("Session not found")
+        UI.error(t(locale, "cli.run.session_not_found"))
         process.exit(1)
       }
       await share(sdk, sessionID)
