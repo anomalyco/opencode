@@ -1,5 +1,6 @@
 import { createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
+import { useI18n } from "@tui/context/i18n"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
@@ -14,6 +15,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
   const dialog = useDialog()
   const sdk = useSDK()
   const route = useRoute()
+  const i18n = useI18n()
 
   onMount(() => {
     dialog.setSize("large")
@@ -72,5 +74,11 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
     return [fullSession, ...result.reverse()]
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork session" options={options()} />
+  return (
+    <DialogSelect
+      onMove={(option) => props.onMove(option.value)}
+      title={i18n.t("tui.dialog.timeline_fork.title")}
+      options={options()}
+    />
+  )
 }

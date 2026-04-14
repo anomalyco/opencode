@@ -1,4 +1,5 @@
 import { createMemo } from "solid-js"
+import { useI18n } from "@tui/context/i18n"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
@@ -14,17 +15,18 @@ export function DialogMessage(props: {
 }) {
   const sync = useSync()
   const sdk = useSDK()
+  const i18n = useI18n()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
   return (
     <DialogSelect
-      title="Message Actions"
+      title={i18n.t("tui.dialog.message.title")}
       options={[
         {
-          title: "Revert",
+          title: i18n.t("tui.dialog.message.revert"),
           value: "session.revert",
-          description: "undo messages and file changes",
+          description: i18n.t("tui.dialog.message.revert_description"),
           onSelect: (dialog) => {
             const msg = message()
             if (!msg) return
@@ -53,9 +55,9 @@ export function DialogMessage(props: {
           },
         },
         {
-          title: "Copy",
+          title: i18n.t("tui.dialog.message.copy"),
           value: "message.copy",
-          description: "message text to clipboard",
+          description: i18n.t("tui.dialog.message.copy_description"),
           onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return
@@ -73,9 +75,9 @@ export function DialogMessage(props: {
           },
         },
         {
-          title: "Fork",
+          title: i18n.t("tui.dialog.message.fork"),
           value: "session.fork",
-          description: "create a new session",
+          description: i18n.t("tui.dialog.message.fork_description"),
           onSelect: async (dialog) => {
             const result = await sdk.client.session.fork({
               sessionID: props.sessionID,
