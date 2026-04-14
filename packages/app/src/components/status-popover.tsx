@@ -11,7 +11,7 @@ import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
-import { item, label, mcp, parse } from "@/components/status-popover-data"
+import { claude, item, label, mcp, parse } from "@/components/status-popover-data"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
@@ -186,6 +186,7 @@ export function StatusPopover() {
   const [cfg, setCfg] = createStore({
     project: undefined as string | undefined,
     projectDir: undefined as string | undefined,
+    claude: undefined as string | undefined,
     omo: undefined as string | undefined,
   })
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
@@ -193,6 +194,7 @@ export function StatusPopover() {
   const group = createMemo(() => label(sync.data.path.directory, global.data.project) || getFilename(sync.data.path.directory))
   const projectCfg = createMemo(() => parse(cfg.project))
   const projectDirCfg = createMemo(() => parse(cfg.projectDir))
+  const claudeCfg = createMemo(() => claude(cfg.claude, sync.data.path.directory))
   const omo = createMemo(() => !!parse(cfg.omo))
 
   createEffect(() => {
@@ -212,9 +214,10 @@ export function StatusPopover() {
         const projectDir = files.find((item) => item.id === "project-dir-opencode-jsonc" && item.exists)
           ?? files.find((item) => item.id === "project-dir-opencode-json" && item.exists)
 
-        const [nextProject, nextProjectDir, nextOmo] = await Promise.all([
+        const [nextProject, nextProjectDir, nextClaude, nextOmo] = await Promise.all([
           project?.path ? read(project.path).catch(() => null) : Promise.resolve(null),
           projectDir?.path ? read(projectDir.path).catch(() => null) : Promise.resolve(null),
+          read(`${global.data.path.home}/.claude.json`).catch(() => null),
           read(`${global.data.path.config}/oh-my-openagent.json`).catch(() =>
             read(`${global.data.path.config}/oh-my-openagent.jsonc`).catch(() => null),
           ),
@@ -223,12 +226,13 @@ export function StatusPopover() {
         setCfg({
           project: nextProject ?? undefined,
           projectDir: nextProjectDir ?? undefined,
+          claude: nextClaude ?? undefined,
           omo: nextOmo ?? undefined,
         })
       })
       .catch(() => {
         if (dead) return
-        setCfg({ project: undefined, projectDir: undefined, omo: undefined })
+        setCfg({ project: undefined, projectDir: undefined, claude: undefined, omo: undefined })
       })
 
     onCleanup(() => {
@@ -245,6 +249,7 @@ export function StatusPopover() {
         global.data.config.mcp,
         projectCfg(),
         projectDirCfg(),
+        claudeCfg(),
         omo(),
         group(),
       ),

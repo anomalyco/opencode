@@ -83,18 +83,31 @@ export const parse = (text: string | null | undefined) => {
 
 const keys = (config: Config | undefined) => new Set(Object.keys(config?.mcp ?? {}))
 
+export const claude = (text: string | null | undefined, dir: string | undefined) => {
+  if (!text || !dir) return new Set<string>()
+  try {
+    const data = JSON.parse(text) as {
+      projects?: Record<string, { mcpServers?: Record<string, unknown> }>
+    }
+    return new Set(Object.keys(data.projects?.[dir]?.mcpServers ?? {}))
+  } catch {
+    return new Set<string>()
+  }
+}
+
 export const source = (input: {
   name: string
   config: Config["mcp"] | undefined
   global: Config["mcp"] | undefined
   project: Config | undefined
   projectDir: Config | undefined
+  claude: Set<string>
   omo: boolean
   group: string | undefined
 }) => {
   const next = input.config?.[input.name]
   const prev = input.global?.[input.name]
-  const local = keys(input.project).has(input.name) || keys(input.projectDir).has(input.name)
+  const local = keys(input.project).has(input.name) || keys(input.projectDir).has(input.name) || input.claude.has(input.name)
   if (local) return input.group
   if (prev && same(next, prev)) return "global"
   if (input.omo && !prev) return "oh-my-openagent"
@@ -110,10 +123,11 @@ export const mcp = (
   global: Config["mcp"] | undefined,
   project: Config | undefined,
   projectDir: Config | undefined,
+  claudeProject: Set<string>,
   omo: boolean,
   group: string | undefined,
 ) => {
-  const next = source({ name, config, global, project, projectDir, omo, group })
+  const next = source({ name, config, global, project, projectDir, claude: claudeProject, omo, group })
   return {
     name,
     project: next && next !== name ? next : undefined,
