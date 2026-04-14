@@ -209,6 +209,9 @@ export namespace ProviderTransform {
       copilot: {
         copilot_cache_control: { type: "ephemeral" },
       },
+      alibaba: {
+        cacheControl: { type: "ephemeral" },
+      },
     }
 
     for (const msg of unique([...system, ...final])) {
@@ -285,7 +288,8 @@ export namespace ProviderTransform {
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
+        model.api.npm === "@ai-sdk/anthropic" ||
+        model.api.npm === "@ai-sdk/alibaba") &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
       msgs = applyCaching(msgs, model)
@@ -774,7 +778,10 @@ export namespace ProviderTransform {
       result["chat_template_args"] = { enable_thinking: true }
     }
 
-    if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {
+    if (
+      ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
+      input.model.api.npm === "@ai-sdk/openai-compatible"
+    ) {
       result["thinking"] = {
         type: "enabled",
         clear_thinking: false,
@@ -825,7 +832,16 @@ export namespace ProviderTransform {
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
-        result["reasoningSummary"] = "auto"
+        // Only inject reasoningSummary for providers that support it natively.
+        // @ai-sdk/openai-compatible proxies (e.g. LiteLLM) do not understand this
+        // parameter and return "Unknown parameter: 'reasoningSummary'".
+        if (
+          input.model.api.npm === "@ai-sdk/openai" ||
+          input.model.api.npm === "@ai-sdk/azure" ||
+          input.model.api.npm === "@ai-sdk/github-copilot"
+        ) {
+          result["reasoningSummary"] = "auto"
+        }
       }
 
       // Only set textVerbosity for non-chat gpt-5.x models

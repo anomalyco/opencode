@@ -48,7 +48,7 @@
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
       "effect": "4.0.0-beta.46",
-      "ai": "6.0.149",
+      "ai": "6.0.158",
       "cross-spawn": "7.0.6",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",

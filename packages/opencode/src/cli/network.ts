@@ -1,5 +1,6 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { Config } from "../config/config"
+import { AppRuntime } from "@/effect/app-runtime"
 
 const options = {
   port: {
@@ -37,7 +38,7 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
 }
 
 export async function resolveNetworkOptions(args: NetworkOptions) {
-  const config = await Config.getGlobal()
+  const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
   const portExplicitlySet = process.argv.includes("--port")
   const hostnameExplicitlySet = process.argv.includes("--hostname")
   const mdnsExplicitlySet = process.argv.includes("--mdns")
