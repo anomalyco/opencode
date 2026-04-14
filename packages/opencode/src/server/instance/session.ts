@@ -302,9 +302,8 @@ export const SessionRoutes = lazy(() =>
             permission: Permission.merge(current.permission ?? [], updates.permission),
           })
         }
-        if (updates.time !== undefined && "archived" in updates.time) {
+if (updates.time !== undefined && "archived" in updates.time) {
           session = await Session.setArchived({ sessionID, time: updates.time.archived ?? undefined })
-        }
         }
 
         const session = await Session.get(sessionID)
