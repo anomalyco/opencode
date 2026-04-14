@@ -6,7 +6,6 @@ import { Config } from "@/config/config"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
-import { EffectLogger } from "@/effect/logger"
 import { Session } from "."
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
@@ -19,11 +18,12 @@ import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
+import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
-  const log = EffectLogger.create({ service: "session.processor" })
+  const log = Log.create({ service: "session.processor" })
 
   export type Result = "compact" | "stop" | "continue"
 
@@ -124,7 +124,7 @@ export namespace SessionProcessor {
           reasoningMap: {},
         }
         let aborted = false
-        const slog = log.with({ sessionID: input.sessionID, messageID: input.assistantMessage.id })
+        const slog = log.clone().tag("sessionID", input.sessionID).tag("messageID", input.assistantMessage.id)
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
@@ -454,7 +454,7 @@ export namespace SessionProcessor {
               return
 
             default:
-              yield* slog.info("unhandled", { event: value.type, value })
+              slog.info("unhandled", { event: value.type, value })
               return
           }
         })
@@ -520,7 +520,7 @@ export namespace SessionProcessor {
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-          yield* slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
+          slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
           const error = parse(e)
           if (MessageV2.ContextOverflowError.isInstance(error)) {
             ctx.needsCompaction = true
@@ -536,7 +536,7 @@ export namespace SessionProcessor {
         })
 
         const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-          yield* slog.info("process")
+          slog.info("process")
           ctx.needsCompaction = false
           ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
