@@ -17,6 +17,9 @@ permissions:
   contents: read
   checks: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   unit:
     name: unit (${{ matrix.settings.name }})
@@ -37,6 +40,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -88,7 +96,6 @@ jobs:
         settings:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
-:.github/workflows/test.yml
           - name: windows
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
@@ -102,6 +109,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
