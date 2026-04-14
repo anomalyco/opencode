@@ -111,8 +111,8 @@ export namespace Profiler {
       messageCount: req.messageCount,
       tools: req.tools,
       tokens: {
-        input: input.tokens.input + input.tokens.cache.read,
-        output: input.tokens.output + input.tokens.reasoning,
+        input: input.tokens.input,
+        output: input.tokens.output,
       },
       finishReason: input.finishReason,
       output: {
