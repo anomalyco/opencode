@@ -182,8 +182,11 @@ pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     let cli_path =
         get_cli_install_path().ok_or_else(|| "Could not determine CLI install path".to_string())?;
 
-    let output = std::process::Command::new(&cli_path)
-        .arg("--version")
+    let mut cmd = std::process::Command::new(&cli_path);
+    cmd.arg("--version");
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd
         .output()
         .map_err(|e| format!("Failed to get CLI version: {}", e))?;
 
@@ -288,6 +291,10 @@ fn probe_shell_env(shell: &str, mode: &str) -> ShellEnvProbe {
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     let output = match command_output_with_timeout(cmd, SHELL_ENV_TIMEOUT) {
         Ok(Some(output)) => output,
         Ok(None) => return ShellEnvProbe::Timeout,
