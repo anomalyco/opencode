@@ -161,19 +161,40 @@ To disable a **specific** LSP server, set `disabled` to `true`:
 
 ### Custom LSP servers
 
-You can add custom LSP servers by specifying the command and file extensions:
+You can add custom LSP servers by specifying the command and file extensions. Most LSP servers use `--stdio` to communicate over standard input/output:
 
-```json title="opencode.json" {4-7}
+```json title="opencode.json" {4-10}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
-    "custom-lsp": {
-      "command": ["custom-lsp-server", "--stdio"],
-      "extensions": [".custom"]
+    "luau-lsp": {
+      "command": ["luau-lsp.exe", "lsp", "--stdio"],
+      "extensions": [".lua", ".luau"]
     }
   }
 }
 ```
+
+You can also pass additional arguments and environment variables:
+
+```json title="opencode.json" {4-13}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "lsp", "--settings", "path/to/settings.json"],
+      "extensions": [".custom"],
+      "env": {
+        "CUSTOM_VAR": "value"
+      }
+    }
+  }
+}
+```
+
+:::note
+Not all LSP servers use `--stdio`. Check your LSP server's documentation for the correct arguments. Common alternatives include `--langserver` or running without flags.
+:::
 
 ---
 
