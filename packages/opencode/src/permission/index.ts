@@ -61,10 +61,12 @@ export namespace Permission {
   )
   export type Reply = Schema.Schema.Type<typeof Reply>
 
-  export const ReplyBody = Schema.Struct({
+  const reply = {
     reply: Reply,
     message: Schema.optional(Schema.String),
-  })
+  }
+
+  export const ReplyBody = Schema.Struct(reply)
     .annotate({ identifier: "PermissionReplyBody" })
     .pipe(withStatics((s) => ({ zod: zod(s) })))
   export type ReplyBody = Schema.Schema.Type<typeof ReplyBody>
@@ -125,8 +127,7 @@ export namespace Permission {
 
   export const ReplyInput = Schema.Struct({
     requestID: PermissionID,
-    reply: Reply,
-    message: Schema.optional(Schema.String),
+    ...reply,
   })
     .annotate({ identifier: "PermissionReplyInput" })
     .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -135,7 +136,7 @@ export namespace Permission {
   export interface Interface {
     readonly ask: (input: AskInput) => Effect.Effect<void, Error>
     readonly reply: (input: ReplyInput) => Effect.Effect<void>
-    readonly list: () => Effect.Effect<Request[]>
+    readonly list: () => Effect.Effect<ReadonlyArray<Request>>
   }
 
   interface PendingEntry {
