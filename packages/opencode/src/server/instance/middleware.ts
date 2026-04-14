@@ -10,6 +10,7 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { AppRuntime } from "@/effect/app-runtime"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -66,7 +67,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     if (!workspaceID) {
       return Instance.provide({
         directory,
-        init: InstanceBootstrap,
+        init: () => AppRuntime.runPromise(InstanceBootstrap),
         async fn() {
           return next()
         },
@@ -94,7 +95,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    const adaptor = await getAdaptor(workspace.type)
+    const adaptor = await getAdaptor(workspace.projectID, workspace.type)
     const target = await adaptor.target(workspace)
 
     if (target.type === "local") {
@@ -103,7 +104,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
         fn: () =>
           Instance.provide({
             directory: target.directory,
-            init: InstanceBootstrap,
+            init: () => AppRuntime.runPromise(InstanceBootstrap),
             async fn() {
               return next()
             },
