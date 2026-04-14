@@ -126,10 +126,14 @@ async function createToolContext(agent: Agent.Info) {
   const { session, messageID } = await AppRuntime.runPromise(
     Effect.gen(function* () {
       const session = yield* Session.Service
-      const provider = yield* Provider.Service
       const result = yield* session.create({ title: `Debug tool run (${agent.name})` })
       const messageID = MessageID.ascending()
-      const model = agent.model ?? (yield* provider.defaultModel())
+      const model = agent.model
+        ? agent.model
+        : yield* Effect.gen(function* () {
+            const provider = yield* Provider.Service
+            return yield* provider.defaultModel()
+          })
       const now = Date.now()
       const message: MessageV2.Assistant = {
         id: messageID,
