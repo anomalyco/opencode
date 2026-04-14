@@ -2,11 +2,11 @@ import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect } from "effect"
-import { EffectLogger } from "@/effect/logger"
 import * as Stream from "effect/Stream"
-import { Tool } from "./tool"
-import { Skill } from "../skill"
+import { EffectLogger } from "@/effect/logger"
 import { Ripgrep } from "../file/ripgrep"
+import { Skill } from "../skill"
+import { Tool } from "./tool"
 
 const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
@@ -17,6 +17,7 @@ export const SkillTool = Tool.define(
   Effect.gen(function* () {
     const skill = yield* Skill.Service
     const rg = yield* Ripgrep.Service
+
     return () =>
       Effect.gen(function* () {
         const list = yield* skill.available().pipe(Effect.provide(EffectLogger.layer))
@@ -45,10 +46,9 @@ export const SkillTool = Tool.define(
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
               const info = yield* skill.get(params.name)
-
               if (!info) {
                 const all = yield* skill.all()
-                const available = all.map((s) => s.name).join(", ")
+                const available = all.map((item) => item.name).join(", ")
                 throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
               }
 
@@ -61,9 +61,8 @@ export const SkillTool = Tool.define(
 
               const dir = path.dirname(info.location)
               const base = pathToFileURL(dir).href
-
               const limit = 10
-              const files = yield* rg.files({ cwd: dir, follow: false, hidden: true }).pipe(
+              const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
                 Stream.filter((file) => !file.includes("SKILL.md")),
                 Stream.map((file) => path.resolve(dir, file)),
                 Stream.take(limit),

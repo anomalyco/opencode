@@ -1,6 +1,7 @@
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
+import { Effect } from "effect"
 import z from "zod"
 import { Format } from "../../format"
 import { TuiRoutes } from "./tui"
@@ -119,11 +120,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        const [branch, default_branch] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
-        return c.json({
-          branch,
-          default_branch,
-        })
+        return c.json(
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const vcs = yield* Vcs.Service
+              const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
+                concurrency: 2,
+              })
+              return { branch, default_branch }
+            }),
+          ),
+        )
       },
     )
     .get(
@@ -150,7 +157,14 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         }),
       ),
       async (c) => {
-        return c.json(await Vcs.diff(c.req.valid("query").mode))
+        return c.json(
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const vcs = yield* Vcs.Service
+              return yield* vcs.diff(c.req.valid("query").mode)
+            }),
+          ),
+        )
       },
     )
     .get(
@@ -193,7 +207,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        const modes = await Agent.list()
+        const modes = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
         return c.json(modes)
       },
     )
@@ -215,7 +229,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        const skills = await Skill.all()
+        const skills = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const skill = yield* Skill.Service
+            return yield* skill.all()
+          }),
+        )
         return c.json(skills)
       },
     )
@@ -237,7 +256,8 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
         },
       }),
       async (c) => {
-        return c.json(await LSP.status())
+        const items = await AppRuntime.runPromise(LSP.Service.use((lsp) => lsp.status()))
+        return c.json(items)
       },
     )
     .get(
