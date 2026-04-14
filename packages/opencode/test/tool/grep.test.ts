@@ -32,18 +32,18 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const projectRoot = path.join(__dirname, "../..")
+const root = path.join(__dirname, "../..")
 
 describe("tool.grep", () => {
   it.live("basic search", () =>
     Effect.gen(function* () {
       const info = yield* GrepTool
       const grep = yield* info.init()
-      const result = yield* provideInstance(projectRoot)(
+      const result = yield* provideInstance(root)(
         grep.execute(
           {
             pattern: "export",
-            path: path.join(projectRoot, "src/tool"),
+            path: path.join(root, "src/tool"),
             include: "*.ts",
           },
           ctx,

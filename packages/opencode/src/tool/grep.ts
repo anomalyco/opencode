@@ -1,13 +1,12 @@
+import path from "path"
 import z from "zod"
 import { Effect, Option } from "effect"
-import { Tool } from "./tool"
-import { Ripgrep } from "../file/ripgrep"
+import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "../filesystem"
-
-import DESCRIPTION from "./grep.txt"
-import { Instance } from "../project/instance"
-import path from "path"
+import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import DESCRIPTION from "./grep.txt"
+import { Tool } from "./tool"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -46,15 +45,16 @@ export const GrepTool = Tool.define(
             },
           })
 
-          const searchPath = AppFileSystem.resolve(
-            path.isAbsolute(params.path ?? Instance.directory)
-              ? (params.path ?? Instance.directory)
-              : path.join(Instance.directory, params.path ?? "."),
+          const ins = yield* InstanceState.context
+          const search = AppFileSystem.resolve(
+            path.isAbsolute(params.path ?? ins.directory)
+              ? (params.path ?? ins.directory)
+              : path.join(ins.directory, params.path ?? "."),
           )
-          const info = yield* fs.stat(searchPath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          const cwd = info?.type === "Directory" ? searchPath : path.dirname(searchPath)
-          const file = info?.type === "Directory" ? undefined : [searchPath]
-          yield* assertExternalDirectoryEffect(ctx, searchPath, {
+          const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const cwd = info?.type === "Directory" ? search : path.dirname(search)
+          const file = info?.type === "Directory" ? undefined : [path.relative(cwd, search)]
+          yield* assertExternalDirectoryEffect(ctx, search, {
             kind: info?.type === "Directory" ? "directory" : "file",
           })
 
@@ -63,8 +63,8 @@ export const GrepTool = Tool.define(
             pattern: params.pattern,
             glob: params.include ? [params.include] : undefined,
             file,
+            signal: ctx.abort,
           })
-
           if (result.items.length === 0) return empty
 
           const rows = result.items.map((item) => ({
@@ -101,46 +101,43 @@ export const GrepTool = Tool.define(
 
           const limit = 100
           const truncated = matches.length > limit
-          const finalMatches = truncated ? matches.slice(0, limit) : matches
+          const final = truncated ? matches.slice(0, limit) : matches
+          if (final.length === 0) return empty
 
-          if (finalMatches.length === 0) return empty
+          const total = matches.length
+          const output = [`Found ${total} matches${truncated ? ` (showing first ${limit})` : ""}`]
 
-          const totalMatches = matches.length
-          const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
-
-          let currentFile = ""
-          for (const match of finalMatches) {
-            if (currentFile !== match.path) {
-              if (currentFile !== "") {
-                outputLines.push("")
-              }
-              currentFile = match.path
-              outputLines.push(`${match.path}:`)
+          let current = ""
+          for (const match of final) {
+            if (current !== match.path) {
+              if (current !== "") output.push("")
+              current = match.path
+              output.push(`${match.path}:`)
             }
-            const truncatedLineText =
+            const text =
               match.text.length > MAX_LINE_LENGTH ? match.text.substring(0, MAX_LINE_LENGTH) + "..." : match.text
-            outputLines.push(`  Line ${match.line}: ${truncatedLineText}`)
+            output.push(`  Line ${match.line}: ${text}`)
           }
 
           if (truncated) {
-            outputLines.push("")
-            outputLines.push(
-              `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
+            output.push("")
+            output.push(
+              `(Results truncated: showing ${limit} of ${total} matches (${total - limit} hidden). Consider using a more specific path or pattern.)`,
             )
           }
 
           if (result.partial) {
-            outputLines.push("")
-            outputLines.push("(Some paths were inaccessible and skipped)")
+            output.push("")
+            output.push("(Some paths were inaccessible and skipped)")
           }
 
           return {
             title: params.pattern,
             metadata: {
-              matches: totalMatches,
+              matches: total,
               truncated,
             },
-            output: outputLines.join("\n"),
+            output: output.join("\n"),
           }
         }).pipe(Effect.orDie),
     }
