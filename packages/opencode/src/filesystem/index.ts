@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
-import { Effect, FileSystem, Layer, Schema, ServiceMap } from "effect"
+import { Effect, FileSystem, Layer, Schema, Context } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "../util/glob"
 
@@ -36,7 +36,7 @@ export namespace AppFileSystem {
     readonly globMatch: (pattern: string, filepath: string) => boolean
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileSystem") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
 
   export const layer = Layer.effect(
     Service,
@@ -188,11 +188,21 @@ export namespace AppFileSystem {
 
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
+    const resolved = pathResolve(windowsPath(p))
     try {
-      return realpathSync.native(p)
+      return realpathSync.native(resolved)
     } catch {
-      return p
+      return resolved
     }
+  }
+
+  export function normalizePathPattern(p: string): string {
+    if (process.platform !== "win32") return p
+    if (p === "*") return p
+    const match = p.match(/^(.*)[\\/]\*$/)
+    if (!match) return normalizePath(p)
+    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
+    return join(normalizePath(dir), "*")
   }
 
   export function resolve(p: string): string {

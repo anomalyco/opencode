@@ -2,12 +2,11 @@ import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
@@ -187,7 +186,7 @@ export namespace Skill {
     log.info("init", { count: Object.keys(state.skills).length })
   })
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
 
   export const layer = Layer.effect(
     Service,
@@ -239,39 +238,27 @@ export namespace Skill {
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) return "No skills are currently available."
-
     if (opts.verbose) {
       return [
         "<available_skills>",
-        ...list.flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
-          "  </skill>",
-        ]),
+        ...list
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .flatMap((skill) => [
+            "  <skill>",
+            `    <name>${skill.name}</name>`,
+            `    <description>${skill.description}</description>`,
+            `    <location>${pathToFileURL(skill.location).href}</location>`,
+            "  </skill>",
+          ]),
         "</available_skills>",
       ].join("\n")
     }
 
-    return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
-  }
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(name: string) {
-    return runPromise((skill) => skill.get(name))
-  }
-
-  export async function all() {
-    return runPromise((skill) => skill.all())
-  }
-
-  export async function dirs() {
-    return runPromise((skill) => skill.dirs())
-  }
-
-  export async function available(agent?: Agent.Info) {
-    return runPromise((skill) => skill.available(agent))
+    return [
+      "## Available Skills",
+      ...list
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+        .map((skill) => `- **${skill.name}**: ${skill.description}`),
+    ].join("\n")
   }
 }
