@@ -536,7 +536,7 @@ test("accepts legacy skills array in opencode.json", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await Config.get()
+      const config = await load()
       expect(Array.isArray(config.skills)).toBe(true)
       expect(config.skills).toEqual([
         {
