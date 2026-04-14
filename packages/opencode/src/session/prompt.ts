@@ -104,11 +104,11 @@ export namespace SessionPrompt {
       const summary = yield* SessionSummary.Service
       const sys = yield* SystemPrompt.Service
       const llm = yield* LLM.Service
+      const ctx = yield* Effect.context()
 
       const run = {
-        promise: <A, E>(effect: Effect.Effect<A, E>) =>
-          Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
-        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
+        promise: <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(ctx)(effect),
+        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runForkWith(ctx)(effect),
       }
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {

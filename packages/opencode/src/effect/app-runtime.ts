@@ -49,7 +49,7 @@ import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
 
 export const AppLayer = Layer.mergeAll(
-  // Observability.layer,
+  Observability.layer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
@@ -95,6 +95,6 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-).pipe(Layer.provide(Observability.layer))
+)
 
 export const AppRuntime = ManagedRuntime.make(AppLayer, { memoMap })
