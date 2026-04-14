@@ -69,7 +69,7 @@ export namespace SessionPrompt {
 
   export interface Interface {
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-    readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
+    readonly prompt: (input: TaskPromptInput) => Effect.Effect<MessageV2.WithParts>
     readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
     readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
     readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
@@ -913,7 +913,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return yield* provider.defaultModel()
       })
 
-      const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+      const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: TaskPromptInput) {
         const agentName = input.agent || (yield* agents.defaultAgent())
         const ag = yield* agents.get(agentName)
         if (!ag) {
@@ -943,6 +943,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             providerID: model.providerID,
             modelID: model.modelID,
             variant,
+            ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
           },
           system: input.system,
           format: input.format,
@@ -1271,8 +1272,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return { info, parts }
       }, Effect.scoped)
 
-      const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
-        function* (input: PromptInput) {
+      const prompt: (input: TaskPromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
+        function* (input: TaskPromptInput) {
           const session = yield* sessions.get(input.sessionID)
           yield* revert.cleanup(session)
           const message = yield* createUserMessage(input)
@@ -1776,6 +1777,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     ),
   })
   export type PromptInput = z.infer<typeof PromptInput>
+  export type TaskPromptInput = PromptInput & {
+    reasoningEffort?: string
+  }
 
   export async function prompt(input: PromptInput) {
     return runPromise((svc) => svc.prompt(PromptInput.parse(input)))

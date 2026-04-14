@@ -36,6 +36,7 @@ import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
+import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
@@ -653,6 +654,119 @@ it.live(
       { git: true, config: providerCfg },
     ),
   10_000,
+)
+
+it.live("task tool reasoning_effort overrides agent reasoning on new children", () =>
+  provideTmpdirServer(
+    ({ llm }) =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const chat = yield* sessions.create({ title: "Pinned" })
+        const { assistant } = yield* seed(chat.id)
+        const promptOps: TaskPromptOps = {
+          cancel() {},
+          resolvePromptParts: prompt.resolvePromptParts,
+          prompt: prompt.prompt,
+        }
+
+        yield* llm.text("child done")
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            reasoning_effort: "xhigh",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const body = (yield* llm.inputs).find((item) => JSON.stringify(item).includes("look into the cache key path"))
+        expect(body).toBeDefined()
+        if (!body) return
+        const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
+        expect(reasoning).toBe("xhigh")
+      }),
+    {
+      git: true,
+      config: (url) => ({
+        ...providerCfg(url),
+        agent: {
+          general: {
+            reasoningEffort: "low",
+          },
+        },
+      }),
+    },
+  ),
+)
+
+it.live("task tool keeps agent reasoning when reasoning_effort is omitted", () =>
+  provideTmpdirServer(
+    ({ llm }) =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const chat = yield* sessions.create({ title: "Pinned" })
+        const { assistant } = yield* seed(chat.id)
+        const promptOps: TaskPromptOps = {
+          cancel() {},
+          resolvePromptParts: prompt.resolvePromptParts,
+          prompt: prompt.prompt,
+        }
+
+        yield* llm.text("child done")
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const body = (yield* llm.inputs).find((item) => JSON.stringify(item).includes("look into the cache key path"))
+        expect(body).toBeDefined()
+        if (!body) return
+        const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
+        expect(reasoning).toBe("low")
+      }),
+    {
+      git: true,
+      config: (url) => ({
+        ...providerCfg(url),
+        agent: {
+          general: {
+            reasoningEffort: "low",
+          },
+        },
+      }),
+    },
+  ),
 )
 
 it.live(

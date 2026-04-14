@@ -557,6 +557,7 @@ export type UserMessage = {
     providerID: string
     modelID: string
     variant?: string
+    reasoningEffort?: string
   }
   system?: string
   tools?: {

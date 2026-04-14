@@ -317,7 +317,13 @@ export namespace Session {
       permission?: Permission.Ruleset
       workspaceID?: WorkspaceID
     }) => Effect.Effect<Info>
-    readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
+    readonly fork: (input: {
+      sessionID: SessionID
+      messageID?: MessageID
+      parentID?: SessionID
+      title?: string
+      permission?: Permission.Ruleset
+    }) => Effect.Effect<Info>
     readonly touch: (sessionID: SessionID) => Effect.Effect<void>
     readonly get: (id: SessionID) => Effect.Effect<Info>
     readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
@@ -514,14 +520,21 @@ export namespace Session {
         })
       })
 
-      const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+      const fork = Effect.fn("Session.fork")(function* (input: {
+        sessionID: SessionID
+        messageID?: MessageID
+        parentID?: SessionID
+        title?: string
+        permission?: Permission.Ruleset
+      }) {
         const directory = yield* InstanceState.directory
         const original = yield* get(input.sessionID)
-        const title = getForkedTitle(original.title)
         const session = yield* createNext({
           directory,
           workspaceID: original.workspaceID,
-          title,
+          parentID: input.parentID,
+          title: input.title ?? getForkedTitle(original.title),
+          permission: input.permission,
         })
         const msgs = yield* messages({ sessionID: input.sessionID })
         const idMap = new Map<string, MessageID>()

@@ -122,6 +122,8 @@ Hidden system agent that creates session summaries. It runs automatically and is
 
 3. **Navigation between sessions**: When subagents create child sessions, use `session_child_first` (default: **\<Leader>+Down**) to enter the first child session from the parent.
 
+By default, new subagent sessions start isolated from the current conversation. When you launch a subagent through the `task` tool, set `fork_context: true` to fork the current session history into the new child session. You can also set `reasoning_effort` on a new `task` call to override the subagent's reasoning level for that launch when the selected model supports it.
+
 4. Once you are in a child session, use:
    - `session_child_cycle` (default: **Right**) to cycle to the next child session
    - `session_child_cycle_reverse` (default: **Left**) to cycle to the previous child session

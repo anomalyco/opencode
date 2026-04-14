@@ -35,7 +35,7 @@ const it = testEffect(
   ),
 )
 
-const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
+const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned", text?: string) {
   const session = yield* Session.Service
   const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
@@ -46,6 +46,15 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     model: ref,
     time: { created: Date.now() },
   })
+  if (text) {
+    yield* session.updatePart({
+      id: PartID.ascending(),
+      messageID: user.id,
+      sessionID: chat.id,
+      type: "text",
+      text,
+    })
+  }
   const assistant: MessageV2.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
@@ -76,7 +85,7 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
   }
 }
 
-function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string): MessageV2.WithParts {
+function reply(input: Parameters<TaskPromptOps["prompt"]>[0], text: string): MessageV2.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -309,6 +318,196 @@ describe("tool.task", () => {
         expect(result.metadata.sessionId).not.toBe("ses_missing")
         expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
         expect(seen?.sessionID).toBe(result.metadata.sessionId)
+      }),
+    ),
+  )
+
+  it.live("execute keeps new children isolated when fork_context is false", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed("Pinned", "parent secret")
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            fork_context: false,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const msgs = yield* sessions.messages({ sessionID: result.metadata.sessionId })
+        expect(msgs).toHaveLength(0)
+      }),
+    ),
+  )
+
+  it.live("execute forks parent context when fork_context is true", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed("Pinned", "parent secret")
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            fork_context: true,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const child = yield* sessions.get(result.metadata.sessionId)
+        const msgs = yield* sessions.messages({ sessionID: child.id })
+        expect(child.parentID).toBe(chat.id)
+        expect(msgs).toHaveLength(1)
+        expect(msgs[0]?.info.role).toBe("user")
+        expect(msgs[0]?.parts.find((part) => part.type === "text")?.type).toBe("text")
+        expect(msgs[0]?.parts.find((part) => part.type === "text" && part.text === "parent secret")).toBeDefined()
+      }),
+    ),
+  )
+
+  it.live("execute does not refork or reapply reasoning when resuming task_id", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed("Pinned", "parent secret")
+        const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+        const childUser = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: child.id,
+          agent: "general",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: childUser.id,
+          sessionID: child.id,
+          type: "text",
+          text: "child secret",
+        })
+
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.TaskPromptInput | undefined
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: child.id,
+            fork_context: true,
+            reasoning_effort: "xhigh",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const msgs = yield* sessions.messages({ sessionID: child.id })
+        expect(msgs).toHaveLength(1)
+        expect(msgs[0]?.parts.find((part) => part.type === "text" && part.text === "child secret")).toBeDefined()
+        expect(msgs[0]?.parts.find((part) => part.type === "text" && part.text === "parent secret")).toBeUndefined()
+        expect(seen?.reasoningEffort).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.live("execute passes reasoning_effort only for new children", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.TaskPromptInput | undefined
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            reasoning_effort: "xhigh",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(seen?.reasoningEffort).toBe("xhigh")
+      }),
+    ),
+  )
+
+  it.live("execute leaves reasoning_effort unset when omitted", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.TaskPromptInput | undefined
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(seen?.reasoningEffort).toBeUndefined()
       }),
     ),
   )

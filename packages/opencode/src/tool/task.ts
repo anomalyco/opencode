@@ -13,7 +13,7 @@ import { Log } from "@/util/log"
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): void
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
-  prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
+  prompt(input: SessionPrompt.TaskPromptInput): Effect.Effect<MessageV2.WithParts>
 }
 
 const id = "task"
@@ -26,6 +26,18 @@ const parameters = z.object({
     .string()
     .describe(
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+    )
+    .optional(),
+  fork_context: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, new subagent sessions start by forking the current session's context and history. By default, new subagent sessions start with a fresh context. Ignored when task_id is used to resume an existing subagent session.",
+    ),
+  reasoning_effort: z
+    .string()
+    .describe(
+      "Optional reasoning effort override for a new subagent session (for example: minimal, low, medium, high, xhigh). This only applies when creating a new subagent session and only affects models/providers that support it.",
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
@@ -60,6 +72,31 @@ export const TaskTool = Tool.define(
 
       const canTask = next.permission.some((rule) => rule.permission === id)
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
+      const permission = [
+        ...(canTodo
+          ? []
+          : [
+              {
+                permission: "todowrite" as const,
+                pattern: "*" as const,
+                action: "deny" as const,
+              },
+            ]),
+        ...(canTask
+          ? []
+          : [
+              {
+                permission: id,
+                pattern: "*" as const,
+                action: "deny" as const,
+              },
+            ]),
+        ...(cfg.experimental?.primary_tools?.map((item) => ({
+          pattern: "*",
+          action: "allow" as const,
+          permission: item,
+        })) ?? []),
+      ]
 
       const taskID = params.task_id
       const session = taskID
@@ -67,35 +104,19 @@ export const TaskTool = Tool.define(
         : undefined
       const nextSession =
         session ??
-        (yield* sessions.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
-          permission: [
-            ...(canTodo
-              ? []
-              : [
-                  {
-                    permission: "todowrite" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(canTask
-              ? []
-              : [
-                  {
-                    permission: id,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(cfg.experimental?.primary_tools?.map((item) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: item,
-            })) ?? []),
-          ],
-        }))
+        (yield* ((params.fork_context ?? false)
+          ? sessions.fork({
+              sessionID: ctx.sessionID,
+              messageID: ctx.messageID,
+              parentID: ctx.sessionID,
+              title: params.description + ` (@${next.name} subagent)`,
+              permission,
+            })
+          : sessions.create({
+              parentID: ctx.sessionID,
+              title: params.description + ` (@${next.name} subagent)`,
+              permission,
+            })))
 
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
@@ -136,6 +157,7 @@ export const TaskTool = Tool.define(
                 modelID: model.modelID,
                 providerID: model.providerID,
               },
+              reasoningEffort: session ? undefined : params.reasoning_effort,
               agent: next.name,
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),

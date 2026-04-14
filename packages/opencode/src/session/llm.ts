@@ -134,6 +134,7 @@ export namespace LLM {
             mergeDeep(input.model.options),
             mergeDeep(input.agent.options),
             mergeDeep(variant),
+            mergeDeep(input.user.model.reasoningEffort ? { reasoningEffort: input.user.model.reasoningEffort } : {}),
           )
           if (isOpenaiOauth) {
             options.instructions = system.join("\n")
