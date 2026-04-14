@@ -79,7 +79,8 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     formatValidationError(error: any): string {
-      return error.errors.map((e: any) => `${e.path.join(".")}: ${e.message}`).join("\n")
+      const issues = error?.issues ?? error?.errors ?? []
+      return issues.map((e: any) => `${e.path?.join(".") ?? "input"}: ${e.message}`).join("\n")
     },
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
@@ -243,13 +244,11 @@ export const BashTool = Tool.define("bash", async () => {
       if (ctx.abort.aborted) {
         aborted = true
         await kill()
-        await cleanupFile()
       }
 
       const abortHandler = () => {
         aborted = true
         void kill()
-        void cleanupFile()
       }
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
