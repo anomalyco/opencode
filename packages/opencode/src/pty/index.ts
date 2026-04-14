@@ -10,7 +10,7 @@ import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectBridge } from "@/effect/bridge"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -119,6 +119,7 @@ export namespace Pty {
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const plugin = yield* Plugin.Service
+      const bridge = yield* EffectBridge.make()
       function teardown(session: Active) {
         try {
           session.process.kill()
@@ -256,8 +257,8 @@ export namespace Pty {
             if (session.info.status === "exited") return
             log.info("session exited", { id, exitCode })
             session.info.status = "exited"
-            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }).pipe(Effect.provide(EffectLogger.layer)))
-            Effect.runFork(remove(id).pipe(Effect.provide(EffectLogger.layer)))
+            bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
+            bridge.fork(remove(id))
           }),
         )
         yield* bus.publish(Event.Created, { info })

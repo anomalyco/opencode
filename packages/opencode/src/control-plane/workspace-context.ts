@@ -12,6 +12,10 @@ export const WorkspaceContext = {
     return context.provide({ workspaceID: input.workspaceID as string }, () => input.fn())
   },
 
+  restore<R>(workspaceID: string, fn: () => R): R {
+    return context.provide({ workspaceID }, fn)
+  },
+
   get workspaceID() {
     try {
       return context.use().workspaceID

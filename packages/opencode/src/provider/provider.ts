@@ -19,7 +19,7 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Effect, Layer, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
@@ -1039,6 +1039,7 @@ export namespace Provider {
       const auth = yield* Auth.Service
       const env = yield* Env.Service
       const plugin = yield* Plugin.Service
+      const bridge = yield* EffectBridge.make()
 
       const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
@@ -1223,8 +1224,7 @@ export namespace Provider {
 
             const options = yield* Effect.promise(() =>
               plugin.auth!.loader!(
-                () =>
-                  Effect.runPromise(auth.get(providerID).pipe(Effect.orDie, Effect.provide(EffectLogger.layer))) as any,
+                () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
                 database[plugin.auth!.provider],
               ),
             )

@@ -1,9 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
 import z from "zod"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
@@ -79,6 +79,7 @@ export namespace Command {
       const config = yield* Config.Service
       const mcp = yield* MCP.Service
       const skill = yield* Skill.Service
+      const bridge = yield* EffectBridge.make()
 
       const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
         const cfg = yield* config.get()
@@ -125,7 +126,7 @@ export namespace Command {
             source: "mcp",
             description: prompt.description,
             get template() {
-              return Effect.runPromise(
+              return bridge.promise(
                 mcp
                   .getPrompt(
                     prompt.client,
@@ -141,7 +142,6 @@ export namespace Command {
                           .map((message) => (message.content.type === "text" ? message.content.text : ""))
                           .join("\n") || "",
                     ),
-                    Effect.provide(EffectLogger.layer),
                   ),
               )
             },
