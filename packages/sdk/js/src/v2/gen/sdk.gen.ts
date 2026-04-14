@@ -29,11 +29,13 @@ import type {
   ExperimentalConsoleSwitchOrgResponses,
   ExperimentalResourceListResponses,
   ExperimentalSessionListResponses,
+  ExperimentalWorkspaceAdaptorListResponses,
   ExperimentalWorkspaceCreateErrors,
   ExperimentalWorkspaceCreateResponses,
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
+  ExperimentalWorkspaceStatusResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
@@ -49,7 +51,6 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
-  GlobalSyncEventSubscribeResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
@@ -235,20 +236,6 @@ class HeyApiRegistry<T> {
   }
 }
 
-export class SyncEvent extends HeyApiClient {
-  /**
-   * Subscribe to global sync events
-   *
-   * Get global sync events
-   */
-  public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).sse.get<GlobalSyncEventSubscribeResponses, unknown, ThrowOnError>({
-      url: "/global/sync-event",
-      ...options,
-    })
-  }
-}
-
 export class Config extends HeyApiClient {
   /**
    * Get global configuration
@@ -346,11 +333,6 @@ export class Global extends HeyApiClient {
         ...params.headers,
       },
     })
-  }
-
-  private _syncEvent?: SyncEvent
-  get syncEvent(): SyncEvent {
-    return (this._syncEvent ??= new SyncEvent({ client: this.client }))
   }
 
   private _config?: Config
@@ -1085,6 +1067,38 @@ export class Console extends HeyApiClient {
   }
 }
 
+export class Adaptor extends HeyApiClient {
+  /**
+   * List workspace adaptors
+   *
+   * List all available workspace adaptors for the current project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceAdaptorListResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/adaptor",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Workspace extends HeyApiClient {
   /**
    * List workspaces
@@ -1164,6 +1178,36 @@ export class Workspace extends HeyApiClient {
   }
 
   /**
+   * Workspace status
+   *
+   * Get connection status for workspaces in the current project.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceStatusResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Remove workspace
    *
    * Remove an existing workspace.
@@ -1197,6 +1241,11 @@ export class Workspace extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _adaptor?: Adaptor
+  get adaptor(): Adaptor {
+    return (this._adaptor ??= new Adaptor({ client: this.client }))
   }
 }
 
@@ -1694,6 +1743,7 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       title?: string
+      permission?: PermissionRuleset
       time?: {
         archived?: number
       }
@@ -1709,6 +1759,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "title" },
+            { in: "body", key: "permission" },
             { in: "body", key: "time" },
           ],
         },

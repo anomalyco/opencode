@@ -10,6 +10,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -51,7 +52,7 @@ export namespace TuiConfig {
   }
 
   function installDeps(dir: string): Promise<void> {
-    return Config.installDependencies(dir)
+    return AppRuntime.runPromise(Config.Service.use((cfg) => cfg.installDependencies(dir)))
   }
 
   async function mergeFile(acc: Acc, file: string) {

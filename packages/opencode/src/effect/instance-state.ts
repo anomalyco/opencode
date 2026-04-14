@@ -1,8 +1,10 @@
-import { Effect, Fiber, ScopedCache, Scope, ServiceMap } from "effect"
+import { Effect, Fiber, ScopedCache, Scope, Context } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { Instance, type InstanceContext } from "@/project/instance"
-import { Context } from "@/util/context"
-import { InstanceRef } from "./instance-ref"
+import { LocalContext } from "@/util/local-context"
+import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 const TypeId = "~opencode/InstanceState"
 
@@ -16,16 +18,20 @@ export namespace InstanceState {
     try {
       return Instance.bind(fn)
     } catch (err) {
-      if (!(err instanceof Context.NotFound)) throw err
+      if (!(err instanceof LocalContext.NotFound)) throw err
     }
     const fiber = Fiber.getCurrent()
-    const ctx = fiber ? ServiceMap.getReferenceUnsafe(fiber.services, InstanceRef) : undefined
+    const ctx = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
     if (!ctx) return fn
     return ((...args: any[]) => Instance.restore(ctx, () => fn(...args))) as F
   }
 
   export const context = Effect.gen(function* () {
     return (yield* InstanceRef) ?? Instance.current
+  })
+
+  export const workspaceID = Effect.gen(function* () {
+    return (yield* WorkspaceRef) ?? WorkspaceContext.workspaceID
   })
 
   export const directory = Effect.map(context, (ctx) => ctx.directory)
@@ -42,7 +48,9 @@ export namespace InstanceState {
           }),
       })
 
-      const off = registerDisposer((directory) => Effect.runPromise(ScopedCache.invalidate(cache, directory)))
+      const off = registerDisposer((directory) =>
+        Effect.runPromise(ScopedCache.invalidate(cache, directory).pipe(Effect.provide(EffectLogger.layer))),
+      )
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       return {

@@ -1,4 +1,3 @@
-import { text } from "node:stream/consumers"
 import { Npm } from "@/npm"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
@@ -217,26 +216,16 @@ export const rlang: Info = {
   name: "air",
   extensions: [".R"],
   async enabled() {
-    const airPath = which("air")
-    if (airPath == null) return false
+    const air = which("air")
+    if (air == null) return false
 
-    try {
-      const proc = Process.spawn(["air", "--help"], {
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      await proc.exited
-      if (!proc.stdout) return false
-      const output = await text(proc.stdout)
+    const output = await Process.text([air, "--help"], { nothrow: true })
 
-      // Check for "Air: An R language server and formatter"
-      const firstLine = output.split("\n")[0]
-      const hasR = firstLine.includes("R language")
-      const hasFormatter = firstLine.includes("formatter")
-      if (hasR && hasFormatter) return ["air", "format", "$FILE"]
-    } catch {
-      return false
-    }
+    // Check for "Air: An R language server and formatter"
+    const firstLine = output.text.split("\n")[0]
+    const hasR = firstLine.includes("R language")
+    const hasFormatter = firstLine.includes("formatter")
+    if (output.code === 0 && hasR && hasFormatter) return [air, "format", "$FILE"]
     return false
   },
 }
@@ -246,11 +235,10 @@ export const uvformat: Info = {
   extensions: [".py", ".pyi"],
   async enabled() {
     if (await ruff.enabled()) return false
-    if (which("uv") !== null) {
-      const proc = Process.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
-      const code = await proc.exited
-      if (code === 0) return ["uv", "format", "--", "$FILE"]
-    }
+    const uv = which("uv")
+    if (uv == null) return false
+    const output = await Process.run([uv, "format", "--help"], { nothrow: true })
+    if (output.code === 0) return [uv, "format", "--", "$FILE"]
     return false
   },
 }

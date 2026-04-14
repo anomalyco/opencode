@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
@@ -22,6 +23,7 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "../../src/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
+import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -30,17 +32,29 @@ import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Skill } from "../../src/skill"
+import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Ripgrep } from "../../src/file/ripgrep"
+import { Format } from "../../src/format"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 
 Log.init({ print: false })
+
+const summary = Layer.succeed(
+  SessionSummary.Service,
+  SessionSummary.Service.of({
+    summarize: () => Effect.void,
+    diff: () => Effect.succeed([]),
+    computeDiff: () => Effect.succeed([]),
+  }),
+)
 
 const ref = {
   providerID: ProviderID.make("test"),
@@ -141,7 +155,7 @@ const filetime = Layer.succeed(
     read: () => Effect.void,
     get: () => Effect.succeed(undefined),
     assert: () => Effect.void,
-    withLock: (_filepath, fn) => Effect.promise(fn),
+    withLock: (_filepath, fn) => fn(),
   }),
 )
 
@@ -169,23 +183,29 @@ function makeHttp() {
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
     Layer.provide(Skill.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps))
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(summary),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
+      Layer.provide(SystemPrompt.defaultLayer),
       Layer.provideMerge(deps),
     ),
   )
@@ -195,7 +215,7 @@ const it = testEffect(makeHttp())
 const unix = process.platform !== "win32" ? it.live : it.live.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
-// so Provider.getModel("test", "test-model") succeeds inside the loop.
+// so provider model lookup succeeds inside the loop.
 const cfg = {
   provider: {
     test: {
@@ -728,19 +748,12 @@ it.live(
           const registry = yield* ToolRegistry.Service
           const { task } = yield* registry.named()
           const original = task.execute
-          task.execute = async (_args, ctx) => {
-            ready.resolve()
-            ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-            await new Promise<void>(() => {})
-            return {
-              title: "",
-              metadata: {
-                sessionId: SessionID.make("task"),
-                model: ref,
-              },
-              output: "",
-            }
-          }
+          task.execute = (_args, ctx) =>
+            Effect.callback<never>((resume) => {
+              ready.resolve()
+              ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
+              return Effect.sync(() => aborted.resolve())
+            })
           yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
 
           const { prompt, chat } = yield* boot()
@@ -1386,11 +1399,10 @@ function hangUntilAborted(tool: { execute: (...args: any[]) => any }) {
   const ready = defer<void>()
   const aborted = defer<void>()
   const original = tool.execute
-  tool.execute = async (_args: any, ctx: any) => {
+  tool.execute = (_args: any, ctx: any) => {
     ready.resolve()
     ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-    await new Promise<void>(() => {})
-    return { title: "", metadata: {}, output: "" }
+    return Effect.callback<never>(() => {})
   }
   const restore = Effect.addFinalizer(() => Effect.sync(() => void (tool.execute = original)))
   return { ready, aborted, restore }

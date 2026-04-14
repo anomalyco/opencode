@@ -2,6 +2,28 @@ import { RGBA } from "@opentui/core"
 
 export namespace Terminal {
   export type Colors = Awaited<ReturnType<typeof colors>>
+
+  function parse(color: string): RGBA | null {
+    if (color.startsWith("rgb:")) {
+      const parts = color.substring(4).split("/")
+      return RGBA.fromInts(parseInt(parts[0], 16) >> 8, parseInt(parts[1], 16) >> 8, parseInt(parts[2], 16) >> 8, 255)
+    }
+    if (color.startsWith("#")) {
+      return RGBA.fromHex(color)
+    }
+    if (color.startsWith("rgb(")) {
+      const parts = color.substring(4, color.length - 1).split(",")
+      return RGBA.fromInts(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), 255)
+    }
+    return null
+  }
+
+  function mode(bg: RGBA | null): "dark" | "light" {
+    if (!bg) return "dark"
+    const luminance = (0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b) / 255
+    return luminance > 0.5 ? "light" : "dark"
+  }
+
   /**
    * Query terminal colors including background, foreground, and palette (0-15).
    * Uses OSC escape sequences to retrieve actual terminal color values.
@@ -31,46 +53,26 @@ export namespace Terminal {
         clearTimeout(timeout)
       }
 
-      const parseColor = (colorStr: string): RGBA | null => {
-        if (colorStr.startsWith("rgb:")) {
-          const parts = colorStr.substring(4).split("/")
-          return RGBA.fromInts(
-            parseInt(parts[0], 16) >> 8, // Convert 16-bit to 8-bit
-            parseInt(parts[1], 16) >> 8,
-            parseInt(parts[2], 16) >> 8,
-            255,
-          )
-        }
-        if (colorStr.startsWith("#")) {
-          return RGBA.fromHex(colorStr)
-        }
-        if (colorStr.startsWith("rgb(")) {
-          const parts = colorStr.substring(4, colorStr.length - 1).split(",")
-          return RGBA.fromInts(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), 255)
-        }
-        return null
-      }
-
       const handler = (data: Buffer) => {
         const str = data.toString()
 
         // Match OSC 11 (background color)
         const bgMatch = str.match(/\x1b]11;([^\x07\x1b]+)/)
         if (bgMatch) {
-          background = parseColor(bgMatch[1])
+          background = parse(bgMatch[1])
         }
 
         // Match OSC 10 (foreground color)
         const fgMatch = str.match(/\x1b]10;([^\x07\x1b]+)/)
         if (fgMatch) {
-          foreground = parseColor(fgMatch[1])
+          foreground = parse(fgMatch[1])
         }
 
         // Match OSC 4 (palette colors)
         const paletteMatches = str.matchAll(/\x1b]4;(\d+);([^\x07\x1b]+)/g)
         for (const match of paletteMatches) {
           const index = parseInt(match[1])
-          const color = parseColor(match[2])
+          const color = parse(match[2])
           if (color) paletteColors[index] = color
         }
 
@@ -100,15 +102,36 @@ export namespace Terminal {
     })
   }
 
+  // Keep startup mode detection separate from `colors()`: the TUI boot path only
+  // needs OSC 11 and should resolve on the first background response instead of
+  // waiting on the full palette query used by system theme generation.
   export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
-    const result = await colors()
-    if (!result.background) return "dark"
+    if (!process.stdin.isTTY) return "dark"
 
-    const { r, g, b } = result.background
-    // Calculate luminance using relative luminance formula
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return new Promise((resolve) => {
+      let timeout: NodeJS.Timeout
 
-    // Determine if dark or light based on luminance threshold
-    return luminance > 0.5 ? "light" : "dark"
+      const cleanup = () => {
+        process.stdin.setRawMode(false)
+        process.stdin.removeListener("data", handler)
+        clearTimeout(timeout)
+      }
+
+      const handler = (data: Buffer) => {
+        const match = data.toString().match(/\x1b]11;([^\x07\x1b]+)/)
+        if (!match) return
+        cleanup()
+        resolve(mode(parse(match[1])))
+      }
+
+      process.stdin.setRawMode(true)
+      process.stdin.on("data", handler)
+      process.stdout.write("\x1b]11;?\x07")
+
+      timeout = setTimeout(() => {
+        cleanup()
+        resolve("dark")
+      }, 1000)
+    })
   }
 }

@@ -13,6 +13,7 @@ import { Provider } from "../../src/provider/provider"
 import { Session } from "../../src/session"
 import type { SessionID } from "../../src/session/schema"
 import { ShareNext } from "../../src/share/share-next"
+import { Storage } from "../../src/storage/storage"
 import { SessionShareTable } from "../../src/share/share.sql"
 import { Database, eq } from "../../src/storage/db"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -55,7 +56,7 @@ function wired(client: HttpClient.HttpClient) {
   return Layer.mergeAll(
     Bus.layer,
     ShareNext.layer,
-    Session.layer,
+    Session.defaultLayer,
     AccountRepo.layer,
     NodeFileSystem.layer,
     CrossSpawnSpawner.defaultLayer,
