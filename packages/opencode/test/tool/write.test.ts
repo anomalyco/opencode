@@ -9,7 +9,9 @@ import { AppFileSystem } from "../../src/filesystem"
 import { FileTime } from "../../src/file/time"
 import { Bus } from "../../src/bus"
 import { Format } from "../../src/format"
+import { Truncate } from "../../src/tool/truncate"
 import { Tool } from "../../src/tool/tool"
+import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -38,6 +40,8 @@ const it = testEffect(
     Bus.layer,
     Format.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
   ),
 )
 

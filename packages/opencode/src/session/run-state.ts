@@ -1,6 +1,5 @@
 import { InstanceState } from "@/effect/instance-state"
 import { Runner } from "@/effect/runner"
-import { makeRuntime } from "@/effect/run-service"
 import { Effect, Layer, Scope, Context } from "effect"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
@@ -106,9 +105,4 @@ export namespace SessionRunState {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(SessionStatus.defaultLayer))
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function assertNotBusy(sessionID: SessionID) {
-    return runPromise((svc) => svc.assertNotBusy(sessionID))
-  }
 }

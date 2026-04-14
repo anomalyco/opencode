@@ -9,8 +9,10 @@ import { FileTime } from "../../src/file/time"
 import { LSP } from "../../src/lsp"
 import { AppFileSystem } from "../../src/filesystem"
 import { Format } from "../../src/format"
+import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
+import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
@@ -34,7 +36,15 @@ async function touch(file: string, time: number) {
 }
 
 const runtime = ManagedRuntime.make(
-  Layer.mergeAll(LSP.defaultLayer, FileTime.defaultLayer, AppFileSystem.defaultLayer, Format.defaultLayer, Bus.layer),
+  Layer.mergeAll(
+    LSP.defaultLayer,
+    FileTime.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Format.defaultLayer,
+    Bus.layer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
 )
 
 afterAll(async () => {
@@ -54,6 +64,18 @@ const readFileTime = (sessionID: SessionID, filepath: string) =>
 
 const subscribeBus = <D extends BusEvent.Definition>(def: D, callback: () => unknown) =>
   runtime.runPromise(Bus.Service.use((bus) => bus.subscribeCallback(def, callback)))
+
+async function onceBus<D extends BusEvent.Definition>(def: D) {
+  const result = Promise.withResolvers<void>()
+  const unsub = await subscribeBus(def, () => {
+    unsub()
+    result.resolve()
+  })
+  return {
+    wait: result.promise,
+    unsub,
+  }
+}
 
 describe("tool.edit", () => {
   describe("creating new files", () => {
@@ -118,23 +140,25 @@ describe("tool.edit", () => {
         fn: async () => {
           const { FileWatcher } = await import("../../src/file/watcher")
 
-          const events: string[] = []
-          const unsubUpdated = await subscribeBus(FileWatcher.Event.Updated, () => events.push("updated"))
+          const updated = await onceBus(FileWatcher.Event.Updated)
 
-          const edit = await resolve()
-          await Effect.runPromise(
-            edit.execute(
-              {
-                filePath: filepath,
-                oldString: "",
-                newString: "content",
-              },
-              ctx,
-            ),
-          )
+          try {
+            const edit = await resolve()
+            await Effect.runPromise(
+              edit.execute(
+                {
+                  filePath: filepath,
+                  oldString: "",
+                  newString: "content",
+                },
+                ctx,
+              ),
+            )
 
-          expect(events).toContain("updated")
-          unsubUpdated()
+            await updated.wait
+          } finally {
+            updated.unsub()
+          }
         },
       })
     })
@@ -349,23 +373,25 @@ describe("tool.edit", () => {
 
           const { FileWatcher } = await import("../../src/file/watcher")
 
-          const events: string[] = []
-          const unsubUpdated = await subscribeBus(FileWatcher.Event.Updated, () => events.push("updated"))
+          const updated = await onceBus(FileWatcher.Event.Updated)
 
-          const edit = await resolve()
-          await Effect.runPromise(
-            edit.execute(
-              {
-                filePath: filepath,
-                oldString: "original",
-                newString: "modified",
-              },
-              ctx,
-            ),
-          )
+          try {
+            const edit = await resolve()
+            await Effect.runPromise(
+              edit.execute(
+                {
+                  filePath: filepath,
+                  oldString: "original",
+                  newString: "modified",
+                },
+                ctx,
+              ),
+            )
 
-          expect(events).toContain("updated")
-          unsubUpdated()
+            await updated.wait
+          } finally {
+            updated.unsub()
+          }
         },
       })
     })
