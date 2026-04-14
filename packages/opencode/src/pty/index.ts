@@ -119,7 +119,6 @@ export namespace Pty {
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const plugin = yield* Plugin.Service
-      const bridge = yield* EffectBridge.make()
       function teardown(session: Active) {
         try {
           session.process.kill()
@@ -174,6 +173,7 @@ export namespace Pty {
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const s = yield* InstanceState.get(state)
+        const bridge = yield* EffectBridge.make()
         const id = PtyID.ascending()
         const command = input.command || Shell.preferred()
         const args = input.args || []

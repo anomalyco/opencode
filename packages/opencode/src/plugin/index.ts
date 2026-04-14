@@ -108,15 +108,15 @@ export namespace Plugin {
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const config = yield* Config.Service
-      const bridge = yield* EffectBridge.make()
-
-      function publishPluginError(message: string) {
-        bridge.fork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
-      }
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("Plugin.state")(function* (ctx) {
           const hooks: Hooks[] = []
+          const bridge = yield* EffectBridge.make()
+
+          function publishPluginError(message: string) {
+            bridge.fork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          }
 
           const { Server } = yield* Effect.promise(() => import("../server/server"))
 

@@ -79,10 +79,10 @@ export namespace Command {
       const config = yield* Config.Service
       const mcp = yield* MCP.Service
       const skill = yield* Skill.Service
-      const bridge = yield* EffectBridge.make()
 
       const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
         const cfg = yield* config.get()
+        const bridge = yield* EffectBridge.make()
         const commands: Record<string, Info> = {}
 
         commands[Default.INIT] = {

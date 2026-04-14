@@ -444,7 +444,6 @@ export namespace MCP {
         return { mcpClient, status, defs: listed } satisfies CreateResult
       })
       const cfgSvc = yield* Config.Service
-      const bridge = yield* EffectBridge.make()
 
       const descendants = Effect.fnUntraced(
         function* (pid: number) {
@@ -472,7 +471,7 @@ export namespace MCP {
         Effect.catch(() => Effect.succeed([] as number[])),
       )
 
-      function watch(s: State, name: string, client: MCPClient, timeout?: number) {
+      function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
           log.info("tools list changed notification received", { server: name })
           if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
@@ -489,6 +488,7 @@ export namespace MCP {
       const state = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
           const cfg = yield* cfgSvc.get()
+          const bridge = yield* EffectBridge.make()
           const config = cfg.mcp ?? {}
           const s: State = {
             status: {},
@@ -517,7 +517,7 @@ export namespace MCP {
                 if (result.mcpClient) {
                   s.clients[key] = result.mcpClient
                   s.defs[key] = result.defs!
-                  watch(s, key, result.mcpClient, mcp.timeout)
+                  watch(s, key, result.mcpClient, bridge, mcp.timeout)
                 }
               }),
             { concurrency: "unbounded" },
@@ -564,11 +564,12 @@ export namespace MCP {
         listed: MCPToolDef[],
         timeout?: number,
       ) {
+        const bridge = yield* EffectBridge.make()
         yield* closeClient(s, name)
         s.status[name] = { status: "connected" }
         s.clients[name] = client
         s.defs[name] = listed
-        watch(s, name, client, timeout)
+        watch(s, name, client, bridge, timeout)
         return s.status[name]
       })
 

@@ -1039,11 +1039,11 @@ export namespace Provider {
       const auth = yield* Auth.Service
       const env = yield* Env.Service
       const plugin = yield* Plugin.Service
-      const bridge = yield* EffectBridge.make()
 
       const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
           using _ = log.time("state")
+          const bridge = yield* EffectBridge.make()
           const cfg = yield* config.get()
           const modelsDev = yield* Effect.promise(() => ModelsDev.get())
           const database = mapValues(modelsDev, fromModelsDevProvider)
