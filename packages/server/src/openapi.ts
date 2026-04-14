@@ -1,4 +1,4 @@
-import { api } from "./spec/api.js"
+import { api } from "./definition/api.js"
 import type { OpenApiSpec } from "./types.js"
 
 export function openapi(): OpenApiSpec {

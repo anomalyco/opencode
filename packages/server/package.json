@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./openapi": "./src/openapi.ts",
-    "./spec/api": "./src/spec/api.ts"
+    "./definition": "./src/definition/index.ts",
+    "./definition/api": "./src/definition/api.ts",
+    "./api": "./src/api/index.ts"
   },
   "files": [
     "dist"
