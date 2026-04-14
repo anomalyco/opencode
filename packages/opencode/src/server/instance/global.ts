@@ -57,11 +57,17 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
     const unsub = subscribe(q)
 
     stream.onAbort(stop)
+    c.req.raw.signal.addEventListener("abort", stop)
 
     try {
       for await (const data of q) {
         if (data === null) return
-        await stream.writeSSE({ data })
+        try {
+          await stream.writeSSE({ data })
+        } catch {
+          stop()
+          return
+        }
       }
     } finally {
       stop()
