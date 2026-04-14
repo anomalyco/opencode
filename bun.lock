@@ -356,6 +356,7 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
+        "@opencode-ai/server": "workspace:*",
         "@opencode-ai/util": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.5.1",
         "@opentui/core": "0.1.99",
@@ -501,6 +502,9 @@
     "packages/server": {
       "name": "@opencode-ai/server",
       "version": "1.4.3",
+      "dependencies": {
+        "effect": "catalog:",
+      },
       "devDependencies": {
         "typescript": "catalog:",
       },
