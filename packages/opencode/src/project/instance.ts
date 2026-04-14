@@ -1,9 +1,9 @@
 import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
+import { makeRuntime } from "@/effect/run-service"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
-import { Effect } from "effect"
 import { LocalContext } from "../util/local-context"
 import { Project } from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
@@ -16,6 +16,7 @@ export interface InstanceContext {
 
 const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
+const project = makeRuntime(Project.Service, Project.defaultLayer)
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -30,13 +31,13 @@ function boot(input: { directory: string; init?: () => Promise<any>; worktree?: 
             worktree: input.worktree,
             project: input.project,
           }
-        : await Effect.runPromise(
-            Project.Service.use((svc) => svc.fromDirectory(input.directory)).pipe(Effect.provide(Project.defaultLayer)),
-          ).then(({ project, sandbox }) => ({
-            directory: input.directory,
-            worktree: sandbox,
-            project,
-          }))
+        : await project
+            .runPromise((svc) => svc.fromDirectory(input.directory))
+            .then(({ project, sandbox }) => ({
+              directory: input.directory,
+              worktree: sandbox,
+              project,
+            }))
     await context.provide(ctx, async () => {
       await input.init?.()
     })
