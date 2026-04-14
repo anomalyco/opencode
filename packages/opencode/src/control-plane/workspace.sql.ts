@@ -6,8 +6,8 @@ import type { WorkspaceID } from "./schema"
 export const WorkspaceTable = sqliteTable("workspace", {
   id: text().$type<WorkspaceID>().primaryKey(),
   type: text().notNull(),
+  name: text().notNull().default(""),
   branch: text(),
-  name: text(),
   directory: text(),
   extra: text({ mode: "json" }),
   project_id: text()

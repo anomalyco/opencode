@@ -19,7 +19,6 @@ import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
-import { fn } from "@/util/fn"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
@@ -29,7 +28,6 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import { Effect, Layer, Option, Context } from "effect"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -178,6 +176,30 @@ export namespace Session {
     ref: "GlobalSession",
   })
   export type GlobalInfo = z.output<typeof GlobalInfo>
+
+  export const CreateInput = z
+    .object({
+      parentID: SessionID.zod.optional(),
+      title: z.string().optional(),
+      permission: Info.shape.permission,
+      workspaceID: WorkspaceID.zod.optional(),
+    })
+    .optional()
+  export type CreateInput = z.output<typeof CreateInput>
+
+  export const ForkInput = z.object({ sessionID: SessionID.zod, messageID: MessageID.zod.optional() })
+  export const GetInput = SessionID.zod
+  export const ChildrenInput = SessionID.zod
+  export const RemoveInput = SessionID.zod
+  export const SetTitleInput = z.object({ sessionID: SessionID.zod, title: z.string() })
+  export const SetArchivedInput = z.object({ sessionID: SessionID.zod, time: z.number().optional() })
+  export const SetPermissionInput = z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset })
+  export const SetRevertInput = z.object({
+    sessionID: SessionID.zod,
+    revert: Info.shape.revert,
+    summary: Info.shape.summary,
+  })
+  export const MessagesInput = z.object({ sessionID: SessionID.zod, limit: z.number().optional() })
 
   export const Event = {
     Created: SyncEvent.define({
@@ -682,48 +704,6 @@ export namespace Session {
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const create = fn(
-    z
-      .object({
-        parentID: SessionID.zod.optional(),
-        title: z.string().optional(),
-        permission: Info.shape.permission,
-        workspaceID: WorkspaceID.zod.optional(),
-      })
-      .optional(),
-    (input) => runPromise((svc) => svc.create(input)),
-  )
-
-  export const fork = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod.optional() }), (input) =>
-    runPromise((svc) => svc.fork(input)),
-  )
-
-  export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
-
-  export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
-    runPromise((svc) => svc.setTitle(input)),
-  )
-
-  export const setArchived = fn(z.object({ sessionID: SessionID.zod, time: z.number().optional() }), (input) =>
-    runPromise((svc) => svc.setArchived(input)),
-  )
-
-  export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset }), (input) =>
-    runPromise((svc) => svc.setPermission(input)),
-  )
-
-  export const setRevert = fn(
-    z.object({ sessionID: SessionID.zod, revert: Info.shape.revert, summary: Info.shape.summary }),
-    (input) =>
-      runPromise((svc) => svc.setRevert({ sessionID: input.sessionID, revert: input.revert, summary: input.summary })),
-  )
-
-  export const messages = fn(z.object({ sessionID: SessionID.zod, limit: z.number().optional() }), (input) =>
-    runPromise((svc) => svc.messages(input)),
-  )
-
   export function* list(input?: {
     directory?: string
     workspaceID?: WorkspaceID
@@ -834,26 +814,5 @@ export namespace Session {
       const project = projects.get(row.project_id) ?? null
       yield { ...fromRow(row), project }
     }
-  }
-
-  export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
-  export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
-  export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
-    MessageV2.Info.parse(msg)
-    return runPromise((svc) => svc.updateMessage(msg))
-  }
-
-  export const removeMessage = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod }), (input) =>
-    runPromise((svc) => svc.removeMessage(input)),
-  )
-
-  export const removePart = fn(
-    z.object({ sessionID: SessionID.zod, messageID: MessageID.zod, partID: PartID.zod }),
-    (input) => runPromise((svc) => svc.removePart(input)),
-  )
-
-  export async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
-    MessageV2.Part.parse(part)
-    return runPromise((svc) => svc.updatePart(part))
   }
 }
