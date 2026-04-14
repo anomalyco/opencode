@@ -1,0 +1,3 @@
+[submodule "packages/agent-comms-plugin"]
+	path = packages/agent-comms-plugin
+	url = https://github.com/ailearningguy/agent-comms-plugin.git
