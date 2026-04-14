@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Layer, Context } from "effect"
+import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -89,6 +89,7 @@ export namespace SessionProcessor {
     | LLM.Service
     | Permission.Service
     | Plugin.Service
+    | SessionSummary.Service
     | SessionStatus.Service
   > = Layer.effect(
     Service,
@@ -101,6 +102,8 @@ export namespace SessionProcessor {
       const llm = yield* LLM.Service
       const permission = yield* Permission.Service
       const plugin = yield* Plugin.Service
+      const summary = yield* SessionSummary.Service
+      const scope = yield* Scope.Scope
       const status = yield* SessionStatus.Service
 
       const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
@@ -385,10 +388,12 @@ export namespace SessionProcessor {
                 }
                 ctx.snapshot = undefined
               }
-              SessionSummary.summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
-              })
+              yield* summary
+                .summarize({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.parentID,
+                })
+                .pipe(Effect.ignore, Effect.forkIn(scope))
               if (
                 !ctx.assistantMessage.summary &&
                 isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
@@ -603,6 +608,7 @@ export namespace SessionProcessor {
       Layer.provide(LLM.defaultLayer),
       Layer.provide(Permission.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
+      Layer.provide(SessionSummary.defaultLayer),
       Layer.provide(SessionStatus.defaultLayer),
       Layer.provide(Bus.layer),
       Layer.provide(Config.defaultLayer),

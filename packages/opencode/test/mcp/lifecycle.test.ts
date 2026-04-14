@@ -1,4 +1,6 @@
 import { test, expect, mock, beforeEach } from "bun:test"
+import { Effect } from "effect"
+import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // --- Mock infrastructure ---
 
@@ -170,7 +172,10 @@ const { tmpdir } = await import("../fixture/fixture")
 
 // --- Helper ---
 
-function withInstance(config: Record<string, any>, fn: () => Promise<void>) {
+function withInstance(
+  config: Record<string, unknown>,
+  fn: (mcp: MCPNS.Interface) => Effect.Effect<void, unknown, never>,
+) {
   return async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -187,7 +192,7 @@ function withInstance(config: Record<string, any>, fn: () => Promise<void>) {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await fn()
+        await Effect.runPromise(MCP.Service.use(fn).pipe(Effect.provide(MCP.defaultLayer)))
         // dispose instance to clean up state between tests
         await Instance.dispose()
       },
@@ -201,28 +206,30 @@ function withInstance(config: Record<string, any>, fn: () => Promise<void>) {
 
 test(
   "tools() reuses cached tool definitions after connect",
-  withInstance({}, async () => {
-    lastCreatedClientName = "my-server"
-    const serverState = getOrCreateClientState("my-server")
-    serverState.tools = [
-      { name: "do_thing", description: "does a thing", inputSchema: { type: "object", properties: {} } },
-    ]
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "my-server"
+      const serverState = getOrCreateClientState("my-server")
+      serverState.tools = [
+        { name: "do_thing", description: "does a thing", inputSchema: { type: "object", properties: {} } },
+      ]
 
-    // First: add the server successfully
-    const addResult = await MCP.add("my-server", {
-      type: "local",
-      command: ["echo", "test"],
-    })
-    expect((addResult.status as any)["my-server"]?.status ?? (addResult.status as any).status).toBe("connected")
+      // First: add the server successfully
+      const addResult = yield* mcp.add("my-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+      expect((addResult.status as any)["my-server"]?.status ?? (addResult.status as any).status).toBe("connected")
 
-    expect(serverState.listToolsCalls).toBe(1)
+      expect(serverState.listToolsCalls).toBe(1)
 
-    const toolsA = await MCP.tools()
-    const toolsB = await MCP.tools()
-    expect(Object.keys(toolsA).length).toBeGreaterThan(0)
-    expect(Object.keys(toolsB).length).toBeGreaterThan(0)
-    expect(serverState.listToolsCalls).toBe(1)
-  }),
+      const toolsA = yield* mcp.tools()
+      const toolsB = yield* mcp.tools()
+      expect(Object.keys(toolsA).length).toBeGreaterThan(0)
+      expect(Object.keys(toolsB).length).toBeGreaterThan(0)
+      expect(serverState.listToolsCalls).toBe(1)
+    }),
+  ),
 )
 
 // ========================================================================
@@ -231,30 +238,32 @@ test(
 
 test(
   "tool change notifications refresh cached tool definitions",
-  withInstance({}, async () => {
-    lastCreatedClientName = "status-server"
-    const serverState = getOrCreateClientState("status-server")
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "status-server"
+      const serverState = getOrCreateClientState("status-server")
 
-    await MCP.add("status-server", {
-      type: "local",
-      command: ["echo", "test"],
-    })
+      yield* mcp.add("status-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
 
-    const before = await MCP.tools()
-    expect(Object.keys(before).some((key) => key.includes("test_tool"))).toBe(true)
-    expect(serverState.listToolsCalls).toBe(1)
+      const before = yield* mcp.tools()
+      expect(Object.keys(before).some((key) => key.includes("test_tool"))).toBe(true)
+      expect(serverState.listToolsCalls).toBe(1)
 
-    serverState.tools = [{ name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } }]
+      serverState.tools = [{ name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } }]
 
-    const handler = Array.from(serverState.notificationHandlers.values())[0]
-    expect(handler).toBeDefined()
-    await handler?.()
+      const handler = Array.from(serverState.notificationHandlers.values())[0]
+      expect(handler).toBeDefined()
+      yield* Effect.promise(() => handler?.())
 
-    const after = await MCP.tools()
-    expect(Object.keys(after).some((key) => key.includes("next_tool"))).toBe(true)
-    expect(Object.keys(after).some((key) => key.includes("test_tool"))).toBe(false)
-    expect(serverState.listToolsCalls).toBe(2)
-  }),
+      const after = yield* mcp.tools()
+      expect(Object.keys(after).some((key) => key.includes("next_tool"))).toBe(true)
+      expect(Object.keys(after).some((key) => key.includes("test_tool"))).toBe(false)
+      expect(serverState.listToolsCalls).toBe(2)
+    }),
+  ),
 )
 
 // ========================================================================
@@ -270,28 +279,29 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "disc-server"
-      getOrCreateClientState("disc-server")
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "disc-server"
+        getOrCreateClientState("disc-server")
 
-      await MCP.add("disc-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("disc-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      const statusBefore = await MCP.status()
-      expect(statusBefore["disc-server"]?.status).toBe("connected")
+        const statusBefore = yield* mcp.status()
+        expect(statusBefore["disc-server"]?.status).toBe("connected")
 
-      await MCP.disconnect("disc-server")
+        yield* mcp.disconnect("disc-server")
 
-      const statusAfter = await MCP.status()
-      expect(statusAfter["disc-server"]?.status).toBe("disabled")
+        const statusAfter = yield* mcp.status()
+        expect(statusAfter["disc-server"]?.status).toBe("disabled")
 
-      // Tools should be empty after disconnect
-      const tools = await MCP.tools()
-      const serverTools = Object.keys(tools).filter((k) => k.startsWith("disc-server"))
-      expect(serverTools.length).toBe(0)
-    },
+        // Tools should be empty after disconnect
+        const tools = yield* mcp.tools()
+        const serverTools = Object.keys(tools).filter((k) => k.startsWith("disc-server"))
+        expect(serverTools.length).toBe(0)
+      }),
   ),
 )
 
@@ -304,26 +314,29 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "reconn-server"
-      const serverState = getOrCreateClientState("reconn-server")
-      serverState.tools = [{ name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } }]
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-server"
+        const serverState = getOrCreateClientState("reconn-server")
+        serverState.tools = [
+          { name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } },
+        ]
 
-      await MCP.add("reconn-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("reconn-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      await MCP.disconnect("reconn-server")
-      expect((await MCP.status())["reconn-server"]?.status).toBe("disabled")
+        yield* mcp.disconnect("reconn-server")
+        expect((yield* mcp.status())["reconn-server"]?.status).toBe("disabled")
 
-      // Reconnect
-      await MCP.connect("reconn-server")
-      expect((await MCP.status())["reconn-server"]?.status).toBe("connected")
+        // Reconnect
+        yield* mcp.connect("reconn-server")
+        expect((yield* mcp.status())["reconn-server"]?.status).toBe("connected")
 
-      const tools = await MCP.tools()
-      expect(Object.keys(tools).some((k) => k.includes("my_tool"))).toBe(true)
-    },
+        const tools = yield* mcp.tools()
+        expect(Object.keys(tools).some((k) => k.includes("my_tool"))).toBe(true)
+      }),
   ),
 )
 
@@ -335,30 +348,32 @@ test(
   "add() closes the old client when replacing a server",
   // Don't put the server in config — add it dynamically so we control
   // exactly which client instance is "first" vs "second".
-  withInstance({}, async () => {
-    lastCreatedClientName = "replace-server"
-    const firstState = getOrCreateClientState("replace-server")
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "replace-server"
+      const firstState = getOrCreateClientState("replace-server")
 
-    await MCP.add("replace-server", {
-      type: "local",
-      command: ["echo", "test"],
-    })
+      yield* mcp.add("replace-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
 
-    expect(firstState.closed).toBe(false)
+      expect(firstState.closed).toBe(false)
 
-    // Create new state for second client
-    clientStates.delete("replace-server")
-    const secondState = getOrCreateClientState("replace-server")
+      // Create new state for second client
+      clientStates.delete("replace-server")
+      const secondState = getOrCreateClientState("replace-server")
 
-    // Re-add should close the first client
-    await MCP.add("replace-server", {
-      type: "local",
-      command: ["echo", "test"],
-    })
+      // Re-add should close the first client
+      yield* mcp.add("replace-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
 
-    expect(firstState.closed).toBe(true)
-    expect(secondState.closed).toBe(false)
-  }),
+      expect(firstState.closed).toBe(true)
+      expect(secondState.closed).toBe(false)
+    }),
+  ),
 )
 
 // ========================================================================
@@ -378,37 +393,38 @@ test(
         command: ["echo", "bad"],
       },
     },
-    async () => {
-      // Set up good server
-      const goodState = getOrCreateClientState("good-server")
-      goodState.tools = [{ name: "good_tool", description: "works", inputSchema: { type: "object", properties: {} } }]
+    (mcp) =>
+      Effect.gen(function* () {
+        // Set up good server
+        const goodState = getOrCreateClientState("good-server")
+        goodState.tools = [{ name: "good_tool", description: "works", inputSchema: { type: "object", properties: {} } }]
 
-      // Set up bad server - will fail on listTools during create()
-      const badState = getOrCreateClientState("bad-server")
-      badState.listToolsShouldFail = true
+        // Set up bad server - will fail on listTools during create()
+        const badState = getOrCreateClientState("bad-server")
+        badState.listToolsShouldFail = true
 
-      // Add good server first
-      lastCreatedClientName = "good-server"
-      await MCP.add("good-server", {
-        type: "local",
-        command: ["echo", "good"],
-      })
+        // Add good server first
+        lastCreatedClientName = "good-server"
+        yield* mcp.add("good-server", {
+          type: "local",
+          command: ["echo", "good"],
+        })
 
-      // Add bad server - should fail but not affect good server
-      lastCreatedClientName = "bad-server"
-      await MCP.add("bad-server", {
-        type: "local",
-        command: ["echo", "bad"],
-      })
+        // Add bad server - should fail but not affect good server
+        lastCreatedClientName = "bad-server"
+        yield* mcp.add("bad-server", {
+          type: "local",
+          command: ["echo", "bad"],
+        })
 
-      const status = await MCP.status()
-      expect(status["good-server"]?.status).toBe("connected")
-      expect(status["bad-server"]?.status).toBe("failed")
+        const status = yield* mcp.status()
+        expect(status["good-server"]?.status).toBe("connected")
+        expect(status["bad-server"]?.status).toBe("failed")
 
-      // Good server's tools should still be available
-      const tools = await MCP.tools()
-      expect(Object.keys(tools).some((k) => k.includes("good_tool"))).toBe(true)
-    },
+        // Good server's tools should still be available
+        const tools = yield* mcp.tools()
+        expect(Object.keys(tools).some((k) => k.includes("good_tool"))).toBe(true)
+      }),
   ),
 )
 
@@ -426,21 +442,22 @@ test(
         enabled: false,
       },
     },
-    async () => {
-      const countBefore = clientCreateCount
+    (mcp) =>
+      Effect.gen(function* () {
+        const countBefore = clientCreateCount
 
-      await MCP.add("disabled-server", {
-        type: "local",
-        command: ["echo", "test"],
-        enabled: false,
-      } as any)
+        yield* mcp.add("disabled-server", {
+          type: "local",
+          command: ["echo", "test"],
+          enabled: false,
+        } as any)
 
-      // No client should have been created
-      expect(clientCreateCount).toBe(countBefore)
+        // No client should have been created
+        expect(clientCreateCount).toBe(countBefore)
 
-      const status = await MCP.status()
-      expect(status["disabled-server"]?.status).toBe("disabled")
-    },
+        const status = yield* mcp.status()
+        expect(status["disabled-server"]?.status).toBe("disabled")
+      }),
   ),
 )
 
@@ -457,22 +474,23 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "prompt-server"
-      const serverState = getOrCreateClientState("prompt-server")
-      serverState.prompts = [{ name: "my-prompt", description: "A test prompt" }]
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-server"
+        const serverState = getOrCreateClientState("prompt-server")
+        serverState.prompts = [{ name: "my-prompt", description: "A test prompt" }]
 
-      await MCP.add("prompt-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("prompt-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      const prompts = await MCP.prompts()
-      expect(Object.keys(prompts).length).toBe(1)
-      const key = Object.keys(prompts)[0]
-      expect(key).toContain("prompt-server")
-      expect(key).toContain("my-prompt")
-    },
+        const prompts = yield* mcp.prompts()
+        expect(Object.keys(prompts).length).toBe(1)
+        const key = Object.keys(prompts)[0]
+        expect(key).toContain("prompt-server")
+        expect(key).toContain("my-prompt")
+      }),
   ),
 )
 
@@ -485,22 +503,23 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "resource-server"
-      const serverState = getOrCreateClientState("resource-server")
-      serverState.resources = [{ name: "my-resource", uri: "file:///test.txt", description: "A test resource" }]
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-server"
+        const serverState = getOrCreateClientState("resource-server")
+        serverState.resources = [{ name: "my-resource", uri: "file:///test.txt", description: "A test resource" }]
 
-      await MCP.add("resource-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("resource-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      const resources = await MCP.resources()
-      expect(Object.keys(resources).length).toBe(1)
-      const key = Object.keys(resources)[0]
-      expect(key).toContain("resource-server")
-      expect(key).toContain("my-resource")
-    },
+        const resources = yield* mcp.resources()
+        expect(Object.keys(resources).length).toBe(1)
+        const key = Object.keys(resources)[0]
+        expect(key).toContain("resource-server")
+        expect(key).toContain("my-resource")
+      }),
   ),
 )
 
@@ -513,21 +532,22 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "prompt-disc-server"
-      const serverState = getOrCreateClientState("prompt-disc-server")
-      serverState.prompts = [{ name: "hidden-prompt", description: "Should not appear" }]
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-disc-server"
+        const serverState = getOrCreateClientState("prompt-disc-server")
+        serverState.prompts = [{ name: "hidden-prompt", description: "Should not appear" }]
 
-      await MCP.add("prompt-disc-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("prompt-disc-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      await MCP.disconnect("prompt-disc-server")
+        yield* mcp.disconnect("prompt-disc-server")
 
-      const prompts = await MCP.prompts()
-      expect(Object.keys(prompts).length).toBe(0)
-    },
+        const prompts = yield* mcp.prompts()
+        expect(Object.keys(prompts).length).toBe(0)
+      }),
   ),
 )
 
@@ -537,12 +557,14 @@ test(
 
 test(
   "connect() on nonexistent server does not throw",
-  withInstance({}, async () => {
-    // Should not throw
-    await MCP.connect("nonexistent")
-    const status = await MCP.status()
-    expect(status["nonexistent"]).toBeUndefined()
-  }),
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      // Should not throw
+      yield* mcp.connect("nonexistent")
+      const status = yield* mcp.status()
+      expect(status["nonexistent"]).toBeUndefined()
+    }),
+  ),
 )
 
 // ========================================================================
@@ -551,10 +573,12 @@ test(
 
 test(
   "disconnect() on nonexistent server does not throw",
-  withInstance({}, async () => {
-    await MCP.disconnect("nonexistent")
-    // Should complete without error
-  }),
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      yield* mcp.disconnect("nonexistent")
+      // Should complete without error
+    }),
+  ),
 )
 
 // ========================================================================
@@ -563,10 +587,12 @@ test(
 
 test(
   "tools() returns empty when no MCP servers are configured",
-  withInstance({}, async () => {
-    const tools = await MCP.tools()
-    expect(Object.keys(tools).length).toBe(0)
-  }),
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      const tools = yield* mcp.tools()
+      expect(Object.keys(tools).length).toBe(0)
+    }),
+  ),
 )
 
 // ========================================================================
@@ -582,27 +608,28 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "fail-connect"
-      getOrCreateClientState("fail-connect")
-      connectShouldFail = true
-      connectError = "Connection refused"
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "fail-connect"
+        getOrCreateClientState("fail-connect")
+        connectShouldFail = true
+        connectError = "Connection refused"
 
-      await MCP.add("fail-connect", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("fail-connect", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      const status = await MCP.status()
-      expect(status["fail-connect"]?.status).toBe("failed")
-      if (status["fail-connect"]?.status === "failed") {
-        expect(status["fail-connect"].error).toContain("Connection refused")
-      }
+        const status = yield* mcp.status()
+        expect(status["fail-connect"]?.status).toBe("failed")
+        if (status["fail-connect"]?.status === "failed") {
+          expect(status["fail-connect"].error).toContain("Connection refused")
+        }
 
-      // No tools should be available
-      const tools = await MCP.tools()
-      expect(Object.keys(tools).length).toBe(0)
-    },
+        // No tools should be available
+        const tools = yield* mcp.tools()
+        expect(Object.keys(tools).length).toBe(0)
+      }),
   ),
 )
 
@@ -648,28 +675,29 @@ test(
         command: ["echo", "test"],
       },
     },
-    async () => {
-      lastCreatedClientName = "my.special-server"
-      const serverState = getOrCreateClientState("my.special-server")
-      serverState.tools = [
-        { name: "tool-a", description: "Tool A", inputSchema: { type: "object", properties: {} } },
-        { name: "tool.b", description: "Tool B", inputSchema: { type: "object", properties: {} } },
-      ]
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "my.special-server"
+        const serverState = getOrCreateClientState("my.special-server")
+        serverState.tools = [
+          { name: "tool-a", description: "Tool A", inputSchema: { type: "object", properties: {} } },
+          { name: "tool.b", description: "Tool B", inputSchema: { type: "object", properties: {} } },
+        ]
 
-      await MCP.add("my.special-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+        yield* mcp.add("my.special-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
 
-      const tools = await MCP.tools()
-      const keys = Object.keys(tools)
+        const tools = yield* mcp.tools()
+        const keys = Object.keys(tools)
 
-      // Server name dots should be replaced with underscores
-      expect(keys.some((k) => k.startsWith("my_special-server_"))).toBe(true)
-      // Tool name dots should be replaced with underscores
-      expect(keys.some((k) => k.endsWith("tool_b"))).toBe(true)
-      expect(keys.length).toBe(2)
-    },
+        // Server name dots should be replaced with underscores
+        expect(keys.some((k) => k.startsWith("my_special-server_"))).toBe(true)
+        // Tool name dots should be replaced with underscores
+        expect(keys.some((k) => k.endsWith("tool_b"))).toBe(true)
+        expect(keys.length).toBe(2)
+      }),
   ),
 )
 
@@ -679,23 +707,25 @@ test(
 
 test(
   "local stdio transport is closed when connect times out (no process leak)",
-  withInstance({}, async () => {
-    lastCreatedClientName = "hanging-server"
-    getOrCreateClientState("hanging-server")
-    connectShouldHang = true
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "hanging-server"
+      getOrCreateClientState("hanging-server")
+      connectShouldHang = true
 
-    const addResult = await MCP.add("hanging-server", {
-      type: "local",
-      command: ["node", "fake.js"],
-      timeout: 100,
-    })
+      const addResult = yield* mcp.add("hanging-server", {
+        type: "local",
+        command: ["node", "fake.js"],
+        timeout: 100,
+      })
 
-    const serverStatus = (addResult.status as any)["hanging-server"] ?? addResult.status
-    expect(serverStatus.status).toBe("failed")
-    expect(serverStatus.error).toContain("timed out")
-    // Transport must be closed to avoid orphaned child process
-    expect(transportCloseCount).toBeGreaterThanOrEqual(1)
-  }),
+      const serverStatus = (addResult.status as any)["hanging-server"] ?? addResult.status
+      expect(serverStatus.status).toBe("failed")
+      expect(serverStatus.error).toContain("timed out")
+      // Transport must be closed to avoid orphaned child process
+      expect(transportCloseCount).toBeGreaterThanOrEqual(1)
+    }),
+  ),
 )
 
 // ========================================================================
@@ -704,23 +734,25 @@ test(
 
 test(
   "remote transport is closed when connect times out",
-  withInstance({}, async () => {
-    lastCreatedClientName = "hanging-remote"
-    getOrCreateClientState("hanging-remote")
-    connectShouldHang = true
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "hanging-remote"
+      getOrCreateClientState("hanging-remote")
+      connectShouldHang = true
 
-    const addResult = await MCP.add("hanging-remote", {
-      type: "remote",
-      url: "http://localhost:9999/mcp",
-      timeout: 100,
-      oauth: false,
-    })
+      const addResult = yield* mcp.add("hanging-remote", {
+        type: "remote",
+        url: "http://localhost:9999/mcp",
+        timeout: 100,
+        oauth: false,
+      })
 
-    const serverStatus = (addResult.status as any)["hanging-remote"] ?? addResult.status
-    expect(serverStatus.status).toBe("failed")
-    // Transport must be closed to avoid leaked HTTP connections
-    expect(transportCloseCount).toBeGreaterThanOrEqual(1)
-  }),
+      const serverStatus = (addResult.status as any)["hanging-remote"] ?? addResult.status
+      expect(serverStatus.status).toBe("failed")
+      // Transport must be closed to avoid leaked HTTP connections
+      expect(transportCloseCount).toBeGreaterThanOrEqual(1)
+    }),
+  ),
 )
 
 // ========================================================================
@@ -729,22 +761,24 @@ test(
 
 test(
   "failed remote transport is closed before trying next transport",
-  withInstance({}, async () => {
-    lastCreatedClientName = "fail-remote"
-    getOrCreateClientState("fail-remote")
-    connectShouldFail = true
-    connectError = "Connection refused"
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "fail-remote"
+      getOrCreateClientState("fail-remote")
+      connectShouldFail = true
+      connectError = "Connection refused"
 
-    const addResult = await MCP.add("fail-remote", {
-      type: "remote",
-      url: "http://localhost:9999/mcp",
-      timeout: 5000,
-      oauth: false,
-    })
+      const addResult = yield* mcp.add("fail-remote", {
+        type: "remote",
+        url: "http://localhost:9999/mcp",
+        timeout: 5000,
+        oauth: false,
+      })
 
-    const serverStatus = (addResult.status as any)["fail-remote"] ?? addResult.status
-    expect(serverStatus.status).toBe("failed")
-    // Both StreamableHTTP and SSE transports should be closed
-    expect(transportCloseCount).toBeGreaterThanOrEqual(2)
-  }),
+      const serverStatus = (addResult.status as any)["fail-remote"] ?? addResult.status
+      expect(serverStatus.status).toBe("failed")
+      // Both StreamableHTTP and SSE transports should be closed
+      expect(transportCloseCount).toBeGreaterThanOrEqual(2)
+    }),
+  ),
 )

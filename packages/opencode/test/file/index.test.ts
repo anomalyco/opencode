@@ -1,18 +1,28 @@
 import { afterEach, describe, test, expect } from "bun:test"
 import { $ } from "bun"
+import { Effect } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
+const init = () => run(File.Service.use((svc) => svc.init()))
+const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
+  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
+const status = () => run(File.Service.use((svc) => svc.status()))
+const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
+const list = (dir?: string) => run(File.Service.use((svc) => svc.list(dir)))
+const search = (input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) =>
+  run(File.Service.use((svc) => svc.search(input)))
+
 describe("file/index Filesystem patterns", () => {
-  describe("File.read() - text content", () => {
+  describe("read() - text content", () => {
     test("reads text file via Filesystem.readText()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "test.txt")
@@ -21,7 +31,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.txt")
+          const result = await read("test.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("Hello World")
         },
@@ -35,7 +45,7 @@ describe("file/index Filesystem patterns", () => {
         directory: tmp.path,
         fn: async () => {
           // Non-existent file should return empty content
-          const result = await File.read("nonexistent.txt")
+          const result = await read("nonexistent.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("")
         },
@@ -50,7 +60,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.txt")
+          const result = await read("test.txt")
           expect(result.content).toBe("content with spaces")
         },
       })
@@ -64,7 +74,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("empty.txt")
+          const result = await read("empty.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("")
         },
@@ -79,14 +89,14 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("multiline.txt")
+          const result = await read("multiline.txt")
           expect(result.content).toBe("line1\nline2\nline3")
         },
       })
     })
   })
 
-  describe("File.read() - binary content", () => {
+  describe("read() - binary content", () => {
     test("reads binary file via Filesystem.readArrayBuffer()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "image.png")
@@ -96,7 +106,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("image.png")
+          const result = await read("image.png")
           expect(result.type).toBe("text") // Images return as text with base64 encoding
           expect(result.encoding).toBe("base64")
           expect(result.mimeType).toBe("image/png")
@@ -113,7 +123,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("binary.so")
+          const result = await read("binary.so")
           expect(result.type).toBe("binary")
           expect(result.content).toBe("")
         },
@@ -121,7 +131,7 @@ describe("file/index Filesystem patterns", () => {
     })
   })
 
-  describe("File.read() - Filesystem.mimeType()", () => {
+  describe("read() - Filesystem.mimeType()", () => {
     test("detects MIME type via Filesystem.mimeType()", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "test.json")
@@ -132,7 +142,7 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           expect(Filesystem.mimeType(filepath)).toContain("application/json")
 
-          const result = await File.read("test.json")
+          const result = await read("test.json")
           expect(result.type).toBe("text")
         },
       })
@@ -161,7 +171,7 @@ describe("file/index Filesystem patterns", () => {
     })
   })
 
-  describe("File.list() - Filesystem.exists() and readText()", () => {
+  describe("list() - Filesystem.exists() and readText()", () => {
     test("reads .gitignore via Filesystem.exists() and readText()", async () => {
       await using tmp = await tmpdir({ git: true })
 
@@ -171,7 +181,7 @@ describe("file/index Filesystem patterns", () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
           await fs.writeFile(gitignorePath, "node_modules\ndist\n", "utf-8")
 
-          // This is used internally in File.list()
+          // This is used internally in list()
           expect(await Filesystem.exists(gitignorePath)).toBe(true)
 
           const content = await Filesystem.readText(gitignorePath)
@@ -204,8 +214,8 @@ describe("file/index Filesystem patterns", () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
           expect(await Filesystem.exists(gitignorePath)).toBe(false)
 
-          // File.list() should still work
-          const nodes = await File.list()
+          // list() should still work
+          const nodes = await list()
           expect(Array.isArray(nodes)).toBe(true)
         },
       })
@@ -244,8 +254,8 @@ describe("file/index Filesystem patterns", () => {
           // Filesystem.readText() on non-existent file throws
           await expect(Filesystem.readText(nonExistentPath)).rejects.toThrow()
 
-          // But File.read() handles this gracefully
-          const result = await File.read("does-not-exist.txt")
+          // But read() handles this gracefully
+          const result = await read("does-not-exist.txt")
           expect(result.content).toBe("")
         },
       })
@@ -272,8 +282,8 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          // File.read() handles missing images gracefully
-          const result = await File.read("broken.png")
+          // read() handles missing images gracefully
+          const result = await read("broken.png")
           expect(result.type).toBe("text")
           expect(result.content).toBe("")
         },
@@ -290,7 +300,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.ts")
+          const result = await read("test.ts")
           expect(result.type).toBe("text")
           expect(result.content).toBe("export const value = 1")
         },
@@ -305,7 +315,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.mts")
+          const result = await read("test.mts")
           expect(result.type).toBe("text")
           expect(result.content).toBe("export const value = 1")
         },
@@ -320,7 +330,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.sh")
+          const result = await read("test.sh")
           expect(result.type).toBe("text")
           expect(result.content).toBe("#!/usr/bin/env bash\necho hello")
         },
@@ -335,7 +345,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("Dockerfile")
+          const result = await read("Dockerfile")
           expect(result.type).toBe("text")
           expect(result.content).toBe("FROM alpine:3.20")
         },
@@ -350,7 +360,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.txt")
+          const result = await read("test.txt")
           expect(result.encoding).toBeUndefined()
           expect(result.type).toBe("text")
         },
@@ -365,7 +375,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("test.jpg")
+          const result = await read("test.jpg")
           expect(result.encoding).toBe("base64")
           expect(result.mimeType).toBe("image/jpeg")
         },
@@ -380,7 +390,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await expect(File.read("../outside.txt")).rejects.toThrow("Access denied")
+          await expect(read("../outside.txt")).rejects.toThrow("Access denied")
         },
       })
     })
@@ -391,13 +401,13 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await expect(File.read("../outside.txt")).rejects.toThrow("Access denied")
+          await expect(read("../outside.txt")).rejects.toThrow("Access denied")
         },
       })
     })
   })
 
-  describe("File.status()", () => {
+  describe("status()", () => {
     test("detects modified file", async () => {
       await using tmp = await tmpdir({ git: true })
       const filepath = path.join(tmp.path, "file.txt")
@@ -409,7 +419,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           const entry = result.find((f) => f.path === "file.txt")
           expect(entry).toBeDefined()
           expect(entry!.status).toBe("modified")
@@ -426,7 +436,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           const entry = result.find((f) => f.path === "new.txt")
           expect(entry).toBeDefined()
           expect(entry!.status).toBe("added")
@@ -447,7 +457,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           // Deleted files appear in both numstat (as "modified") and diff-filter=D (as "deleted")
           const entries = result.filter((f) => f.path === "gone.txt")
           expect(entries.some((e) => e.status === "deleted")).toBe(true)
@@ -470,7 +480,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           expect(result.some((f) => f.path === "keep.txt" && f.status === "modified")).toBe(true)
           expect(result.some((f) => f.path === "remove.txt" && f.status === "deleted")).toBe(true)
           expect(result.some((f) => f.path === "brand-new.txt" && f.status === "added")).toBe(true)
@@ -484,7 +494,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           expect(result).toEqual([])
         },
       })
@@ -496,7 +506,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           expect(result).toEqual([])
         },
       })
@@ -519,7 +529,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.status()
+          const result = await status()
           const entry = result.find((f) => f.path === "data.bin")
           expect(entry).toBeDefined()
           expect(entry!.status).toBe("modified")
@@ -530,7 +540,7 @@ describe("file/index Filesystem patterns", () => {
     })
   })
 
-  describe("File.list()", () => {
+  describe("list()", () => {
     test("returns files and directories with correct shape", async () => {
       await using tmp = await tmpdir({ git: true })
       await fs.mkdir(path.join(tmp.path, "subdir"))
@@ -540,7 +550,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nodes = await File.list()
+          const nodes = await list()
           expect(nodes.length).toBeGreaterThanOrEqual(2)
           for (const node of nodes) {
             expect(node).toHaveProperty("name")
@@ -564,7 +574,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nodes = await File.list()
+          const nodes = await list()
           const dirs = nodes.filter((n) => n.type === "directory")
           const files = nodes.filter((n) => n.type === "file")
           // Dirs come first
@@ -589,7 +599,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nodes = await File.list()
+          const nodes = await list()
           const names = nodes.map((n) => n.name)
           expect(names).not.toContain(".git")
           expect(names).not.toContain(".DS_Store")
@@ -608,7 +618,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nodes = await File.list()
+          const nodes = await list()
           const logNode = nodes.find((n) => n.name === "app.log")
           const tsNode = nodes.find((n) => n.name === "main.ts")
           const buildNode = nodes.find((n) => n.name === "build")
@@ -628,7 +638,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nodes = await File.list("sub")
+          const nodes = await list("sub")
           expect(nodes.length).toBe(2)
           expect(nodes.map((n) => n.name).sort()).toEqual(["a.txt", "b.txt"])
           // Paths should be relative to project root (normalize for Windows)
@@ -643,7 +653,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await expect(File.list("../outside")).rejects.toThrow("Access denied")
+          await expect(list("../outside")).rejects.toThrow("Access denied")
         },
       })
     })
@@ -655,7 +665,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const nodes = await File.list()
+          const nodes = await list()
           expect(nodes.length).toBeGreaterThanOrEqual(1)
           // Without git, ignored should be false for all
           for (const node of nodes) {
@@ -666,7 +676,7 @@ describe("file/index Filesystem patterns", () => {
     })
   })
 
-  describe("File.search()", () => {
+  describe("search()", () => {
     async function setupSearchableRepo() {
       const tmp = await tmpdir({ git: true })
       await fs.writeFile(path.join(tmp.path, "index.ts"), "code", "utf-8")
@@ -685,9 +695,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: "", type: "file" })
+          const result = await search({ query: "", type: "file" })
           expect(result.length).toBeGreaterThan(0)
         },
       })
@@ -699,7 +709,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.search({ query: "main", type: "file" })
+          const result = await search({ query: "main", type: "file" })
           expect(result.some((f) => f.includes("main"))).toBe(true)
         },
       })
@@ -711,9 +721,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: "", type: "directory" })
+          const result = await search({ query: "", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
           // Find first hidden dir index
           const firstHidden = result.findIndex((d) => d.split("/").some((p) => p.startsWith(".") && p.length > 1))
@@ -731,9 +741,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: "main", type: "file" })
+          const result = await search({ query: "main", type: "file" })
           expect(result.some((f) => f.includes("main"))).toBe(true)
         },
       })
@@ -745,9 +755,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: "", type: "file" })
+          const result = await search({ query: "", type: "file" })
           // Files don't end with /
           for (const f of result) {
             expect(f.endsWith("/")).toBe(false)
@@ -762,9 +772,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: "", type: "directory" })
+          const result = await search({ query: "", type: "directory" })
           // Directories end with /
           for (const d of result) {
             expect(d.endsWith("/")).toBe(true)
@@ -779,9 +789,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: "", type: "file", limit: 2 })
+          const result = await search({ query: "", type: "file", limit: 2 })
           expect(result.length).toBeLessThanOrEqual(2)
         },
       })
@@ -793,9 +803,9 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
+          await init()
 
-          const result = await File.search({ query: ".hidden", type: "directory" })
+          const result = await search({ query: ".hidden", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
           expect(result[0]).toContain(".hidden")
         },
@@ -808,19 +818,19 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
-          expect(await File.search({ query: "fresh", type: "file" })).toEqual([])
+          await init()
+          expect(await search({ query: "fresh", type: "file" })).toEqual([])
 
           await fs.writeFile(path.join(tmp.path, "fresh.ts"), "fresh", "utf-8")
 
-          const result = await File.search({ query: "fresh", type: "file" })
+          const result = await search({ query: "fresh", type: "file" })
           expect(result).toContain("fresh.ts")
         },
       })
     })
   })
 
-  describe("File.read() - diff/patch", () => {
+  describe("read() - diff/patch", () => {
     test("returns diff and patch for modified tracked file", async () => {
       await using tmp = await tmpdir({ git: true })
       const filepath = path.join(tmp.path, "file.txt")
@@ -832,7 +842,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("file.txt")
+          const result = await read("file.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("modified content")
           expect(result.diff).toBeDefined()
@@ -856,7 +866,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("staged.txt")
+          const result = await read("staged.txt")
           expect(result.diff).toBeDefined()
           expect(result.patch).toBeDefined()
         },
@@ -873,7 +883,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const result = await File.read("clean.txt")
+          const result = await read("clean.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("unchanged")
           expect(result.diff).toBeUndefined()
@@ -893,10 +903,10 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: one.path,
         fn: async () => {
-          await File.init()
-          const results = await File.search({ query: "a.ts", type: "file" })
+          await init()
+          const results = await search({ query: "a.ts", type: "file" })
           expect(results).toContain("a.ts")
-          const results2 = await File.search({ query: "b.ts", type: "file" })
+          const results2 = await search({ query: "b.ts", type: "file" })
           expect(results2).not.toContain("b.ts")
         },
       })
@@ -904,10 +914,10 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: two.path,
         fn: async () => {
-          await File.init()
-          const results = await File.search({ query: "b.ts", type: "file" })
+          await init()
+          const results = await search({ query: "b.ts", type: "file" })
           expect(results).toContain("b.ts")
-          const results2 = await File.search({ query: "a.ts", type: "file" })
+          const results2 = await search({ query: "a.ts", type: "file" })
           expect(results2).not.toContain("a.ts")
         },
       })
@@ -920,8 +930,8 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
-          const results = await File.search({ query: "before", type: "file" })
+          await init()
+          const results = await search({ query: "before", type: "file" })
           expect(results).toContain("before.ts")
         },
       })
@@ -934,10 +944,10 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          await File.init()
-          const results = await File.search({ query: "after", type: "file" })
+          await init()
+          const results = await search({ query: "after", type: "file" })
           expect(results).toContain("after.ts")
-          const stale = await File.search({ query: "before", type: "file" })
+          const stale = await search({ query: "before", type: "file" })
           expect(stale).not.toContain("before.ts")
         },
       })
