@@ -46,7 +46,7 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
+import { attach, makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 
@@ -108,8 +108,9 @@ export namespace SessionPrompt {
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
-          Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
-        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
+          Effect.runPromise(attach(effect).pipe(Effect.provide(EffectLogger.layer))),
+        fork: <A, E>(effect: Effect.Effect<A, E>) =>
+          Effect.runFork(attach(effect).pipe(Effect.provide(EffectLogger.layer))),
       }
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
