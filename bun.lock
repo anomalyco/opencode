@@ -510,6 +510,7 @@
         "effect": "catalog:",
       },
       "devDependencies": {
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
       },
     },
