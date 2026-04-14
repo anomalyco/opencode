@@ -1024,6 +1024,7 @@ describe("tool.bash abort", () => {
         )
         expect(result.output).toContain("started")
         expect(result.output).toContain("bash tool terminated command after exceeding timeout")
+        expect(result.output).toContain("retry with a larger timeout value in milliseconds")
       },
     })
   }, 15_000)
