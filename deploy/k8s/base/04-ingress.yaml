@@ -1,0 +1,67 @@
+# Ingress for OpenCode (HTTP API + Frontend only)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veritly-app
+  namespace: veritly
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - app.veritly.co.uk
+    secretName: veritly-tls
+  rules:
+  - host: app.veritly.co.uk
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: opencode-frontend
+            port:
+              number: 80
+---
+# Ingress for Relay (WebSocket only - public for browsers)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veritly-relay
+  namespace: veritly
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # WebSocket specific settings
+    nginx.ingress.kubernetes.io/websocket-services: "relay"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Sticky sessions for WebSocket affinity
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "veritly_relay"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    # Connection upgrades
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - relay.veritly.co.uk
+    secretName: relay-tls
+  rules:
+  - host: relay.veritly.co.uk
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: relay
+            port:
+              number: 8080

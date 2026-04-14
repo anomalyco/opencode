@@ -45,6 +45,7 @@ import { GlobalRoutes } from "./routes/global";
 import { MDNS } from "./mdns";
 import { lazy } from "@/util/lazy";
 import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly";
+import path from "path";
 
 // This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false;
@@ -56,6 +57,33 @@ initVeritlyTracer({
 
 export namespace Server {
 	const log = Log.create({ service: "server" });
+
+	function localAppDistDir() {
+		const dir = process.env.OPENCODE_APP_DIST_DIR?.trim();
+		return dir ? Filesystem.resolve(dir) : undefined;
+	}
+
+	async function serveLocalApp(pathname: string) {
+		const root = localAppDistDir();
+		if (!root) return;
+
+		const relativePath = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+		const candidate = Filesystem.resolve(path.join(root, relativePath));
+		const indexFile = Filesystem.resolve(path.join(root, "index.html"));
+
+		if (!candidate.startsWith(root)) return new Response("Not found", { status: 404 });
+
+		const target = (await Filesystem.exists(candidate)) ? candidate : indexFile;
+		if (!(await Filesystem.exists(target))) return;
+
+		const file = Bun.file(target);
+		return new Response(file, {
+			headers: {
+				"Content-Type": Filesystem.mimeType(target),
+				"Cache-Control": target === indexFile ? "no-cache" : "public, max-age=31536000, immutable",
+			},
+		});
+	}
 
 	export const Default = lazy(() => createApp({}));
 
@@ -589,6 +617,8 @@ export namespace Server {
 				)
 				.all("/*", async (c) => {
 					const path = c.req.path;
+					const local = await serveLocalApp(path);
+					if (local) return local;
 
 					const response = await proxy(`https://app.opencode.ai${path}`, {
 						...c.req,

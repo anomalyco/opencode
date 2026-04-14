@@ -1,0 +1,11 @@
+FROM nginx:alpine
+
+COPY packages/app/dist /usr/share/nginx/html
+COPY packages/app/public /usr/share/nginx/html/public
+
+RUN chmod -R 755 /usr/share/nginx/html && \
+    chown -R nginx:nginx /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

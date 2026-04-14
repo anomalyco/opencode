@@ -1,0 +1,191 @@
+# Veritly Kubernetes Deployment
+
+Two separate ingresses for clean separation of concerns:
+- **app.veritly.co.uk** - OpenCode API + Frontend (HTTP)
+- **relay.veritly.co.uk** - WebSocket Relay (WSS) with sticky sessions
+
+## Architecture
+
+```
+                    Internet
+                       │
+           ┌───────────┴───────────┐
+           │                       │
+     [app.veritly.co.uk]    [relay.veritly.co.uk]
+     (HTTP/HTTPS)              (WSS - WebSocket)
+           │                       │
+           ▼                       ▼
+    ┌─────────────┐         ┌─────────────┐
+    │   Opencode  │         │    Relay    │
+    │    :3000    │         │    :8080    │
+    │  (1 replica)│         │  (2+ replicas)│
+    └─────────────┘         └─────────────┘
+                                     │
+                              ┌──────┴──────┐
+                              │Python SDK   │
+                              │Local dev     │
+                              └─────────────┘
+
+External: univer.veritly.co.uk (already deployed)
+```
+
+## Why Two Ingresses?
+
+1. **WebSocket needs special config**: Longer timeouts, sticky sessions, connection upgrades
+2. **Different scaling patterns**: Relay needs 2+ replicas with affinity, Opencode is 1 replica (SQLite)
+3. **Clean separation**: Browser connects directly to relay domain
+4. **Independent SSL/TLS**: Each can have its own cert config
+
+## Prerequisites
+
+- `kubectl` configured for your cluster
+- `doctl` authenticated with DigitalOcean
+- Docker installed
+
+## Quick Deploy
+
+```bash
+cd /Users/Apple/Documents/Github/veritly/vendor/opencode-veritly
+./deploy/k8s/deploy-production.sh
+```
+
+This will:
+1. Configure kubectl for your DOKS cluster
+2. Create DO Container Registry (if needed)
+3. Build and push Docker images
+4. Install NGINX Ingress Controller (if needed)
+5. Deploy all services
+6. Wait for rollout
+
+## Manual Steps
+
+### 1. Configure kubectl
+```bash
+doctl kubernetes cluster kubeconfig save 602c73dd-37fe-4c00-a23e-1aa027878fa2
+```
+
+### 2. Install NGINX Ingress Controller
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/do/deploy.yaml
+```
+
+### 3. Build and Push Images
+```bash
+# Set up registry
+doctl registry create veritly  # if not exists
+doctl registry login
+
+# Build
+docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml build
+
+# Tag
+docker tag opencode-veritly-relay:latest registry.digitalocean.com/veritly/relay:latest
+docker tag opencode-veritly-opencode:latest registry.digitalocean.com/veritly/opencode:latest
+docker tag opencode-veritly-executor-api:latest registry.digitalocean.com/veritly/executor-api:latest
+
+# Push
+docker push registry.digitalocean.com/veritly/relay:latest
+docker push registry.digitalocean.com/veritly/opencode:latest
+docker push registry.digitalocean.com/veritly/executor-api:latest
+```
+
+### 4. Update Registry in Kustomization
+```bash
+# Edit deploy/k8s/base/kustomization.yaml
+# Change image newName to your registry
+```
+
+### 5. Set Secrets
+```bash
+kubectl create secret generic veritly-secrets \
+  --from-literal=OPENCODE_SERVER_PASSWORD='your-secure-password' \
+  --namespace veritly
+```
+
+### 6. Deploy
+```bash
+kubectl apply -k deploy/k8s/base/
+```
+
+## DNS Configuration
+
+Get the ingress IP:
+```bash
+kubectl get svc -n ingress-nginx ingress-nginx-controller
+```
+
+Point both domains to this IP:
+- `app.veritly.co.uk` → INGRESS_IP
+- `relay.veritly.co.uk` → INGRESS_IP
+
+## Verification
+
+```bash
+# Check pods
+kubectl get pods -n veritly
+
+# Check services
+kubectl get svc -n veritly
+
+# Check ingress
+kubectl get ingress -n veritly
+
+# Test relay health
+curl https://relay.veritly.co.uk/health
+
+# Test app
+curl https://app.veritly.co.uk/global/health
+```
+
+## Configuration
+
+Edit `deploy/k8s/base/00-namespace.yaml` ConfigMap:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `PUBLIC_HOST` | app.veritly.co.uk | Main app domain |
+| `PUBLIC_BASE_URL` | https://app.veritly.co.uk | Full URL |
+| `VITE_UNIVER_BACKEND_URL` | https://univer.veritly.co.uk | Univer API |
+| `VITE_UNIVER_SDK_WS` | wss://relay.veritly.co.uk/ws | Relay WebSocket |
+
+## Scaling
+
+```bash
+# Scale relay (already has HPA 2-10 replicas)
+kubectl scale deployment relay --replicas=5 -n veritly
+
+# Scale executor
+kubectl scale deployment executor-api --replicas=3 -n veritly
+
+# Note: Opencode stays at 1 replica (SQLite constraint)
+```
+
+## Troubleshooting
+
+### Pods stuck in ImagePullBackOff
+Images aren't in registry. Run the build/push steps.
+
+### Ingress has no IP
+NGINX ingress controller not installed. Run:
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/do/deploy.yaml
+```
+
+### WebSocket not connecting
+Check relay ingress has sticky session annotations:
+```bash
+kubectl describe ingress veritly-relay -n veritly
+```
+
+### SSL cert not working
+Install cert-manager:
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+```
+
+## External Dependencies
+
+- **Univer**: Already deployed at `univer.veritly.co.uk`
+- **USIP**: Part of Univer deployment
+
+These are configured in the ConfigMap and must be accessible from the cluster.

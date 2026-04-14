@@ -3,7 +3,6 @@
 .turbo
 node_modules
 packages/*/node_modules
-packages/*/dist
 packages/*/.astro
 packages/*/.wrangler
 packages/*/.sst

@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: executor-api
+  namespace: veritly
+  labels:
+    app: executor-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: executor-api
+  template:
+    metadata:
+      labels:
+        app: executor-api
+    spec:
+      containers:
+      - name: executor-api
+        image: opencode-veritly-executor-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 7777
+          name: http
+        env:
+        - name: PORT
+          value: "7777"
+        - name: EXECUTOR_DRIVER
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: EXECUTOR_DRIVER
+        - name: EXECUTOR_DEFAULT_TIMEOUT_MS
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: EXECUTOR_DEFAULT_TIMEOUT_MS
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 7777
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 7777
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: executor-api
+  namespace: veritly
+spec:
+  selector:
+    app: executor-api
+  ports:
+  - port: 7777
+    targetPort: 7777
+    name: http

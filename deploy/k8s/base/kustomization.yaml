@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: veritly
+
+resources:
+  - 00-namespace.yaml
+  - 01-relay.yaml
+  - 02-opencode-api.yaml
+  - 02b-opencode-frontend.yaml
+  - 02c-opencode-pvc.yaml
+  - 03-executor.yaml
+  - 04-ingress.yaml
+
+images:
+  - name: opencode-veritly-relay
+    newName: registry.digitalocean.com/veritly-registry/relay
+    newTag: latest
+  - name: opencode-veritly-api
+    newName: registry.digitalocean.com/veritly-registry/opencode-api
+    newTag: latest
+  - name: opencode-veritly-frontend
+    newName: registry.digitalocean.com/veritly-registry/opencode-frontend
+    newTag: latest
+  - name: opencode-veritly-executor-api
+    newName: registry.digitalocean.com/veritly-registry/executor-api
+    newTag: latest

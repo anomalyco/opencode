@@ -1,0 +1,28 @@
+services:
+  opencode-api:
+    image: opencode-veritly-api:lean
+    ports:
+      - "8000:3000"
+    environment:
+      - OPENCODE_DISABLE_LOCAL_FILESYSTEM=false
+      - OPENCODE_DISABLE_LOCAL_FILESYSTEM=false
+      - DEPLOYMENT_ENVIRONMENT=local
+      - VITE_UNIVER_BACKEND_URL=http://localhost:18765
+      - VERITLY_WS_DEBUG=0
+    volumes:
+      - ./packages/app/dist:/app/packages/app/dist:ro
+      - opencode-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  opencode-frontend:
+    image: opencode-veritly-frontend:lean
+    ports:
+      - "43002:80"
+
+volumes:
+  opencode-data:

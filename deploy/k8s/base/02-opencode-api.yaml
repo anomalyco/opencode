@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode-api
+  namespace: veritly
+  labels:
+    app: opencode-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencode-api
+  template:
+    metadata:
+      labels:
+        app: opencode-api
+    spec:
+      containers:
+      - name: opencode-api
+        image: opencode-veritly-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: OPENCODE_SERVER_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: OPENCODE_SERVER_USERNAME
+        - name: OPENCODE_SERVER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: veritly-secrets
+              key: OPENCODE_SERVER_PASSWORD
+        - name: OPENCODE_HOSTED_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: OPENCODE_HOSTED_MODE
+        - name: OPENCODE_DISABLE_LOCAL_FILESYSTEM
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: OPENCODE_DISABLE_LOCAL_FILESYSTEM
+        - name: DEPLOYMENT_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: DEPLOYMENT_ENVIRONMENT
+        - name: VITE_UNIVER_BACKEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: VITE_UNIVER_BACKEND_URL
+        - name: VERITLY_WS_DEBUG
+          value: "0"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: opencode-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-api
+  namespace: veritly
+spec:
+  selector:
+    app: opencode-api
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http

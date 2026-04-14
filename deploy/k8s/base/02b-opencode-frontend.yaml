@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencode-frontend
+  namespace: veritly
+  labels:
+    app: opencode-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencode-frontend
+  template:
+    metadata:
+      labels:
+        app: opencode-frontend
+    spec:
+      containers:
+      - name: opencode-frontend
+        image: opencode-veritly-frontend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-frontend
+  namespace: veritly
+spec:
+  selector:
+    app: opencode-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
