@@ -110,6 +110,7 @@ export namespace Ripgrep {
     glob?: string[]
     limit?: number
     follow?: boolean
+    file?: string[]
     signal?: AbortSignal
   }
 
@@ -246,7 +247,7 @@ export namespace Ripgrep {
   }
 
   function searchArgs(input: SearchInput) {
-    const args = ["--json", "--hidden", "--glob=!.git/*"]
+    const args = ["--json", "--hidden", "--glob=!.git/*", "--no-messages"]
     if (input.follow) args.push("--follow")
     if (input.glob) {
       for (const glob of input.glob) {
@@ -254,7 +255,7 @@ export namespace Ripgrep {
       }
     }
     if (input.limit) args.push(`--max-count=${input.limit}`)
-    args.push("--", input.pattern, ".")
+    args.push("--", input.pattern, ...(input.file ?? ["."]))
     return args
   }
 

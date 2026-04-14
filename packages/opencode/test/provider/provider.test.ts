@@ -2436,10 +2436,15 @@ test("plugin config providers persist after instance dispose", async () => {
 
   const first = await Instance.provide({
     directory: tmp.path,
-    fn: async () => {
-      await Plugin.init()
-      return list()
-    },
+    fn: async () =>
+      AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          const provider = yield* Provider.Service
+          yield* plugin.init()
+          return yield* provider.list()
+        }),
+      ),
   })
   expect(first[ProviderID.make("demo")]).toBeDefined()
   expect(first[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
