@@ -20,6 +20,7 @@ import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
+import { Profiler } from "./profiler"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -363,6 +364,13 @@ export namespace SessionProcessor {
               ctx.assistantMessage.finish = value.finishReason
               ctx.assistantMessage.cost += usage.cost
               ctx.assistantMessage.tokens = usage.tokens
+              Profiler.endRequest({
+                sessionID: ctx.sessionID,
+                messageID: ctx.assistantMessage.id,
+                tokens: usage.tokens,
+                cost: usage.cost,
+                finishReason: value.finishReason,
+              })
               yield* session.updatePart({
                 id: PartID.ascending(),
                 reason: value.finishReason,

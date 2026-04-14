@@ -21,6 +21,7 @@ import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { Profiler } from "./profiler"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -324,6 +325,23 @@ export namespace LLM {
         }
       })
     }
+
+    Profiler.startRequest({
+      sessionID: input.sessionID,
+      messageID: input.user.id,
+      agent: input.agent.name,
+      provider: provider.id,
+      modelID: input.model.id,
+      apiModelID: input.model.api.id,
+      endpoint:
+        (provider.options?.["baseURL"] as string) ??
+        (provider.options?.["endpoint"] as string) ??
+        input.model.api.url ??
+        "unknown",
+      system,
+      messageCount: messages.length,
+      tools: Object.keys(tools),
+    })
 
     return streamText({
       onError(error) {
