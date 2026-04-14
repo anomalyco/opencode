@@ -31,14 +31,7 @@ export async function InstanceBootstrap() {
     projectID: Instance.project.id,
     step: "start",
   })
-  const pluginAt = Date.now()
-  void Plugin.init()
-  log.info("instance.bootstrap", {
-    directory: Instance.directory,
-    projectID: Instance.project.id,
-    step: "plugin_background",
-    duration: Date.now() - pluginAt,
-  })
+  await run("plugin", () => Plugin.init())
   ShareNext.init()
   log.info("instance.bootstrap", {
     directory: Instance.directory,

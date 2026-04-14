@@ -86,7 +86,7 @@ export namespace Plugin {
                 : undefined,
               fetch: async (...args) => Server.Default().fetch(...args),
             })
-            const cfg = await Config.get()
+            const cfg = await Config.live()
             const input: PluginInput = {
               client,
               project: ctx.project,
@@ -251,7 +251,7 @@ export namespace Plugin {
   export async function init() {
     const dir = Instance.directory
     const task = pending.get(dir)
-    if (task) return
+    if (task) return task
 
     const next = runPromise((svc) => svc.init())
       .catch((err) => {
@@ -265,5 +265,6 @@ export namespace Plugin {
       })
 
     pending.set(dir, next)
+    return next
   }
 }
