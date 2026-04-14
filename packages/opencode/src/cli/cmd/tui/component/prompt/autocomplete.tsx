@@ -48,7 +48,7 @@ function extractLineRange(input: string) {
 export type AutocompleteRef = {
   onInput: (value: string) => void
   onKeyDown: (e: KeyEvent) => void
-  visible: false | "@" | "/"
+  visible: false | "@" | "/" | "$"
 }
 
 export type AutocompleteOption = {
@@ -72,6 +72,7 @@ export function Autocomplete(props: {
   ref: (ref: AutocompleteRef) => void
   fileStyleId: number
   agentStyleId: number
+  skillStyleId: number
   promptPartTypeId: () => number
 }) {
   const sdk = useSDK()
@@ -143,7 +144,8 @@ export function Autocomplete(props: {
 
     const charAfterCursor = props.value.at(currentCursorOffset)
     const needsSpace = charAfterCursor !== " "
-    const append = "@" + text + (needsSpace ? " " : "")
+    const prefix = part.type === "skill" ? "$" : "@"
+    const append = prefix + text + (needsSpace ? " " : "")
 
     input.cursorOffset = store.index
     const startCursor = input.logicalCursor
@@ -153,11 +155,18 @@ export function Autocomplete(props: {
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText(append)
 
-    const virtualText = "@" + text
+    const virtualText = prefix + text
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
-    const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
+    const styleId =
+      part.type === "file"
+        ? props.fileStyleId
+        : part.type === "agent"
+          ? props.agentStyleId
+          : part.type === "skill"
+            ? props.skillStyleId
+            : undefined
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
@@ -193,6 +202,10 @@ export function Autocomplete(props: {
         part.source.text.end = extmarkEnd
         part.source.text.value = virtualText
       } else if (part.type === "agent" && part.source) {
+        part.source.start = extmarkStart
+        part.source.end = extmarkEnd
+        part.source.value = virtualText
+      } else if (part.type === "skill" && part.source) {
         part.source.start = extmarkStart
         part.source.end = extmarkEnd
         part.source.value = virtualText
@@ -341,6 +354,36 @@ export function Autocomplete(props: {
       )
   })
 
+  const skills = createMemo((): AutocompleteOption[] => {
+    const results = sync.data.skill.map(
+      (skill): AutocompleteOption => ({
+        display: skill.name,
+        description: skill.description,
+        onSelect: () => {
+          insertPart(skill.name, {
+            type: "skill",
+            name: skill.name,
+            source: {
+              start: 0,
+              end: 0,
+              value: "$" + skill.name,
+            },
+          })
+        },
+      }),
+    )
+
+    results.sort((a, b) => a.display.localeCompare(b.display))
+
+    const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
+    if (!max) return results
+    const maxDisplay = Math.min(max!, 20)
+    return results.map((item) => ({
+      ...item,
+      display: item.display.length > 20 ? item.display.slice(0, 17) + "... " : item.display.padEnd(maxDisplay + 1),
+    }))
+  })
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...command.slashes()]
 
@@ -372,9 +415,14 @@ export function Autocomplete(props: {
     const filesValue = files()
     const agentsValue = agents()
     const commandsValue = commands()
+    const skillsValue = skills()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...agentsValue, ...(filesValue || []), ...mcpResources()]
+        : store.visible === "$"
+          ? [...skillsValue]
+          : [...commandsValue]
 
     const currentFilter = filter()
 
@@ -461,7 +509,7 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
-  function show(mode: "@" | "/") {
+  function show(mode: "@" | "/" | "$") {
     command.keybinds(false)
     setStore({
       visible: mode,
@@ -517,13 +565,25 @@ export function Autocomplete(props: {
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
         const text = value.slice(0, offset)
         const idx = text.lastIndexOf("@")
-        if (idx === -1) return
+        if (idx !== -1) {
+          const between = text.slice(idx)
+          const before = idx === 0 ? undefined : value[idx - 1]
+          if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+            show("@")
+            setStore("index", idx)
+            return
+          }
+        }
 
-        const between = text.slice(idx)
-        const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
-          show("@")
-          setStore("index", idx)
+        // Check for "$" trigger - find the nearest "$" before cursor with no whitespace between
+        const dollarIdx = text.lastIndexOf("$")
+        if (dollarIdx !== -1) {
+          const between = text.slice(dollarIdx)
+          const before = dollarIdx === 0 ? undefined : value[dollarIdx - 1]
+          if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+            show("$")
+            setStore("index", dollarIdx)
+          }
         }
       },
       onKeyDown(e: KeyEvent) {
@@ -577,6 +637,14 @@ export function Autocomplete(props: {
 
           if (e.name === "/") {
             if (props.input().cursorOffset === 0) show("/")
+          }
+
+          if (e.name === "$") {
+            const cursorOffset = props.input().cursorOffset
+            const charBeforeCursor =
+              cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
+            if (canTrigger) show("$")
           }
         }
       },

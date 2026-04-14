@@ -134,6 +134,16 @@ export namespace SessionPrompt {
           .meta({
             ref: "AgentPartInput",
           }),
+        MessageV2.SkillPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "SkillPartInput",
+          }),
         MessageV2.SubtaskPart.omit({
           messageID: true,
           sessionID: true,
@@ -1158,6 +1168,39 @@ export namespace SessionPrompt {
                 " Use the above message and context to generate a prompt and call the task tool with subagent: " +
                 part.name +
                 hint,
+            },
+          ]
+        }
+
+        if (part.type === "skill") {
+          // Load skill content and add as synthetic text
+          const { Skill } = await import("@/skill/skill")
+          const skillInfo = await Skill.get(part.name)
+          if (skillInfo) {
+            return [
+              {
+                id: Identifier.ascending("part"),
+                ...part,
+                messageID: info.id,
+                sessionID: input.sessionID,
+              },
+              {
+                id: Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `## Skill: ${skillInfo.name}\n\n${skillInfo.description}`,
+              },
+            ]
+          }
+          // If skill not found, just store the part without expansion
+          return [
+            {
+              id: Identifier.ascending("part"),
+              ...part,
+              messageID: info.id,
+              sessionID: input.sessionID,
             },
           ]
         }
