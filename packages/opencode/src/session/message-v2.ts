@@ -155,6 +155,21 @@ export namespace MessageV2 {
   })
   export type AgentPart = z.infer<typeof AgentPart>
 
+  export const SkillPart = PartBase.extend({
+    type: z.literal("skill"),
+    name: z.string(),
+    source: z
+      .object({
+        value: z.string(),
+        start: z.number().int(),
+        end: z.number().int(),
+      })
+      .optional(),
+  }).meta({
+    ref: "SkillPart",
+  })
+  export type SkillPart = z.infer<typeof SkillPart>
+
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
     auto: z.boolean(),
@@ -338,6 +353,7 @@ export namespace MessageV2 {
       SnapshotPart,
       PatchPart,
       AgentPart,
+      SkillPart,
       RetryPart,
       CompactionPart,
     ])

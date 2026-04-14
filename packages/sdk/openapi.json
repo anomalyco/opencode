@@ -2267,6 +2267,9 @@
                           "$ref": "#/components/schemas/AgentPartInput"
                         },
                         {
+                          "$ref": "#/components/schemas/SkillPartInput"
+                        },
+                        {
                           "$ref": "#/components/schemas/SubtaskPartInput"
                         }
                       ]
@@ -2641,6 +2644,9 @@
                         },
                         {
                           "$ref": "#/components/schemas/AgentPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/SkillPartInput"
                         },
                         {
                           "$ref": "#/components/schemas/SubtaskPartInput"
@@ -6942,6 +6948,47 @@
         },
         "required": ["id", "sessionID", "messageID", "type", "name"]
       },
+      "SkillPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "skill"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["value", "start", "end"]
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "name"]
+      },
       "RetryPart": {
         "type": "object",
         "properties": {
@@ -7069,6 +7116,9 @@
           },
           {
             "$ref": "#/components/schemas/AgentPart"
+          },
+          {
+            "$ref": "#/components/schemas/SkillPart"
           },
           {
             "$ref": "#/components/schemas/RetryPart"
@@ -10212,6 +10262,41 @@
           "type": {
             "type": "string",
             "const": "agent"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["value", "start", "end"]
+          }
+        },
+        "required": ["type", "name"]
+      },
+      "SkillPartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "skill"
           },
           "name": {
             "type": "string"

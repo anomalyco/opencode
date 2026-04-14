@@ -5,7 +5,7 @@ import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart, FilePart, TextPart, SkillPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
   input: string
@@ -13,6 +13,7 @@ export type PromptInfo = {
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | Omit<SkillPart, "id" | "messageID" | "sessionID">
     | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
         source?: {
           text: {

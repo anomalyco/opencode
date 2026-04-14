@@ -29,6 +29,13 @@ import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 
+// Skill type from API response
+type Skill = {
+  name: string
+  description: string
+  location: string
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -40,6 +47,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_auth: Record<string, ProviderAuthMethod[]>
       agent: Agent[]
       command: Command[]
+      skill: Skill[]
       permission: {
         [sessionID: string]: PermissionRequest[]
       }
@@ -86,6 +94,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       permission: {},
       question: {},
       command: [],
+      skill: [],
       provider: [],
       provider_default: {},
       session: [],
@@ -360,6 +369,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           Promise.all([
             ...(args.continue ? [] : [sessionListPromise]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
+            sdk.client.app.skills().then((x) => setStore("skill", reconcile((x.data as Skill[] | undefined) ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
             sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),

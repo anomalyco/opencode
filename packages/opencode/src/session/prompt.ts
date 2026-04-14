@@ -134,6 +134,16 @@ export namespace SessionPrompt {
           .meta({
             ref: "AgentPartInput",
           }),
+        MessageV2.SkillPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "SkillPartInput",
+          }),
         MessageV2.SubtaskPart.omit({
           messageID: true,
           sessionID: true,
@@ -1162,6 +1172,39 @@ export namespace SessionPrompt {
           ]
         }
 
+        if (part.type === "skill") {
+          // Load skill content and add as synthetic text
+          const { Skill } = await import("@/skill/skill")
+          const skillInfo = await Skill.get(part.name)
+          if (skillInfo) {
+            return [
+              {
+                id: Identifier.ascending("part"),
+                ...part,
+                messageID: info.id,
+                sessionID: input.sessionID,
+              },
+              {
+                id: Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `## Skill: ${skillInfo.name}\n\n${skillInfo.description}`,
+              },
+            ]
+          }
+          // If skill not found, just store the part without expansion
+          return [
+            {
+              id: Identifier.ascending("part"),
+              ...part,
+              messageID: info.id,
+              sessionID: input.sessionID,
+            },
+          ]
+        }
+
         return [
           {
             id: Identifier.ascending("part"),
@@ -1546,23 +1589,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const kill = () => Shell.killTree(proc, { exited: () => exited })
 
-    const cleanupFile = async () => {
-      if (!truncated) return
-      try {
-        await fs.unlink(tmpPath)
-      } catch {}
-    }
-
     if (abort.aborted) {
       aborted = true
       await kill()
-      await cleanupFile()
     }
 
     const abortHandler = () => {
       aborted = true
       void kill()
-      void cleanupFile()
     }
 
     abort.addEventListener("abort", abortHandler, { once: true })

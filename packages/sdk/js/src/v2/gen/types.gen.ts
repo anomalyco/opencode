@@ -421,6 +421,19 @@ export type AgentPart = {
   }
 }
 
+export type SkillPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "skill"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
 export type RetryPart = {
   id: string
   sessionID: string
@@ -465,6 +478,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | SkillPart
   | RetryPart
   | CompactionPart
 
@@ -1960,6 +1974,17 @@ export type AgentPartInput = {
   }
 }
 
+export type SkillPartInput = {
+  id?: string
+  type: "skill"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
 export type SubtaskPartInput = {
   id?: string
   type: "subtask"
@@ -3233,7 +3258,7 @@ export type SessionPromptData = {
     }
     system?: string
     variant?: string
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SkillPartInput | SubtaskPartInput>
   }
   path: {
     /**
@@ -3420,7 +3445,7 @@ export type SessionPromptAsyncData = {
     }
     system?: string
     variant?: string
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SkillPartInput | SubtaskPartInput>
   }
   path: {
     /**
