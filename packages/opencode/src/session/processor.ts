@@ -370,7 +370,6 @@ export namespace SessionProcessor {
                 sessionID: ctx.sessionID,
                 messageID: ctx.assistantMessage.id,
                 tokens: usage.tokens,
-                cost: usage.cost,
                 finishReason: value.finishReason,
               })
               yield* session.updatePart({

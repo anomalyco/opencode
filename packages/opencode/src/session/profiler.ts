@@ -90,7 +90,6 @@ export namespace Profiler {
       reasoning: number
       cache: { read: number; write: number }
     }
-    cost: number
     finishReason: string
   }) {
     if (!enabled()) return
@@ -111,8 +110,10 @@ export namespace Profiler {
       userQuery: req.userQuery,
       messageCount: req.messageCount,
       tools: req.tools,
-      tokens: input.tokens,
-      cost: input.cost,
+      tokens: {
+        input: input.tokens.input + input.tokens.cache.read + input.tokens.cache.write,
+        output: input.tokens.output + input.tokens.reasoning,
+      },
       finishReason: input.finishReason,
       output: {
         text: req.text,
