@@ -453,10 +453,12 @@ export namespace ACP {
                 return
             }
           }
-          if (part.type !== "text" && part.type !== "file") return
+          
           // ACP clients already know the prompt they just submitted, so replaying
           // live user parts duplicates the message. We still replay user history in
           // loadSession() and forkSession() via processMessage().
+          if (part.type !== "text" && part.type !== "file") return
+
           return
         }
 
