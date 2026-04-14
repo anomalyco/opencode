@@ -75,11 +75,25 @@ export const EventRoutes = () =>
         })
 
         stream.onAbort(stop)
+        // Second abort path: req.raw.signal fires before stream.onAbort on direct
+        // connections (~2ms earlier), and provides an independent cleanup path when
+        // the responseReadable.cancel() chain is broken (e.g. reverse proxy).
+        // Hono only registers this on Bun 1.0/1.1 (isOldBunVersion gate); we add
+        // it unconditionally so Bun 1.2+ is also covered.
+        c.req.raw.signal.addEventListener("abort", stop)
 
         try {
           for await (const data of q) {
             if (data === null) return
-            await stream.writeSSE({ data })
+            try {
+              await stream.writeSSE({ data })
+            } catch {
+              // Hono 4.x StreamingApi.write() has an empty catch — this block
+              // never fires on the current version. Kept for forward compatibility
+              // in case a future Hono version propagates write errors.
+              stop()
+              return
+            }
           }
         } finally {
           stop()

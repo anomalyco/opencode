@@ -11,7 +11,11 @@ export const adapter: Adapter = {
         const args = {
           fetch: app.fetch,
           hostname: opts.hostname,
-          idleTimeout: 0,
+          // Default is 10s which is too aggressive for SSE connections.
+          // 0 disables the timeout entirely — dead connections (CLOSE_WAIT) are
+          // never cleaned up, causing unbounded memory growth. 120s gives the
+          // cleanup chain enough time to fire while still bounding leak duration.
+          idleTimeout: 120,
           websocket: ws.websocket,
         } as const
         const start = (port: number) => {
