@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -29,9 +30,11 @@ afterEach(async () => {
 async function load(dir: string) {
   return Instance.provide({
     directory: dir,
-    fn: async () => {
-      await Plugin.list()
-    },
+    fn: async () =>
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.list()
+      }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
   })
 }
 
