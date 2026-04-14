@@ -104,12 +104,21 @@ export namespace SessionPrompt {
       const summary = yield* SessionSummary.Service
       const sys = yield* SystemPrompt.Service
       const llm = yield* LLM.Service
-      const ctx = yield* Effect.context()
-
-      const run = {
-        promise: <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(ctx)(effect),
-        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runForkWith(ctx)(effect),
-      }
+      const runner = Effect.fn("SessionPrompt.runner")(function* () {
+        const ctx = yield* Effect.context()
+        return {
+          promise: <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(ctx)(effect),
+          fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runForkWith(ctx)(effect),
+        }
+      })
+      const ops = Effect.fn("SessionPrompt.ops")(function* () {
+        const run = yield* runner()
+        return {
+          cancel: (sessionID: SessionID) => run.fork(cancel(sessionID)),
+          resolvePromptParts: (template: string) => resolvePromptParts(template),
+          prompt: (input: PromptInput) => prompt(input),
+        } satisfies TaskPromptOps
+      })
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         yield* elog.info("cancel", { sessionID })
@@ -359,6 +368,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         using _ = log.time("resolveTools")
         const tools: Record<string, AITool> = {}
+        const run = yield* runner()
+        const promptOps = yield* ops()
 
         const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
           sessionID: input.session.id,
@@ -528,6 +539,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
+        const promptOps = yield* ops()
         const { task: taskTool } = yield* registry.named()
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
@@ -712,6 +724,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput) {
         const ctx = yield* InstanceState.context
+        const run = yield* runner()
         const session = yield* sessions.get(input.sessionID)
         if (session.revert) {
           yield* revert.cleanup(session)
@@ -1658,12 +1671,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
         return result
       })
-
-      const promptOps: TaskPromptOps = {
-        cancel: (sessionID) => run.fork(cancel(sessionID)),
-        resolvePromptParts: (template) => resolvePromptParts(template),
-        prompt: (input) => prompt(input),
-      }
 
       return Service.of({
         cancel,

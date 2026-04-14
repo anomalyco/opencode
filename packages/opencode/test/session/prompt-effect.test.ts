@@ -483,6 +483,48 @@ it.live("loop continues when finish is tool-calls", () =>
   ),
 )
 
+it.live("glob tool keeps instance context during prompt runs", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "Glob context",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        const file = path.join(dir, "probe.txt")
+        yield* Effect.promise(() => Bun.write(file, "probe"))
+
+        yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "find text files" }],
+        })
+        yield* llm.tool("glob", { pattern: "**/*.txt" })
+        yield* llm.text("done")
+
+        const result = yield* prompt.loop({ sessionID: session.id })
+        expect(result.info.role).toBe("assistant")
+
+        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+        const tool = msgs
+          .flatMap((msg) => msg.parts)
+          .find(
+            (part): part is CompletedToolPart =>
+              part.type === "tool" && part.tool === "glob" && part.state.status === "completed",
+          )
+        if (!tool) return
+
+        expect(tool.state.output).toContain(file)
+        expect(tool.state.output).not.toContain("No context found for instance")
+        expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+      }),
+    { git: true, config: providerCfg },
+  ),
+)
+
 it.live("loop continues when finish is stop but assistant has tool parts", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {
