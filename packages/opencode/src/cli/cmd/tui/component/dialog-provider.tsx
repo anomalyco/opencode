@@ -47,10 +47,10 @@ export function createDialogProviderOptions() {
             mammouth: "(Recommended)",
             anthropic: "(API key)",
             openai: "(ChatGPT Plus/Pro or API key)",
-            "mammouth-go": "Low cost subscription for everyone",
+            "mammouth-ai": "(Mammouth API key)",
           }[provider.id],
           footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
-          category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+          category: provider.id == "mammouth-ai" ? "Mammouth AI" : provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
           gutter: consoleManaged ? (
             <text fg={theme.textMuted}>{CONSOLE_MANAGED_ICON}</text>
           ) : connected ? (
