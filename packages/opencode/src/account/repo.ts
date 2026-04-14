@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm"
-import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Schema, Context } from "effect"
 
 import { Database } from "@/storage/db"
 import { AccountStateTable, AccountTable } from "./account.sql"
@@ -38,7 +38,7 @@ export namespace AccountRepo {
   }
 }
 
-export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Service>()("@opencode/AccountRepo") {
+export class AccountRepo extends Context.Service<AccountRepo, AccountRepo.Service>()("@opencode/AccountRepo") {
   static readonly layer: Layer.Layer<AccountRepo> = Layer.effect(
     AccountRepo,
     Effect.gen(function* () {

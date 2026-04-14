@@ -6,11 +6,11 @@ import DESCRIPTION from "./multiedit.txt"
 import path from "path"
 import { Instance } from "../project/instance"
 
-export const MultiEditTool = Tool.defineEffect(
+export const MultiEditTool = Tool.define(
   "multiedit",
   Effect.gen(function* () {
     const editInfo = yield* EditTool
-    const edit = yield* Effect.promise(() => editInfo.init())
+    const edit = yield* editInfo.init()
 
     return {
       description: DESCRIPTION,
@@ -37,16 +37,14 @@ export const MultiEditTool = Tool.defineEffect(
         Effect.gen(function* () {
           const results = []
           for (const [, entry] of params.edits.entries()) {
-            const result = yield* Effect.promise(() =>
-              edit.execute(
-                {
-                  filePath: params.filePath,
-                  oldString: entry.oldString,
-                  newString: entry.newString,
-                  replaceAll: entry.replaceAll,
-                },
-                ctx,
-              ),
+            const result = yield* edit.execute(
+              {
+                filePath: params.filePath,
+                oldString: entry.oldString,
+                newString: entry.newString,
+                replaceAll: entry.replaceAll,
+              },
+              ctx,
             )
             results.push(result)
           }
@@ -57,7 +55,7 @@ export const MultiEditTool = Tool.defineEffect(
             },
             output: results.at(-1)!.output,
           }
-        }).pipe(Effect.orDie, Effect.runPromise),
+        }),
     }
   }),
 )

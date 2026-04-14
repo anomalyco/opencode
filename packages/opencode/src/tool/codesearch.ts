@@ -5,7 +5,7 @@ import { Tool } from "./tool"
 import * as McpExa from "./mcp-exa"
 import DESCRIPTION from "./codesearch.txt"
 
-export const CodeSearchTool = Tool.defineEffect(
+export const CodeSearchTool = Tool.define(
   "codesearch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
@@ -29,17 +29,15 @@ export const CodeSearchTool = Tool.defineEffect(
       }),
       execute: (params: { query: string; tokensNum: number }, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            ctx.ask({
-              permission: "codesearch",
-              patterns: [params.query],
-              always: ["*"],
-              metadata: {
-                query: params.query,
-                tokensNum: params.tokensNum,
-              },
-            }),
-          )
+          yield* ctx.ask({
+            permission: "codesearch",
+            patterns: [params.query],
+            always: ["*"],
+            metadata: {
+              query: params.query,
+              tokensNum: params.tokensNum,
+            },
+          })
 
           const result = yield* McpExa.call(
             http,
@@ -59,7 +57,7 @@ export const CodeSearchTool = Tool.defineEffect(
             title: `Code search: ${params.query}`,
             metadata: {},
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )
