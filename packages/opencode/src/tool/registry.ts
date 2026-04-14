@@ -78,6 +78,7 @@ export namespace ToolRegistry {
     Service,
     never,
     | Config.Service
+    | Env.Service
     | Plugin.Service
     | Question.Service
     | Todo.Service
@@ -99,6 +100,7 @@ export namespace ToolRegistry {
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
+      const env = yield* Env.Service
       const plugin = yield* Plugin.Service
       const agents = yield* Agent.Service
       const skill = yield* Skill.Service
@@ -121,6 +123,7 @@ export namespace ToolRegistry {
       const greptool = yield* GrepTool
       const patchtool = yield* ApplyPatchTool
       const skilltool = yield* SkillTool
+      const agent = yield* Agent.Service
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -140,8 +143,8 @@ export namespace ToolRegistry {
                     worktree: ctx.worktree,
                   }
                   const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
-                  const agent = yield* Effect.promise(() => Agent.get(toolCtx.agent))
-                  const out = yield* truncate.output(result, {}, agent)
+                  const info = yield* agent.get(toolCtx.agent)
+                  const out = yield* truncate.output(result, {}, info)
                   return {
                     title: "",
                     output: out.truncated ? out.content : result,
@@ -271,13 +274,14 @@ export namespace ToolRegistry {
       })
 
       const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+        const e2e = !!(yield* env.get("OPENCODE_E2E_LLM_URL"))
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
             return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
 
           const usePatch =
-            !!Env.get("OPENCODE_E2E_LLM_URL") ||
+            e2e ||
             (input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4"))
           if (tool.id === ApplyPatchTool.id) return usePatch
           if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
@@ -324,6 +328,7 @@ export namespace ToolRegistry {
   export const defaultLayer = Layer.suspend(() =>
     layer.pipe(
       Layer.provide(Config.defaultLayer),
+      Layer.provide(Env.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),

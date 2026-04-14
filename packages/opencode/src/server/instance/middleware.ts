@@ -95,7 +95,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    const adaptor = await getAdaptor(workspace.type)
+    const adaptor = await getAdaptor(workspace.projectID, workspace.type)
     const target = await adaptor.target(workspace)
 
     if (target.type === "local") {

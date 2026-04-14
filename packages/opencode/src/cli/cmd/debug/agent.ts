@@ -35,7 +35,7 @@ export const AgentCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const agentName = args.name as string
-      const agent = await Agent.get(agentName)
+      const agent = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(agentName)))
       if (!agent) {
         process.stderr.write(
           `Agent ${agentName} not found, run '${basename(process.execPath)} agent list' to get an agent list` + EOL,
@@ -125,7 +125,14 @@ function parseToolParams(input?: string) {
 async function createToolContext(agent: Agent.Info) {
   const session = await Session.create({ title: `Debug tool run (${agent.name})` })
   const messageID = MessageID.ascending()
-  const model = agent.model ?? (await Provider.defaultModel())
+  const model =
+    agent.model ??
+    (await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* Provider.Service
+        return yield* provider.defaultModel()
+      }),
+    ))
   const now = Date.now()
   const message: MessageV2.Assistant = {
     id: messageID,

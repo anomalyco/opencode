@@ -330,6 +330,7 @@ export namespace Ripgrep {
       glob?: string[]
       limit?: number
       follow?: boolean
+      file?: string[]
     }) => Effect.Effect<{ items: Item[]; partial: boolean }, PlatformError | Error>
   }
 
@@ -351,6 +352,7 @@ export namespace Ripgrep {
         maxDepth?: number
         limit?: number
         pattern?: string
+        file?: string[]
       }) {
         const out = [yield* bin(), input.mode === "search" ? "--json" : "--files", "--glob=!.git/*"]
         if (input.follow) out.push("--follow")
@@ -363,7 +365,7 @@ export namespace Ripgrep {
         }
         if (input.limit) out.push(`--max-count=${input.limit}`)
         if (input.mode === "search") out.push("--no-messages")
-        if (input.pattern) out.push("--", input.pattern)
+        if (input.pattern) out.push("--", input.pattern, ...(input.file ?? []))
         return out
       })
 
@@ -405,6 +407,7 @@ export namespace Ripgrep {
         glob?: string[]
         limit?: number
         follow?: boolean
+        file?: string[]
       }) {
         return yield* Effect.scoped(
           Effect.gen(function* () {
@@ -414,6 +417,7 @@ export namespace Ripgrep {
               follow: input.follow,
               limit: input.limit,
               pattern: input.pattern,
+              file: input.file,
             })
 
             const handle = yield* spawner.spawn(

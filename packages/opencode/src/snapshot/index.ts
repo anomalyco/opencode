@@ -5,7 +5,6 @@ import path from "path"
 import z from "zod"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Hash } from "@/util/hash"
 import { Config } from "../config/config"
@@ -770,34 +769,4 @@ export namespace Snapshot {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Config.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function track() {
-    return runPromise((svc) => svc.track())
-  }
-
-  export async function patch(hash: string) {
-    return runPromise((svc) => svc.patch(hash))
-  }
-
-  export async function restore(snapshot: string) {
-    return runPromise((svc) => svc.restore(snapshot))
-  }
-
-  export async function revert(patches: Patch[]) {
-    return runPromise((svc) => svc.revert(patches))
-  }
-
-  export async function diff(hash: string) {
-    return runPromise((svc) => svc.diff(hash))
-  }
-
-  export async function diffFull(from: string, to: string) {
-    return runPromise((svc) => svc.diffFull(from, to))
-  }
 }

@@ -109,7 +109,7 @@ export const GlobalRoutes = lazy(() =>
                       directory: z.string(),
                       project: z.string().optional(),
                       workspace: z.string().optional(),
-                      payload: BusEvent.payloads(),
+                      payload: z.union([...BusEvent.payloads(), ...SyncEvent.payloads()]),
                     })
                     .meta({
                       ref: "GlobalEvent",
@@ -136,52 +136,6 @@ export const GlobalRoutes = lazy(() =>
       },
     )
     .get(
-      "/sync-event",
-      describeRoute({
-        summary: "Subscribe to global sync events",
-        description: "Get global sync events",
-        operationId: "global.sync-event.subscribe",
-        responses: {
-          200: {
-            description: "Event stream",
-            content: {
-              "text/event-stream": {
-                schema: resolver(
-                  z
-                    .object({
-                      payload: SyncEvent.payloads(),
-                    })
-                    .meta({
-                      ref: "SyncEvent",
-                    }),
-                ),
-              },
-            },
-          },
-        },
-      }),
-      async (c) => {
-        log.info("global sync event connected")
-        c.header("Cache-Control", "no-cache, no-transform")
-        c.header("X-Accel-Buffering", "no")
-        c.header("X-Content-Type-Options", "nosniff")
-        return streamEvents(c, (q) => {
-          return SyncEvent.subscribeAll(({ def, event }) => {
-            // TODO: don't pass def, just pass the type (and it should
-            // be versioned)
-            q.push(
-              JSON.stringify({
-                payload: {
-                  ...event,
-                  type: SyncEvent.versionedType(def.type, def.version),
-                },
-              }),
-            )
-          })
-        })
-      },
-    )
-    .get(
       "/config",
       describeRoute({
         summary: "Get global configuration",
@@ -199,7 +153,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await Config.getGlobal())
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())))
       },
     )
     .patch(
@@ -223,7 +177,7 @@ export const GlobalRoutes = lazy(() =>
       validator("json", Config.Info),
       async (c) => {
         const config = c.req.valid("json")
-        const next = await Config.updateGlobal(config)
+        const next = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.updateGlobal(config)))
         return c.json(next)
       },
     )
