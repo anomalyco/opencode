@@ -62,8 +62,11 @@ const resolve = () =>
 const readFileTime = (sessionID: SessionID, filepath: string) =>
   runtime.runPromise(FileTime.Service.use((ft) => ft.read(sessionID, filepath)))
 
-const subscribeBus = <D extends BusEvent.Definition>(def: D, callback: () => unknown) =>
-  runtime.runPromise(Bus.Service.use((bus) => bus.subscribeCallback(def, callback)))
+const subscribeBus = async <D extends BusEvent.Definition>(def: D, callback: () => unknown) => {
+  const off = await runtime.runPromise(Bus.Service.use((bus) => bus.subscribeCallback(def, callback)))
+  await Bun.sleep(10)
+  return off
+}
 
 describe("tool.edit", () => {
   describe("creating new files", () => {
