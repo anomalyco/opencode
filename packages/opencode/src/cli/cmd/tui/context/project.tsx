@@ -33,12 +33,15 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       },
     })
 
-    async function sync() {
+    let sync_seqnr = 0
+    async function sync(seqnr = ++sync_seqnr) {
       const workspace = store.workspace.current
       const [path, project] = await Promise.all([
         sdk.client.path.get({ workspace }),
         sdk.client.project.current({ workspace }),
       ])
+
+      if (seqnr < sync_seqnr) return
 
       batch(() => {
         setStore("instance", "path", reconcile(path.data || defaultPath))
