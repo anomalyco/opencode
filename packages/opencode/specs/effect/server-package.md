@@ -39,7 +39,8 @@ Everything still lives in `packages/opencode`.
 
 Important current facts:
 
-- there is no `packages/core`, `packages/server`, or `packages/cli` workspace yet
+- there is no `packages/core` or `packages/cli` workspace yet
+- `packages/server` now exists as a minimal scaffold package, but it does not own any real route contracts, handlers, or runtime composition yet
 - the main host server is still Hono-based in `src/server/server.ts`
 - current OpenAPI generation is Hono-based through `Server.openapi()` and `cli/cmd/generate.ts`
 - the Effect runtime and app layer are centralized in `src/effect/app-runtime.ts` and `src/effect/run-service.ts`
@@ -48,6 +49,34 @@ Important current facts:
 - that experimental slice already has an end-to-end test at `test/server/question-httpapi.test.ts`
 
 This means the package split should start from an extraction path, not from greenfield package ownership.
+
+## Structural reference
+
+Use `anomalyco/opentunnel` as the structural reference for `packages/server`.
+
+The important pattern there is:
+
+- `packages/core` owns services and domain schemas
+- `packages/server/src/definition/*` owns pure `HttpApi` contracts
+- `packages/server/src/api/*` owns `HttpApiBuilder.group(...)` implementations and server-side middleware wiring
+- `packages/server/src/index.ts` becomes the composition root only after the server package really owns runtime hosting
+
+Relevant `opentunnel` files:
+
+- `packages/server/src/definition/index.ts`
+- `packages/server/src/definition/tunnel.ts`
+- `packages/server/src/api/index.ts`
+- `packages/server/src/api/tunnel.ts`
+- `packages/server/src/api/client.ts`
+- `packages/server/src/index.ts`
+
+The intended direction here is the same, but the current `opencode` package split is earlier in the migration.
+
+That means:
+
+- we should follow the same `definition` and `api` naming
+- we should keep contract and implementation as separate modules from the start
+- we should postpone the runtime composition root until `packages/core` exists enough to support it cleanly
 
 ## Key decision
 
@@ -105,8 +134,8 @@ This package split should preserve that separation explicitly.
 
 Default shape for migrated routes:
 
-- contract lives in `packages/server/src/spec/*`
-- implementation lives in `packages/server/src/impl/*`
+- contract lives in `packages/server/src/definition/*`
+- implementation lives in `packages/server/src/api/*`
 - host mounting stays outside for now
 
 ## OpenAPI rule
@@ -136,12 +165,19 @@ Practical implication:
 Minimum viable `packages/server`:
 
 - `src/index.ts`
-- `src/spec/api.ts`
-- `src/spec/question.ts`
-- `src/impl/question.ts`
+- `src/definition/index.ts`
+- `src/definition/api.ts`
+- `src/definition/question.ts`
+- `src/api/index.ts`
+- `src/api/question.ts`
 - `src/openapi.ts`
 - `src/bridge/hono.ts`
 - `src/types.ts`
+
+Later additions, once there is enough real contract surface:
+
+- `src/api/client.ts`
+- runtime composition in `src/index.ts`
 
 Suggested initial exports:
 
@@ -302,13 +338,14 @@ Scope:
 
 - add the new workspace package
 - add package manifest and tsconfig
-- add empty `src/index.ts`, `src/spec/api.ts`, `src/openapi.ts`, and supporting scaffolding
+- add empty `src/index.ts`, `src/definition/api.ts`, `src/definition/index.ts`, `src/api/index.ts`, `src/openapi.ts`, and supporting scaffolding
 
 Rules:
 
 - no production behavior changes
 - no host server changes yet
 - no imports from `packages/opencode` inside `packages/server`
+- prefer `opentunnel`-style naming from the start: `definition` for contracts, `api` for implementations
 
 Done means:
 
@@ -321,8 +358,8 @@ Done means:
 Scope:
 
 - extract the pure `HttpApi` contract from `src/server/instance/httpapi/question.ts`
-- place it in `packages/server/src/spec/question.ts`
-- aggregate it in `packages/server/src/spec/api.ts`
+- place it in `packages/server/src/definition/question.ts`
+- aggregate it in `packages/server/src/definition/api.ts`
 - generate OpenAPI in `packages/server/src/openapi.ts`
 
 Rules:
@@ -341,7 +378,7 @@ Done means:
 
 Scope:
 
-- extract the question `HttpApiBuilder.group(...)` implementation into `packages/server/src/impl/question.ts`
+- extract the question `HttpApiBuilder.group(...)` implementation into `packages/server/src/api/question.ts`
 - expose it as a factory that accepts host-provided dependencies or wiring
 - add a small Hono bridge in `packages/server/src/bridge/hono.ts` if needed
 
@@ -603,8 +640,8 @@ Avoid by:
 
 ## Checklist
 
-- [ ] create `packages/server`
-- [ ] add package-level exports for contract and OpenAPI
+- [x] create `packages/server`
+- [x] add package-level exports for contract and OpenAPI
 - [ ] extract `question` contract into `packages/server`
 - [ ] extract `question` handler factory into `packages/server`
 - [ ] mount `question` from `packages/opencode`
