@@ -240,6 +240,66 @@ describe("tool.write", () => {
     )
   })
 
+  describe("large file handling", () => {
+    it.live("skips diff computation and sets truncated flag", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "big.txt")
+          const big = "a".repeat(400 * 1024) + "\n"
+          yield* Effect.promise(() => fs.writeFile(filepath, big, "utf-8"))
+          yield* markRead(ctx.sessionID, filepath)
+
+          let askMetadata: any
+          const askingCtx: Tool.Context = {
+            ...ctx,
+            ask: (input: any) =>
+              Effect.sync(() => {
+                askMetadata = input.metadata
+              }),
+          }
+
+          const start = performance.now()
+          const newContent = "b".repeat(400 * 1024) + "\n"
+          const result = yield* run({ filePath: filepath, content: newContent }, askingCtx)
+          const elapsed = performance.now() - start
+
+          expect(elapsed).toBeLessThan(1000)
+          expect(askMetadata).toBeDefined()
+          expect(askMetadata.truncated).toBe(true)
+          expect(askMetadata.diff).toBe("")
+          expect(result.metadata.truncated).toBe(true)
+
+          const onDisk = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(onDisk).toBe(newContent)
+        }),
+      ),
+    )
+
+    it.live("keeps full diff for small files", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "small.txt")
+          yield* Effect.promise(() => fs.writeFile(filepath, "old\n", "utf-8"))
+          yield* markRead(ctx.sessionID, filepath)
+
+          let askMetadata: any
+          const askingCtx: Tool.Context = {
+            ...ctx,
+            ask: (input: any) =>
+              Effect.sync(() => {
+                askMetadata = input.metadata
+              }),
+          }
+
+          yield* run({ filePath: filepath, content: "new\n" }, askingCtx)
+          expect(askMetadata.truncated).toBe(false)
+          expect(askMetadata.diff).toContain("+new")
+          expect(askMetadata.diff).toContain("-old")
+        }),
+      ),
+    )
+  })
+
   describe("title generation", () => {
     it.live("returns relative path as title", () =>
       provideTmpdirInstance((dir) =>

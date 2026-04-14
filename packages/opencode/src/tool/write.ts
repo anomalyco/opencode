@@ -3,7 +3,7 @@ import * as path from "path"
 import { Effect } from "effect"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { LSPClient } from "../lsp/client"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
@@ -12,7 +12,7 @@ import { Format } from "../format"
 import { FileTime } from "../file/time"
 import { AppFileSystem } from "../filesystem"
 import { Instance } from "../project/instance"
-import { trimDiff } from "./edit"
+import { buildDisplayDiff, LARGE_FILE_FORMAT_BYTES } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -43,19 +43,24 @@ export const WriteTool = Tool.define(
           const contentOld = exists ? yield* fs.readFileString(filepath) : ""
           if (exists) yield* filetime.assert(ctx.sessionID, filepath)
 
-          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+          const display = buildDisplayDiff(filepath, contentOld, params.content)
           yield* ctx.ask({
             permission: "edit",
             patterns: [path.relative(Instance.worktree, filepath)],
             always: ["*"],
             metadata: {
               filepath,
-              diff,
+              diff: display.diff,
+              truncated: display.truncated,
+              additions: display.additions,
+              deletions: display.deletions,
             },
           })
 
           yield* fs.writeWithDirs(filepath, params.content)
-          yield* format.file(filepath)
+          const newSize = Buffer.byteLength(params.content, "utf8")
+          const skipHeavy = newSize > LARGE_FILE_FORMAT_BYTES
+          if (!skipHeavy) yield* format.file(filepath)
           yield* bus.publish(File.Event.Edited, { file: filepath })
           yield* bus.publish(FileWatcher.Event.Updated, {
             file: filepath,
@@ -64,21 +69,24 @@ export const WriteTool = Tool.define(
           yield* filetime.read(ctx.sessionID, filepath)
 
           let output = "Wrote file successfully."
-          yield* lsp.touchFile(filepath, true)
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilepath = AppFileSystem.normalizePath(filepath)
-          let projectDiagnosticsCount = 0
-          for (const [file, issues] of Object.entries(diagnostics)) {
-            const current = file === normalizedFilepath
-            if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
-            const block = LSP.Diagnostic.report(current ? filepath : file, issues)
-            if (!block) continue
-            if (current) {
-              output += `\n\nLSP errors detected in this file, please fix:\n${block}`
-              continue
+          let diagnostics: Record<string, LSPClient.Diagnostic[]> = {}
+          if (!skipHeavy) {
+            yield* lsp.touchFile(filepath, true)
+            diagnostics = yield* lsp.diagnostics()
+            const normalizedFilepath = AppFileSystem.normalizePath(filepath)
+            let projectDiagnosticsCount = 0
+            for (const [file, issues] of Object.entries(diagnostics)) {
+              const current = file === normalizedFilepath
+              if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
+              const block = LSP.Diagnostic.report(current ? filepath : file, issues)
+              if (!block) continue
+              if (current) {
+                output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+                continue
+              }
+              projectDiagnosticsCount++
+              output += `\n\nLSP errors detected in other files:\n${block}`
             }
-            projectDiagnosticsCount++
-            output += `\n\nLSP errors detected in other files:\n${block}`
           }
 
           return {
@@ -87,6 +95,7 @@ export const WriteTool = Tool.define(
               diagnostics,
               filepath,
               exists: exists,
+              truncated: display.truncated,
             },
             output,
           }

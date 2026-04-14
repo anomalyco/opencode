@@ -41,6 +41,7 @@ type AskInput = {
   metadata: {
     diff: string
     filepath: string
+    truncated?: boolean
     files: Array<{
       filePath: string
       relativePath: string
@@ -49,6 +50,7 @@ type AskInput = {
       additions: number
       deletions: number
       movePath?: string
+      truncated?: boolean
     }>
   }
 }
@@ -579,6 +581,36 @@ EOF`
         await execute({ patchText }, ctx)
         // Result has ASCII quotes because that's what the patch specifies
         expect(await fs.readFile(target, "utf-8")).toBe(`He said "hi"\nsome${emDash}dash\nend\n`)
+      },
+    })
+  })
+
+  test("skips Myers diff and marks truncated on large files", async () => {
+    await using fixture = await tmpdir()
+    const { ctx, calls } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "big.txt")
+        const padding = "a\n".repeat(200_000) // ~400 KB, above 256 KB threshold
+        await fs.writeFile(target, `head\n${padding}tail\n`, "utf-8")
+
+        const patchText = "*** Begin Patch\n*** Update File: big.txt\n@@\n-head\n+HEAD\n*** End Patch"
+
+        const start = performance.now()
+        const result = await execute({ patchText }, ctx)
+        const elapsed = performance.now() - start
+
+        expect(elapsed).toBeLessThan(2000)
+        expect(calls.length).toBe(1)
+        const file = calls[0].metadata.files[0] as any
+        expect(file.truncated).toBe(true)
+        expect(file.patch).toBe("")
+        expect((result.metadata as any).truncated).toBe(true)
+
+        const updated = await fs.readFile(target, "utf-8")
+        expect(updated.startsWith("HEAD\n")).toBe(true)
       },
     })
   })

@@ -612,6 +612,39 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
+export const LARGE_FILE_DIFF_BYTES = 256 * 1024
+export const LARGE_FILE_FORMAT_BYTES = 2 * 1024 * 1024
+
+export interface DisplayDiff {
+  diff: string
+  truncated: boolean
+  additions: number
+  deletions: number
+}
+
+export function buildDisplayDiff(filepath: string, oldContent: string, newContent: string): DisplayDiff {
+  const oldSize = Buffer.byteLength(oldContent, "utf8")
+  const newSize = Buffer.byteLength(newContent, "utf8")
+  if (oldSize > LARGE_FILE_DIFF_BYTES || newSize > LARGE_FILE_DIFF_BYTES) {
+    const oldLines = oldContent ? oldContent.split("\n").length : 0
+    const newLines = newContent ? newContent.split("\n").length : 0
+    return {
+      diff: "",
+      truncated: true,
+      additions: Math.max(0, newLines - oldLines),
+      deletions: Math.max(0, oldLines - newLines),
+    }
+  }
+  let additions = 0
+  let deletions = 0
+  for (const change of diffLines(oldContent, newContent)) {
+    if (change.added) additions += change.count || 0
+    if (change.removed) deletions += change.count || 0
+  }
+  const diff = trimDiff(createTwoFilesPatch(filepath, filepath, oldContent, newContent))
+  return { diff, truncated: false, additions, deletions }
+}
+
 export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(

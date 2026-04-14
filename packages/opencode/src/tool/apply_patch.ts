@@ -6,9 +6,8 @@ import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
-import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { trimDiff } from "./edit"
+import { buildDisplayDiff, LARGE_FILE_FORMAT_BYTES } from "./edit"
 import { LSP } from "../lsp"
 import { AppFileSystem } from "../filesystem"
 import DESCRIPTION from "./apply_patch.txt"
@@ -59,6 +58,7 @@ export const ApplyPatchTool = Tool.define(
         diff: string
         additions: number
         deletions: number
+        truncated: boolean
       }> = []
 
       let totalDiff = ""
@@ -72,26 +72,20 @@ export const ApplyPatchTool = Tool.define(
             const oldContent = ""
             const newContent =
               hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
-            const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
-
-            let additions = 0
-            let deletions = 0
-            for (const change of diffLines(oldContent, newContent)) {
-              if (change.added) additions += change.count || 0
-              if (change.removed) deletions += change.count || 0
-            }
+            const display = buildDisplayDiff(filePath, oldContent, newContent)
 
             fileChanges.push({
               filePath,
               oldContent,
               newContent,
               type: "add",
-              diff,
-              additions,
-              deletions,
+              diff: display.diff,
+              additions: display.additions,
+              deletions: display.deletions,
+              truncated: display.truncated,
             })
 
-            totalDiff += diff + "\n"
+            totalDiff += display.diff + "\n"
             break
           }
 
@@ -115,14 +109,7 @@ export const ApplyPatchTool = Tool.define(
               return yield* Effect.fail(new Error(`apply_patch verification failed: ${error}`))
             }
 
-            const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
-
-            let additions = 0
-            let deletions = 0
-            for (const change of diffLines(oldContent, newContent)) {
-              if (change.added) additions += change.count || 0
-              if (change.removed) deletions += change.count || 0
-            }
+            const display = buildDisplayDiff(filePath, oldContent, newContent)
 
             const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
             yield* assertExternalDirectoryEffect(ctx, movePath)
@@ -133,12 +120,13 @@ export const ApplyPatchTool = Tool.define(
               newContent,
               type: hunk.move_path ? "move" : "update",
               movePath,
-              diff,
-              additions,
-              deletions,
+              diff: display.diff,
+              additions: display.additions,
+              deletions: display.deletions,
+              truncated: display.truncated,
             })
 
-            totalDiff += diff + "\n"
+            totalDiff += display.diff + "\n"
             break
           }
 
@@ -146,21 +134,20 @@ export const ApplyPatchTool = Tool.define(
             const contentToDelete = yield* afs
               .readFileString(filePath)
               .pipe(Effect.catch((error) => Effect.fail(new Error(`apply_patch verification failed: ${error}`))))
-            const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
-
-            const deletions = contentToDelete.split("\n").length
+            const display = buildDisplayDiff(filePath, contentToDelete, "")
 
             fileChanges.push({
               filePath,
               oldContent: contentToDelete,
               newContent: "",
               type: "delete",
-              diff: deleteDiff,
+              diff: display.diff,
               additions: 0,
-              deletions,
+              deletions: display.truncated ? display.deletions : contentToDelete.split("\n").length,
+              truncated: display.truncated,
             })
 
-            totalDiff += deleteDiff + "\n"
+            totalDiff += display.diff + "\n"
             break
           }
         }
@@ -175,7 +162,9 @@ export const ApplyPatchTool = Tool.define(
         additions: change.additions,
         deletions: change.deletions,
         movePath: change.movePath,
+        truncated: change.truncated,
       }))
+      const anyTruncated = fileChanges.some((c) => c.truncated)
 
       // Check permissions if needed
       const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath).replaceAll("\\", "/"))
@@ -187,6 +176,7 @@ export const ApplyPatchTool = Tool.define(
           filepath: relativePaths.join(", "),
           diff: totalDiff,
           files,
+          truncated: anyTruncated,
         },
       })
 
@@ -226,7 +216,10 @@ export const ApplyPatchTool = Tool.define(
         }
 
         if (edited) {
-          yield* format.file(edited)
+          const editedSize = Buffer.byteLength(change.newContent, "utf8")
+          if (editedSize <= LARGE_FILE_FORMAT_BYTES) {
+            yield* format.file(edited)
+          }
           yield* bus.publish(File.Event.Edited, { file: edited })
         }
       }
@@ -236,13 +229,17 @@ export const ApplyPatchTool = Tool.define(
         yield* bus.publish(FileWatcher.Event.Updated, update)
       }
 
-      // Notify LSP of file changes and collect diagnostics
-      for (const change of fileChanges) {
-        if (change.type === "delete") continue
-        const target = change.movePath ?? change.filePath
-        yield* lsp.touchFile(target, true)
+      // Notify LSP of file changes and collect diagnostics (skip for very large files)
+      const skipLsp = fileChanges.some((c) => Buffer.byteLength(c.newContent, "utf8") > LARGE_FILE_FORMAT_BYTES)
+      let diagnostics: Record<string, import("../lsp/client").LSPClient.Diagnostic[]> = {}
+      if (!skipLsp) {
+        for (const change of fileChanges) {
+          if (change.type === "delete") continue
+          const target = change.movePath ?? change.filePath
+          yield* lsp.touchFile(target, true)
+        }
+        diagnostics = yield* lsp.diagnostics()
       }
-      const diagnostics = yield* lsp.diagnostics()
 
       // Generate output summary
       const summaryLines = fileChanges.map((change) => {
@@ -272,6 +269,7 @@ export const ApplyPatchTool = Tool.define(
           diff: totalDiff,
           files,
           diagnostics,
+          truncated: anyTruncated,
         },
         output,
       }

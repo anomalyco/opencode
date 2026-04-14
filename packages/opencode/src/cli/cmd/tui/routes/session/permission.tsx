@@ -55,6 +55,9 @@ function EditBody(props: { request: PermissionRequest }) {
 
   const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
   const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
+  const truncated = createMemo(() => Boolean(props.request.metadata?.truncated))
+  const additions = createMemo(() => (props.request.metadata?.additions as number) ?? 0)
+  const deletions = createMemo(() => (props.request.metadata?.deletions as number) ?? 0)
 
   const view = createMemo(() => {
     const diffStyle = config.diff_style
@@ -101,7 +104,11 @@ function EditBody(props: { request: PermissionRequest }) {
       </Show>
       <Show when={!diff()}>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>No diff provided</text>
+          <text fg={theme.textMuted}>
+            {truncated()
+              ? `Large file — diff omitted (+${additions()} / -${deletions()} lines)`
+              : "No diff provided"}
+          </text>
         </box>
       </Show>
     </box>
