@@ -232,12 +232,7 @@ const GitContext = () => {
           size: "normal",
           class: "prompt-pick min-w-0 max-w-[320px] group",
         }}
-        class="w-[560px] max-w-[calc(100vw-40px)] rounded-xl border border-white/10 bg-transparent shadow-[var(--shadow-lg-border-base)]"
-        style={{
-          "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
-          "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
-          "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
-        }}
+        class="w-[560px] max-w-[calc(100vw-40px)]"
         trigger={
           <div class="min-w-0 flex items-center gap-1.5 px-1.5">
             <Icon name="branch" size="small" class="shrink-0 text-icon-base" />
@@ -246,7 +241,7 @@ const GitContext = () => {
           </div>
         }
       >
-        <div class="flex flex-col gap-4 p-3">
+        <div class="flex flex-col gap-4">
           <div class="flex flex-col gap-1">
             <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Git context</div>
             <div class="flex items-center gap-2 min-w-0">
@@ -542,16 +537,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const motion = (value: number) => ({
     opacity: value,
     transform: `scale(${0.95 + value * 0.05})`,
-    filter: `blur(${(1 - value) * 2}px)`,
     "pointer-events": value > 0.5 ? ("auto" as const) : ("none" as const),
   })
   const buttons = createMemo(() => motion(buttonsSpring()))
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
   const glass = createMemo(() => ({
-    "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
-    "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
-    "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+    "background-color":
+      platform.platform === "desktop" ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
+    "backdrop-filter": platform.platform === "desktop" ? "none" : "blur(40px) saturate(150%)",
+    "-webkit-backdrop-filter": platform.platform === "desktop" ? "none" : "blur(40px) saturate(150%)",
   }))
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -1915,7 +1910,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           options={agentNames()}
                           current={local.agent.current()?.name ?? ""}
                           onSelect={local.agent.set}
-                          class="prompt-pick capitalize max-w-[160px]"
+                          class="prompt-pick prompt-agent capitalize"
                           valueClass="truncate"
                           triggerStyle={control()}
                           contentStyle={glass()}
@@ -1942,8 +1937,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               <Show when={local.model.current()?.provider?.id}>
                                 <ProviderIcon
                                   id={local.model.current()!.provider.id}
-                                  class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                                  style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                                  class="size-4 shrink-0 opacity-100"
                                 />
                               </Show>
                               <span class="truncate">
@@ -1973,8 +1967,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             <Show when={local.model.current()?.provider?.id}>
                               <ProviderIcon
                                 id={local.model.current()!.provider.id}
-                                class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                                style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                                class="size-4 shrink-0 opacity-100"
                               />
                             </Show>
                             <span class="truncate">

@@ -156,8 +156,55 @@
     line-height: 20px;
   }
 
+  [data-component="select"].prompt-agent [data-slot="select-select-trigger"] {
+    width: fit-content;
+    min-width: 0;
+    max-width: min(24rem, calc(100vw - 14rem));
+    flex: 0 1 auto;
+  }
+
+  [data-component="select"].prompt-agent [data-slot="select-select-trigger-value"] {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
   [data-component="select-content"].prompt-pick {
     padding: 6px;
+  }
+
+  [data-component="select-content"].prompt-agent {
+    width: max-content;
+    min-width: max(104px, var(--kb-popper-anchor-width));
+    max-width: min(32rem, calc(100vw - 24px));
+  }
+
+  [data-component="select-content"].prompt-agent [data-slot="select-select-item-label"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-component="select-content"].prompt-agent [data-slot="select-select-item-indicator"] {
+    display: none;
+  }
+
+  [data-component="select-content"].prompt-agent [data-slot="select-select-item"][data-selected],
+  [data-component="select-content"].prompt-agent [data-slot="select-select-item"][aria-selected="true"] {
+    color: var(--syntax-type);
+  }
+
+  [data-component="select-content"].prompt-agent [data-slot="select-select-item"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    padding: 6px 10px;
+    transition: none;
+  }
+
+  [data-component="select-content"].prompt-agent [data-slot="select-select-content-list"] {
+    max-height: min(24rem, calc(100vh - 24px));
   }
 
   [data-component="select-content"].prompt-variant [data-slot="select-select-content-list"] {
@@ -165,9 +212,9 @@
   }
 
   [data-component="select-content"].prompt-pick [data-slot="select-select-item"] {
-    padding: 6px 8px;
+    padding: 6px 10px;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: var(--font-size-small);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);

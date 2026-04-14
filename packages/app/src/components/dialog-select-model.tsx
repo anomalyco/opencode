@@ -14,6 +14,7 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -26,6 +27,7 @@ const ModelList: Component<{
   onSelect: () => void
   action?: JSX.Element
   model?: ModelState
+  tooltip?: boolean
 }> = (props) => {
   const model = props.model ?? useLocal().model
   const language = useLanguage()
@@ -55,16 +57,20 @@ const ModelList: Component<{
         if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
         return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
       }}
-      itemWrapper={(item, node) => (
-        <Tooltip
-          class="w-full"
-          placement="right-start"
-          gutter={12}
-          value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
-        >
-          {node}
-        </Tooltip>
-      )}
+      itemWrapper={
+        props.tooltip === false
+          ? undefined
+          : (item, node) => (
+              <Tooltip
+                class="w-full"
+                placement="right-start"
+                gutter={12}
+                value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
+              >
+                {node}
+              </Tooltip>
+            )
+      }
       onSelect={(x) => {
         model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
@@ -105,6 +111,7 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
+  const platform = usePlatform()
 
   const handleManage = () => {
     setStore("open", false)
@@ -133,11 +140,9 @@ export function ModelSelectorPopover(props: {
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
-          class="w-72 h-80 flex flex-col p-2 rounded-xl border bg-[color:rgb(12_12_14_/_0.34)] shadow-[var(--shadow-lg-border-base)] z-50 outline-none overflow-hidden backdrop-blur-[40px] saturate-[1.5] [-webkit-backdrop-filter:blur(40px)_saturate(1.5)]"
-          style={{
-            border: "1px solid rgb(255 255 255 / 0.04)",
-            ...(props.style ?? {}),
-          }}
+          data-component="popover-content"
+          class="w-72 h-80 flex flex-col p-2 overflow-hidden"
+          style={props.style}
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
             setStore("open", false)
@@ -163,6 +168,7 @@ export function ModelSelectorPopover(props: {
             model={props.model}
             onSelect={() => setStore("open", false)}
             class="p-1"
+            tooltip={false}
             action={
               <div class="flex items-center gap-1">
                 <Tooltip placement="top" value={language.t("command.provider.connect")}>

@@ -95,8 +95,8 @@
   max-width: 23rem;
   overflow: hidden;
   border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
-  background-color: rgb(12 12 14 / 0.34);
+  border: 1px solid var(--border-weak-base);
+  background-color: color-mix(in srgb, var(--background-stronger) 70%, transparent);
   background-clip: padding-box;
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
@@ -134,9 +134,9 @@
     position: relative;
     display: flex;
     align-items: center;
-    padding: 2px 8px;
+    padding: 6px 10px;
     gap: 12px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
 
     /* text-12-medium */
@@ -144,7 +144,7 @@
     font-size: var(--font-size-small);
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large); /* 166.667% */
+    line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
 
     color: var(--text-strong);
@@ -156,7 +156,7 @@
     user-select: none;
 
     &[data-highlighted] {
-      background: var(--surface-raised-base-hover);
+      background: rgba(255, 255, 255, 0.08);
     }
     &[data-disabled] {
       background-color: var(--surface-raised-base);
@@ -174,13 +174,13 @@
       outline: none;
     }
     &:hover {
-      background: var(--surface-raised-base-hover);
+      background: rgba(255, 255, 255, 0.08);
     }
   }
 }
 
 html[data-platform="desktop"][data-os="windows"] [data-component="select-content"] {
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background-color: var(--background-stronger);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -192,16 +192,6 @@ html[data-platform="desktop"][data-os="windows"] [data-component="select-content
 
   [data-slot="select-select-content-list"] {
     padding: 4px;
-  }
-
-  [data-slot="select-select-item"] {
-    /* text-14-regular */
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
-    font-style: normal;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
   }
 }
 

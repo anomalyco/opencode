@@ -7,8 +7,8 @@
   min-width: 200px;
   max-width: 320px;
   border-radius: var(--radius-xl);
-  background-color: rgb(12 12 14 / 0.34);
-  border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
+  background-color: color-mix(in srgb, var(--background-stronger) 70%, transparent);
+  border: 1px solid var(--border-weak-base);
   background-clip: padding-box;
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
@@ -77,18 +77,18 @@
   }
 
   [data-slot="popover-arrow"] {
-    fill: color-mix(in oklch, var(--surface-raised-stronger-non-alpha) 78%, transparent);
+    fill: color-mix(in srgb, var(--background-stronger) 70%, transparent);
   }
 }
 
 html[data-platform="desktop"][data-os="windows"] [data-component="popover-content"] {
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background-color: var(--background-stronger);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 html[data-platform="desktop"][data-os="windows"] [data-component="popover-content"] [data-slot="popover-arrow"] {
-  fill: var(--surface-raised-stronger-non-alpha);
+  fill: var(--background-stronger);
 }
 
 @keyframes popover-open {

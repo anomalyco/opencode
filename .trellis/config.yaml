@@ -1,0 +1,33 @@
+# Trellis Configuration
+# Project-level settings for the Trellis workflow system
+#
+# All values have sensible defaults. Only override what you need.
+
+#-------------------------------------------------------------------------------
+# Session Recording
+#-------------------------------------------------------------------------------
+
+# Commit message used when auto-committing journal/index changes
+# after running add_session.py
+session_commit_message: "chore: record journal"
+
+# Maximum lines per journal file before rotating to a new one
+max_journal_lines: 2000
+
+#-------------------------------------------------------------------------------
+# Task Lifecycle Hooks
+#-------------------------------------------------------------------------------
+
+# Shell commands to run after task lifecycle events.
+# Each hook receives TASK_JSON_PATH environment variable pointing to task.json.
+# Hook failures print a warning but do not block the main operation.
+#
+# hooks:
+#   after_create:
+#     - "echo 'Task created'"
+#   after_start:
+#     - "echo 'Task started'"
+#   after_finish:
+#     - "echo 'Task finished'"
+#   after_archive:
+#     - "echo 'Task archived'"

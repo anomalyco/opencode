@@ -109,9 +109,9 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
             ...(local.classList ?? {}),
             [local.class ?? ""]: !!local.class,
           }}
-          onPointerEnter={() => move(itemProps.item.rawValue)}
-          onPointerMove={() => move(itemProps.item.rawValue)}
-          onFocus={() => move(itemProps.item.rawValue)}
+          onPointerEnter={local.onHighlight ? () => move(itemProps.item.rawValue) : undefined}
+          onPointerMove={local.onHighlight ? () => move(itemProps.item.rawValue) : undefined}
+          onFocus={local.onHighlight ? () => move(itemProps.item.rawValue) : undefined}
         >
           <Kobalte.ItemLabel data-slot="select-select-item-label">
             {local.children
