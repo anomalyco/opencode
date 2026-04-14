@@ -271,13 +271,19 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       validator(
+        "query",
+        z.object({
+          directory: z.string().optional(),
+        }),
+      ),
+      validator(
         "json",
         z.object({
           title: z.string().optional(),
           permission: Permission.Ruleset.optional(),
           time: z
             .object({
-              archived: z.number().optional(),
+              archived: z.number().nullable().optional(),
             })
             .optional(),
         }),
