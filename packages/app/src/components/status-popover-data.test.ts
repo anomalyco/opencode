@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Config, Project } from "@opencode-ai/sdk/v2/client"
-import { item, label, mcp } from "./status-popover-data"
+import { claude, item, label, mcp } from "./status-popover-data"
 
 describe("status popover data", () => {
   test("reads plugin source from project paths", () => {
@@ -39,7 +39,9 @@ describe("status popover data", () => {
       },
     } satisfies Config["mcp"]
 
-    expect(mcp("sentry", { status: "connected" }, global, global, undefined, undefined, false, "repo")).toMatchObject({
+    expect(
+      mcp("sentry", { status: "connected" }, global, global, undefined, undefined, new Set(), false, "repo"),
+    ).toMatchObject({
       name: "sentry",
       project: "global",
     })
@@ -59,7 +61,9 @@ describe("status popover data", () => {
       },
     } satisfies Config["mcp"]
 
-    expect(mcp("sentry", { status: "connected" }, config, global, { mcp: config }, undefined, false, "repo")).toMatchObject({
+    expect(
+      mcp("sentry", { status: "connected" }, config, global, { mcp: config }, undefined, new Set(), false, "repo"),
+    ).toMatchObject({
       name: "sentry",
       project: "repo",
     })
@@ -73,16 +77,42 @@ describe("status popover data", () => {
       },
     } satisfies Config["mcp"]
 
-    expect(mcp("linear", { status: "connected" }, config, undefined, { mcp: config }, undefined, false, "repo")).toMatchObject({
+    expect(
+      mcp("linear", { status: "connected" }, config, undefined, { mcp: config }, undefined, new Set(), false, "repo"),
+    ).toMatchObject({
       name: "linear",
       project: "repo",
     })
   })
 
   test("marks plugin injected mcp entries as oh-my-openagent", () => {
-    expect(mcp("context7", { status: "connected" }, undefined, undefined, undefined, undefined, true, "repo")).toMatchObject({
+    expect(
+      mcp("context7", { status: "connected" }, undefined, undefined, undefined, undefined, new Set(), true, "repo"),
+    ).toMatchObject({
       name: "context7",
       project: "oh-my-openagent",
+    })
+  })
+
+  test("marks claude project mcp entries as project scoped", () => {
+    const set = claude(
+      JSON.stringify({
+        projects: {
+          "/Users/me/repo": {
+            mcpServers: {
+              context7: {
+                command: "npx",
+              },
+            },
+          },
+        },
+      }),
+      "/Users/me/repo",
+    )
+
+    expect(mcp("context7", { status: "connected" }, undefined, undefined, undefined, undefined, set, true, "repo")).toMatchObject({
+      name: "context7",
+      project: "repo",
     })
   })
 })
