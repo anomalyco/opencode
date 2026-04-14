@@ -7,10 +7,13 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
+import { item, label, mcp, parse } from "@/components/status-popover-data"
+import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
@@ -19,61 +22,6 @@ import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
-
-const stem = (value: string) => value.replace(/\.(?:ts|js|mjs|cjs|mts|cts)$/i, "")
-
-const file = (value: string) => {
-  if (!value.startsWith("file://")) return value
-  try {
-    const url = new URL(value)
-    const path = decodeURIComponent(url.pathname)
-    if (!url.hostname) return path
-    return `//${url.hostname}${path}`
-  } catch {
-    return value
-  }
-}
-
-const base = (value: string) => file(value).split(/[\\/]/).at(-1) ?? value
-
-const project = (value: string) => {
-  const list = file(value).split(/[\\/]/).filter(Boolean)
-  const low = list.map((part) => part.toLowerCase())
-  const i = list.lastIndexOf(".opencode")
-  if (i > 0 && (low[i + 1] === "plugin" || low[i + 1] === "plugins")) return list[i - 1]
-
-  const config = low.lastIndexOf(".config")
-  if (config >= 0 && low[config + 1] === "opencode" && (low[config + 2] === "plugin" || low[config + 2] === "plugins"))
-    return "global"
-
-  const roam = low.lastIndexOf("roaming")
-  if (roam > 0 && low[roam - 1] === "appdata" && low[roam + 1] === "opencode" && (low[roam + 2] === "plugin" || low[roam + 2] === "plugins"))
-    return "global"
-
-  const local = low.lastIndexOf("local")
-  if (local > 0 && low[local - 1] === "appdata" && low[local + 1] === "opencode" && (low[local + 2] === "plugin" || low[local + 2] === "plugins"))
-    return "global"
-
-  return undefined
-}
-
-const plug = (value: string) => {
-  const next = file(value)
-  if (value.startsWith("file://") || next !== value || value.includes("/") || value.includes("\\")) return stem(base(next))
-  const at = value.lastIndexOf("@")
-  if (at > 0) return value.slice(0, at)
-  return value
-}
-
-const item = (value: string) => {
-  const name = plug(value)
-  const group = project(value)
-  return {
-    name,
-    project: group && group !== name ? group : undefined,
-    value,
-  }
-}
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -214,6 +162,7 @@ const useMcpToggleMutation = () => {
 
 export function StatusPopover() {
   const sync = useSync()
+  const global = useGlobalSync()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -238,8 +187,73 @@ export function StatusPopover() {
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
+  const [cfg, setCfg] = createStore({
+    project: undefined as string | undefined,
+    projectDir: undefined as string | undefined,
+    omo: undefined as string | undefined,
+  })
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const group = createMemo(() => label(sync.data.path.directory, global.data.project) || getFilename(sync.data.path.directory))
+  const projectCfg = createMemo(() => parse(cfg.project))
+  const projectDirCfg = createMemo(() => parse(cfg.projectDir))
+  const omo = createMemo(() => !!parse(cfg.omo))
+
+  createEffect(() => {
+    const read = platform.readConfigFile
+    const list = platform.listConfigFiles
+    const dir = sync.data.path.directory
+    if (!read || !list || platform.platform !== "desktop" || !dir) {
+      setCfg({ project: undefined, projectDir: undefined, omo: undefined })
+      return
+    }
+
+    let dead = false
+    void list(dir)
+      .then(async (files) => {
+        const project = files.find((item) => item.id === "project-opencode-jsonc" && item.exists)
+          ?? files.find((item) => item.id === "project-opencode-json" && item.exists)
+        const projectDir = files.find((item) => item.id === "project-dir-opencode-jsonc" && item.exists)
+          ?? files.find((item) => item.id === "project-dir-opencode-json" && item.exists)
+
+        const [nextProject, nextProjectDir, nextOmo] = await Promise.all([
+          project?.path ? read(project.path).catch(() => null) : Promise.resolve(null),
+          projectDir?.path ? read(projectDir.path).catch(() => null) : Promise.resolve(null),
+          read(`${global.data.path.config}/oh-my-openagent.json`).catch(() =>
+            read(`${global.data.path.config}/oh-my-openagent.jsonc`).catch(() => null),
+          ),
+        ])
+        if (dead) return
+        setCfg({
+          project: nextProject ?? undefined,
+          projectDir: nextProjectDir ?? undefined,
+          omo: nextOmo ?? undefined,
+        })
+      })
+      .catch(() => {
+        if (dead) return
+        setCfg({ project: undefined, projectDir: undefined, omo: undefined })
+      })
+
+    onCleanup(() => {
+      dead = true
+    })
+  })
+
+  const mcpItems = createMemo(() =>
+    mcpNames().map((name) =>
+      mcp(
+        name,
+        sync.data.mcp?.[name],
+        sync.data.config.mcp,
+        global.data.config.mcp,
+        projectCfg(),
+        projectDirCfg(),
+        omo(),
+        group(),
+      ),
+    ),
+  )
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
@@ -409,9 +423,9 @@ export function StatusPopover() {
                     </div>
                   }
                 >
-                  <For each={mcpNames()}>
-                    {(name) => {
-                      const status = () => mcpStatus(name)
+                  <For each={mcpItems()}>
+                    {(entry) => {
+                      const status = () => entry.status?.status
                       const enabled = () => status() === "connected"
                       return (
                         <button
@@ -419,9 +433,9 @@ export function StatusPopover() {
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                           onClick={() => {
                             if (toggleMcp.isPending) return
-                            toggleMcp.mutate(name)
+                            toggleMcp.mutate(entry.name)
                           }}
-                          disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                          disabled={toggleMcp.isPending && toggleMcp.variables === entry.name}
                         >
                           <div
                             classList={{
@@ -433,14 +447,19 @@ export function StatusPopover() {
                                 status() === "needs_auth" || status() === "needs_client_registration",
                             }}
                           />
-                          <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
+                          <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
+                            {entry.name}
+                            <Show when={entry.project}>
+                              <span class="text-text-weak"> {" | "}{entry.project}</span>
+                            </Show>
+                          </div>
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                              disabled={toggleMcp.isPending && toggleMcp.variables === entry.name}
                               onChange={() => {
                                 if (toggleMcp.isPending) return
-                                toggleMcp.mutate(name)
+                                toggleMcp.mutate(entry.name)
                               }}
                             />
                           </div>
