@@ -18,7 +18,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
-import { makeRuntime } from "@/effect/run-service"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -598,25 +597,4 @@ export namespace Worktree {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function makeWorktreeInfo(name?: string) {
-    return runPromise((svc) => svc.makeWorktreeInfo(name))
-  }
-
-  export async function createFromInfo(info: Info, startCommand?: string) {
-    return runPromise((svc) => svc.createFromInfo(info, startCommand))
-  }
-
-  export async function create(input?: CreateInput) {
-    return runPromise((svc) => svc.create(input))
-  }
-
-  export async function remove(input: RemoveInput) {
-    return runPromise((svc) => svc.remove(input))
-  }
-
-  export async function reset(input: ResetInput) {
-    return runPromise((svc) => svc.reset(input))
-  }
 }
