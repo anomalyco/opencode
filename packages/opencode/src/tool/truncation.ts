@@ -1,4 +1,4 @@
-import fs from "fs/promises"
+import fs, { appendFile } from "fs/promises"
 import path from "path"
 import { Global } from "../global"
 import { Identifier } from "../id/id"
@@ -20,6 +20,80 @@ export namespace Truncate {
     maxLines?: number
     maxBytes?: number
     direction?: "head" | "tail"
+  }
+
+  export class Stream {
+    static async create() {
+      await fs.mkdir(DIR, { recursive: true })
+      return new Stream(path.join(DIR, Identifier.ascending("tool")))
+    }
+
+    readonly outputPath: string
+    output: Buffer | null = null
+    outputSize = 0
+    lineCount = 0
+    truncated = false
+    private writer: ReturnType<Bun.BunFile["writer"]> | null = null
+
+    private constructor(outputPath: string) {
+      this.outputPath = outputPath
+    }
+
+    append(
+      chunk: Buffer,
+      options: {
+        maxBytes?: number
+        maxLines?: number
+      } = {},
+    ) {
+      const str = chunk.toString()
+      const nextOutputSize = this.outputSize + str.length
+      const nextLineCount = this.lineCount + (str.match(/\n/g) || []).length
+      const shouldTruncate =
+        nextOutputSize > (options.maxBytes ?? Number.POSITIVE_INFINITY) ||
+        nextLineCount > (options.maxLines ?? Number.POSITIVE_INFINITY)
+
+      this.outputSize += str.length
+      this.lineCount = nextLineCount
+      if (shouldTruncate) {
+        this.truncated = true
+      }
+
+      if (this.truncated) {
+        if (!this.writer) {
+          const tmpFile = Bun.file(this.outputPath)
+          this.writer = tmpFile.writer()
+          if (this.output) {
+            this.writer.write(this.output)
+          }
+        }
+        this.writer.write(chunk)
+      } else if (this.output) {
+        this.output = Buffer.concat([this.output, chunk])
+      } else {
+        this.output = chunk
+      }
+
+      return this.output ? this.output.toString() : null
+    }
+
+    async flush() {
+      if (!this.truncated || !this.writer) return
+      await this.writer.flush()
+    }
+
+    async appendText(text: string) {
+      if (!this.truncated) return
+      await this.flush()
+      await appendFile(this.outputPath, text)
+    }
+
+    async cleanup() {
+      if (!this.truncated) return
+      try {
+        await fs.unlink(this.outputPath)
+      } catch {}
+    }
   }
 
   export function init() {

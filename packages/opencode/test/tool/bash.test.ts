@@ -317,4 +317,37 @@ describe("tool.bash truncation", () => {
       },
     })
   })
+
+  test("preserves truncated output file when aborted", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const controller = new AbortController()
+
+        setTimeout(() => controller.abort(), 50)
+
+        const lineCount = Truncate.MAX_LINES + 500
+        const result = await bash.execute(
+          {
+            command: `seq 1 ${lineCount}; sleep 5`,
+            description: "Generate output then wait for abort",
+          },
+          {
+            ...ctx,
+            abort: controller.signal,
+          },
+        )
+
+        expect((result.metadata as any).truncated).toBe(true)
+        const filepath = (result.metadata as any).outputPath
+        expect(filepath).toBeTruthy()
+
+        const saved = await Bun.file(filepath).text()
+        expect(saved).toContain("1\n")
+        expect(saved).toContain(String(lineCount))
+        expect(saved).toContain("User aborted the command")
+      },
+    })
+  })
 })

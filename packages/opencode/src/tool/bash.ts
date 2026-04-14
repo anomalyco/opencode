@@ -1,12 +1,9 @@
 import { Buffer } from "buffer"
 import z from "zod"
-import { appendFile } from "fs/promises"
-import fs from "fs/promises"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
-import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
@@ -81,7 +78,20 @@ export const BashTool = Tool.define("bash", async () => {
     formatValidationError(error: any): string {
       return error.errors.map((e: any) => `${e.path.join(".")}: ${e.message}`).join("\n")
     },
-    async execute(params, ctx) {
+    async execute(
+      params,
+      ctx,
+    ): Promise<{
+      title: string
+      metadata: {
+        output: string
+        truncated: boolean
+        exit: number | null
+        description: string
+        outputPath: string
+      }
+      output: string
+    }> {
       const cwd = params.workdir || Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
@@ -161,17 +171,8 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      // Use Buffer for accumulation. When exceeding WINDOW_SIZE,
-      // switch to file streaming to avoid O(n²) memory growth.
-      const tmpId = Identifier.ascending("tool")
-      const tmpPath = path.join(Truncate.DIR, tmpId)
-      await fs.mkdir(Truncate.DIR, { recursive: true })
+      const stream = await Truncate.Stream.create()
       const WINDOW_SIZE = 50 * 1024
-      let output: Buffer | null = null
-      let outputSize = 0
-      let lineCount = 0
-      let truncated = false
-      let writer: ReturnType<Bun.BunFile["writer"]> | null = null
 
       const proc = spawn(params.command, {
         shell,
@@ -191,30 +192,8 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        const str = chunk.toString()
-        outputSize += str.length
-        lineCount += (str.match(/\n/g) || []).length
-
-        if (lineCount > Truncate.MAX_LINES || outputSize > WINDOW_SIZE) {
-          truncated = true
-          if (!writer) {
-            const tmpFile = Bun.file(tmpPath)
-            writer = tmpFile.writer()
-            if (output) {
-              writer.write(output)
-            }
-          }
-          writer.write(chunk)
-        } else {
-          if (output) {
-            output = Buffer.concat([output, chunk])
-          } else {
-            output = chunk
-          }
-        }
-
-        if (output) {
-          const preview = output.toString()
+        const preview = stream.append(chunk, { maxBytes: WINDOW_SIZE, maxLines: Truncate.MAX_LINES })
+        if (preview) {
           ctx.metadata({
             metadata: {
               output: preview,
@@ -233,23 +212,14 @@ export const BashTool = Tool.define("bash", async () => {
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
-      const cleanupFile = async () => {
-        if (!truncated) return
-        try {
-          await fs.unlink(tmpPath)
-        } catch {}
-      }
-
       if (ctx.abort.aborted) {
         aborted = true
         await kill()
-        await cleanupFile()
       }
 
       const abortHandler = () => {
         aborted = true
         void kill()
-        void cleanupFile()
       }
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
@@ -279,13 +249,11 @@ export const BashTool = Tool.define("bash", async () => {
           })
         })
       } catch (err) {
-        await cleanupFile()
+        await stream.cleanup()
         throw err
       }
 
-      if (truncated) {
-        await writer!.flush()
-      }
+      await stream.flush()
 
       const resultMetadata: string[] = []
 
@@ -297,23 +265,23 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
-      if (truncated) {
+      if (stream.truncated) {
         if (resultMetadata.length > 0) {
           const metadataText = "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
-          await appendFile(tmpPath, metadataText)
+          await stream.appendText(metadataText)
         }
 
-        const userPreview = output ? (output as Buffer).toString() : ""
-        const agentPreview = `${userPreview}\n\n...${outputSize - WINDOW_SIZE} bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${tmpPath}\nGrep to search the full content or Read with offset/limit to view specific sections.\nIf Task tool is available, delegate that to an explore agent.`
+        const userPreview = stream.output ? stream.output.toString() : ""
+        const agentPreview = `${userPreview}\n\n...${stream.outputSize - WINDOW_SIZE} bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${stream.outputPath}\nGrep to search the full content or Read with offset/limit to view specific sections.\nIf Task tool is available, delegate that to an explore agent.`
 
         return {
           title: params.description,
           metadata: {
             output: userPreview,
-            truncated,
+            truncated: stream.truncated,
             exit: proc.exitCode,
             description: params.description,
-            outputPath: tmpPath,
+            outputPath: stream.outputPath,
           },
           output: agentPreview,
         }
@@ -321,20 +289,20 @@ export const BashTool = Tool.define("bash", async () => {
 
       if (resultMetadata.length > 0) {
         const metadataText = "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
-        if (output) {
-          output = Buffer.concat([output, Buffer.from(metadataText)])
+        if (stream.output) {
+          stream.output = Buffer.concat([stream.output, Buffer.from(metadataText)])
         } else {
-          output = Buffer.from(metadataText)
+          stream.output = Buffer.from(metadataText)
         }
       }
 
-      const outputStr = output ? (output as Buffer).toString() : ""
+      const outputStr = stream.output ? stream.output.toString() : ""
 
       return {
         title: params.description,
         metadata: {
           output: outputStr,
-          truncated,
+          truncated: stream.truncated,
           exit: proc.exitCode,
           description: params.description,
           outputPath: "",

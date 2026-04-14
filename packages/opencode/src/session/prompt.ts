@@ -1,7 +1,7 @@
 import { Buffer } from "buffer"
 import path from "path"
 import os from "os"
-import fs, { appendFile } from "fs/promises"
+import fs from "fs/promises"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
@@ -1177,6 +1177,8 @@ export namespace SessionPrompt {
           const { Skill } = await import("@/skill/skill")
           const skillInfo = await Skill.get(part.name)
           if (skillInfo) {
+            const parsed = await ConfigMarkdown.parse(skillInfo.location).catch(() => undefined)
+            const skillContent = parsed?.content?.trim()
             return [
               {
                 id: Identifier.ascending("part"),
@@ -1190,7 +1192,9 @@ export namespace SessionPrompt {
                 sessionID: input.sessionID,
                 type: "text",
                 synthetic: true,
-                text: `## Skill: ${skillInfo.name}\n\n${skillInfo.description}`,
+                text: skillContent
+                  ? `## Skill: ${skillInfo.name}\n\n${skillContent}`
+                  : `## Skill: ${skillInfo.name}\n\n${skillInfo.description}`,
               },
             ]
           }
@@ -1529,13 +1533,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
-    const tmpId = Identifier.ascending("tool")
-    const tmpPath = path.join(Truncate.DIR, tmpId)
+    const stream = await Truncate.Stream.create()
     const WINDOW_SIZE = 50 * 1024
-    let output: Buffer | null = null
-    let outputSize = 0
-    let truncated = false
-    let writer: ReturnType<Bun.BunFile["writer"]> | null = null
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
@@ -1548,29 +1547,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     })
 
     const handleChunk = (chunk: Buffer) => {
-      const str = chunk.toString()
-      outputSize += str.length
-
-      if (outputSize > WINDOW_SIZE) {
-        truncated = true
-        if (!writer) {
-          const tmpFile = Bun.file(tmpPath)
-          writer = tmpFile.writer()
-          if (output) {
-            writer.write(output)
-          }
-        }
-        writer.write(chunk)
-      } else {
-        if (output) {
-          output = Buffer.concat([output, chunk])
-        } else {
-          output = chunk
-        }
-      }
-
-      if (output) {
-        const preview = output.toString()
+      const preview = stream.append(chunk, { maxBytes: WINDOW_SIZE })
+      if (preview) {
         if (part.state.status === "running") {
           part.state.metadata = {
             output: preview,
@@ -1609,9 +1587,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
     })
 
-    if (truncated) {
-      await writer!.flush()
-    }
+    await stream.flush()
 
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
@@ -1619,18 +1595,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (part.state.status === "running") {
       if (aborted) {
         const metadataText = "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
-        if (truncated) {
-          await appendFile(tmpPath, metadataText)
-        } else if (output) {
-          output = Buffer.concat([output, Buffer.from(metadataText)])
+        if (stream.truncated) {
+          await stream.appendText(metadataText)
+        } else if (stream.output) {
+          stream.output = Buffer.concat([stream.output, Buffer.from(metadataText)])
         } else {
-          output = Buffer.from(metadataText)
+          stream.output = Buffer.from(metadataText)
         }
       }
 
-      if (truncated) {
-        const userPreview = output ? output.toString() : ""
-        const agentPreview = `${userPreview}\n\n...${outputSize - WINDOW_SIZE} bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${tmpPath}\nGrep to search the full content or Read with offset/limit to view specific sections.\nIf Task tool is available, delegate that to an explore agent.`
+      if (stream.truncated) {
+        const userPreview = stream.output ? stream.output.toString() : ""
+        const agentPreview = `${userPreview}\n\n...${stream.outputSize - WINDOW_SIZE} bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${stream.outputPath}\nGrep to search the full content or Read with offset/limit to view specific sections.\nIf Task tool is available, delegate that to an explore agent.`
         part.state = {
           status: "completed",
           time: {
@@ -1642,7 +1618,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           metadata: {
             output: userPreview,
             description: "",
-            outputPath: tmpPath,
+            outputPath: stream.outputPath,
           },
           output: agentPreview,
         }
@@ -1656,10 +1632,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           input: part.state.input,
           title: "",
           metadata: {
-            output: output ? output.toString("utf8") : "",
+            output: stream.output ? stream.output.toString("utf8") : "",
             description: "",
           },
-          output: output ? output.toString("utf8") : "",
+          output: stream.output ? stream.output.toString("utf8") : "",
         }
       }
       await Session.updatePart(part)

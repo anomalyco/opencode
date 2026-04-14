@@ -358,6 +358,7 @@ export function Autocomplete(props: {
     const results = sync.data.skill.map(
       (skill): AutocompleteOption => ({
         display: skill.name,
+        value: skill.name,
         description: skill.description,
         onSelect: () => {
           insertPart(skill.name, {
