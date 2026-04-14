@@ -15,7 +15,6 @@ import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogWorkspaceCreate, openWorkspaceSession } from "./dialog-workspace-create"
 import { Spinner } from "./spinner"
-import { Keybind } from "@/util/keybind"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 

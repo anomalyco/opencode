@@ -751,7 +751,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
   })
 
-  event.on("session.deleted", (evt) => {
+event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -761,15 +761,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
-event.on("session.archived", (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
-      toast.show({
-        variant: "info",
-        message: "The current session was archived",
-      })
-    }
-  })
+  // Note: session.archived handling is done in the session list dialog via the SDK
+  // When a session is archived, users select a different session or navigate home
 
   event.on("session.error", (evt) => {
     const error = evt.properties.error
