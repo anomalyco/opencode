@@ -747,7 +747,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-previous")
         const agent = {
           name: "test",
@@ -765,20 +765,16 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           previousResponseId: "resp_prev",
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [{ role: "user", content: "Hello again" }],
           tools: {},
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         const body = capture.body
