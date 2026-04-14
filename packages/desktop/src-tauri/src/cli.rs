@@ -111,11 +111,16 @@ fn get_cli_install_path() -> Option<std::path::PathBuf> {
 
 pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     // Get binary with symlinks support
+    let binary_name = if cfg!(windows) {
+        "opencode-cli.exe"
+    } else {
+        "opencode-cli"
+    };
     tauri::process::current_binary(&app.env())
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
-        .join("opencode-cli")
+        .join(binary_name)
 }
 
 fn is_cli_installed() -> bool {
