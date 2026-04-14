@@ -1,9 +1,14 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
 import { Log } from "../../src/util/log"
 
 Log.init({ print: false })
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("experimental project httpapi", () => {
   test("lists projects, returns current project, and serves docs", async () => {

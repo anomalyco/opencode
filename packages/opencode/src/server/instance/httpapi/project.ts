@@ -44,11 +44,11 @@ export const ProjectApi = HttpApi.make("project")
   )
 
 const list = Effect.fn("ProjectHttpApi.list")(function* () {
-  return Schema.decodeUnknownSync(Schema.Array(Project.Info))(Project.list())
+  return Project.list()
 })
 
 const current = Effect.fn("ProjectHttpApi.current")(function* () {
-  return Schema.decodeUnknownSync(Project.Info)(Instance.project)
+  return Instance.project
 })
 
 export const ProjectLive = HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
