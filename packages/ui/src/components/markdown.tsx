@@ -770,48 +770,53 @@ export function Markdown(
 
     // Fast-append path: during streaming, if new HTML starts with the previous HTML,
     // find the common top-level node boundary and only morphdom the tail.
-    if (isStreaming && prevHtml && content.startsWith(prevHtml.slice(0, Math.max(0, prevHtml.lastIndexOf("<"))))) {
-      // Find how many top-level children are stable
-      const existingCount = container.childNodes.length
-      if (existingCount > 0) {
-        const temp = document.createElement("div")
-        temp.innerHTML = content
-        wrapCodeBlocks(temp)
-        const newCount = temp.childNodes.length
+    if (isStreaming && prevHtml && content.length > prevHtml.length) {
+      // Check if content is a prefix-growing append (new content starts with old content)
+      const prefixMatch = content.startsWith(prevHtml.slice(0, Math.max(0, prevHtml.lastIndexOf("<"))))
 
-        // Check how many leading children are identical
-        let stableCount = 0
-        const limit = Math.min(existingCount, newCount)
-        for (let i = 0; i < limit - 1; i++) {
-          const existing = container.childNodes[i]
-          const incoming = temp.childNodes[i]
-          if (existing && incoming && existing.isEqualNode(incoming)) {
-            stableCount++
-          } else {
-            break
-          }
-        }
+      if (prefixMatch) {
+        // Find how many top-level children are stable
+        const existingCount = container.childNodes.length
+        if (existingCount > 0) {
+          const temp = document.createElement("div")
+          temp.innerHTML = content
+          wrapCodeBlocks(temp)
+          const newCount = temp.childNodes.length
 
-        if (stableCount > 0 && stableCount >= existingCount - 1) {
-          // Remove unstable trailing nodes from container
-          while (container.childNodes.length > stableCount) {
-            container.removeChild(container.lastChild!)
-          }
-          // Append all nodes from stableCount onward from temp
-          while (temp.childNodes.length > stableCount) {
-            const node = temp.childNodes[stableCount]
-            container.appendChild(node)
+          // Check how many leading children are identical
+          let stableCount = 0
+          const limit = Math.min(existingCount, newCount)
+          for (let i = 0; i < limit - 1; i++) {
+            const existing = container.childNodes[i]
+            const incoming = temp.childNodes[i]
+            if (existing && incoming && existing.isEqualNode(incoming)) {
+              stableCount++
+            } else {
+              break
+            }
           }
 
-          container.dataset.html = content
+          if (stableCount > 0 && stableCount >= existingCount - 1) {
+            // Remove unstable trailing nodes from container
+            while (container.childNodes.length > stableCount) {
+              container.removeChild(container.lastChild!)
+            }
+            // Append all nodes from stableCount onward from temp
+            while (temp.childNodes.length > stableCount) {
+              const node = temp.childNodes[stableCount]
+              container.appendChild(node)
+            }
 
-          if (copySetupTimer) clearTimeout(copySetupTimer)
-          copySetupTimer = setTimeout(() => {
-            if (copyCleanup) copyCleanup()
-            copyCleanup = setupCodeCopy(container, next)
-            setLabels(container, next)
-          }, 150)
-          return
+            container.dataset.html = content
+
+            if (copySetupTimer) clearTimeout(copySetupTimer)
+            copySetupTimer = setTimeout(() => {
+              if (copyCleanup) copyCleanup()
+              copyCleanup = setupCodeCopy(container, next)
+              setLabels(container, next)
+            }, 150)
+            return
+          }
         }
       }
     }
