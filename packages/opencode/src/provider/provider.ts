@@ -116,12 +116,6 @@ export namespace Provider {
     })
   }
 
-  function e2eURL() {
-    const url = Env.get("OPENCODE_E2E_LLM_URL")
-    if (typeof url !== "string" || url === "") return
-    return url
-  }
-
   type BundledSDK = {
     languageModel(modelId: string): LanguageModelV3
   }
@@ -166,6 +160,8 @@ export namespace Provider {
   type CustomDep = {
     auth: (id: string) => Effect.Effect<Auth.Info | undefined>
     config: () => Effect.Effect<Config.Info>
+    env: () => Effect.Effect<Record<string, string | undefined>>
+    get: (key: string) => Effect.Effect<string | undefined>
   }
 
   function useLanguageModel(sdk: any) {
@@ -184,7 +180,7 @@ export namespace Provider {
           },
         }),
       opencode: Effect.fnUntraced(function* (input: Info) {
-        const env = Env.all()
+        const env = yield* dep.env()
         const hasKey = iife(() => {
           if (input.env.some((item) => env[item])) return true
           return false
@@ -231,14 +227,15 @@ export namespace Provider {
           },
           options: {},
         }),
-      azure: (provider) => {
+      azure: Effect.fnUntraced(function* (provider: Info) {
+        const env = yield* dep.env()
         const resource = iife(() => {
           const name = provider.options?.resourceName
           if (typeof name === "string" && name.trim() !== "") return name
-          return Env.get("AZURE_RESOURCE_NAME")
+          return env["AZURE_RESOURCE_NAME"]
         })
 
-        return Effect.succeed({
+        return {
           autoload: false,
           async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
             if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
@@ -254,11 +251,11 @@ export namespace Provider {
               ...(resource && { AZURE_RESOURCE_NAME: resource }),
             }
           },
-        })
-      },
-      "azure-cognitive-services": () => {
-        const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
-        return Effect.succeed({
+        }
+      }),
+      "azure-cognitive-services": Effect.fnUntraced(function* () {
+        const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
+        return {
           autoload: false,
           async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
             if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
@@ -271,23 +268,24 @@ export namespace Provider {
           options: {
             baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
           },
-        })
-      },
+        }
+      }),
       "amazon-bedrock": Effect.fnUntraced(function* () {
         const providerConfig = (yield* dep.config()).provider?.["amazon-bedrock"]
         const auth = yield* dep.auth("amazon-bedrock")
+        const env = yield* dep.env()
 
         // Region precedence: 1) config file, 2) env var, 3) default
         const configRegion = providerConfig?.options?.region
-        const envRegion = Env.get("AWS_REGION")
+        const envRegion = env["AWS_REGION"]
         const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
 
         // Profile: config file takes precedence over env var
         const configProfile = providerConfig?.options?.profile
-        const envProfile = Env.get("AWS_PROFILE")
+        const envProfile = env["AWS_PROFILE"]
         const profile = configProfile ?? envProfile
 
-        const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
+        const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
 
         // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
         // until the scope of the Env API is clarified (test only or runtime?)
@@ -301,7 +299,7 @@ export namespace Provider {
           return undefined
         })
 
-        const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
+        const awsWebIdentityTokenFile = env["AWS_WEB_IDENTITY_TOKEN_FILE"]
 
         const containerCreds = Boolean(
           process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
@@ -439,24 +437,22 @@ export namespace Provider {
             },
           },
         }),
-      "google-vertex": (provider) => {
+      "google-vertex": Effect.fnUntraced(function* (provider: Info) {
+        const env = yield* dep.env()
         const project =
-          provider.options?.project ??
-          Env.get("GOOGLE_CLOUD_PROJECT") ??
-          Env.get("GCP_PROJECT") ??
-          Env.get("GCLOUD_PROJECT")
+          provider.options?.project ?? env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
 
         const location = String(
           provider.options?.location ??
-            Env.get("GOOGLE_VERTEX_LOCATION") ??
-            Env.get("GOOGLE_CLOUD_LOCATION") ??
-            Env.get("VERTEX_LOCATION") ??
+            env["GOOGLE_VERTEX_LOCATION"] ??
+            env["GOOGLE_CLOUD_LOCATION"] ??
+            env["VERTEX_LOCATION"] ??
             "us-central1",
         )
 
         const autoload = Boolean(project)
-        if (!autoload) return Effect.succeed({ autoload: false })
-        return Effect.succeed({
+        if (!autoload) return { autoload: false }
+        return {
           autoload: true,
           vars(_options: Record<string, any>) {
             const endpoint =
@@ -485,14 +481,15 @@ export namespace Provider {
             const id = String(modelID).trim()
             return sdk.languageModel(id)
           },
-        })
-      },
-      "google-vertex-anthropic": () => {
-        const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-        const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
+        }
+      }),
+      "google-vertex-anthropic": Effect.fnUntraced(function* () {
+        const env = yield* dep.env()
+        const project = env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
+        const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
         const autoload = Boolean(project)
-        if (!autoload) return Effect.succeed({ autoload: false })
-        return Effect.succeed({
+        if (!autoload) return { autoload: false }
+        return {
           autoload: true,
           options: {
             project,
@@ -502,8 +499,8 @@ export namespace Provider {
             const id = String(modelID).trim()
             return sdk.languageModel(id)
           },
-        })
-      },
+        }
+      }),
       "sap-ai-core": Effect.fnUntraced(function* () {
         const auth = yield* dep.auth("sap-ai-core")
         // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
@@ -539,14 +536,15 @@ export namespace Provider {
           },
         }),
       gitlab: Effect.fnUntraced(function* (input: Info) {
-        const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+        const instanceUrl = (yield* dep.get("GITLAB_INSTANCE_URL")) || "https://gitlab.com"
 
         const auth = yield* dep.auth(input.id)
         const apiKey = yield* Effect.sync(() => {
           if (auth?.type === "oauth") return auth.access
           if (auth?.type === "api") return auth.key
-          return Env.get("GITLAB_TOKEN")
+          return undefined
         })
+        const token = apiKey ?? (yield* dep.get("GITLAB_TOKEN"))
 
         const providerConfig = (yield* dep.config()).provider?.["gitlab"]
 
@@ -563,10 +561,10 @@ export namespace Provider {
         }
 
         return {
-          autoload: !!apiKey,
+          autoload: !!token,
           options: {
             instanceUrl,
-            apiKey,
+            apiKey: token,
             aiGatewayHeaders,
             featureFlags,
           },
@@ -681,8 +679,8 @@ export namespace Provider {
         if (input.options?.baseURL) return { autoload: false }
 
         const auth = yield* dep.auth(input.id)
-        const accountId =
-          Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+        const env = yield* dep.env()
+        const accountId = env["CLOUDFLARE_ACCOUNT_ID"] || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
         if (!accountId)
           return {
             autoload: false,
@@ -694,7 +692,7 @@ export namespace Provider {
           }
 
         const apiKey = yield* Effect.gen(function* () {
-          const envToken = Env.get("CLOUDFLARE_API_KEY")
+          const envToken = env["CLOUDFLARE_API_KEY"]
           if (envToken) return envToken
           if (auth?.type === "api") return auth.key
           return undefined
@@ -723,10 +721,9 @@ export namespace Provider {
         if (input.options?.baseURL) return { autoload: false }
 
         const auth = yield* dep.auth(input.id)
-        const accountId =
-          Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
-        const gateway =
-          Env.get("CLOUDFLARE_GATEWAY_ID") || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
+        const env = yield* dep.env()
+        const accountId = env["CLOUDFLARE_ACCOUNT_ID"] || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+        const gateway = env["CLOUDFLARE_GATEWAY_ID"] || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
 
         if (!accountId || !gateway) {
           const missing = [
@@ -745,7 +742,7 @@ export namespace Provider {
 
         // Get API token from env or auth - required for authenticated gateways
         const apiToken = yield* Effect.gen(function* () {
-          const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
+          const envToken = env["CLOUDFLARE_API_TOKEN"] || env["CF_AIG_TOKEN"]
           if (envToken) return envToken
           if (auth?.type === "api") return auth.key
           return undefined
@@ -1030,662 +1027,661 @@ export namespace Provider {
     }
   }
 
-  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service> =
-    Layer.effect(
-      Service,
-      Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
-        const config = yield* Config.Service
-        const auth = yield* Auth.Service
-        const plugin = yield* Plugin.Service
+  const layer: Layer.Layer<
+    Service,
+    never,
+    Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service | Env.Service
+  > = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const config = yield* Config.Service
+      const auth = yield* Auth.Service
+      const env = yield* Env.Service
+      const plugin = yield* Plugin.Service
 
-        const state = yield* InstanceState.make<State>(() =>
-          Effect.gen(function* () {
-            using _ = log.time("state")
-            const cfg = yield* config.get()
-            const modelsDev = yield* Effect.promise(() => ModelsDev.get())
-            const database = mapValues(modelsDev, fromModelsDevProvider)
+      const state = yield* InstanceState.make<State>(() =>
+        Effect.gen(function* () {
+          using _ = log.time("state")
+          const cfg = yield* config.get()
+          const modelsDev = yield* Effect.promise(() => ModelsDev.get())
+          const database = mapValues(modelsDev, fromModelsDevProvider)
 
-            const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
-            const languages = new Map<string, LanguageModelV3>()
-            const modelLoaders: {
-              [providerID: string]: CustomModelLoader
-            } = {}
-            const varsLoaders: {
-              [providerID: string]: CustomVarsLoader
-            } = {}
-            const sdk = new Map<string, BundledSDK>()
-            const discoveryLoaders: {
-              [providerID: string]: CustomDiscoverModels
-            } = {}
-            const dep = {
-              auth: (id: string) => auth.get(id).pipe(Effect.orDie),
-              config: () => config.get(),
-            }
+          const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
+          const languages = new Map<string, LanguageModelV3>()
+          const modelLoaders: {
+            [providerID: string]: CustomModelLoader
+          } = {}
+          const varsLoaders: {
+            [providerID: string]: CustomVarsLoader
+          } = {}
+          const sdk = new Map<string, BundledSDK>()
+          const discoveryLoaders: {
+            [providerID: string]: CustomDiscoverModels
+          } = {}
+          const dep = {
+            auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+            config: () => config.get(),
+            env: () => env.all(),
+            get: (key: string) => env.get(key),
+          }
 
-            log.info("init")
+          log.info("init")
 
-            function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
-              const existing = providers[providerID]
-              if (existing) {
-                // @ts-expect-error
-                providers[providerID] = mergeDeep(existing, provider)
-                return
-              }
-              const match = database[providerID]
-              if (!match) return
+          function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
+            const existing = providers[providerID]
+            if (existing) {
               // @ts-expect-error
-              providers[providerID] = mergeDeep(match, provider)
+              providers[providerID] = mergeDeep(existing, provider)
+              return
+            }
+            const match = database[providerID]
+            if (!match) return
+            // @ts-expect-error
+            providers[providerID] = mergeDeep(match, provider)
+          }
+
+          // load plugins first so config() hook runs before reading cfg.provider
+          const plugins = yield* plugin.list()
+
+          // now read config providers - includes any modifications from plugin config() hook
+          const configProviders = Object.entries(cfg.provider ?? {})
+          const disabled = new Set(cfg.disabled_providers ?? [])
+          const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+
+          function isProviderAllowed(providerID: ProviderID): boolean {
+            if (enabled && !enabled.has(providerID)) return false
+            if (disabled.has(providerID)) return false
+            return true
+          }
+
+          // extend database from config
+          for (const [providerID, provider] of configProviders) {
+            const existing = database[providerID]
+            const parsed: Info = {
+              id: ProviderID.make(providerID),
+              name: provider.name ?? existing?.name ?? providerID,
+              env: provider.env ?? existing?.env ?? [],
+              options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+              source: "config",
+              models: existing?.models ?? {},
             }
 
-            // load plugins first so config() hook runs before reading cfg.provider
-            const plugins = yield* plugin.list()
-
-            // now read config providers - includes any modifications from plugin config() hook
-            const configProviders = Object.entries(cfg.provider ?? {})
-            const disabled = new Set(cfg.disabled_providers ?? [])
-            const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
-
-            function isProviderAllowed(providerID: ProviderID): boolean {
-              if (enabled && !enabled.has(providerID)) return false
-              if (disabled.has(providerID)) return false
-              return true
-            }
-
-            // extend database from config
-            for (const [providerID, provider] of configProviders) {
-              const existing = database[providerID]
-              const parsed: Info = {
-                id: ProviderID.make(providerID),
-                name: provider.name ?? existing?.name ?? providerID,
-                env: provider.env ?? existing?.env ?? [],
-                options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
-                source: "config",
-                models: existing?.models ?? {},
+            for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+              const existingModel = parsed.models[model.id ?? modelID]
+              const name = iife(() => {
+                if (model.name) return model.name
+                if (model.id && model.id !== modelID) return modelID
+                return existingModel?.name ?? modelID
+              })
+              const parsedModel: Model = {
+                id: ModelID.make(modelID),
+                api: {
+                  id: model.id ?? existingModel?.api.id ?? modelID,
+                  npm:
+                    model.provider?.npm ??
+                    provider.npm ??
+                    existingModel?.api.npm ??
+                    modelsDev[providerID]?.npm ??
+                    "@ai-sdk/openai-compatible",
+                  url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+                },
+                status: model.status ?? existingModel?.status ?? "active",
+                name,
+                providerID: ProviderID.make(providerID),
+                capabilities: {
+                  temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+                  reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+                  attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
+                  toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
+                  input: {
+                    text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
+                    audio:
+                      model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
+                    image:
+                      model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+                    video:
+                      model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
+                    pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
+                  },
+                  output: {
+                    text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
+                    audio:
+                      model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
+                    image:
+                      model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
+                    video:
+                      model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
+                    pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
+                  },
+                  interleaved: model.interleaved ?? false,
+                },
+                cost: {
+                  input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
+                  output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
+                  cache: {
+                    read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+                    write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
+                  },
+                },
+                options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
+                limit: {
+                  context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+                  input: model.limit?.input ?? existingModel?.limit?.input,
+                  output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+                },
+                headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+                family: model.family ?? existingModel?.family ?? "",
+                release_date: model.release_date ?? existingModel?.release_date ?? "",
+                variants: {},
               }
-
-              for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-                const existingModel = parsed.models[model.id ?? modelID]
-                const name = iife(() => {
-                  if (model.name) return model.name
-                  if (model.id && model.id !== modelID) return modelID
-                  return existingModel?.name ?? modelID
-                })
-                const parsedModel: Model = {
-                  id: ModelID.make(modelID),
-                  api: {
-                    id: model.id ?? existingModel?.api.id ?? modelID,
-                    npm:
-                      model.provider?.npm ??
-                      provider.npm ??
-                      existingModel?.api.npm ??
-                      modelsDev[providerID]?.npm ??
-                      "@ai-sdk/openai-compatible",
-                    url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
-                  },
-                  status: model.status ?? existingModel?.status ?? "active",
-                  name,
-                  providerID: ProviderID.make(providerID),
-                  capabilities: {
-                    temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-                    reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
-                    attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-                    toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
-                    input: {
-                      text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
-                      audio:
-                        model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                      image:
-                        model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
-                      video:
-                        model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
-                      pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
-                    },
-                    output: {
-                      text:
-                        model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
-                      audio:
-                        model.modalities?.output?.includes("audio") ??
-                        existingModel?.capabilities.output.audio ??
-                        false,
-                      image:
-                        model.modalities?.output?.includes("image") ??
-                        existingModel?.capabilities.output.image ??
-                        false,
-                      video:
-                        model.modalities?.output?.includes("video") ??
-                        existingModel?.capabilities.output.video ??
-                        false,
-                      pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
-                    },
-                    interleaved: model.interleaved ?? false,
-                  },
-                  cost: {
-                    input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
-                    output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
-                    cache: {
-                      read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-                      write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
-                    },
-                  },
-                  options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
-                  limit: {
-                    context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-                    input: model.limit?.input ?? existingModel?.limit?.input,
-                    output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
-                  },
-                  headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
-                  family: model.family ?? existingModel?.family ?? "",
-                  release_date: model.release_date ?? existingModel?.release_date ?? "",
-                  variants: {},
-                }
-                const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
-                parsedModel.variants = mapValues(
-                  pickBy(merged, (v) => !v.disabled),
-                  (v) => omit(v, ["disabled"]),
-                )
-                parsed.models[modelID] = parsedModel
-              }
-              database[providerID] = parsed
+              const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
+              parsedModel.variants = mapValues(
+                pickBy(merged, (v) => !v.disabled),
+                (v) => omit(v, ["disabled"]),
+              )
+              parsed.models[modelID] = parsedModel
             }
+            database[providerID] = parsed
+          }
 
-            // load env
-            const env = Env.all()
-            for (const [id, provider] of Object.entries(database)) {
-              const providerID = ProviderID.make(id)
-              if (disabled.has(providerID)) continue
-              const apiKey = provider.env.map((item) => env[item]).find(Boolean)
-              if (!apiKey) continue
+          // load env
+          const envs = yield* env.all()
+          for (const [id, provider] of Object.entries(database)) {
+            const providerID = ProviderID.make(id)
+            if (disabled.has(providerID)) continue
+            const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
+            if (!apiKey) continue
+            mergeProvider(providerID, {
+              source: "env",
+              key: provider.env.length === 1 ? apiKey : undefined,
+            })
+          }
+
+          // load apikeys
+          const auths = yield* auth.all().pipe(Effect.orDie)
+          for (const [id, provider] of Object.entries(auths)) {
+            const providerID = ProviderID.make(id)
+            if (disabled.has(providerID)) continue
+            if (provider.type === "api") {
               mergeProvider(providerID, {
-                source: "env",
-                key: provider.env.length === 1 ? apiKey : undefined,
+                source: "api",
+                key: provider.key,
               })
             }
+          }
 
-            // load apikeys
-            const auths = yield* auth.all().pipe(Effect.orDie)
-            for (const [id, provider] of Object.entries(auths)) {
-              const providerID = ProviderID.make(id)
-              if (disabled.has(providerID)) continue
-              if (provider.type === "api") {
-                mergeProvider(providerID, {
-                  source: "api",
-                  key: provider.key,
-                })
-              }
+          // plugin auth loader - database now has entries for config providers
+          for (const plugin of plugins) {
+            if (!plugin.auth) continue
+            const providerID = ProviderID.make(plugin.auth.provider)
+            if (disabled.has(providerID)) continue
+
+            const stored = yield* auth.get(providerID).pipe(Effect.orDie)
+            if (!stored) continue
+            if (!plugin.auth.loader) continue
+
+            const options = yield* Effect.promise(() =>
+              plugin.auth!.loader!(
+                () =>
+                  Effect.runPromise(auth.get(providerID).pipe(Effect.orDie, Effect.provide(EffectLogger.layer))) as any,
+                database[plugin.auth!.provider],
+              ),
+            )
+            const opts = options ?? {}
+            const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+            mergeProvider(providerID, patch)
+          }
+
+          for (const [id, fn] of Object.entries(custom(dep))) {
+            const providerID = ProviderID.make(id)
+            if (disabled.has(providerID)) continue
+            const data = database[providerID]
+            if (!data) {
+              log.error("Provider does not exist in model list " + providerID)
+              continue
             }
-
-            // plugin auth loader - database now has entries for config providers
-            for (const plugin of plugins) {
-              if (!plugin.auth) continue
-              const providerID = ProviderID.make(plugin.auth.provider)
-              if (disabled.has(providerID)) continue
-
-              const stored = yield* auth.get(providerID).pipe(Effect.orDie)
-              if (!stored) continue
-              if (!plugin.auth.loader) continue
-
-              const options = yield* Effect.promise(() =>
-                plugin.auth!.loader!(
-                  () =>
-                    Effect.runPromise(
-                      auth.get(providerID).pipe(Effect.orDie, Effect.provide(EffectLogger.layer)),
-                    ) as any,
-                  database[plugin.auth!.provider],
-                ),
-              )
-              const opts = options ?? {}
+            const result = yield* fn(data)
+            if (result && (result.autoload || providers[providerID])) {
+              if (result.getModel) modelLoaders[providerID] = result.getModel
+              if (result.vars) varsLoaders[providerID] = result.vars
+              if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+              const opts = result.options ?? {}
               const patch: Partial<Info> = providers[providerID]
                 ? { options: opts }
                 : { source: "custom", options: opts }
               mergeProvider(providerID, patch)
             }
+          }
 
-            for (const [id, fn] of Object.entries(custom(dep))) {
-              const providerID = ProviderID.make(id)
-              if (disabled.has(providerID)) continue
-              const data = database[providerID]
-              if (!data) {
-                log.error("Provider does not exist in model list " + providerID)
-                continue
-              }
-              const result = yield* fn(data)
-              if (result && (result.autoload || providers[providerID])) {
-                if (result.getModel) modelLoaders[providerID] = result.getModel
-                if (result.vars) varsLoaders[providerID] = result.vars
-                if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
-                const opts = result.options ?? {}
-                const patch: Partial<Info> = providers[providerID]
-                  ? { options: opts }
-                  : { source: "custom", options: opts }
-                mergeProvider(providerID, patch)
-              }
-            }
+          // load config - re-apply with updated data
+          for (const [id, provider] of configProviders) {
+            const providerID = ProviderID.make(id)
+            const partial: Partial<Info> = { source: "config" }
+            if (provider.env) partial.env = provider.env
+            if (provider.name) partial.name = provider.name
+            if (provider.options) partial.options = provider.options
+            mergeProvider(providerID, partial)
+          }
 
-            // load config - re-apply with updated data
-            for (const [id, provider] of configProviders) {
-              const providerID = ProviderID.make(id)
-              const partial: Partial<Info> = { source: "config" }
-              if (provider.env) partial.env = provider.env
-              if (provider.name) partial.name = provider.name
-              if (provider.options) partial.options = provider.options
-              mergeProvider(providerID, partial)
-            }
-
-            const gitlab = ProviderID.make("gitlab")
-            if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-              yield* Effect.promise(async () => {
-                try {
-                  const discovered = await discoveryLoaders[gitlab]()
-                  for (const [modelID, model] of Object.entries(discovered)) {
-                    if (!providers[gitlab].models[modelID]) {
-                      providers[gitlab].models[modelID] = model
-                    }
+          const gitlab = ProviderID.make("gitlab")
+          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[gitlab]()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[gitlab].models[modelID]) {
+                    providers[gitlab].models[modelID] = model
                   }
-                } catch (e) {
-                  log.warn("state discovery error", { id: "gitlab", error: e })
                 }
-              })
-            }
-
-            for (const hook of plugins) {
-              const p = hook.provider
-              const models = p?.models
-              if (!p || !models) continue
-
-              const providerID = ProviderID.make(p.id)
-              if (disabled.has(providerID)) continue
-
-              const provider = providers[providerID]
-              if (!provider) continue
-              const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
-
-              provider.models = yield* Effect.promise(async () => {
-                const next = await models(provider, { auth: pluginAuth })
-                return Object.fromEntries(
-                  Object.entries(next).map(([id, model]) => [
-                    id,
-                    {
-                      ...model,
-                      id: ModelID.make(id),
-                      providerID,
-                    },
-                  ]),
-                )
-              })
-            }
-
-            for (const [id, provider] of Object.entries(providers)) {
-              const providerID = ProviderID.make(id)
-              if (!isProviderAllowed(providerID)) {
-                delete providers[providerID]
-                continue
+              } catch (e) {
+                log.warn("state discovery error", { id: "gitlab", error: e })
               }
+            })
+          }
 
-              const configProvider = cfg.provider?.[providerID]
+          for (const hook of plugins) {
+            const p = hook.provider
+            const models = p?.models
+            if (!p || !models) continue
 
-              for (const [modelID, model] of Object.entries(provider.models)) {
-                model.api.id = model.api.id ?? model.id ?? modelID
-                if (
-                  modelID === "gpt-5-chat-latest" ||
-                  (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
-                )
-                  delete provider.models[modelID]
-                if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS)
-                  delete provider.models[modelID]
-                if (model.status === "deprecated") delete provider.models[modelID]
-                if (
-                  (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-                  (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
-                )
-                  delete provider.models[modelID]
+            const providerID = ProviderID.make(p.id)
+            if (disabled.has(providerID)) continue
 
-                model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            const provider = providers[providerID]
+            if (!provider) continue
+            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
-                const configVariants = configProvider?.models?.[modelID]?.variants
-                if (configVariants && model.variants) {
-                  const merged = mergeDeep(model.variants, configVariants)
-                  model.variants = mapValues(
-                    pickBy(merged, (v) => !v.disabled),
-                    (v) => omit(v, ["disabled"]),
-                  )
-                }
-              }
+            provider.models = yield* Effect.promise(async () => {
+              const next = await models(provider, { auth: pluginAuth })
+              return Object.fromEntries(
+                Object.entries(next).map(([id, model]) => [
+                  id,
+                  {
+                    ...model,
+                    id: ModelID.make(id),
+                    providerID,
+                  },
+                ]),
+              )
+            })
+          }
 
-              if (Object.keys(provider.models).length === 0) {
-                delete providers[providerID]
-                continue
-              }
-
-              log.info("found", { providerID })
+          for (const [id, provider] of Object.entries(providers)) {
+            const providerID = ProviderID.make(id)
+            if (!isProviderAllowed(providerID)) {
+              delete providers[providerID]
+              continue
             }
 
-            return {
-              models: languages,
-              providers,
-              sdk,
-              modelLoaders,
-              varsLoaders,
+            const configProvider = cfg.provider?.[providerID]
+
+            for (const [modelID, model] of Object.entries(provider.models)) {
+              model.api.id = model.api.id ?? model.id ?? modelID
+              if (
+                modelID === "gpt-5-chat-latest" ||
+                (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+              )
+                delete provider.models[modelID]
+              if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
+              if (model.status === "deprecated") delete provider.models[modelID]
+              if (
+                (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
+                (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+              )
+                delete provider.models[modelID]
+
+              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+
+              const configVariants = configProvider?.models?.[modelID]?.variants
+              if (configVariants && model.variants) {
+                const merged = mergeDeep(model.variants, configVariants)
+                model.variants = mapValues(
+                  pickBy(merged, (v) => !v.disabled),
+                  (v) => omit(v, ["disabled"]),
+                )
+              }
             }
-          }),
-        )
 
-        const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+            if (Object.keys(provider.models).length === 0) {
+              delete providers[providerID]
+              continue
+            }
 
-        async function resolveSDK(model: Model, s: State) {
-          try {
-            using _ = log.time("getSDK", {
+            log.info("found", { providerID })
+          }
+
+          return {
+            models: languages,
+            providers,
+            sdk,
+            modelLoaders,
+            varsLoaders,
+          }
+        }),
+      )
+
+      const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+
+      async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
+        try {
+          using _ = log.time("getSDK", {
+            providerID: model.providerID,
+          })
+          const provider = s.providers[model.providerID]
+          const options = { ...provider.options }
+
+          if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
+            delete options.fetch
+          }
+
+          if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
+            options["includeUsage"] = true
+          }
+
+          const baseURL = iife(() => {
+            let url =
+              typeof options["baseURL"] === "string" && options["baseURL"] !== "" ? options["baseURL"] : model.api.url
+            if (!url) return
+
+            const loader = s.varsLoaders[model.providerID]
+            if (loader) {
+              const vars = loader(options)
+              for (const [key, value] of Object.entries(vars)) {
+                const field = "${" + key + "}"
+                url = url.replaceAll(field, value)
+              }
+            }
+
+            url = url.replace(/\$\{([^}]+)\}/g, (item, key) => {
+              const val = envs[String(key)]
+              return val ?? item
+            })
+            return url
+          })
+
+          if (baseURL !== undefined) options["baseURL"] = baseURL
+          if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+          if (model.headers)
+            options["headers"] = {
+              ...options["headers"],
+              ...model.headers,
+            }
+
+          const key = Hash.fast(
+            JSON.stringify({
               providerID: model.providerID,
-            })
-            const provider = s.providers[model.providerID]
-            const options = { ...provider.options }
+              npm: model.api.npm,
+              options,
+            }),
+          )
+          const existing = s.sdk.get(key)
+          if (existing) return existing
 
-            if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
-              delete options.fetch
-            }
+          const customFetch = options["fetch"]
+          const chunkTimeout = options["chunkTimeout"]
+          delete options["chunkTimeout"]
 
-            if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-              options["includeUsage"] = true
-            }
+          options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+            const fetchFn = customFetch ?? fetch
+            const opts = init ?? {}
+            const chunkAbortCtl =
+              typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+            const signals: AbortSignal[] = []
 
-            const baseURL = iife(() => {
-              let url =
-                typeof options["baseURL"] === "string" && options["baseURL"] !== "" ? options["baseURL"] : model.api.url
-              if (!url) return
+            if (opts.signal) signals.push(opts.signal)
+            if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+            if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
+              signals.push(AbortSignal.timeout(options["timeout"]))
 
-              const loader = s.varsLoaders[model.providerID]
-              if (loader) {
-                const vars = loader(options)
-                for (const [key, value] of Object.entries(vars)) {
-                  const field = "${" + key + "}"
-                  url = url.replaceAll(field, value)
-                }
-              }
+            const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+            if (combined) opts.signal = combined
 
-              url = url.replace(/\$\{([^}]+)\}/g, (item, key) => {
-                const val = Env.get(String(key))
-                return val ?? item
-              })
-              return url
-            })
-
-            if (baseURL !== undefined) options["baseURL"] = baseURL
-            if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
-            if (model.headers)
-              options["headers"] = {
-                ...options["headers"],
-                ...model.headers,
-              }
-
-            const key = Hash.fast(
-              JSON.stringify({
-                providerID: model.providerID,
-                npm: model.api.npm,
-                options,
-              }),
-            )
-            const existing = s.sdk.get(key)
-            if (existing) return existing
-
-            const customFetch = options["fetch"]
-            const chunkTimeout = options["chunkTimeout"]
-            delete options["chunkTimeout"]
-
-            options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-              const fetchFn = customFetch ?? fetch
-              const opts = init ?? {}
-              const chunkAbortCtl =
-                typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
-              const signals: AbortSignal[] = []
-
-              if (opts.signal) signals.push(opts.signal)
-              if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
-              if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
-                signals.push(AbortSignal.timeout(options["timeout"]))
-
-              const combined =
-                signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
-              if (combined) opts.signal = combined
-
-              // Strip openai itemId metadata following what codex does
-              if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
-                const body = JSON.parse(opts.body as string)
-                const isAzure = model.providerID.includes("azure")
-                const keepIds = isAzure && body.store === true
-                if (!keepIds && Array.isArray(body.input)) {
-                  for (const item of body.input) {
-                    if ("id" in item) {
-                      delete item.id
-                    }
+            // Strip openai itemId metadata following what codex does
+            if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+              const body = JSON.parse(opts.body as string)
+              const isAzure = model.providerID.includes("azure")
+              const keepIds = isAzure && body.store === true
+              if (!keepIds && Array.isArray(body.input)) {
+                for (const item of body.input) {
+                  if ("id" in item) {
+                    delete item.id
                   }
-                  opts.body = JSON.stringify(body)
                 }
+                opts.body = JSON.stringify(body)
               }
-
-              const res = await fetchFn(input, {
-                ...opts,
-                // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-                timeout: false,
-              })
-
-              if (!chunkAbortCtl) return res
-              return wrapSSE(res, chunkTimeout, chunkAbortCtl)
             }
 
-            const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
-            if (bundledFn) {
-              log.info("using bundled provider", {
-                providerID: model.providerID,
-                pkg: model.api.npm,
-              })
-              const loaded = bundledFn({
-                name: model.providerID,
-                ...options,
-              })
-              s.sdk.set(key, loaded)
-              return loaded as SDK
-            }
+            const res = await fetchFn(input, {
+              ...opts,
+              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+              timeout: false,
+            })
 
-            let installedPath: string
-            if (!model.api.npm.startsWith("file://")) {
-              const item = await Npm.add(model.api.npm)
-              if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
-              installedPath = item.entrypoint
-            } else {
-              log.info("loading local provider", { pkg: model.api.npm })
-              installedPath = model.api.npm
-            }
+            if (!chunkAbortCtl) return res
+            return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          }
 
-            const mod = await import(installedPath)
-
-            const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-            const loaded = fn({
+          const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
+          if (bundledFn) {
+            log.info("using bundled provider", {
+              providerID: model.providerID,
+              pkg: model.api.npm,
+            })
+            const loaded = bundledFn({
               name: model.providerID,
               ...options,
             })
             s.sdk.set(key, loaded)
             return loaded as SDK
+          }
+
+          let installedPath: string
+          if (!model.api.npm.startsWith("file://")) {
+            const item = await Npm.add(model.api.npm)
+            if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+            installedPath = item.entrypoint
+          } else {
+            log.info("loading local provider", { pkg: model.api.npm })
+            installedPath = model.api.npm
+          }
+
+          const mod = await import(installedPath)
+
+          const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+          const loaded = fn({
+            name: model.providerID,
+            ...options,
+          })
+          s.sdk.set(key, loaded)
+          return loaded as SDK
+        } catch (e) {
+          throw new InitError({ providerID: model.providerID }, { cause: e })
+        }
+      }
+
+      const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
+        InstanceState.use(state, (s) => s.providers[providerID]),
+      )
+
+      const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
+        const s = yield* InstanceState.get(state)
+        const provider = s.providers[providerID]
+        if (!provider) {
+          const available = Object.keys(s.providers)
+          const matches = fuzzysort.go(providerID, available, { limit: 3, threshold: -10000 })
+          throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
+        }
+
+        const info = provider.models[modelID]
+        if (!info) {
+          const available = Object.keys(provider.models)
+          const matches = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 })
+          throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
+        }
+        return info
+      })
+
+      const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
+        const s = yield* InstanceState.get(state)
+        const envs = yield* env.all()
+        const key = `${model.providerID}/${model.id}`
+        if (s.models.has(key)) return s.models.get(key)!
+
+        return yield* Effect.promise(async () => {
+          const url = (() => {
+            const item = envs["OPENCODE_E2E_LLM_URL"]
+            if (typeof item !== "string" || item === "") return
+            return item
+          })()
+          if (url) {
+            const language = createOpenAICompatible({
+              name: model.providerID,
+              apiKey: "test-key",
+              baseURL: url,
+            }).chatModel(model.api.id)
+            s.models.set(key, language)
+            return language
+          }
+
+          const provider = s.providers[model.providerID]
+          const sdk = await resolveSDK(model, s, envs)
+
+          try {
+            const language = s.modelLoaders[model.providerID]
+              ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
+                  ...provider.options,
+                  ...model.options,
+                })
+              : sdk.languageModel(model.api.id)
+            s.models.set(key, language)
+            return language
           } catch (e) {
-            throw new InitError({ providerID: model.providerID }, { cause: e })
+            if (e instanceof NoSuchModelError)
+              throw new ModelNotFoundError(
+                {
+                  modelID: model.id,
+                  providerID: model.providerID,
+                },
+                { cause: e },
+              )
+            throw e
+          }
+        })
+      })
+
+      const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
+        const s = yield* InstanceState.get(state)
+        const provider = s.providers[providerID]
+        if (!provider) return undefined
+        for (const item of query) {
+          for (const modelID of Object.keys(provider.models)) {
+            if (modelID.includes(item)) return { providerID, modelID }
+          }
+        }
+        return undefined
+      })
+
+      const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderID) {
+        const cfg = yield* config.get()
+
+        if (cfg.small_model) {
+          const parsed = parseModel(cfg.small_model)
+          return yield* getModel(parsed.providerID, parsed.modelID)
+        }
+
+        const s = yield* InstanceState.get(state)
+        const provider = s.providers[providerID]
+        if (!provider) return undefined
+
+        let priority = [
+          "claude-haiku-4-5",
+          "claude-haiku-4.5",
+          "3-5-haiku",
+          "3.5-haiku",
+          "gemini-3-flash",
+          "gemini-2.5-flash",
+          "gpt-5-nano",
+        ]
+        if (providerID.startsWith("opencode")) {
+          priority = ["gpt-5-nano"]
+        }
+        if (providerID.startsWith("github-copilot")) {
+          priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
+        }
+        for (const item of priority) {
+          if (providerID === ProviderID.amazonBedrock) {
+            const crossRegionPrefixes = ["global.", "us.", "eu."]
+            const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
+
+            const globalMatch = candidates.find((m) => m.startsWith("global."))
+            if (globalMatch) return yield* getModel(providerID, ModelID.make(globalMatch))
+
+            const region = provider.options?.region
+            if (region) {
+              const regionPrefix = region.split("-")[0]
+              if (regionPrefix === "us" || regionPrefix === "eu") {
+                const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
+                if (regionalMatch) return yield* getModel(providerID, ModelID.make(regionalMatch))
+              }
+            }
+
+            const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
+            if (unprefixed) return yield* getModel(providerID, ModelID.make(unprefixed))
+          } else {
+            for (const model of Object.keys(provider.models)) {
+              if (model.includes(item)) return yield* getModel(providerID, ModelID.make(model))
+            }
           }
         }
 
-        const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
-          InstanceState.use(state, (s) => s.providers[providerID]),
+        return undefined
+      })
+
+      const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
+        const cfg = yield* config.get()
+        if (cfg.model) return parseModel(cfg.model)
+
+        const s = yield* InstanceState.get(state)
+        const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
+          Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
+            if (!isRecord(x) || !Array.isArray(x.recent)) return []
+            return x.recent.flatMap((item) => {
+              if (!isRecord(item)) return []
+              if (typeof item.providerID !== "string") return []
+              if (typeof item.modelID !== "string") return []
+              return [{ providerID: ProviderID.make(item.providerID), modelID: ModelID.make(item.modelID) }]
+            })
+          }),
+          Effect.catch(() => Effect.succeed([] as { providerID: ProviderID; modelID: ModelID }[])),
         )
+        for (const entry of recent) {
+          const provider = s.providers[entry.providerID]
+          if (!provider) continue
+          if (!provider.models[entry.modelID]) continue
+          return { providerID: entry.providerID, modelID: entry.modelID }
+        }
 
-        const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
-          const s = yield* InstanceState.get(state)
-          const provider = s.providers[providerID]
-          if (!provider) {
-            const available = Object.keys(s.providers)
-            const matches = fuzzysort.go(providerID, available, { limit: 3, threshold: -10000 })
-            throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
-          }
+        const provider = Object.values(s.providers).find(
+          (p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id),
+        )
+        if (!provider) throw new Error("no providers found")
+        const [model] = sort(Object.values(provider.models))
+        if (!model) throw new Error("no models found")
+        return {
+          providerID: provider.id,
+          modelID: model.id,
+        }
+      })
 
-          const info = provider.models[modelID]
-          if (!info) {
-            const available = Object.keys(provider.models)
-            const matches = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 })
-            throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
-          }
-          return info
-        })
-
-        const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
-          const s = yield* InstanceState.get(state)
-          const key = `${model.providerID}/${model.id}`
-          if (s.models.has(key)) return s.models.get(key)!
-
-          return yield* Effect.promise(async () => {
-            const url = e2eURL()
-            if (url) {
-              const language = createOpenAICompatible({
-                name: model.providerID,
-                apiKey: "test-key",
-                baseURL: url,
-              }).chatModel(model.api.id)
-              s.models.set(key, language)
-              return language
-            }
-
-            const provider = s.providers[model.providerID]
-            const sdk = await resolveSDK(model, s)
-
-            try {
-              const language = s.modelLoaders[model.providerID]
-                ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                    ...provider.options,
-                    ...model.options,
-                  })
-                : sdk.languageModel(model.api.id)
-              s.models.set(key, language)
-              return language
-            } catch (e) {
-              if (e instanceof NoSuchModelError)
-                throw new ModelNotFoundError(
-                  {
-                    modelID: model.id,
-                    providerID: model.providerID,
-                  },
-                  { cause: e },
-                )
-              throw e
-            }
-          })
-        })
-
-        const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
-          const s = yield* InstanceState.get(state)
-          const provider = s.providers[providerID]
-          if (!provider) return undefined
-          for (const item of query) {
-            for (const modelID of Object.keys(provider.models)) {
-              if (modelID.includes(item)) return { providerID, modelID }
-            }
-          }
-          return undefined
-        })
-
-        const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderID) {
-          const cfg = yield* config.get()
-
-          if (cfg.small_model) {
-            const parsed = parseModel(cfg.small_model)
-            return yield* getModel(parsed.providerID, parsed.modelID)
-          }
-
-          const s = yield* InstanceState.get(state)
-          const provider = s.providers[providerID]
-          if (!provider) return undefined
-
-          let priority = [
-            "claude-haiku-4-5",
-            "claude-haiku-4.5",
-            "3-5-haiku",
-            "3.5-haiku",
-            "gemini-3-flash",
-            "gemini-2.5-flash",
-            "gpt-5-nano",
-          ]
-          if (providerID.startsWith("opencode")) {
-            priority = ["gpt-5-nano"]
-          }
-          if (providerID.startsWith("github-copilot")) {
-            priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
-          }
-          for (const item of priority) {
-            if (providerID === ProviderID.amazonBedrock) {
-              const crossRegionPrefixes = ["global.", "us.", "eu."]
-              const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
-
-              const globalMatch = candidates.find((m) => m.startsWith("global."))
-              if (globalMatch) return yield* getModel(providerID, ModelID.make(globalMatch))
-
-              const region = provider.options?.region
-              if (region) {
-                const regionPrefix = region.split("-")[0]
-                if (regionPrefix === "us" || regionPrefix === "eu") {
-                  const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
-                  if (regionalMatch) return yield* getModel(providerID, ModelID.make(regionalMatch))
-                }
-              }
-
-              const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
-              if (unprefixed) return yield* getModel(providerID, ModelID.make(unprefixed))
-            } else {
-              for (const model of Object.keys(provider.models)) {
-                if (model.includes(item)) return yield* getModel(providerID, ModelID.make(model))
-              }
-            }
-          }
-
-          return undefined
-        })
-
-        const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
-          const cfg = yield* config.get()
-          if (cfg.model) return parseModel(cfg.model)
-
-          const s = yield* InstanceState.get(state)
-          const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
-            Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
-              if (!isRecord(x) || !Array.isArray(x.recent)) return []
-              return x.recent.flatMap((item) => {
-                if (!isRecord(item)) return []
-                if (typeof item.providerID !== "string") return []
-                if (typeof item.modelID !== "string") return []
-                return [{ providerID: ProviderID.make(item.providerID), modelID: ModelID.make(item.modelID) }]
-              })
-            }),
-            Effect.catch(() => Effect.succeed([] as { providerID: ProviderID; modelID: ModelID }[])),
-          )
-          for (const entry of recent) {
-            const provider = s.providers[entry.providerID]
-            if (!provider) continue
-            if (!provider.models[entry.modelID]) continue
-            return { providerID: entry.providerID, modelID: entry.modelID }
-          }
-
-          const provider = Object.values(s.providers).find(
-            (p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id),
-          )
-          if (!provider) throw new Error("no providers found")
-          const [model] = sort(Object.values(provider.models))
-          if (!model) throw new Error("no models found")
-          return {
-            providerID: provider.id,
-            modelID: model.id,
-          }
-        })
-
-        return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
-      }),
-    )
+      return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    }),
+  )
 
   export const defaultLayer = Layer.suspend(() =>
     layer.pipe(
       Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Env.defaultLayer),
       Layer.provide(Config.defaultLayer),
       Layer.provide(Auth.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
