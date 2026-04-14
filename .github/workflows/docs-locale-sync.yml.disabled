@@ -10,9 +10,8 @@ on:
 jobs:
   sync-locales:
     if: false
-    #if: github.actor != 'mammouth-agent[bot]'
+    #if: github.actor != 'opencode-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
-:.github/workflows/docs-locale-sync.yml
     permissions:
       contents: write
     steps:
