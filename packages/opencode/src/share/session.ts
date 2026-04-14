@@ -8,7 +8,7 @@ import { ShareNext } from "./share-next"
 
 export namespace SessionShare {
   export interface Interface {
-    readonly create: (input?: Parameters<typeof Session.create>[0]) => Effect.Effect<Session.Info>
+    readonly create: (input?: Session.CreateInput) => Effect.Effect<Session.Info>
     readonly share: (sessionID: SessionID) => Effect.Effect<{ url: string }, unknown>
     readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
   }
@@ -38,7 +38,7 @@ export namespace SessionShare {
         yield* Effect.sync(() => SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: null } } }))
       })
 
-      const create = Effect.fn("SessionShare.create")(function* (input?: Parameters<typeof Session.create>[0]) {
+      const create = Effect.fn("SessionShare.create")(function* (input?: Session.CreateInput) {
         const result = yield* session.create(input)
         if (result.parentID) return result
         const conf = yield* cfg.get()

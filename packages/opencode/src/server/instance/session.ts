@@ -121,12 +121,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.get.schema,
+          sessionID: Session.GetInput,
         }),
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = await Session.get(sessionID)
+        const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID)))
         return c.json(session)
       },
     )
@@ -152,12 +152,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.children.schema,
+          sessionID: Session.ChildrenInput,
         }),
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = await Session.children(sessionID)
+        const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.children(sessionID)))
         return c.json(session)
       },
     )
@@ -209,7 +209,7 @@ export const SessionRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", Session.create.schema),
+      validator("json", Session.CreateInput),
       async (c) => {
         const body = c.req.valid("json") ?? {}
         const session = await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.create(body)))
@@ -237,12 +237,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.remove.schema,
+          sessionID: Session.RemoveInput,
         }),
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.remove(sessionID)
+        await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(sessionID)))
         return c.json(true)
       },
     )
@@ -285,22 +285,27 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
-        const current = await Session.get(sessionID)
+        const session = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const current = yield* session.get(sessionID)
 
-        if (updates.title !== undefined) {
-          await Session.setTitle({ sessionID, title: updates.title })
-        }
-        if (updates.permission !== undefined) {
-          await Session.setPermission({
-            sessionID,
-            permission: Permission.merge(current.permission ?? [], updates.permission),
-          })
-        }
-        if (updates.time?.archived !== undefined) {
-          await Session.setArchived({ sessionID, time: updates.time.archived })
-        }
+            if (updates.title !== undefined) {
+              yield* session.setTitle({ sessionID, title: updates.title })
+            }
+            if (updates.permission !== undefined) {
+              yield* session.setPermission({
+                sessionID,
+                permission: Permission.merge(current.permission ?? [], updates.permission),
+              })
+            }
+            if (updates.time?.archived !== undefined) {
+              yield* session.setArchived({ sessionID, time: updates.time.archived })
+            }
 
-        const session = await Session.get(sessionID)
+            return yield* session.get(sessionID)
+          }),
+        )
         return c.json(session)
       },
     )
@@ -375,14 +380,14 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.fork.schema.shape.sessionID,
+          sessionID: Session.ForkInput.shape.sessionID,
         }),
       ),
-      validator("json", Session.fork.schema.omit({ sessionID: true })),
+      validator("json", Session.ForkInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        const result = await Session.fork({ ...body, sessionID })
+        const result = await AppRuntime.runPromise(Session.Service.use((svc) => svc.fork({ ...body, sessionID })))
         return c.json(result)
       },
     )
@@ -662,14 +667,24 @@ export const SessionRoutes = lazy(() =>
         const query = c.req.valid("query")
         const sessionID = c.req.valid("param").sessionID
         if (query.limit === undefined) {
-          await Session.get(sessionID)
-          const messages = await Session.messages({ sessionID })
+          const messages = await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const session = yield* Session.Service
+              yield* session.get(sessionID)
+              return yield* session.messages({ sessionID })
+            }),
+          )
           return c.json(messages)
         }
 
         if (query.limit === 0) {
-          await Session.get(sessionID)
-          const messages = await Session.messages({ sessionID })
+          const messages = await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const session = yield* Session.Service
+              yield* session.get(sessionID)
+              return yield* session.messages({ sessionID })
+            }),
+          )
           return c.json(messages)
         }
 
@@ -797,11 +812,15 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
-        await Session.removePart({
-          sessionID: params.sessionID,
-          messageID: params.messageID,
-          partID: params.partID,
-        })
+        await AppRuntime.runPromise(
+          Session.Service.use((svc) =>
+            svc.removePart({
+              sessionID: params.sessionID,
+              messageID: params.messageID,
+              partID: params.partID,
+            }),
+          ),
+        )
         return c.json(true)
       },
     )
@@ -839,7 +858,7 @@ export const SessionRoutes = lazy(() =>
             `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
           )
         }
-        const part = await Session.updatePart(body)
+        const part = await AppRuntime.runPromise(Session.Service.use((svc) => svc.updatePart(body)))
         return c.json(part)
       },
     )

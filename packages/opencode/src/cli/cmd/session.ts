@@ -11,6 +11,7 @@ import { Process } from "../../util/process"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
+import { AppRuntime } from "@/effect/app-runtime"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -60,12 +61,12 @@ export const SessionDeleteCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       const sessionID = SessionID.make(args.sessionID)
       try {
-        await Session.get(sessionID)
+        await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID)))
       } catch {
         UI.error(`Session not found: ${args.sessionID}`)
         process.exit(1)
       }
-      await Session.remove(sessionID)
+      await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(sessionID)))
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
     })
   },
