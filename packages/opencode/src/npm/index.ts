@@ -7,10 +7,14 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 import { Arborist } from "@npmcli/arborist"
+import Config from "@npmcli/config"
+// @ts-ignore documented @npmcli/config integration uses this subpath, but @types/npmcli__config does not declare it
+import { definitions, flatten, shorthands } from "@npmcli/config/lib/definitions"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
   const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
+  const npmdir = import.meta.dirname
 
   export const InstallFailedError = NamedError.create(
     "NpmInstallFailedError",
@@ -40,6 +44,22 @@ export namespace Npm {
     return result
   }
 
+  async function opts(cwd: string, env = process.env) {
+    const conf = new Config({
+      cwd,
+      env,
+      argv: [],
+      execPath: process.execPath,
+      platform: process.platform,
+      npmPath: npmdir,
+      definitions,
+      shorthands,
+      flatten,
+    })
+    await conf.load()
+    return conf.flat
+  }
+
   export async function add(pkg: string) {
     const dir = directory(pkg)
     await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
@@ -47,7 +67,9 @@ export namespace Npm {
       pkg,
     })
 
+    const cfg = await opts(Global.Path.cache)
     const arborist = new Arborist({
+      ...cfg,
       path: dir,
       binLinks: true,
       progress: false,
@@ -68,7 +90,7 @@ export namespace Npm {
         save: true,
         saveType: "prod",
       })
-      .catch((cause) => {
+      .catch((cause: unknown) => {
         throw new InstallFailedError(
           { pkg },
           {
@@ -87,7 +109,9 @@ export namespace Npm {
     log.info("checking dependencies", { dir })
 
     const reify = async () => {
+      const cfg = await opts(dir)
       const arb = new Arborist({
+        ...cfg,
         path: dir,
         binLinks: true,
         progress: false,
