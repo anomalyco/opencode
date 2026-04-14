@@ -51,6 +51,9 @@ export namespace Flag {
   export const JUPYTERHUB_OAUTH_CALLBACK_URL = process.env["JUPYTERHUB_OAUTH_CALLBACK_URL"]
   export const JUPYTERHUB_BASE_URL = process.env["JUPYTERHUB_BASE_URL"]
   export const JUPYTERHUB_SERVICE_PREFIX = process.env["JUPYTERHUB_SERVICE_PREFIX"]
+  // Serve proxy (subdomain routing)
+  export const OPENCODE_SERVE_DOMAIN = process.env["OPENCODE_SERVE_DOMAIN"]
+
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental

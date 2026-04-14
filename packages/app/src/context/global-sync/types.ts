@@ -2,6 +2,7 @@ import type {
   Agent,
   Command,
   Config,
+  Env,
   FileDiff,
   LspStatus,
   McpStatus,
@@ -42,6 +43,7 @@ export type State = {
   provider: ProviderListResponse
   config: Config
   path: Path
+  env: Env
   session: Session[]
   sessionTotal: number
   session_status: {

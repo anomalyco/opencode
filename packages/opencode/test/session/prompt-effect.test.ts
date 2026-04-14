@@ -148,10 +148,6 @@ function defer<T>() {
   return { promise, resolve }
 }
 
-function waitMs(ms: number) {
-  return Effect.promise(() => new Promise<void>((done) => setTimeout(done, ms)))
-}
-
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
@@ -584,7 +580,7 @@ it.effect(
 
           const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           // Give the loop time to start
-          yield* waitMs(200)
+          yield* Effect.sleep(200)
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(fiber)
@@ -715,7 +711,7 @@ it.effect(
           yield* Effect.promise(() => ready.promise)
           // Queue a second caller
           const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           yield* prompt.cancel(chat.id)
 
@@ -1018,10 +1014,10 @@ unix(
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
             .pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           expect(yield* test.calls).toBe(0)
 
@@ -1052,11 +1048,11 @@ unix(
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
             .pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           expect(yield* test.calls).toBe(0)
 
@@ -1088,7 +1084,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* waitMs(50)
+            yield* Effect.sleep(50)
 
             yield* prompt.cancel(chat.id)
 
@@ -1125,7 +1121,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
               .pipe(Effect.forkChild)
-            yield* waitMs(50)
+            yield* Effect.sleep(50)
 
             yield* prompt.cancel(chat.id)
 
@@ -1156,10 +1152,10 @@ unix(
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
             .pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* waitMs(50)
+          yield* Effect.sleep(50)
 
           yield* prompt.cancel(chat.id)
 
@@ -1185,7 +1181,7 @@ unix(
             const a = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* waitMs(50)
+            yield* Effect.sleep(50)
 
             const exit = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "echo hi" })

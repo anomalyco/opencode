@@ -1144,6 +1144,10 @@ export type ServerConfig = {
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
+  /**
+   * Base path prefix for reverse proxy (e.g. /user/alice/)
+   */
+  basePath?: string
 }
 
 export type PermissionActionConfig = "ask" | "allow" | "deny"
@@ -1739,6 +1743,11 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+}
+
+export type Env = {
+  serveDomain?: string
+  jupyterhubUser?: string
 }
 
 export type ToolIds = Array<string>
@@ -2651,6 +2660,25 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type EnvGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/env"
+}
+
+export type EnvGetResponses = {
+  /**
+   * Environment
+   */
+  200: Env
+}
+
+export type EnvGetResponse = EnvGetResponses[keyof EnvGetResponses]
 
 export type ToolIdsData = {
   body?: never

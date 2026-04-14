@@ -22,10 +22,12 @@ import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
+import { EnvRoutes } from "./routes/env"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { errorHandler } from "./middleware"
+import { DEFAULT_CSP, csp } from "./csp"
 
 const log = Log.create({ service: "server" })
 
@@ -34,20 +36,13 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-const SERVE_URL = process.env["OPENCODE_SERVE_DOMAIN"] ?? ""
-
-const DEFAULT_CSP =
-  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
-
-const csp = (hash = "") =>
-  `frame-ancestors 'self' ${SERVE_URL}; default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
-
 export const InstanceRoutes = (app?: Hono) =>
   (app ?? new Hono())
     .onError(errorHandler(log))
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes())
     .route("/config", ConfigRoutes())
+    .route("/env", EnvRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
     .route("/permission", PermissionRoutes())

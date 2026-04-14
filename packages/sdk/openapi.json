@@ -1220,6 +1220,47 @@
         ]
       }
     },
+    "/env": {
+      "get": {
+        "operationId": "env.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get environment",
+        "description": "Retrieve runtime environment values exposed to the client.",
+        "responses": {
+          "200": {
+            "description": "Environment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Env"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.env.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/tool/ids": {
       "get": {
         "operationId": "tool.ids",
@@ -10347,6 +10388,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "basePath": {
+            "description": "Base path prefix for reverse proxy (e.g. /user/alice/)",
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -11689,6 +11734,17 @@
           }
         },
         "required": ["id", "name", "source", "env", "options", "models"]
+      },
+      "Env": {
+        "type": "object",
+        "properties": {
+          "serveDomain": {
+            "type": "string"
+          },
+          "jupyterhubUser": {
+            "type": "string"
+          }
+        }
       },
       "ToolIDs": {
         "type": "array",

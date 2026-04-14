@@ -1,5 +1,6 @@
 import type {
   Config,
+  Env,
   OpencodeClient,
   Path,
   Project,
@@ -31,6 +32,7 @@ type GlobalStore = {
   ready: boolean
   error?: InitError
   path: Path
+  env: Env
   project: Project[]
   session_todo: {
     [sessionID: string]: Todo[]
@@ -60,6 +62,7 @@ function createGlobalSync() {
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    env: {},
     project: projectCache.value,
     session_todo: {},
     provider: { all: [], connected: [], default: {} },
@@ -260,6 +263,7 @@ function createGlobalSync() {
         global: {
           config: globalStore.config,
           path: globalStore.path,
+          env: globalStore.env,
           project: globalStore.project,
           provider: globalStore.provider,
         },
