@@ -93,6 +93,7 @@ export namespace Database {
     db.run("PRAGMA cache_size = -64000")
     db.run("PRAGMA foreign_keys = ON")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    db.run("PRAGMA mmap_size = 0")
 
     // Apply schema migrations
     const entries =
