@@ -1,4 +1,5 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
+import open from "open"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -23,7 +24,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "github-copilot": 3,
   anthropic: 4,
   google: 5,
-  minimax: 6,
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
@@ -258,6 +258,7 @@ function AutoMethod(props: AutoMethodProps) {
   }))
 
   onMount(async () => {
+    open(props.authorization.url).catch(() => {})
     const result = await sdk.client.provider.oauth.callback({
       providerID: props.providerID,
       method: props.index,
