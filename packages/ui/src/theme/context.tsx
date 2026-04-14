@@ -162,7 +162,7 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { defaultTheme?: string; onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark") => void }) => {
-    const themeId = normalize(read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme) ?? "oc-2"
+    const themeId = "aura" // TODO: 커스텀 테마 적용
     const colorScheme: ColorScheme = "light"
     const mode: "light" | "dark" = "light"
     const [store, setStore] = createStore({
@@ -251,13 +251,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mediaQuery.addEventListener("change", onMedia)
       onCleanup(() => mediaQuery.removeEventListener("change", onMedia))
 
-      const rawTheme = read(STORAGE_KEYS.THEME_ID)
-      const savedTheme = normalize(rawTheme ?? props.defaultTheme) ?? "oc-2"
+      const savedTheme = "aura" // TODO: 커스텀 테마 적용
       const savedScheme: ColorScheme = "light"
-      if (rawTheme && rawTheme !== savedTheme) {
-        write(STORAGE_KEYS.THEME_ID, savedTheme)
-        clear()
-      }
       if (savedTheme !== store.themeId) setStore("themeId", savedTheme)
       if (savedScheme !== store.colorScheme) setStore("colorScheme", savedScheme)
       setStore("mode", "light")
