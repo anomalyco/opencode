@@ -6,6 +6,8 @@ import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Effect } from "effect"
 
 export const ExportCommand = cmd({
   command: "export [sessionID]",
@@ -67,8 +69,16 @@ export const ExportCommand = cmd({
       }
 
       try {
-        const sessionInfo = await Session.get(sessionID!)
-        const messages = await Session.messages({ sessionID: sessionInfo.id })
+        const { sessionInfo, messages } = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const sessionInfo = yield* session.get(sessionID!)
+            return {
+              sessionInfo,
+              messages: yield* session.messages({ sessionID: sessionInfo.id }),
+            }
+          }),
+        )
 
         const exportData = {
           info: sessionInfo,

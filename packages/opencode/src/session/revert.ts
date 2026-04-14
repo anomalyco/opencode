@@ -1,6 +1,5 @@
 import z from "zod"
 import { Effect, Layer, Context } from "effect"
-import { makeRuntime } from "@/effect/run-service"
 import { Bus } from "../bus"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
@@ -160,18 +159,4 @@ export namespace SessionRevert {
       Layer.provide(SessionSummary.defaultLayer),
     ),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function revert(input: RevertInput) {
-    return runPromise((svc) => svc.revert(input))
-  }
-
-  export async function unrevert(input: { sessionID: SessionID }) {
-    return runPromise((svc) => svc.unrevert(input))
-  }
-
-  export async function cleanup(session: Session.Info) {
-    return runPromise((svc) => svc.cleanup(session))
-  }
 }

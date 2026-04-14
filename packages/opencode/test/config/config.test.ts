@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
 import { AppFileSystem } from "../../src/filesystem"
+import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir, tmpdirScoped } from "../fixture/fixture"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
@@ -35,6 +36,7 @@ const emptyAuth = Layer.mock(Auth.Service)({
 
 const layer = Config.layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Env.defaultLayer),
   Layer.provide(emptyAuth),
   Layer.provide(emptyAccount),
   Layer.provideMerge(infra),
@@ -332,6 +334,7 @@ test("resolves env templates in account config with account token", async () => 
 
   const layer = Config.layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
     Layer.provide(emptyAuth),
     Layer.provide(fakeAccount),
     Layer.provideMerge(infra),
@@ -1824,6 +1827,7 @@ test("project config overrides remote well-known config", async () => {
 
   const layer = Config.layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
     Layer.provide(fakeAuth),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
@@ -1879,6 +1883,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
 
   const layer = Config.layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
     Layer.provide(fakeAuth),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),

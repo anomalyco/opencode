@@ -254,7 +254,7 @@ export const ExperimentalRoutes = lazy(() =>
       validator("json", Worktree.CreateInput.optional()),
       async (c) => {
         const body = c.req.valid("json")
-        const worktree = await Worktree.create(body)
+        const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.create(body)))
         return c.json(worktree)
       },
     )
@@ -276,7 +276,7 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const sandboxes = await Project.sandboxes(Instance.project.id)
+        const sandboxes = await AppRuntime.runPromise(Project.Service.use((svc) => svc.sandboxes(Instance.project.id)))
         return c.json(sandboxes)
       },
     )
@@ -301,8 +301,10 @@ export const ExperimentalRoutes = lazy(() =>
       validator("json", Worktree.RemoveInput),
       async (c) => {
         const body = c.req.valid("json")
-        await Worktree.remove(body)
-        await Project.removeSandbox(Instance.project.id, body.directory)
+        await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove(body)))
+        await AppRuntime.runPromise(
+          Project.Service.use((svc) => svc.removeSandbox(Instance.project.id, body.directory)),
+        )
         return c.json(true)
       },
     )
@@ -327,7 +329,7 @@ export const ExperimentalRoutes = lazy(() =>
       validator("json", Worktree.ResetInput),
       async (c) => {
         const body = c.req.valid("json")
-        await Worktree.reset(body)
+        await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.reset(body)))
         return c.json(true)
       },
     )

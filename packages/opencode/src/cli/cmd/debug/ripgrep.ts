@@ -46,7 +46,7 @@ const FilesCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const files: string[] = []
-      for await (const file of Ripgrep.files({
+      for await (const file of await Ripgrep.files({
         cwd: Instance.directory,
         glob: args.glob ? [args.glob] : undefined,
       })) {

@@ -293,6 +293,7 @@ export namespace MCP {
                 log.info("oauth redirect requested", { key, url: url.toString() })
               },
             },
+            auth,
           )
         }
 
@@ -744,6 +745,7 @@ export namespace MCP {
               capturedUrl = url
             },
           },
+          auth,
         )
 
         const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), { authProvider })

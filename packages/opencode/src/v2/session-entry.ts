@@ -1,6 +1,10 @@
 import { Identifier } from "@/id/id"
+import { Database } from "@/node"
+import type { SessionID } from "@/session/schema"
+import { SessionEntryTable } from "@/session/session.sql"
 import { withStatics } from "@/util/schema"
-import { DateTime, Effect, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { eq } from "../storage/db"
 
 export namespace SessionEntry {
   export const ID = Schema.String.pipe(Schema.brand("Session.Entry.ID")).pipe(
@@ -181,6 +185,43 @@ export namespace SessionEntry {
     overflow: Schema.Boolean.pipe(Schema.optional),
   }) {}
 
-  export const Entry = Schema.Union([User, Synthetic, Request, Tool, Text, Reasoning, Complete, Retry, Compaction])
+  export const Entry = Schema.Union([User, Synthetic, Request, Tool, Text, Reasoning, Complete, Retry, Compaction], {
+    mode: "oneOf",
+  })
   export type Entry = Schema.Schema.Type<typeof Entry>
+
+  export type Type = Entry["type"]
+
+  export interface Interface {
+    readonly decode: (row: typeof SessionEntryTable.$inferSelect) => Entry
+    readonly fromSession: (sessionID: SessionID) => Effect.Effect<Entry[], never>
+  }
+
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionEntry") {}
+
+  export const layer: Layer.Layer<Service, never, never> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const decodeEntry = Schema.decodeUnknownSync(Entry)
+
+      const decode: (typeof Service.Service)["decode"] = (row) => decodeEntry({ ...row, id: row.id, type: row.type })
+
+      const fromSession = Effect.fn("SessionEntry.fromSession")(function* (sessionID: SessionID) {
+        return Database.use((db) =>
+          db
+            .select()
+            .from(SessionEntryTable)
+            .where(eq(SessionEntryTable.session_id, sessionID))
+            .orderBy(SessionEntryTable.id)
+            .all()
+            .map((row) => decode(row)),
+        )
+      })
+
+      return Service.of({
+        decode,
+        fromSession,
+      })
+    }),
+  )
 }
