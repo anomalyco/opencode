@@ -542,8 +542,10 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
   const diffAlpha = isDark ? 0.22 : 0.14
   const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
   const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
-  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
-  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
+  const diffContextBg = grays[2]
+  const diffAddedLineNumberBg = tint(diffContextBg, ansiColors.green, diffAlpha)
+  const diffRemovedLineNumberBg = tint(diffContextBg, ansiColors.red, diffAlpha)
+  const diffLineNumber = textMuted
 
   return {
     theme: {
@@ -583,8 +585,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       diffHighlightRemoved: ansiColors.redBright,
       diffAddedBg,
       diffRemovedBg,
-      diffContextBg: grays[1],
-      diffLineNumber: grays[6],
+      diffContextBg,
+      diffLineNumber,
       diffAddedLineNumberBg,
       diffRemovedLineNumberBg,
 

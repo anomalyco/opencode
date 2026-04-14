@@ -13,11 +13,11 @@ import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
-import { makeRuntime } from "@/effect/run-service"
+import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -164,7 +164,7 @@ export namespace Worktree {
     readonly reset: (input: ResetInput) => Effect.Effect<boolean>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Worktree") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Worktree") {}
 
   type GitResult = { code: number; text: string; stderr: string }
 
@@ -266,7 +266,7 @@ export namespace Worktree {
         const booted = yield* Effect.promise(() =>
           Instance.provide({
             directory: info.directory,
-            init: InstanceBootstrap,
+            init: () => BootstrapRuntime.runPromise(InstanceBootstrap),
             fn: () => undefined,
           })
             .then(() => true)
@@ -590,32 +590,11 @@ export namespace Worktree {
     }),
   )
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(Git.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Project.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function makeWorktreeInfo(name?: string) {
-    return runPromise((svc) => svc.makeWorktreeInfo(name))
-  }
-
-  export async function createFromInfo(info: Info, startCommand?: string) {
-    return runPromise((svc) => svc.createFromInfo(info, startCommand))
-  }
-
-  export async function create(input?: CreateInput) {
-    return runPromise((svc) => svc.create(input))
-  }
-
-  export async function remove(input: RemoveInput) {
-    return runPromise((svc) => svc.remove(input))
-  }
-
-  export async function reset(input: ResetInput) {
-    return runPromise((svc) => svc.reset(input))
-  }
 }

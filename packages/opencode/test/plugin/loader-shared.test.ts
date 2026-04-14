@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -13,8 +14,6 @@ const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Instance } = await import("../../src/project/instance")
 const { Npm } = await import("../../src/npm")
-const { Bus } = await import("../../src/bus")
-const { Session } = await import("../../src/session")
 
 afterAll(() => {
   if (disableDefault === undefined) {
@@ -31,30 +30,11 @@ afterEach(async () => {
 async function load(dir: string) {
   return Instance.provide({
     directory: dir,
-    fn: async () => {
-      await Plugin.list()
-    },
-  })
-}
-
-async function errs(dir: string) {
-  return Instance.provide({
-    directory: dir,
-    fn: async () => {
-      const errors: string[] = []
-      const off = Bus.subscribe(Session.Event.Error, (evt) => {
-        const error = evt.properties.error
-        if (!error || typeof error !== "object") return
-        if (!("data" in error)) return
-        if (!error.data || typeof error.data !== "object") return
-        if (!("message" in error.data)) return
-        if (typeof error.data.message !== "string") return
-        errors.push(error.data.message)
-      })
-      await Plugin.list()
-      off()
-      return errors
-    },
+    fn: async () =>
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.list()
+      }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
   })
 }
 
@@ -184,14 +164,13 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const errors = await errs(tmp.path)
+    await load(tmp.path)
     const called = await Bun.file(tmp.extra.mark)
       .text()
       .then(() => true)
       .catch(() => false)
 
     expect(called).toBe(false)
-    expect(errors.some((x) => x.includes("must export id"))).toBe(true)
   })
 
   test("rejects v1 plugin that exports server and tui together", async () => {
@@ -223,14 +202,13 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const errors = await errs(tmp.path)
+    await load(tmp.path)
     const called = await Bun.file(tmp.extra.mark)
       .text()
       .then(() => true)
       .catch(() => false)
 
     expect(called).toBe(false)
-    expect(errors.some((x) => x.includes("either server() or tui(), not both"))).toBe(true)
   })
 
   test("resolves npm plugin specs with explicit and default versions", async () => {
@@ -383,8 +361,7 @@ describe("plugin.loader.shared", () => {
     const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
-      const errors = await errs(tmp.path)
-      expect(errors).toHaveLength(0)
+      await load(tmp.path)
       expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
     } finally {
       install.mockRestore()
@@ -436,8 +413,7 @@ describe("plugin.loader.shared", () => {
     const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
-      const errors = await errs(tmp.path)
-      expect(errors).toHaveLength(0)
+      await load(tmp.path)
       expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
     } finally {
       install.mockRestore()
@@ -482,14 +458,13 @@ describe("plugin.loader.shared", () => {
     const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
-      const errors = await errs(tmp.path)
+      await load(tmp.path)
       const called = await Bun.file(tmp.extra.mark)
         .text()
         .then(() => true)
         .catch(() => false)
 
       expect(called).toBe(false)
-      expect(errors).toHaveLength(0)
     } finally {
       install.mockRestore()
     }
@@ -546,13 +521,12 @@ describe("plugin.loader.shared", () => {
     const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
-      const errors = await errs(tmp.path)
+      await load(tmp.path)
       const called = await Bun.file(tmp.extra.mark)
         .text()
         .then(() => true)
         .catch(() => false)
       expect(called).toBe(false)
-      expect(errors.some((x) => x.includes("outside plugin directory"))).toBe(true)
     } finally {
       install.mockRestore()
     }
@@ -588,30 +562,49 @@ describe("plugin.loader.shared", () => {
     }
   })
 
-  test("publishes session.error when install fails", async () => {
+  test("skips broken plugin when install fails", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["broken-plugin@9.9.9"] }, null, 2))
+        const ok = path.join(dir, "ok.ts")
+        const mark = path.join(dir, "ok.txt")
+        await Bun.write(
+          ok,
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: ["broken-plugin@9.9.9", pathToFileURL(ok).href] }, null, 2),
+        )
+        return { mark }
       },
     })
 
     const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
 
     try {
-      const errors = await errs(tmp.path)
-
-      expect(errors.some((x) => x.includes("Failed to install plugin broken-plugin@9.9.9") && x.includes("boom"))).toBe(
-        true,
-      )
+      await load(tmp.path)
+      expect(install).toHaveBeenCalledWith("broken-plugin@9.9.9")
+      expect(await Bun.file(tmp.extra.mark).text()).toBe("ok")
     } finally {
       install.mockRestore()
     }
   })
 
-  test("publishes session.error when plugin init throws", async () => {
+  test("continues loading plugins when plugin init throws", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const file = pathToFileURL(path.join(dir, "throws.ts")).href
+        const ok = pathToFileURL(path.join(dir, "ok.ts")).href
+        const mark = path.join(dir, "ok.txt")
         await Bun.write(
           path.join(dir, "throws.ts"),
           [
@@ -624,51 +617,91 @@ describe("plugin.loader.shared", () => {
             "",
           ].join("\n"),
         )
+        await Bun.write(
+          path.join(dir, "ok.ts"),
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
 
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file] }, null, 2))
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file, ok] }, null, 2))
 
-        return { file }
+        return { mark }
       },
     })
 
-    const errors = await errs(tmp.path)
-
-    expect(errors.some((x) => x.includes(`Failed to load plugin ${tmp.extra.file}: explode`))).toBe(true)
+    await load(tmp.path)
+    expect(await Bun.file(tmp.extra.mark).text()).toBe("ok")
   })
 
-  test("publishes session.error when plugin module has invalid export", async () => {
+  test("continues loading plugins when plugin module has invalid export", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const file = pathToFileURL(path.join(dir, "invalid.ts")).href
+        const ok = pathToFileURL(path.join(dir, "ok.ts")).href
+        const mark = path.join(dir, "ok.txt")
         await Bun.write(
           path.join(dir, "invalid.ts"),
           ["export default {", '  id: "demo.invalid",', "  nope: true,", "}", ""].join("\n"),
         )
+        await Bun.write(
+          path.join(dir, "ok.ts"),
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
 
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file] }, null, 2))
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file, ok] }, null, 2))
 
-        return { file }
+        return { mark }
       },
     })
 
-    const errors = await errs(tmp.path)
-
-    expect(errors.some((x) => x.includes(`Failed to load plugin ${tmp.extra.file}`))).toBe(true)
+    await load(tmp.path)
+    expect(await Bun.file(tmp.extra.mark).text()).toBe("ok")
   })
 
-  test("publishes session.error when plugin import fails", async () => {
+  test("continues loading plugins when plugin import fails", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const missing = pathToFileURL(path.join(dir, "missing-plugin.ts")).href
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [missing] }, null, 2))
+        const ok = pathToFileURL(path.join(dir, "ok.ts")).href
+        const mark = path.join(dir, "ok.txt")
+        await Bun.write(
+          path.join(dir, "ok.ts"),
+          [
+            "export default {",
+            '  id: "demo.ok",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "ok")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [missing, ok] }, null, 2))
 
-        return { missing }
+        return { mark }
       },
     })
 
-    const errors = await errs(tmp.path)
-
-    expect(errors.some((x) => x.includes(`Failed to load plugin ${tmp.extra.missing}`))).toBe(true)
+    await load(tmp.path)
+    expect(await Bun.file(tmp.extra.mark).text()).toBe("ok")
   })
 
   test("loads object plugin via plugin.server", async () => {

@@ -1,11 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Session } from "../../src/session"
+import { Effect } from "effect"
+import { Session as SessionNs } from "../../src/session"
+import type { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
+
+function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
+  return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
+}
+
+const svc = {
+  ...SessionNs,
+  create(input?: SessionNs.CreateInput) {
+    return run(SessionNs.Service.use((svc) => svc.create(input)))
+  },
+  remove(id: SessionID) {
+    return run(SessionNs.Service.use((svc) => svc.remove(id)))
+  },
+}
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -18,7 +34,7 @@ describe("tui.selectSession endpoint", () => {
       directory: tmp.path,
       fn: async () => {
         // #given
-        const session = await Session.create({})
+        const session = await svc.create({})
 
         // #when
         const app = Server.Default().app
@@ -33,7 +49,7 @@ describe("tui.selectSession endpoint", () => {
         const body = await response.json()
         expect(body).toBe(true)
 
-        await Session.remove(session.id)
+        await svc.remove(session.id)
       },
     })
   })
