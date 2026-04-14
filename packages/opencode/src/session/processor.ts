@@ -370,6 +370,7 @@ export namespace SessionProcessor {
                 tokens: usage.tokens,
                 cost: usage.cost,
                 finishReason: value.finishReason,
+                output: ctx.currentText?.text ?? "",
               })
               yield* session.updatePart({
                 id: PartID.ascending(),

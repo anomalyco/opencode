@@ -15,6 +15,7 @@ export namespace Profiler {
     apiModelID: string
     endpoint: string
     system: string[]
+    userQuery: string
     messageCount: number
     tools: string[]
     startTime: number
@@ -45,6 +46,7 @@ export namespace Profiler {
     apiModelID: string
     endpoint: string
     system: string[]
+    userQuery: string
     messageCount: number
     tools: string[]
   }) {
@@ -67,6 +69,7 @@ export namespace Profiler {
     }
     cost: number
     finishReason: string
+    output: string
   }) {
     if (!enabled()) return
     const req = pending.get(input.sessionID)
@@ -83,11 +86,13 @@ export namespace Profiler {
       apiModelID: req.apiModelID,
       endpoint: req.endpoint,
       system: req.system,
+      userQuery: req.userQuery,
       messageCount: req.messageCount,
       tools: req.tools,
       tokens: input.tokens,
       cost: input.cost,
       finishReason: input.finishReason,
+      output: input.output,
       durationMs: Date.now() - req.startTime,
     }
 

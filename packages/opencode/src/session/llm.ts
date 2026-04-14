@@ -326,6 +326,22 @@ export namespace LLM {
       })
     }
 
+    const userQuery = (() => {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]
+        if (msg.role !== "user") continue
+        if (typeof msg.content === "string") return msg.content
+        if (Array.isArray(msg.content)) {
+          const text = msg.content
+            .filter((p): p is { type: "text"; text: string } => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+          if (text) return text
+        }
+      }
+      return ""
+    })()
+
     Profiler.startRequest({
       sessionID: input.sessionID,
       messageID: input.user.id,
@@ -339,6 +355,7 @@ export namespace LLM {
         input.model.api.url ??
         "unknown",
       system,
+      userQuery,
       messageCount: messages.length,
       tools: Object.keys(tools),
     })
