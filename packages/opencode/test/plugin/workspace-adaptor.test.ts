@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
@@ -72,15 +73,17 @@ describe("plugin.workspace", () => {
 
     const info = await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        await Plugin.init()
-        return Workspace.create({
-          type: tmp.extra.type,
-          branch: null,
-          extra: { key: "value" },
-          projectID: Instance.project.id,
-        })
-      },
+      fn: async () =>
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          yield* plugin.init()
+          return Workspace.create({
+            type: tmp.extra.type,
+            branch: null,
+            extra: { key: "value" },
+            projectID: Instance.project.id,
+          })
+        }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
     })
 
     expect(info.type).toBe(tmp.extra.type)

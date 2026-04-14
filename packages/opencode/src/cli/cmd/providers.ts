@@ -340,6 +340,12 @@ export const ProvidersLoginCommand = cmd({
           }
           return filtered
         })
+        const hooks = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const plugin = yield* Plugin.Service
+            return yield* plugin.list()
+          }),
+        )
 
         const priority: Record<string, number> = {
           opencode: 0,
@@ -351,7 +357,7 @@ export const ProvidersLoginCommand = cmd({
           vercel: 6,
         }
         const pluginProviders = resolvePluginProviders({
-          hooks: await Plugin.list(),
+          hooks,
           existingProviders: providers,
           disabled,
           enabled,
@@ -408,7 +414,7 @@ export const ProvidersLoginCommand = cmd({
           provider = selected as string
         }
 
-        const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
+        const plugin = hooks.findLast((x) => x.auth?.provider === provider)
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method)
           if (handled) return
@@ -422,7 +428,7 @@ export const ProvidersLoginCommand = cmd({
           if (prompts.isCancel(custom)) throw new UI.CancelledError()
           provider = custom.replace(/^@ai-sdk\//, "")
 
-          const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
+          const customPlugin = hooks.findLast((x) => x.auth?.provider === provider)
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
             if (handled) return
