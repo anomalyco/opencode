@@ -22,7 +22,6 @@
   <a href="README.de.md">Deutsch</a> |
   <a href="README.es.md">Español</a> |
   <a href="README.fr.md">Français</a> |
-  <a href="README.id.md">Bahasa Indonesia</a> |
   <a href="README.it.md">Italiano</a> |
   <a href="README.da.md">Dansk</a> |
   <a href="README.ja.md">日本語</a> |
@@ -37,7 +36,8 @@
   <a href="README.uk.md">Українська</a> |
   <a href="README.bn.md">বাংলা</a> |
   <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+    <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
