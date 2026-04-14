@@ -1,13 +1,13 @@
 ### Issue for this PR
 
-Closes #
+Closes #21595
 
 ### Type of change
 
 - [ ] Bug fix
 - [ ] New feature
 - [ ] Refactor / code improvement
-- [ ] Documentation
+- [x] Documentation
 
 ### What does this PR do?
 
