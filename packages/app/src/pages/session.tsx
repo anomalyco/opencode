@@ -1528,6 +1528,7 @@ export default function Page() {
     overflowAnchor: "none",
     bottomThreshold: scrollBottomThreshold,
     resize: "off",
+    columnReverse: true,
   })
   const live = () => ui.mode === "live"
   const enterLive = () => {
@@ -1547,9 +1548,9 @@ export default function Page() {
   // physical bottom. This avoids relying on the auto-scroll state machine once
   // content height is already changing every frame.
   const lockBottom = (el: HTMLDivElement, source: string) => {
-    const next = Math.max(0, el.scrollHeight - el.clientHeight)
-    if (Math.abs(el.scrollTop - next) <= 1) return
-    el.scrollTop = next
+    // column-reverse: scrollTop=0 is the bottom
+    if (Math.abs(el.scrollTop) <= 1) return
+    el.scrollTop = 0
   }
 
   let scrollStateFrame: number | undefined
@@ -1559,8 +1560,10 @@ export default function Page() {
   let initialScrollFrame: number | undefined
 
   const clamp = (el: HTMLDivElement, reason = "clamp") => {
-    const max = Math.max(0, el.scrollHeight - el.clientHeight)
-    const top = Math.max(0, Math.min(el.scrollTop, max))
+    // column-reverse: scrollTop ranges from -(scrollHeight - clientHeight) to 0
+    const min = -(el.scrollHeight - el.clientHeight)
+    const max = 0
+    const top = Math.max(min, Math.min(el.scrollTop, max))
     if (Math.abs(el.scrollTop - top) <= 1) return top
     el.scrollTop = top
     return top
@@ -1589,7 +1592,8 @@ export default function Page() {
     const max = el.scrollHeight - el.clientHeight
     const distance = max - el.scrollTop
     const overflow = max > 1
-    const bottom = !overflow || max - top <= scrollBottomThreshold
+    // column-reverse: distance from bottom = |scrollTop|
+    const bottom = !overflow || Math.abs(el.scrollTop) <= scrollBottomThreshold
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom && ui.scroll.jump === jump) return
     setUi("scroll", { overflow, bottom, jump })
@@ -2025,7 +2029,8 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
+      // column-reverse: distance from bottom = |scrollTop|
+      const gap = el ? Math.abs(el.scrollTop) : 0
       const stick = el ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
 
       dockHeight = next
@@ -2033,8 +2038,8 @@ export default function Page() {
       if (el && stick) {
         requestAnimationFrame(() => {
           if (scroller !== el) return
-          const top = el.scrollHeight - el.clientHeight - gap
-          el.scrollTop = top > 0 ? top : 0
+          // column-reverse: maintain the same gap from bottom
+          el.scrollTop = -gap
           clamp(el, "dock:resize:clamp")
         })
       }

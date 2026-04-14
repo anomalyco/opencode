@@ -114,6 +114,21 @@ const createEmbeddedWebUIBundle = async () => {
 
 const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
+function file(...parts: string[]) {
+  return path.resolve(dir, ...parts)
+}
+
+function exists(...parts: string[]) {
+  return fs.existsSync(file(...parts))
+}
+
+function ready() {
+  const worker = exists("node_modules", "@opentui", "core", "parser.worker.js")
+  const watcher = exists("node_modules", "@parcel", "watcher", "index.js")
+  console.log("Build deps", { worker, watcher, singleFlag, skipInstall })
+  return worker && watcher
+}
+
 const allTargets: {
   os: string
   arch: "arm64" | "x64"
@@ -201,7 +216,7 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-if (!skipInstall) {
+if (!skipInstall && (!singleFlag || !ready())) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }

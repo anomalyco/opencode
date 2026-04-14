@@ -368,8 +368,17 @@ export function MessageTimeline(props: {
 
     if (props.live) return tailWindow(ids, root)
 
-    const min = Math.max(0, root.scrollTop - windowOverscan)
-    const max = root.scrollTop + root.clientHeight + windowOverscan
+    // column-reverse: scrollTop is negative, convert to content position
+    // viewport bottom (in content coords) = scrollHeight + scrollTop
+    // viewport top (in content coords) = scrollHeight + scrollTop - clientHeight
+    const scrollHeight = root.scrollHeight
+    const clientHeight = root.clientHeight
+    const scrollTop = root.scrollTop
+    const viewportTop = scrollHeight + scrollTop - clientHeight
+    const viewportBottom = scrollHeight + scrollTop
+
+    const min = Math.max(0, viewportTop - windowOverscan)
+    const max = viewportBottom + windowOverscan
     let offset = 0
     let start = 0
     while (start < ids.length) {
@@ -432,7 +441,7 @@ export function MessageTimeline(props: {
       requestAnimationFrame(() => {
         const root = viewport
         if (!root) return
-        root.scrollTop = root.scrollHeight
+        root.scrollTop = 0
         props.onScheduleScrollState(root)
       })
       return
@@ -471,11 +480,17 @@ export function MessageTimeline(props: {
     const ids = rendered()
     if (!canWindow() || !root || ids.length <= windowThreshold) return false
     if (windowed.end === Infinity) return true
-    const top = root.scrollTop
-    const bottom = top + root.clientHeight
+
+    // column-reverse: convert scrollTop to content position
+    const scrollHeight = root.scrollHeight
+    const clientHeight = root.clientHeight
+    const scrollTop = root.scrollTop
+    const viewportTop = scrollHeight + scrollTop - clientHeight
+    const viewportBottom = scrollHeight + scrollTop
+
     const start = Math.max(0, windowed.top + windowOverscan / 2)
     const end = totalHeight() - Math.max(0, windowed.bottom + windowOverscan / 2)
-    return top < start || bottom > end
+    return viewportTop < start || viewportBottom > end
   }
 
   const visibleRendered = createMemo(() => {
@@ -520,7 +535,7 @@ export function MessageTimeline(props: {
       if (!root) return
       if (!isWorking()) return
       if (!props.live && !props.scroll.bottom) return
-      root.scrollTop = root.scrollHeight
+      root.scrollTop = 0
       props.onScheduleScrollState(root)
       bottomFrame = requestAnimationFrame(step)
     }
@@ -1126,6 +1141,7 @@ export function MessageTimeline(props: {
           </button>
         </div>
         <ScrollView
+          columnReverse={true}
           viewportRef={(el) => {
             viewport = el
             props.setScrollRef(el)
