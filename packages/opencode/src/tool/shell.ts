@@ -22,6 +22,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { Browser } from "@/browser"
 
 export { Parameters } from "./shell/prompt"
 
@@ -409,13 +410,11 @@ export const ShellTool = Tool.define(
     })
 
     const shellEnv = Effect.fn("ShellTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
-      const extra = yield* plugin.trigger(
-        "shell.env",
-        { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
-        { env: {} },
-      )
+      const extra = yield* plugin.trigger("shell.env", { cwd, sessionID: ctx.sessionID, callID: ctx.callID }, { env: {} })
+      const browser = yield* Effect.promise(() => Browser.env(ctx.sessionID))
       return {
         ...process.env,
+        ...browser,
         ...extra.env,
       }
     })

@@ -39,6 +39,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { Browser } from "@/browser"
 
 const log = Log.create({ service: "session" })
 
@@ -574,6 +575,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
 
         yield* sync.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
         yield* sync.remove(sessionID)
+        yield* Effect.promise(() => Browser.remove(sessionID)).pipe(Effect.ignore)
       } catch (e) {
         log.error(e)
       }

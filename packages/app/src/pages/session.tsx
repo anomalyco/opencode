@@ -56,6 +56,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { BrowserPanel } from "@/pages/session/browser-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
@@ -402,13 +403,15 @@ export default function Page() {
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const desktopBrowserOpen = createMemo(() => isDesktop() && view().browser.opened())
+  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen() || desktopBrowserOpen())
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
+    if (desktopBrowserOpen()) return `calc(100% - ${layout.browser.width()}px)`
     if (desktopReviewOpen()) return `${layout.session.width()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const centered = createMemo(() => isDesktop() && !desktopReviewOpen() && !desktopBrowserOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -565,6 +568,13 @@ export default function Page() {
     })
     return open
   }, desktopReviewOpen())
+
+  createEffect(() => {
+    if (!isDesktop()) return
+    if (!view().browser.opened()) return
+    if (view().reviewPanel.opened()) view().reviewPanel.close()
+    if (layout.fileTree.opened()) layout.fileTree.close()
+  })
 
   const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
@@ -1964,6 +1974,7 @@ export default function Page() {
           reviewSnap={ui.reviewSnap}
           size={size}
         />
+        <BrowserPanel size={size} />
       </div>
 
       <TerminalPanel />

@@ -8,6 +8,7 @@ import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
+import { Browser } from "@/browser"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -150,6 +151,8 @@ export const TaskTool = Tool.define(
               },
               parts,
             })
+
+            yield* Effect.promise(() => Browser.close(nextSession.id)).pipe(Effect.ignore)
 
             return {
               title: params.description,

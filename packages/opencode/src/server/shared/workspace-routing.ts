@@ -6,6 +6,7 @@ const RULES: Array<Rule> = [
   { path: "/experimental/workspace", action: "local" },
   { path: "/session/status", action: "forward" },
   { method: "GET", path: "/session", action: "local" },
+  { path: "/browser", action: "local" },
 ]
 
 export function isLocalWorkspaceRoute(method: string, path: string) {

@@ -118,6 +118,7 @@ export function SessionSidePanel(props: {
   }
 
   const openReviewPanel = () => {
+    if (view().browser.opened()) view().browser.close()
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 

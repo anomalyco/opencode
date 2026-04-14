@@ -214,6 +214,29 @@ export function SessionHeader() {
     focusTerminalById(id)
   }
 
+  const toggleBrowser = () => {
+    const next = !view().browser.opened()
+    if (!next) {
+      view().browser.close()
+      return
+    }
+    if (view().reviewPanel.opened()) view().reviewPanel.close()
+    if (layout.fileTree.opened()) layout.fileTree.close()
+    view().browser.open()
+  }
+
+  const toggleReview = () => {
+    const next = !view().reviewPanel.opened()
+    if (next && view().browser.opened()) view().browser.close()
+    view().reviewPanel.toggle()
+  }
+
+  const toggleTree = () => {
+    const next = !layout.fileTree.opened()
+    if (next && view().browser.opened()) view().browser.close()
+    layout.fileTree.toggle()
+  }
+
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
@@ -449,6 +472,26 @@ export function SessionHeader() {
                   </TooltipKeybind>
                 </Show>
 
+                <Tooltip placement="bottom" value="Toggle browser">
+                  <Button
+                    variant="ghost"
+                    class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                    onClick={toggleBrowser}
+                    aria-label="Toggle browser"
+                    aria-expanded={view().browser.opened()}
+                    aria-controls="browser-panel"
+                  >
+                    <Icon
+                      size="small"
+                      name="window-cursor"
+                      classList={{
+                        "text-icon-strong": view().browser.opened(),
+                        "text-icon-weak": !view().browser.opened(),
+                      }}
+                    />
+                  </Button>
+                </Tooltip>
+
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
@@ -457,7 +500,7 @@ export function SessionHeader() {
                     <Button
                       variant="ghost"
                       class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => view().reviewPanel.toggle()}
+                      onClick={toggleReview}
                       aria-label={language.t("command.review.toggle")}
                       aria-expanded={view().reviewPanel.opened()}
                       aria-controls="review-panel"
@@ -474,7 +517,7 @@ export function SessionHeader() {
                       <Button
                         variant="ghost"
                         class="titlebar-icon w-8 h-6 p-0 box-border"
-                        onClick={() => layout.fileTree.toggle()}
+                        onClick={toggleTree}
                         aria-label={language.t("command.fileTree.toggle")}
                         aria-expanded={layout.fileTree.opened()}
                         aria-controls="file-tree-panel"

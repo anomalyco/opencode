@@ -26,6 +26,7 @@ import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
+import { BrowserRoutes } from "../browser"
 import { InstanceMiddleware } from "./middleware"
 import { jsonRequest, runRequest } from "./trace"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
@@ -171,6 +172,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
+    .route("/browser", BrowserRoutes())
     .route("/sync", SyncRoutes())
     .route("/", FileRoutes())
     .route("/", EventRoutes())

@@ -387,6 +387,7 @@
         "@solid-primitives/scheduled": "1.5.2",
         "@standard-schema/spec": "1.0.0",
         "@zip.js/zip.js": "2.7.62",
+        "agent-browser": "0.25.3",
         "ai": "catalog:",
         "ai-gateway-provider": "3.1.2",
         "bonjour-service": "1.3.0",
@@ -2501,6 +2502,8 @@
     "acorn-walk": ["acorn-walk@8.3.2", "", {}, "sha512-cjkyv4OtNCIeqhHrfS81QWXoCBPExR/J62oyEqepVw8WaQeSqpW2uhuLPh1m9eWhDuOo/jUXVTlifvesOWp/4A=="],
 
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
+
+    "agent-browser": ["agent-browser@0.25.3", "", { "bin": { "agent-browser": "bin/agent-browser.js" } }, "sha512-9qdD8Fe22fXHB9nEfWzZ31/16EjeHBbXXue44SoJt+8LpyZS07dV/aQR2B2LevLL8eCneJBOhqvEBP2lP0NwJw=="],
 
     "agentkeepalive": ["agentkeepalive@4.6.0", "", { "dependencies": { "humanize-ms": "^1.2.1" } }, "sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ=="],
 

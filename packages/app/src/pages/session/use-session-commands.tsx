@@ -453,6 +453,21 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const viewCmds = () => [
     viewCommand({
+      id: "browser.toggle",
+      title: "Toggle browser",
+      slash: "browser",
+      onSelect: () => {
+        const next = !view().browser.opened()
+        if (!next) {
+          view().browser.close()
+          return
+        }
+        if (view().reviewPanel.opened()) view().reviewPanel.close()
+        if (layout.fileTree.opened()) layout.fileTree.close()
+        view().browser.open()
+      },
+    }),
+    viewCommand({
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),
       keybind: "ctrl+`",
@@ -463,7 +478,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
+      onSelect: () => {
+        const next = !view().reviewPanel.opened()
+        if (next && view().browser.opened()) view().browser.close()
+        view().reviewPanel.toggle()
+      },
     }),
     ...(shown()
       ? [
@@ -471,7 +490,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
             id: "fileTree.toggle",
             title: language.t("command.fileTree.toggle"),
             keybind: "mod+\\",
-            onSelect: () => layout.fileTree.toggle(),
+            onSelect: () => {
+              const next = !layout.fileTree.opened()
+              if (next && view().browser.opened()) view().browser.close()
+              layout.fileTree.toggle()
+            },
           }),
         ]
       : []),

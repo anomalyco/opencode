@@ -18,6 +18,7 @@ const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const DEFAULT_BROWSER_WIDTH = 560
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -158,6 +159,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })()
 
       const review = value.review
+      const browser = value.browser
       const fileTree = value.fileTree
       const migratedFileTree = (() => {
         if (!isRecord(fileTree)) return fileTree
@@ -180,6 +182,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return {
           ...review,
           panelOpened: opened,
+        }
+      })()
+
+      const migratedBrowser = (() => {
+        if (!isRecord(browser)) return browser
+        if (typeof browser.width === "number") return browser
+        const width = typeof browser.height === "number" ? browser.height : DEFAULT_BROWSER_WIDTH
+        return {
+          ...browser,
+          width,
         }
       })()
 
@@ -211,6 +223,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (
         migratedSidebar === sidebar &&
         migratedReview === review &&
+        migratedBrowser === browser &&
         migratedFileTree === fileTree &&
         migratedSessionTabs === sessionTabs
       ) {
@@ -221,6 +234,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ...value,
         sidebar: migratedSidebar,
         review: migratedReview,
+        browser: migratedBrowser,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
       }
@@ -238,6 +252,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         terminal: {
           height: DEFAULT_TERMINAL_HEIGHT,
+          opened: false,
+        },
+        browser: {
+          width: DEFAULT_BROWSER_WIDTH,
           opened: false,
         },
         review: {
@@ -607,6 +625,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "height", height)
         },
       },
+      browser: {
+        width: createMemo(() => store.browser?.width ?? DEFAULT_BROWSER_WIDTH),
+        resize(width: number) {
+          if (!store.browser) {
+            setStore("browser", { width, opened: false })
+            return
+          }
+          setStore("browser", "width", width)
+        },
+      },
       review: {
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
@@ -726,6 +754,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const browserOpened = createMemo(() => store.browser?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
@@ -752,6 +781,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("review", "panelOpened", next)
         }
 
+        function setBrowserOpened(next: boolean) {
+          const current = store.browser
+          if (!current) {
+            setStore("browser", { width: DEFAULT_BROWSER_WIDTH, opened: next })
+            return
+          }
+
+          const value = current.opened ?? false
+          if (value === next) return
+          setStore("browser", "opened", next)
+        }
+
         return {
           scroll(tab: string) {
             return scroll.scroll(key(), tab)
@@ -769,6 +810,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setTerminalOpened(!terminalOpened())
+            },
+          },
+          browser: {
+            opened: browserOpened,
+            open() {
+              setBrowserOpened(true)
+            },
+            close() {
+              setBrowserOpened(false)
+            },
+            toggle() {
+              setBrowserOpened(!browserOpened())
             },
           },
           reviewPanel: {
