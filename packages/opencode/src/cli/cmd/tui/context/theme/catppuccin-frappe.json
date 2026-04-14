@@ -126,8 +126,8 @@
       "light": "frappeMantle"
     },
     "diffLineNumber": {
-      "dark": "frappeSurface1",
-      "light": "frappeSurface1"
+      "dark": "#8f93a1",
+      "light": "#8f93a1"
     },
     "diffAddedLineNumberBg": {
       "dark": "#223025",

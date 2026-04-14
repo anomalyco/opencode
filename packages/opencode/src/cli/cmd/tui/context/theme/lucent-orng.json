@@ -130,7 +130,7 @@
       "light": "transparent"
     },
     "diffLineNumber": {
-      "dark": "#666666",
+      "dark": "#767676",
       "light": "#999999"
     },
     "diffAddedLineNumberBg": {

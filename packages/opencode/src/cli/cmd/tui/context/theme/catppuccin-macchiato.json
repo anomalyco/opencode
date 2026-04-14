@@ -126,8 +126,8 @@
       "light": "macMantle"
     },
     "diffLineNumber": {
-      "dark": "macSurface1",
-      "light": "macSurface1"
+      "dark": "#9294a2",
+      "light": "#9294a2"
     },
     "diffAddedLineNumberBg": {
       "dark": "#223025",
