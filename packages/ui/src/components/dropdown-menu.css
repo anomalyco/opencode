@@ -3,9 +3,9 @@
   min-width: 8rem;
   overflow: hidden;
   border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
+  border: 1px solid var(--border-weak-base);
   background-clip: padding-box;
-  background-color: rgb(12 12 14 / 0.34);
+  background-color: color-mix(in srgb, var(--background-stronger) 70%, transparent);
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
   padding: 6px;
@@ -43,7 +43,7 @@
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    border-radius: calc(var(--radius-md) - 2px);
+    border-radius: var(--radius-md);
     cursor: pointer;
     user-select: none;
     outline: none;
@@ -56,7 +56,7 @@
     color: var(--text-strong);
 
     &[data-highlighted] {
-      background: var(--surface-raised-base-hover);
+      background: rgba(255, 255, 255, 0.08);
     }
 
     &[data-disabled] {
@@ -115,20 +115,20 @@
   }
 
   [data-slot="dropdown-menu-arrow"] {
-    fill: rgb(12 12 14 / 0.34);
+    fill: color-mix(in srgb, var(--background-stronger) 70%, transparent);
   }
 }
 
 html[data-platform="desktop"][data-os="windows"] [data-component="dropdown-menu-content"],
 html[data-platform="desktop"][data-os="windows"] [data-component="dropdown-menu-sub-content"] {
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background-color: var(--background-stronger);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 html[data-platform="desktop"][data-os="windows"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-arrow"],
 html[data-platform="desktop"][data-os="windows"] [data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-arrow"] {
-  fill: var(--surface-raised-stronger-non-alpha);
+  fill: var(--background-stronger);
 }
 
 @keyframes dropdown-menu-open {

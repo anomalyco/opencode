@@ -7,4 +7,6 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  "plugin": [
+  ],
 }
