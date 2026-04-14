@@ -94,7 +94,25 @@ export namespace Snapshot {
             function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
               const proc = ChildProcess.make("git", cmd, {
                 cwd: opts?.cwd,
-                env: opts?.env,
+                // When opencode runs inside a git hook, git sets GIT_INDEX_FILE in the
+                // hook environment pointing at the working repo's index (commit.c:
+                // run_commit_hook). This variable is inherited by every subprocess via
+                // extendEnv and takes priority over the index path implied by --git-dir,
+                // causing git add / write-tree to write into the working repo's index
+                // instead of the shadow repo's. Blobs go into the shadow object store but
+                // index entries end up in the working repo, leaving it with references to
+                // objects that only exist in the snapshot — breaking the next commit.
+                //
+                // Unsetting GIT_INDEX_FILE (and GIT_DIR / GIT_WORK_TREE, which are
+                // redundant given our explicit --git-dir / --work-tree flags) ensures the
+                // shadow gitdir is authoritative. All other env vars (GIT_CONFIG_GLOBAL,
+                // HOME, PATH, credential helpers, etc.) are intentionally preserved.
+                env: {
+                  GIT_INDEX_FILE: undefined,
+                  GIT_DIR: undefined,
+                  GIT_WORK_TREE: undefined,
+                  ...opts?.env,
+                },
                 extendEnv: true,
               })
               const handle = yield* spawner.spawn(proc)
@@ -550,6 +568,7 @@ export namespace Snapshot {
 
                     const proc = ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
                       cwd: state.directory,
+                      env: { GIT_INDEX_FILE: undefined, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
                       extendEnv: true,
                       stdin: Stream.make(new TextEncoder().encode(refs.map((item) => item.ref).join("\n") + "\n")),
                     })
