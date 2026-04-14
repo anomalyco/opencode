@@ -105,10 +105,10 @@ import type {
   PtyRemoveResponses,
   PtyUpdateErrors,
   PtyUpdateResponses,
+  QuestionAnswer,
   QuestionListResponses,
   QuestionRejectErrors,
   QuestionRejectResponses,
-  QuestionReply,
   QuestionReplyErrors,
   QuestionReplyResponses,
   SessionAbortErrors,
@@ -2738,7 +2738,7 @@ export class Question extends HeyApiClient {
       requestID: string
       directory?: string
       workspace?: string
-      questionReply?: QuestionReply
+      answers?: Array<QuestionAnswer>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2750,7 +2750,7 @@ export class Question extends HeyApiClient {
             { in: "path", key: "requestID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { key: "questionReply", map: "body" },
+            { in: "body", key: "answers" },
           ],
         },
       ],
