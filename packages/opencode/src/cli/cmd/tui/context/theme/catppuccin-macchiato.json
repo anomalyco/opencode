@@ -125,10 +125,7 @@
       "dark": "macMantle",
       "light": "macMantle"
     },
-    "diffLineNumber": {
-      "dark": "#9294a2",
-      "light": "#9294a2"
-    },
+    "diffLineNumber": "textMuted",
     "diffAddedLineNumberBg": {
       "dark": "#223025",
       "light": "#223025"

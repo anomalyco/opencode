@@ -142,7 +142,7 @@
     },
     "diffLineNumber": {
       "dark": "#808792",
-      "light": "lfg3"
+      "light": "textMuted"
     },
     "diffAddedLineNumberBg": {
       "dark": "diffGreenBg",

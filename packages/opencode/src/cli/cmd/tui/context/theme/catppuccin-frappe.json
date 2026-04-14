@@ -125,10 +125,7 @@
       "dark": "frappeMantle",
       "light": "frappeMantle"
     },
-    "diffLineNumber": {
-      "dark": "#8f93a1",
-      "light": "#8f93a1"
-    },
+    "diffLineNumber": "textMuted",
     "diffAddedLineNumberBg": {
       "dark": "#223025",
       "light": "#223025"
