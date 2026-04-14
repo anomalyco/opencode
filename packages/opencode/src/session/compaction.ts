@@ -9,14 +9,12 @@ import z from "zod"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
-import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context } from "effect"
-import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
 
@@ -387,26 +385,5 @@ When constructing the summary, try to stick to this template:
       Layer.provide(Bus.layer),
       Layer.provide(Config.defaultLayer),
     ),
-  )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
-    return runPromise((svc) => svc.isOverflow(input))
-  }
-
-  export async function prune(input: { sessionID: SessionID }) {
-    return runPromise((svc) => svc.prune(input))
-  }
-
-  export const create = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      agent: z.string(),
-      model: z.object({ providerID: ProviderID.zod, modelID: ModelID.zod }),
-      auto: z.boolean(),
-      overflow: z.boolean().optional(),
-    }),
-    (input) => runPromise((svc) => svc.create(input)),
   )
 }
