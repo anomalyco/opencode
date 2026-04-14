@@ -3,6 +3,7 @@ import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { Config } from "../../config/config"
+import { AppRuntime } from "../../effect/app-runtime"
 import { datetime, resolveLocale, t, type Locale } from "../../i18n"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
@@ -250,7 +251,8 @@ export const ExportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const locale = resolveLocale((await Config.get()).locale)
+      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+      const locale = resolveLocale(config.locale)
       let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
       process.stderr.write(exportProgress(locale, sessionID ?? latest(locale)) + "\n")
 
