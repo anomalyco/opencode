@@ -43,6 +43,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { useI18n } from "../../context/i18n"
 
 export type PromptProps = {
   sessionID?: string
@@ -110,6 +111,7 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const kv = useKV()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  const i18n = useI18n()
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
@@ -142,7 +144,7 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message: i18n.t("tui.prompt.provider_required"),
       duration: 3000,
     })
     if (sync.data.provider.length === 0) {
@@ -255,9 +257,9 @@ export function Prompt(props: PromptProps) {
   command.register(() => {
     return [
       {
-        title: "Clear prompt",
+        title: i18n.t("tui.prompt.clear"),
         value: "prompt.clear",
-        category: "Prompt",
+        category: i18n.t("tui.prompt.category"),
         hidden: true,
         onSelect: (dialog) => {
           input.extmarks.clear()
@@ -266,10 +268,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Submit prompt",
+        title: i18n.t("tui.prompt.submit"),
         value: "prompt.submit",
         keybind: "input_submit",
-        category: "Prompt",
+        category: i18n.t("tui.prompt.category"),
         hidden: true,
         onSelect: async (dialog) => {
           if (!input.focused) return
@@ -280,10 +282,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Paste",
+        title: i18n.t("tui.prompt.paste"),
         value: "prompt.paste",
         keybind: "input_paste",
-        category: "Prompt",
+        category: i18n.t("tui.prompt.category"),
         hidden: true,
         onSelect: async () => {
           const content = await Clipboard.read()
@@ -297,10 +299,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Interrupt session",
+        title: i18n.t("tui.session.interrupt"),
         value: "session.interrupt",
         keybind: "session_interrupt",
-        category: "Session",
+        category: i18n.t("tui.session.category"),
         hidden: true,
         enabled: status().type !== "idle",
         onSelect: (dialog) => {
@@ -329,8 +331,8 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Open editor",
-        category: "Session",
+        title: i18n.t("tui.session.open_editor"),
+        category: i18n.t("tui.session.category"),
         keybind: "editor_open",
         value: "prompt.editor",
         slash: {
@@ -416,9 +418,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Skills",
+        title: i18n.t("tui.prompt.skills"),
         value: "prompt.skills",
-        category: "Prompt",
+        category: i18n.t("tui.prompt.category"),
         slash: {
           name: "skills",
         },
@@ -599,9 +601,9 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => [
     {
-      title: "Stash prompt",
+      title: i18n.t("tui.prompt.stash_push"),
       value: "prompt.stash",
-      category: "Prompt",
+      category: i18n.t("tui.prompt.category"),
       enabled: !!store.prompt.input,
       onSelect: (dialog) => {
         if (!store.prompt.input) return
@@ -617,9 +619,9 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
-      title: "Stash pop",
+      title: i18n.t("tui.prompt.stash_pop"),
       value: "prompt.stash.pop",
-      category: "Prompt",
+      category: i18n.t("tui.prompt.category"),
       enabled: stash.list().length > 0,
       onSelect: (dialog) => {
         const entry = stash.pop()
@@ -633,9 +635,9 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
-      title: "Stash list",
+      title: i18n.t("tui.prompt.stash_list"),
       value: "prompt.stash.list",
-      category: "Prompt",
+      category: i18n.t("tui.prompt.category"),
       enabled: stash.list().length > 0,
       onSelect: (dialog) => {
         dialog.replace(() => (
@@ -712,7 +714,7 @@ export function Prompt(props: PromptProps) {
         console.log("Creating a session failed:", res.error)
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: i18n.t("tui.session.create_failed"),
           variant: "error",
         })
 
@@ -977,10 +979,10 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
-      return `Run a command... "${example}"`
+      return i18n.t("tui.prompt.placeholder.run", { example })
     }
     if (!list().length) return undefined
-    return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    return i18n.t("tui.prompt.placeholder.ask", { example: list()[store.placeholder % list().length] })
   })
 
   const spinnerDef = createMemo(() => {

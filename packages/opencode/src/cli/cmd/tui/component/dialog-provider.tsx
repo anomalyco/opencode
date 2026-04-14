@@ -15,6 +15,7 @@ import * as Clipboard from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
+import { useI18n } from "../context/i18n"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -30,6 +31,7 @@ export function createDialogProviderOptions() {
   const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
+  const i18n = useI18n()
   const { theme } = useTheme()
   const onboarded = useConnected()
   const options = createMemo(() => {
@@ -44,10 +46,10 @@ export function createDialogProviderOptions() {
           title: provider.name,
           value: provider.id,
           description: {
-            opencode: "(Recommended)",
-            anthropic: "(API key)",
-            openai: "(ChatGPT Plus/Pro or API key)",
-            "opencode-go": "Low cost subscription for everyone",
+            opencode: i18n.t("tui.provider.recommended"),
+            anthropic: i18n.t("tui.provider.api_key_hint"),
+            openai: i18n.t("tui.provider.chatgpt_hint"),
+            "opencode-go": i18n.t("tui.provider.low_cost_hint"),
           }[provider.id],
           footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
           category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
@@ -67,7 +69,7 @@ export function createDialogProviderOptions() {
                 dialog.replace(
                   () => (
                     <DialogSelect
-                      title="Select auth method"
+                      title={i18n.t("tui.dialog.provider.select_auth_method")}
                       options={methods.map((x, index) => ({
                         title: x.label,
                         value: index,
@@ -147,7 +149,8 @@ export function createDialogProviderOptions() {
 
 export function DialogProvider() {
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  const i18n = useI18n()
+  return <DialogSelect title={i18n.t("tui.dialog.provider.title")} options={options()} />
 }
 
 interface AutoMethodProps {
@@ -162,12 +165,13 @@ function AutoMethod(props: AutoMethodProps) {
   const dialog = useDialog()
   const sync = useSync()
   const toast = useToast()
+  const i18n = useI18n()
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
       const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
       Clipboard.copy(code)
-        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .then(() => toast.show({ message: i18n.t("tui.common.copied_clipboard"), variant: "info" }))
         .catch(toast.error)
     }
   })
@@ -200,9 +204,9 @@ function AutoMethod(props: AutoMethodProps) {
         <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
-      <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.textMuted}>{i18n.t("tui.dialog.provider.waiting_authorization")}</text>
       <text fg={theme.text}>
-        c <span style={{ fg: theme.textMuted }}>copy</span>
+        c <span style={{ fg: theme.textMuted }}>{i18n.t("tui.provider.copy")}</span>
       </text>
     </box>
   )
@@ -219,12 +223,13 @@ function CodeMethod(props: CodeMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const dialog = useDialog()
+  const i18n = useI18n()
   const [error, setError] = createSignal(false)
 
   return (
     <DialogPrompt
       title={props.title}
-      placeholder="Authorization code"
+      placeholder={i18n.t("tui.dialog.provider.authorization_code")}
       onConfirm={async (value) => {
         const { error } = await sdk.client.provider.oauth.callback({
           providerID: props.providerID,
@@ -244,7 +249,7 @@ function CodeMethod(props: CodeMethodProps) {
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
           <Link href={props.authorization.url} fg={theme.primary} />
           <Show when={error()}>
-            <text fg={theme.error}>Invalid code</text>
+            <text fg={theme.error}>{i18n.t("tui.dialog.provider.invalid_code")}</text>
           </Show>
         </box>
       )}
@@ -262,11 +267,12 @@ function ApiMethod(props: ApiMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const { theme } = useTheme()
+  const i18n = useI18n()
 
   return (
     <DialogPrompt
       title={props.title}
-      placeholder="API key"
+      placeholder={i18n.t("tui.dialog.provider.api_key")}
       description={
         {
           opencode: (

@@ -1,10 +1,12 @@
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
+import { useI18n } from "../context/i18n"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { onCleanup } from "solid-js"
 
 export function DialogThemeList() {
   const theme = useTheme()
+  const i18n = useI18n()
   const options = Object.keys(theme.all())
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
     .map((value) => ({
@@ -22,7 +24,7 @@ export function DialogThemeList() {
 
   return (
     <DialogSelect
-      title="Themes"
+      title={i18n.t("tui.dialog.theme.title")}
       options={options}
       current={initial}
       onMove={(opt) => {

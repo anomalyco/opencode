@@ -7,6 +7,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
+import { useI18n } from "../context/i18n"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 
@@ -15,6 +16,7 @@ export function DialogModel(props: { providerID?: string }) {
   const sync = useSync()
   const dialog = useDialog()
   const keybind = useKeybind()
+  const i18n = useI18n()
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
@@ -106,7 +108,7 @@ export function DialogModel(props: { providerID?: string }) {
           providers(),
           map((option) => ({
             ...option,
-            category: "Popular providers",
+            category: i18n.t("tui.dialog.model.popular"),
           })),
           take(6),
         )
@@ -128,7 +130,7 @@ export function DialogModel(props: { providerID?: string }) {
 
   const title = createMemo(() => {
     const value = provider()
-    if (!value) return "Select model"
+    if (!value) return i18n.t("tui.dialog.model.title")
     return value.name
   })
 
@@ -153,14 +155,14 @@ export function DialogModel(props: { providerID?: string }) {
       keybind={[
         {
           keybind: keybind.all.model_provider_list?.[0],
-          title: connected() ? "Connect provider" : "View all providers",
+          title: connected() ? i18n.t("tui.dialog.model.connect") : i18n.t("tui.dialog.model.view_all"),
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
           },
         },
         {
           keybind: keybind.all.model_favorite_toggle?.[0],
-          title: "Favorite",
+          title: i18n.t("tui.dialog.model.favorite"),
           disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })

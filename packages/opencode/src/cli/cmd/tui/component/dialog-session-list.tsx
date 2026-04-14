@@ -17,6 +17,7 @@ import { DialogWorkspaceCreate, openWorkspaceSession, restoreWorkspaceSession } 
 import { Spinner } from "./spinner"
 import { errorMessage } from "@/util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
+import { useI18n } from "../context/i18n"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
@@ -29,6 +30,7 @@ export function DialogSessionList() {
   const { theme } = useTheme()
   const sdk = useSDK()
   const toast = useToast()
+  const i18n = useI18n()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
 
@@ -54,6 +56,7 @@ export function DialogSessionList() {
             sdk,
             sync,
             toast,
+            i18n,
             workspaceID,
           })
         }
@@ -157,13 +160,15 @@ export function DialogSessionList() {
         const date = new Date(x.time.updated)
         let category = date.toDateString()
         if (category === today) {
-          category = "Today"
+          category = i18n.t("tui.dialog.session.today")
         }
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
-          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
+          title: isDeleting
+            ? i18n.t("tui.dialog.session.delete_confirm", { keybind: keybind.print("session_delete") })
+            : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -179,7 +184,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={i18n.t("tui.dialog.session.title")}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -197,7 +202,7 @@ export function DialogSessionList() {
       keybind={[
         {
           keybind: keybind.all.session_delete?.[0],
-          title: "delete",
+          title: i18n.t("tui.dialog.session.delete"),
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
               const session = sessions().find((item) => item.id === option.value)
@@ -245,14 +250,14 @@ export function DialogSessionList() {
         },
         {
           keybind: keybind.all.session_rename?.[0],
-          title: "rename",
+          title: i18n.t("tui.dialog.session.rename"),
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
         },
         {
           keybind: Keybind.parse("ctrl+w")[0],
-          title: "new workspace",
+          title: i18n.t("tui.dialog.session.new_workspace"),
           side: "right",
           disabled: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
           onTrigger: () => {
