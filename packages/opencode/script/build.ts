@@ -197,6 +197,9 @@ for (const item of targets) {
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
     external: ["node-gyp"],
+    format: "esm",
+    minify: true,
+    splitting: true,
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,

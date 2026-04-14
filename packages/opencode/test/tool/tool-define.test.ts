@@ -1,7 +1,11 @@
 import { describe, test, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import z from "zod"
+import { Agent } from "../../src/agent/agent"
 import { Tool } from "../../src/tool/tool"
+import { Truncate } from "../../src/tool/truncate"
+
+const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
 
 const params = z.object({ input: z.string() })
 
@@ -21,34 +25,34 @@ describe("Tool.define", () => {
     const original = makeTool("test")
     const originalExecute = original.execute
 
-    const info = await Effect.runPromise(Tool.define("test-tool", Effect.succeed(original)))
+    const info = await runtime.runPromise(Tool.define("test-tool", Effect.succeed(original)))
 
-    await info.init()
-    await info.init()
-    await info.init()
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
 
     expect(original.execute).toBe(originalExecute)
   })
 
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
-    const info = await Effect.runPromise(
+  test("effect-defined tool returns fresh objects and is unaffected", async () => {
+    const info = await runtime.runPromise(
       Tool.define(
         "test-fn-tool",
-        Effect.succeed(() => Promise.resolve(makeTool("test"))),
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
       ),
     )
 
-    const first = await info.init()
-    const second = await info.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
 
   test("object-defined tool returns distinct objects per init() call", async () => {
-    const info = await Effect.runPromise(Tool.define("test-copy", Effect.succeed(makeTool("test"))))
+    const info = await runtime.runPromise(Tool.define("test-copy", Effect.succeed(makeTool("test"))))
 
-    const first = await info.init()
-    const second = await info.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })

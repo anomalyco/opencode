@@ -454,52 +454,53 @@ export const BashTool = Tool.define(
       }
     })
 
-    return async () => {
-      const shell = Shell.acceptable()
-      const name = Shell.name(shell)
-      const chain =
-        name === "powershell"
-          ? "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell 5.1 does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
-          : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
-      log.info("bash tool using shell", { shell })
+    return () =>
+      Effect.sync(() => {
+        const shell = Shell.acceptable()
+        const name = Shell.name(shell)
+        const chain =
+          name === "powershell"
+            ? "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell 5.1 does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
+            : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
+        log.info("bash tool using shell", { shell })
 
-      return {
-        description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
-          .replaceAll("${os}", process.platform)
-          .replaceAll("${shell}", name)
-          .replaceAll("${chaining}", chain)
-          .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-          .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
-        parameters: Parameters,
-        execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
-          Effect.gen(function* () {
-            const cwd = params.workdir
-              ? yield* resolvePath(params.workdir, Instance.directory, shell)
-              : Instance.directory
-            if (params.timeout !== undefined && params.timeout < 0) {
-              throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
-            }
-            const timeout = params.timeout ?? DEFAULT_TIMEOUT
-            const ps = PS.has(name)
-            const root = yield* parse(params.command, ps)
-            const scan = yield* collect(root, cwd, ps, shell)
-            if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
-            yield* ask(ctx, scan)
+        return {
+          description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+            .replaceAll("${os}", process.platform)
+            .replaceAll("${shell}", name)
+            .replaceAll("${chaining}", chain)
+            .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
+            .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+          parameters: Parameters,
+          execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+            Effect.gen(function* () {
+              const cwd = params.workdir
+                ? yield* resolvePath(params.workdir, Instance.directory, shell)
+                : Instance.directory
+              if (params.timeout !== undefined && params.timeout < 0) {
+                throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
+              }
+              const timeout = params.timeout ?? DEFAULT_TIMEOUT
+              const ps = PS.has(name)
+              const root = yield* parse(params.command, ps)
+              const scan = yield* collect(root, cwd, ps, shell)
+              if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
+              yield* ask(ctx, scan)
 
-            return yield* run(
-              {
-                shell,
-                name,
-                command: params.command,
-                cwd,
-                env: yield* shellEnv(ctx, cwd),
-                timeout,
-                description: params.description,
-              },
-              ctx,
-            )
-          }),
-      }
-    }
+              return yield* run(
+                {
+                  shell,
+                  name,
+                  command: params.command,
+                  cwd,
+                  env: yield* shellEnv(ctx, cwd),
+                  timeout,
+                  description: params.description,
+                },
+                ctx,
+              )
+            }),
+        }
+      })
   }),
 )

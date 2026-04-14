@@ -147,7 +147,7 @@ describe("session messages endpoint", () => {
 
 describe("session.prompt_async error handling", () => {
   test("prompt_async route has error handler for detached prompt call", async () => {
-    const src = await Bun.file(new URL("../../src/server/routes/session.ts", import.meta.url)).text()
+    const src = await Bun.file(new URL("../../src/server/instance/session.ts", import.meta.url)).text()
     const start = src.indexOf('"/:sessionID/prompt_async"')
     const end = src.indexOf('"/:sessionID/command"', start)
     expect(start).toBeGreaterThan(-1)

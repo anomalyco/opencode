@@ -1,10 +1,16 @@
 import { $ } from "bun"
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
+
+const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
+  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
+const status = () => run(File.Service.use((svc) => svc.status()))
+const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
 
 const wintest = process.platform === "win32" ? test : test.skip
 
@@ -27,7 +33,7 @@ describe("file fsmonitor", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await File.status()
+        await status()
       },
     })
 
@@ -52,7 +58,7 @@ describe("file fsmonitor", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await File.read("tracked.txt")
+        await read("tracked.txt")
       },
     })
 
