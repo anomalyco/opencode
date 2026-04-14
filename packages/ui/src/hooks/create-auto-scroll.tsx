@@ -29,6 +29,13 @@ export interface AutoScrollOptions {
   overflowAnchor?: "none" | "auto" | "dynamic"
   bottomThreshold?: number
   resize?: "follow" | "off"
+  /**
+   * When true, the scroll container uses CSS `flex-direction: column-reverse`.
+   * In this mode scrollTop=0 is the visual bottom and scrollTop goes negative
+   * as the user scrolls up.  The auto-scroll logic adapts all position
+   * calculations accordingly.
+   */
+  columnReverse?: boolean
 }
 
 export function createAutoScroll(options: AutoScrollOptions) {
@@ -40,9 +47,16 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
+  const reverse = () => options.columnReverse ?? false
 
   const log = (event: string, extra?: Record<string, unknown>) => {
     if (!event || !extra) return
+  }
+
+  const distanceFromBottom = (el: HTMLElement) => {
+    // column-reverse: scrollTop=0 is bottom, negative going up
+    if (reverse()) return Math.abs(el.scrollTop)
+    return el.scrollHeight - el.clientHeight - el.scrollTop
   }
 
   const atBottom = (el: HTMLElement) => {
@@ -56,10 +70,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const active = () => options.working() || settling
 
-  const distanceFromBottom = (el: HTMLElement) => {
-    return el.scrollHeight - el.clientHeight - el.scrollTop
-  }
-
   const canScroll = (el: HTMLElement) => {
     return el.scrollHeight - el.clientHeight > 1
   }
@@ -69,8 +79,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
   // the handler can see a non-zero `distanceFromBottom` and incorrectly assume
   // the user scrolled.
   const markAuto = (el: HTMLElement) => {
+    // In column-reverse the "at bottom" scrollTop is 0.
+    // In normal mode it's scrollHeight - clientHeight.
+    const bottomTop = reverse() ? 0 : Math.max(0, el.scrollHeight - el.clientHeight)
     auto = {
-      top: Math.max(0, el.scrollHeight - el.clientHeight),
+      top: bottomTop,
       time: Date.now(),
     }
 
@@ -97,6 +110,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
     markAuto(el)
+
+    if (reverse()) {
+      // column-reverse: bottom is scrollTop=0
+      if (behavior === "smooth") {
+        el.scrollTo({ top: 0, behavior })
+        return
+      }
+      el.scrollTop = 0
+      return
+    }
+
     log("scroll:write", { source: "scrollToBottomNow", behavior, nextTop: el.scrollHeight })
     if (behavior === "smooth") {
       el.scrollTo({ top: el.scrollHeight, behavior })
@@ -146,6 +170,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleWheel = (e: WheelEvent) => {
+    // deltaY < 0 means scrolling up (away from bottom) in both modes
     if (e.deltaY >= 0) return
     // If the user is scrolling within a nested scrollable region (tool output,
     // code block, etc), don't treat it as leaving the "follow bottom" mode.
@@ -224,6 +249,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
       }
       if (!active()) return
       if (store.userScrolled) return
+
+      // In column-reverse mode the browser natively keeps the bottom visible
+      // when content grows, so we can skip the programmatic scroll.
+      if (reverse()) return
+
       // ResizeObserver fires after layout, before paint.
       // Keep the bottom locked in the same frame to avoid visible
       // "jump up then catch up" artifacts while streaming content.
