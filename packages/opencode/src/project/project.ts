@@ -1,4 +1,5 @@
 import z from "zod"
+import { zod } from "@/util/effect-zod"
 import { and, Database, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
@@ -8,7 +9,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -17,38 +18,45 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 export namespace Project {
   const log = Log.create({ service: "project" })
 
-  export const Info = z
-    .object({
-      id: ProjectID.zod,
-      worktree: z.string(),
-      vcs: z.literal("git").optional(),
-      name: z.string().optional(),
-      icon: z
-        .object({
-          url: z.string().optional(),
-          override: z.string().optional(),
-          color: z.string().optional(),
-        })
-        .optional(),
-      commands: z
-        .object({
-          start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
-        })
-        .optional(),
-      time: z.object({
-        created: z.number(),
-        updated: z.number(),
-        initialized: z.number().optional(),
-      }),
-      sandboxes: z.array(z.string()),
-    })
-    .meta({
-      ref: "Project",
-    })
-  export type Info = z.infer<typeof Info>
+  export class Icon extends Schema.Class<Icon>("ProjectIcon")({
+    url: Schema.optional(Schema.String),
+    override: Schema.optional(Schema.String),
+    color: Schema.optional(Schema.String),
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export class Commands extends Schema.Class<Commands>("ProjectCommands")({
+    start: Schema.optional(
+      Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),
+    ),
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export class Time extends Schema.Class<Time>("ProjectTime")({
+    created: Schema.Number,
+    updated: Schema.Number,
+    initialized: Schema.optional(Schema.Number),
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export class Info extends Schema.Class<Info>("Project")({
+    id: ProjectID,
+    worktree: Schema.String,
+    vcs: Schema.optional(Schema.Literal("git")),
+    name: Schema.optional(Schema.String),
+    icon: Schema.optional(Icon),
+    commands: Schema.optional(Commands),
+    time: Time,
+    sandboxes: Schema.mutable(Schema.Array(Schema.String)),
+  }) {
+    static readonly zod = zod(this)
+  }
 
   export const Event = {
-    Updated: BusEvent.define("project.updated", Info),
+    Updated: BusEvent.define("project.updated", Info.zod),
   }
 
   type Row = typeof ProjectTable.$inferSelect
@@ -58,10 +66,10 @@ export namespace Project {
       row.icon_url || row.icon_color
         ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
         : undefined
-    return {
+    return new Info({
       id: row.id,
       worktree: row.worktree,
-      vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
+      vcs: row.vcs === "git" ? "git" : undefined,
       name: row.name ?? undefined,
       icon,
       time: {
@@ -71,14 +79,14 @@ export namespace Project {
       },
       sandboxes: row.sandboxes,
       commands: row.commands ?? undefined,
-    }
+    })
   }
 
   export const UpdateInput = z.object({
     projectID: ProjectID.zod,
     name: z.string().optional(),
-    icon: Info.shape.icon.optional(),
-    commands: Info.shape.commands.optional(),
+    icon: Icon.zod.optional(),
+    commands: Commands.zod.optional(),
   })
   export type UpdateInput = z.infer<typeof UpdateInput>
 
@@ -142,7 +150,7 @@ export namespace Project {
           }),
         )
 
-      const fakeVcs = Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS)
+      const fakeVcs: Info["vcs"] = Flag.OPENCODE_FAKE_VCS === "git" ? "git" : undefined
 
       const resolveGitPath = (cwd: string, name: string) => {
         if (!name) return cwd
@@ -249,27 +257,21 @@ export namespace Project {
         const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
         const existing = row
           ? fromRow(row)
-          : {
+          : new Info({
               id: data.id,
               worktree: data.worktree,
               vcs: data.vcs,
-              sandboxes: [] as string[],
+              sandboxes: [],
               time: { created: Date.now(), updated: Date.now() },
-            }
+            })
 
         if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY)
           yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
-        const result: Info = {
-          ...existing,
-          worktree: data.worktree,
-          vcs: data.vcs,
-          time: { ...existing.time, updated: Date.now() },
-        }
-        if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-          result.sandboxes.push(data.sandbox)
-        result.sandboxes = yield* Effect.forEach(
-          result.sandboxes,
+        const sandboxes = yield* Effect.forEach(
+          data.sandbox !== existing.worktree && !existing.sandboxes.includes(data.sandbox)
+            ? [...existing.sandboxes, data.sandbox]
+            : existing.sandboxes,
           (s) =>
             fs.exists(s).pipe(
               Effect.orDie,
@@ -277,6 +279,14 @@ export namespace Project {
             ),
           { concurrency: "unbounded" },
         ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
+
+        const result = new Info({
+          ...existing,
+          worktree: data.worktree,
+          vcs: data.vcs,
+          time: { ...existing.time, updated: Date.now() },
+          sandboxes,
+        })
 
         yield* db((d) =>
           d
