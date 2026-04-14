@@ -166,6 +166,7 @@ export interface MessagePartProps {
   markdownViewport?: HTMLDivElement
   markdownHighlight?: "full" | "defer"
   markdownMath?: "full" | "defer"
+  streaming?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -647,6 +648,13 @@ export function AssistantParts(props: {
   const data = useData()
   const emptyParts: PartType[] = []
 
+  // Determine which message is actively streaming
+  const activeStreamingMessage = createMemo(() => {
+    if (!props.working) return undefined
+    // Find the last incomplete assistant message
+    return props.messages.findLast((msg) => typeof msg.time.completed !== "number")
+  })
+
   const grouped = createMemo(() => {
     const keys: string[] = []
     const items: Record<
@@ -708,6 +716,14 @@ export function AssistantParts(props: {
           return value
         })
         const tail = createMemo(() => last() === key)
+        // Only mark as streaming if this part belongs to the active streaming message
+        const isStreaming = createMemo(() => {
+          const entry = part()
+          if (!entry) return false
+          const activeMsg = activeStreamingMessage()
+          if (!activeMsg) return false
+          return entry.message.id === activeMsg.id
+        })
         return (
           <>
             <Show when={ctx()}>
@@ -725,6 +741,7 @@ export function AssistantParts(props: {
                   markdownViewport={props.markdownViewport}
                   markdownHighlight={props.markdownHighlight}
                   markdownMath={props.markdownMath}
+                  streaming={isStreaming()}
                 />
               )}
             </Show>
@@ -1337,6 +1354,7 @@ export function Part(props: MessagePartProps) {
         markdownViewport={props.markdownViewport}
         markdownHighlight={props.markdownHighlight}
         markdownMath={props.markdownMath}
+        streaming={props.streaming}
       />
     </Show>
   )
@@ -1576,6 +1594,8 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   const displayText = () => (part.text ?? "").trim()
   const streaming = createMemo(() => {
+    // Use explicit streaming prop if provided, otherwise fall back to message completion check
+    if (props.streaming !== undefined) return props.streaming
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
   })
@@ -1650,6 +1670,8 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const text = () => part.text.trim()
   const [open, setOpen] = createSignal(true)
   const streaming = createMemo(() => {
+    // Use explicit streaming prop if provided, otherwise fall back to message completion check
+    if (props.streaming !== undefined) return props.streaming
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
   })
