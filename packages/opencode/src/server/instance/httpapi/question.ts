@@ -9,6 +9,11 @@ import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from 
 import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/question"
+const Reply = Schema.Struct({
+  answers: Schema.Array(Question.Answer).annotate({
+    description: "User answers in order of questions (each answer is an array of selected labels)",
+  }),
+})
 
 const Api = HttpApi.make("question")
   .add(
@@ -25,7 +30,7 @@ const Api = HttpApi.make("question")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: QuestionID },
-          payload: Question.Reply,
+          payload: Reply,
           success: Schema.Boolean,
         }).annotateMerge(
           OpenApi.annotations({
@@ -62,7 +67,7 @@ const QuestionLive = HttpApiBuilder.group(
 
     const reply = Effect.fn("QuestionHttpApi.reply")(function* (ctx: {
       params: { requestID: QuestionID }
-      payload: Question.Reply
+      payload: Schema.Schema.Type<typeof Reply>
     }) {
       yield* svc.reply({
         requestID: ctx.params.requestID,

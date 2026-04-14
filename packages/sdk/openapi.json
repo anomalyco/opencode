@@ -4769,7 +4769,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuestionReply"
+                "type": "object",
+                "properties": {
+                  "answers": {
+                    "description": "User answers in order of questions (each answer is an array of selected labels)",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/QuestionAnswer"
+                    }
+                  }
+                },
+                "required": ["answers"]
               }
             }
           }
@@ -12360,19 +12370,6 @@
           }
         },
         "required": ["type", "prompt", "description", "agent"]
-      },
-      "QuestionReply": {
-        "type": "object",
-        "properties": {
-          "answers": {
-            "description": "User answers in order of questions (each answer is an array of selected labels)",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionAnswer"
-            }
-          }
-        },
-        "required": ["answers"]
       },
       "ProviderAuthMethod": {
         "type": "object",
