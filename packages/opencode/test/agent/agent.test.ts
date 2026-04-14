@@ -741,7 +741,7 @@ test("defaultAgent returns ask when build is disabled and default_agent not set"
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
+      // build is disabled, so it should return ask (next primary agent)
       expect(agent).toBe("ask")
     },
   })
