@@ -335,13 +335,6 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         output.maxOutputTokens = undefined
       }
     },
-    // sending additional prompts after compaction will bill user
-    // we intentionally stop after compaction to avoid extra billing
-    // this matches the behavior of the github copilot cli
-    "experimental.compaction.autocontinue": async (incoming, output) => {
-      if (!incoming.model.providerID.includes("github-copilot")) return
-      output.enabled = false
-    },
     "chat.headers": async (incoming, output) => {
       if (!incoming.model.providerID.includes("github-copilot")) return
 
