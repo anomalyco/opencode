@@ -588,6 +588,8 @@ function math(el: Element) {
 // Debounce delay before upgrading from fast parse to full parse (with shiki)
 const HIGHLIGHT_DEBOUNCE_MS = 600
 const HIGHLIGHT_IDLE_TIMEOUT_MS = 4_000
+// Throttle math rendering during streaming to reduce CPU cost
+const STREAMING_MATH_THROTTLE_MS = 300
 
 export function Markdown(
   props: ComponentProps<"div"> & {
@@ -621,6 +623,7 @@ export function Markdown(
   const [ready, setReady] = createSignal(true)
   const [seen, setSeen] = createSignal(!!local.eager)
   const [mathSeen, setMathSeen] = createSignal(!!local.eager || local.math !== "defer")
+  const [lastMathRenderTime, setLastMathRenderTime] = createSignal(0)
   const labels = createMemo(() => ({
     copy: i18n.t("ui.message.copy"),
     copied: i18n.t("ui.message.copied"),
@@ -642,8 +645,28 @@ export function Markdown(
     const cache = cacheMode({ highlight: local.highlight, chunked: local.chunked, math: local.math })
     const current = mode()
     const key = hash ? `${cache}:${current}:${hash}` : undefined
-    // During streaming, render math incrementally for completed paragraphs
-    const streamingMath = local.streaming ? "full" : (mathReady() ? "full" : "defer")
+
+    // Smart math rendering during streaming:
+    // - Check if content has new paragraphs (double newline) or math blocks
+    // - Throttle to avoid excessive re-renders
+    let streamingMath: "full" | "defer" = mathReady() ? "full" : "defer"
+    if (local.streaming) {
+      const now = Date.now()
+      const timeSinceLastRender = now - lastMathRenderTime()
+      const hasNewParagraph = normalized.includes("\n\n")
+      const hasMathBlock = /\$\$[\s\S]*?\$\$|\$[^\$\n]+\$/.test(normalized)
+
+      // Render math if:
+      // 1. Content has math syntax AND
+      // 2. Either has completed paragraphs OR enough time has passed
+      if (hasMathBlock && (hasNewParagraph || timeSinceLastRender > STREAMING_MATH_THROTTLE_MS)) {
+        streamingMath = "full"
+        setLastMathRenderTime(now)
+      } else {
+        streamingMath = "defer"
+      }
+    }
+
     return {
       markdown,
       normalized,
