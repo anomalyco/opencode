@@ -144,7 +144,7 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
-      permission: Permission.Ruleset.optional(),
+      permission: Permission.Ruleset.zod.optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -704,6 +704,47 @@ export namespace Session {
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
 
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export const create = fn(
+    z
+      .object({
+        parentID: SessionID.zod.optional(),
+        title: z.string().optional(),
+        permission: Info.shape.permission,
+        workspaceID: WorkspaceID.zod.optional(),
+      })
+      .optional(),
+    (input) => runPromise((svc) => svc.create(input)),
+  )
+
+  export const fork = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod.optional() }), (input) =>
+    runPromise((svc) => svc.fork(input)),
+  )
+
+  export const get = fn(SessionID.zod, (id) => runPromise((svc) => svc.get(id)))
+
+  export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
+    runPromise((svc) => svc.setTitle(input)),
+  )
+
+  export const setArchived = fn(z.object({ sessionID: SessionID.zod, time: z.number().optional() }), (input) =>
+    runPromise((svc) => svc.setArchived(input)),
+  )
+
+  export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset.zod }), (input) =>
+    runPromise((svc) => svc.setPermission(input)),
+  )
+
+  export const setRevert = fn(
+    z.object({ sessionID: SessionID.zod, revert: Info.shape.revert, summary: Info.shape.summary }),
+    (input) =>
+      runPromise((svc) => svc.setRevert({ sessionID: input.sessionID, revert: input.revert, summary: input.summary })),
+  )
+
+  export const messages = fn(z.object({ sessionID: SessionID.zod, limit: z.number().optional() }), (input) =>
+    runPromise((svc) => svc.messages(input)),
+  )
   export function* list(input?: {
     directory?: string
     workspaceID?: WorkspaceID

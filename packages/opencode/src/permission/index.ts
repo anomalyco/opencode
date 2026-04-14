@@ -7,75 +7,86 @@ import { Instance } from "@/project/instance"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
+import { zod } from "@/util/effect-zod"
 import { Log } from "@/util/log"
+import { withStatics } from "@/util/schema"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
-import z from "zod"
 import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
 
-  export const Action = z.enum(["allow", "deny", "ask"]).meta({
-    ref: "PermissionAction",
+  export const Action = Schema.Union([Schema.Literal("allow"), Schema.Literal("deny"), Schema.Literal("ask")])
+    .annotate({ identifier: "PermissionAction" })
+    .pipe(withStatics((s) => ({ zod: zod(s) })))
+  export type Action = Schema.Schema.Type<typeof Action>
+
+  export class Rule extends Schema.Class<Rule>("PermissionRule")({
+    permission: Schema.String,
+    pattern: Schema.String,
+    action: Action,
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export const Ruleset = Schema.mutable(Schema.Array(Rule))
+    .annotate({ identifier: "PermissionRuleset" })
+    .pipe(withStatics((s) => ({ zod: zod(s) })))
+  export type Ruleset = Schema.Schema.Type<typeof Ruleset>
+
+  export class Tool extends Schema.Class<Tool>("PermissionTool")({
+    messageID: MessageID,
+    callID: Schema.String,
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export class Request extends Schema.Class<Request>("PermissionRequest")({
+    id: PermissionID,
+    sessionID: SessionID,
+    permission: Schema.String,
+    patterns: Schema.Array(Schema.String),
+    metadata: Schema.Record(Schema.String, Schema.Unknown),
+    always: Schema.Array(Schema.String),
+    tool: Schema.optional(Tool),
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export const Reply = Schema.Union([Schema.Literal("once"), Schema.Literal("always"), Schema.Literal("reject")]).pipe(
+    withStatics((s) => ({ zod: zod(s) })),
+  )
+  export type Reply = Schema.Schema.Type<typeof Reply>
+
+  export const ReplyBody = Schema.Struct({
+    reply: Reply,
+    message: Schema.optional(Schema.String),
   })
-  export type Action = z.infer<typeof Action>
+    .annotate({ identifier: "PermissionReplyBody" })
+    .pipe(withStatics((s) => ({ zod: zod(s) })))
+  export type ReplyBody = Schema.Schema.Type<typeof ReplyBody>
 
-  export const Rule = z
-    .object({
-      permission: z.string(),
-      pattern: z.string(),
-      action: Action,
-    })
-    .meta({
-      ref: "PermissionRule",
-    })
-  export type Rule = z.infer<typeof Rule>
-
-  export const Ruleset = Rule.array().meta({
-    ref: "PermissionRuleset",
-  })
-  export type Ruleset = z.infer<typeof Ruleset>
-
-  export const Request = z
-    .object({
-      id: PermissionID.zod,
-      sessionID: SessionID.zod,
-      permission: z.string(),
-      patterns: z.string().array(),
-      metadata: z.record(z.string(), z.any()),
-      always: z.string().array(),
-      tool: z
-        .object({
-          messageID: MessageID.zod,
-          callID: z.string(),
-        })
-        .optional(),
-    })
-    .meta({
-      ref: "PermissionRequest",
-    })
-  export type Request = z.infer<typeof Request>
-
-  export const Reply = z.enum(["once", "always", "reject"])
-  export type Reply = z.infer<typeof Reply>
-
-  export const Approval = z.object({
-    projectID: ProjectID.zod,
-    patterns: z.string().array(),
-  })
+  export class Approval extends Schema.Class<Approval>("PermissionApproval")({
+    projectID: ProjectID,
+    patterns: Schema.Array(Schema.String),
+  }) {
+    static readonly zod = zod(this)
+  }
 
   export const Event = {
-    Asked: BusEvent.define("permission.asked", Request),
+    Asked: BusEvent.define("permission.asked", Request.zod),
     Replied: BusEvent.define(
       "permission.replied",
-      z.object({
-        sessionID: SessionID.zod,
-        requestID: PermissionID.zod,
-        reply: Reply,
-      }),
+      zod(
+        Schema.Struct({
+          sessionID: SessionID,
+          requestID: PermissionID,
+          reply: Reply,
+        }).annotate({ identifier: "PermissionReplied" }),
+      ),
     ),
   }
 
@@ -103,19 +114,27 @@ export namespace Permission {
 
   export type Error = DeniedError | RejectedError | CorrectedError
 
-  export const AskInput = Request.partial({ id: true }).extend({
+  export const AskInput = Schema.Struct({
+    ...Request.fields,
+    id: Schema.optional(PermissionID),
     ruleset: Ruleset,
   })
+    .annotate({ identifier: "PermissionAskInput" })
+    .pipe(withStatics((s) => ({ zod: zod(s) })))
+  export type AskInput = Schema.Schema.Type<typeof AskInput>
 
-  export const ReplyInput = z.object({
-    requestID: PermissionID.zod,
+  export const ReplyInput = Schema.Struct({
+    requestID: PermissionID,
     reply: Reply,
-    message: z.string().optional(),
+    message: Schema.optional(Schema.String),
   })
+    .annotate({ identifier: "PermissionReplyInput" })
+    .pipe(withStatics((s) => ({ zod: zod(s) })))
+  export type ReplyInput = Schema.Schema.Type<typeof ReplyInput>
 
   export interface Interface {
-    readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<void, Error>
-    readonly reply: (input: z.infer<typeof ReplyInput>) => Effect.Effect<void>
+    readonly ask: (input: AskInput) => Effect.Effect<void, Error>
+    readonly reply: (input: ReplyInput) => Effect.Effect<void>
     readonly list: () => Effect.Effect<Request[]>
   }
 
@@ -163,7 +182,7 @@ export namespace Permission {
         }),
       )
 
-      const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
+      const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
         const { approved, pending } = yield* InstanceState.get(state)
         const { ruleset, ...request } = input
         let needsAsk = false
@@ -183,10 +202,10 @@ export namespace Permission {
         if (!needsAsk) return
 
         const id = request.id ?? PermissionID.ascending()
-        const info: Request = {
+        const info = Schema.decodeUnknownSync(Request)({
           id,
           ...request,
-        }
+        })
         log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
         const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
@@ -200,7 +219,7 @@ export namespace Permission {
         )
       })
 
-      const reply = Effect.fn("Permission.reply")(function* (input: z.infer<typeof ReplyInput>) {
+      const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
         const { approved, pending } = yield* InstanceState.get(state)
         const existing = pending.get(input.requestID)
         if (!existing) return

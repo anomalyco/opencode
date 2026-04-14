@@ -274,7 +274,7 @@ export const SessionRoutes = lazy(() =>
         "json",
         z.object({
           title: z.string().optional(),
-          permission: Permission.Ruleset.optional(),
+          permission: Permission.Ruleset.zod.optional(),
           time: z
             .object({
               archived: z.number().optional(),
@@ -1093,7 +1093,7 @@ export const SessionRoutes = lazy(() =>
           permissionID: PermissionID.zod,
         }),
       ),
-      validator("json", z.object({ response: Permission.Reply })),
+      validator("json", z.object({ response: Permission.Reply.zod })),
       async (c) => {
         const params = c.req.valid("param")
         await AppRuntime.runPromise(
