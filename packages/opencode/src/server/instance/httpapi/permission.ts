@@ -50,26 +50,30 @@ const Api = HttpApi.make("permission")
     }),
   )
 
-const list = Effect.fn("PermissionHttpApi.list")(function* () {
-  const svc = yield* Permission.Service
-  return yield* svc.list()
-})
+const PermissionLive = HttpApiBuilder.group(
+  Api,
+  "permission",
+  Effect.fn("PermissionHttpApi.handlers")(function* (handlers) {
+    const svc = yield* Permission.Service
 
-const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
-  params: { requestID: PermissionID }
-  payload: Permission.ReplyBody
-}) {
-  const svc = yield* Permission.Service
-  yield* svc.reply({
-    requestID: ctx.params.requestID,
-    reply: ctx.payload.reply,
-    message: ctx.payload.message,
-  })
-  return true
-})
+    const list = Effect.fn("PermissionHttpApi.list")(function* () {
+      return yield* svc.list()
+    })
 
-const PermissionLive = HttpApiBuilder.group(Api, "permission", (handlers) =>
-  handlers.handle("list", list).handle("reply", reply),
+    const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
+      params: { requestID: PermissionID }
+      payload: Permission.ReplyBody
+    }) {
+      yield* svc.reply({
+        requestID: ctx.params.requestID,
+        reply: ctx.payload.reply,
+        message: ctx.payload.message,
+      })
+      return true
+    })
+
+    return handlers.handle("list", list).handle("reply", reply)
+  }),
 )
 
 const web = lazy(() =>
