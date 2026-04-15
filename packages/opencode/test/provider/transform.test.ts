@@ -85,7 +85,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
-  test("should set promptCacheKey for openai-compatible provider when setCacheKey not present", () => {
+  test("should set promptCacheKey for openai-compatible provider when setCacheKey not present and setCacheKey not present", () => {
     const openaiModel = {
       ...mockModel,
       providerID: "openai-compatible",
@@ -99,7 +99,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
-  test("should not set promptCacheKey for openai-compatible provider when setCacheKey is false", () => {
+  test("should not set promptCacheKey for openai-compatible provider when setCacheKey is false and setCacheKey not present in result", () => {
     const openaiModel = {
       ...mockModel,
       providerID: "openai-compatible",
@@ -107,10 +107,9 @@ describe("ProviderTransform.options - setCacheKey", () => {
         id: "gpt-4",
         url: "https://api.openai.com",
         npm: "@ai-sdk/openai-compatible",
-      },
-      providerOptions: { setCacheKey: false },
+      }
     }
-    const result = ProviderTransform.options({ model: openaiModel, sessionID, providerOptions: {} })
+    const result = ProviderTransform.options({ model: openaiModel, sessionID, providerOptions: { setCacheKey: false } })
     expect(result.promptCacheKey).toBeUndefined()
   })
 

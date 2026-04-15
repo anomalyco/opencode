@@ -797,6 +797,9 @@ export namespace ProviderTransform {
       input.providerOptions?.setCacheKey === true
     ) {
       result["promptCacheKey"] = input.sessionID
+      if ("setCacheKey" in input.providerOptions) {
+        delete input.providerOptions["setCacheKey"]
+      }
     }
 
     if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
