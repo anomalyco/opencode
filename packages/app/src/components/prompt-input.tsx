@@ -1706,6 +1706,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
 
+  const variantLabel = createMemo(() => {
+    const defaultText = language.t("common.default")
+    return (x: string) => x === "default" ? defaultText : x
+  })
+
   return (
     <div class="relative size-full flex flex-col gap-0">
       {(promptReady(), null)}
@@ -1932,7 +1937,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           class="prompt-pick prompt-agent capitalize"
                           valueClass="truncate"
                           triggerStyle={control()}
-                          contentStyle={glass()}
                           variant="ghost"
                         />
                       </TooltipKeybind>
@@ -1974,7 +1978,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           keybind={command.keybind("model.choose")}
                         >
                           <ModelSelectorPopover
-                            style={glass()}
                             triggerAs={Button}
                             triggerProps={{
                               variant: "ghost",
@@ -2006,12 +2009,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           size="normal"
                           options={variants()}
                           current={local.model.variant.current() ?? "default"}
-                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          label={variantLabel()}
                           onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                           class="prompt-pick prompt-variant capitalize max-w-[160px]"
                           valueClass="truncate"
                           triggerStyle={control()}
-                          contentStyle={glass()}
                           variant="ghost"
                         />
                       </TooltipKeybind>
