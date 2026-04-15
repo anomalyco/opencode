@@ -362,9 +362,8 @@ export function StatusPopover() {
                     return (
                       <button
                         type="button"
-                        class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
+                        class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
                         classList={{
-                          "hover:bg-surface-raised-base-hover": !isBlocked(),
                           "cursor-not-allowed": isBlocked(),
                         }}
                         aria-disabled={isBlocked()}
@@ -435,7 +434,7 @@ export function StatusPopover() {
                       return (
                         <button
                           type="button"
-                          class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                          class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md transition-colors text-left"
                           onClick={() => {
                             if (toggleMcp.isPending) return
                             toggleMcp.mutate(entry.name)
@@ -521,7 +520,7 @@ export function StatusPopover() {
                         value={<span class="font-mono text-12-regular whitespace-nowrap">{plugin.value}</span>}
                         contentStyle={{ "max-width": "none" }}
                       >
-                        <div class="flex items-center gap-2 w-full px-2 py-1 rounded-md hover:bg-surface-raised-base-hover">
+                        <div class="status-list-item flex items-center gap-2 w-full px-2 py-1 rounded-md">
                           <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
                           <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
                             {plugin.name}

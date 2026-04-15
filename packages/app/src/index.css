@@ -221,6 +221,11 @@
     letter-spacing: var(--letter-spacing-normal);
   }
 
+  /* Status popover list item hover style */
+  .status-list-item:not(.cursor-not-allowed):hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;

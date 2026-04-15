@@ -3,13 +3,14 @@ import { createStore, produce } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { List } from "@opencode-ai/ui/list"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
@@ -1077,15 +1078,22 @@ export function MessageTimeline(props: {
                             }
                             class="w-[320px] max-w-[min(320px,calc(100vw-24px))] p-2"
                           >
-                            <div class="max-h-[min(60vh,420px)] overflow-y-auto">
-                              <MessageNav
-                                messages={props.renderedUserMessages}
-                                current={currentMessage()}
-                                size="normal"
-                                onMessageSelect={jumpTo}
-                                getLabel={(message) => label(message, sync.data.part[message.id] ?? [])}
-                              />
-                            </div>
+                            <List
+                              class="p-0"
+                              items={props.renderedUserMessages}
+                              key={(message) => message.id}
+                              current={currentMessage()}
+                              onSelect={(message) => message && jumpTo(message)}
+                            >
+                              {(message) => (
+                                <>
+                                  <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" class="mr-3" />
+                                  <div data-slot="list-item-label" class="truncate text-left">
+                                    {label(message, sync.data.part[message.id] ?? [])}
+                                  </div>
+                                </>
+                              )}
+                            </List>
                           </Popover>
                         </Show>
                         <DropdownMenu

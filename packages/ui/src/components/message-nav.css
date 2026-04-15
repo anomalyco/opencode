@@ -86,7 +86,7 @@
 }
 
 [data-slot="message-nav-item"]:hover [data-slot="message-nav-message-button"] {
-  background-color: var(--surface-base);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 [data-slot="message-nav-item"]:active [data-slot="message-nav-message-button"] {
   background-color: var(--surface-base-active);
