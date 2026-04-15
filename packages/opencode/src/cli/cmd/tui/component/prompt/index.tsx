@@ -928,31 +928,35 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Check for paste events BEFORE app_exit check to prevent exiting on paste attempts
-                // Also prevent exit for any V key with meta/ctrl (Mac Command+V workaround)
-                const isPasteEvent =
-                  keybind.match("input_paste", e) || (e.name === "v" && (e.meta || e.ctrl)) || e.name === "paste"
-                if (isPasteEvent) {
-                  const content = await Clipboard.read()
-                  if (content?.mime.startsWith("image/")) {
-                    e.preventDefault()
-                    await pasteAttachment({
-                      filename: "clipboard",
-                      mime: content.mime,
-                      content: content.data,
-                    })
-                    return
+                // ULTRA AGGRESSIVE: Block ANY exit attempt when meta or ctrl is held
+                // This is a last-resort fix for Mac Command+V which may not arrive as expected
+                if (e.meta || e.ctrl) {
+                  // Check if it might be a paste attempt
+                  const mightBePaste = e.name === "v" || e.name === "c" || keybind.match("input_paste", e)
+                  if (mightBePaste) {
+                    // Try to read clipboard - if successful, it's a paste, not an exit
+                    try {
+                      const content = await Clipboard.read()
+                      if (content) {
+                        e.preventDefault()
+                        // If it's text, just return and let onPaste handle it
+                        // If it's an image, handle it
+                        if (content.mime.startsWith("image/")) {
+                          await pasteAttachment({
+                            filename: "clipboard",
+                            mime: content.mime,
+                            content: content.data,
+                          })
+                        }
+                        return
+                      }
+                    } catch {}
                   }
-                  // For text paste, let the onPaste handler deal with it
-                  // Also prevent default to avoid triggering exit
+                  // Block any exit when meta/ctrl held - likely a paste attempt that came through wrong
                   e.preventDefault()
                   return
                 }
-                // Additional prevention: if name is v with meta/ctrl, prevent exit even if it gets here
-                if (keybind.match("app_exit", e) && (e.meta || e.ctrl)) {
-                  e.preventDefault()
-                  return
-                }
+                // Normal exit check (only when no modifiers)
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
                     await exit()
