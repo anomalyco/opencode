@@ -1925,13 +1925,6 @@ export type SubtaskPartInput = {
   command?: string
 }
 
-export type QuestionReply = {
-  /**
-   * User answers in order of questions (each answer is an array of selected labels)
-   */
-  answers: Array<QuestionAnswer>
-}
-
 export type ProviderAuthMethod = {
   type: "oauth" | "api"
   label: string
@@ -4259,7 +4252,12 @@ export type QuestionListResponses = {
 export type QuestionListResponse = QuestionListResponses[keyof QuestionListResponses]
 
 export type QuestionReplyData = {
-  body?: QuestionReply
+  body?: {
+    /**
+     * User answers in order of questions (each answer is an array of selected labels)
+     */
+    answers: Array<QuestionAnswer>
+  }
   path: {
     requestID: string
   }
