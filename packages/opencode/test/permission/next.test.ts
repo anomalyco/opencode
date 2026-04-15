@@ -545,6 +545,17 @@ it.live("ask - throws DeniedError when action is deny", () =>
   ),
 )
 
+test("DeniedError - uses reason as message when provided", () => {
+  const err = new Permission.DeniedError({ ruleset: [], reason: "blocked by TDD policy" })
+  expect(err.message).toBe("blocked by TDD policy")
+})
+
+test("DeniedError - uses default message when reason is absent", () => {
+  const err = new Permission.DeniedError({ ruleset: [{ permission: "bash", pattern: "*", action: "deny" }] })
+  expect(err.message).toContain("The user has specified a rule")
+  expect(err.message).toContain("bash")
+})
+
 it.live("ask - stays pending when action is ask", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {
