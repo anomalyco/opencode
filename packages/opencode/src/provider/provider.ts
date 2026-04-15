@@ -1192,7 +1192,7 @@ const layer: Layer.Layer<
               limit: {
                 context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
                 input: model.limit?.input ?? existingModel?.limit?.input,
-                output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+                output: model.limit?.output ?? existingModel?.limit?.output ?? ProviderTransform.OUTPUT_TOKEN_MAX,
               },
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",

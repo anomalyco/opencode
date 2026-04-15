@@ -8,6 +8,7 @@ import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
 import { ModelsDev } from "../../src/provider"
 import { Provider } from "../../src/provider"
+import { OUTPUT_TOKEN_MAX } from "../../src/provider/transform"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util"
 import { Env } from "../../src/env"
@@ -1745,7 +1746,7 @@ test("model limit defaults to zero when not specified", async () => {
       const providers = await list()
       const model = providers[ProviderID.make("no-limit")].models["model"]
       expect(model.limit.context).toBe(0)
-      expect(model.limit.output).toBe(0)
+      expect(model.limit.output).toBe(OUTPUT_TOKEN_MAX)
     },
   })
 })
@@ -2639,4 +2640,39 @@ test("opencode loader keeps paid models when auth exists", async () => {
       } catch {}
     }
   }
+})
+
+test("custom model without output limit falls back to OUTPUT_TOKEN_MAX", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-provider": {
+              name: "Custom Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "custom-model": {
+                  name: "Custom Model",
+                  tool_call: true,
+                },
+              },
+              options: { apiKey: "test" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const model = providers[ProviderID.make("custom-provider")].models["custom-model"]
+      expect(model.limit.output).toBe(OUTPUT_TOKEN_MAX)
+    },
+  })
 })
