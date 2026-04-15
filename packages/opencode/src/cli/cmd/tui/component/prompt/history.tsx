@@ -13,15 +13,16 @@ export type PromptInfo = {
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
-    | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
-        source?: {
-          text: {
-            start: number
-            end: number
-            value: string
+      | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
+          source?: {
+            text: {
+              start: number
+              end: number
+              value: string
+            }
+            kind?: "paste" | "skill"
           }
-        }
-      })
+        })
   )[]
 }
 

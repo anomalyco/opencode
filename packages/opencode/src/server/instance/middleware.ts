@@ -11,6 +11,7 @@ import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { AppRuntime } from "@/effect/app-runtime"
+import { LocalContext } from "@/util/local-context"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -37,12 +38,26 @@ function getSessionID(url: URL) {
   return SessionID.make(id)
 }
 
+function isLocalContextNotFound(err: unknown): err is LocalContext.NotFound {
+  return err instanceof LocalContext.NotFound
+}
+
 async function getSessionWorkspace(url: URL) {
   const id = getSessionID(url)
   if (!id) return null
 
-  const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(id))).catch(() => undefined)
-  return session?.workspaceID
+  // Session lookup may fail if no instance context is available yet.
+  // This happens when the middleware is first running and hasn't set up
+  // the instance context. In this case, we fall back to using the directory.
+  try {
+    const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(id)))
+    return session?.workspaceID
+  } catch (err) {
+    if (!isLocalContextNotFound(err)) throw err
+    // If instance context is not available, return null and let the middleware
+    // fall back to directory-based routing
+    return null
+  }
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {

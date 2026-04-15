@@ -7,6 +7,11 @@ import { EffectLogger } from "@/effect/logger"
 import { Ripgrep } from "../file/ripgrep"
 import { Skill } from "../skill"
 import { Tool } from "./tool"
+import { LocalContext } from "@/util/local-context"
+
+function isLocalContextNotFound(err: unknown): err is LocalContext.NotFound {
+  return err instanceof LocalContext.NotFound
+}
 
 const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
@@ -20,7 +25,15 @@ export const SkillTool = Tool.define(
 
     return () =>
       Effect.gen(function* () {
-        const list = yield* skill.available().pipe(Effect.provide(EffectLogger.layer))
+        const list = yield* skill.available().pipe(
+          Effect.provide(EffectLogger.layer),
+          Effect.catch((err) => {
+            if (isLocalContextNotFound(err)) {
+              return Effect.succeed([])
+            }
+            return Effect.fail(err)
+          }),
+        )
 
         const description =
           list.length === 0
@@ -45,9 +58,23 @@ export const SkillTool = Tool.define(
           parameters: Parameters,
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
-              const info = yield* skill.get(params.name)
+              const info = yield* skill.get(params.name).pipe(
+                Effect.catch((err) => {
+                  if (isLocalContextNotFound(err)) {
+                    return Effect.fail(new Error("Unable to load skill: instance context not available"))
+                  }
+                  return Effect.fail(err)
+                }),
+              )
               if (!info) {
-                const all = yield* skill.all()
+                const all = yield* skill.all().pipe(
+                  Effect.catch((err) => {
+                    if (isLocalContextNotFound(err)) {
+                      return Effect.succeed([])
+                    }
+                    return Effect.fail(err)
+                  }),
+                )
                 const available = all.map((item) => item.name).join(", ")
                 throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
               }

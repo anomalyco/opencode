@@ -16,6 +16,7 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
+import { expand, has } from "./skill"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -37,6 +38,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { useSkillCatalog } from "@tui/context/skills"
 
 export type PromptProps = {
   sessionID?: string
@@ -93,6 +95,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const skillCatalog = useSkillCatalog()
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
@@ -115,6 +118,7 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
+  const skillStyleId = syntax().getStyleId("extmark.skill")!
   let promptPartTypeId = 0
   const event = useEvent()
 
@@ -479,7 +483,7 @@ export function Prompt(props: PromptProps) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = pasteStyleId
+        styleId = part.source.kind === "skill" ? skillStyleId : pasteStyleId
       }
 
       if (virtualText) {
@@ -698,6 +702,10 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      if (has(inputText)) {
+        await skillCatalog.refresh()
+        inputText = expand(inputText, (name) => skillCatalog.get(name))
+      }
       sdk.client.session
         .prompt({
           sessionID,
@@ -763,6 +771,7 @@ export function Prompt(props: PromptProps) {
           type: "text" as const,
           text,
           source: {
+            kind: "paste",
             text: {
               start: extmarkStart,
               end: extmarkEnd,
@@ -890,6 +899,7 @@ export function Prompt(props: PromptProps) {
         value={store.prompt.input}
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
+        skillStyleId={skillStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>

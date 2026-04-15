@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import fs from "fs/promises"
 import path from "path"
 import z from "zod"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -1274,6 +1275,62 @@ unix(
           }),
         { git: true, config: cfg },
       ),
+    ),
+  30_000,
+)
+
+unix(
+  "skill tool keeps instance context during model tool execution",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const name = "git-release"
+          yield* Effect.promise(() =>
+            fs.mkdir(path.join(dir, ".agents", "skills", name), { recursive: true }).then(() =>
+              Bun.write(
+                path.join(dir, ".agents", "skills", name, "SKILL.md"),
+                `---
+name: git-release
+description: Create consistent releases and changelogs.
+---
+
+# Git Release
+
+Use this skill.
+`,
+              ),
+            ),
+          )
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({ title: "Skill Tool" })
+
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "build",
+            noReply: true,
+            parts: [{ type: "text", text: "load the git release skill" }],
+          })
+
+          yield* llm.tool("skill", { name })
+
+          yield* prompt.loop({ sessionID: chat.id })
+
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const msg = msgs.find((item) => item.info.role === "assistant" && item.parts.some((part) => part.type === "tool"))
+          expect(msg?.info.role).toBe("assistant")
+          if (!msg || msg.info.role !== "assistant") return
+
+          const tool = completedTool(msg.parts)
+          if (!tool) return
+
+          expect(tool.tool).toBe("skill")
+          expect(tool.state.output).toContain(`<skill_content name="${name}">`)
+          expect(tool.state.output).toContain(`# Skill: ${name}`)
+        }),
+      { git: true, config: providerCfg },
     ),
   30_000,
 )

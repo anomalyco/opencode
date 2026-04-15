@@ -45,6 +45,7 @@ import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
+import { attach } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -107,12 +108,14 @@ export namespace SessionPrompt {
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
-          Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
-        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
+          Effect.runPromise(attach(effect).pipe(Effect.provide(EffectLogger.layer))),
+        fork: <A, E>(effect: Effect.Effect<A, E>) =>
+          Effect.runFork(attach(effect).pipe(Effect.provide(EffectLogger.layer))),
       }
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-        yield* elog.info("cancel", { sessionID })
+        // Use direct Log instead of EffectLogger to avoid TUI leakage
+        log.clone().tag("sessionID", sessionID).debug("cancel")
         yield* state.cancel(sessionID)
       })
 
@@ -1302,14 +1305,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
           const ctx = yield* InstanceState.context
-          const slog = elog.with({ sessionID })
+          // Use direct Log instead of EffectLogger to avoid TUI leakage
+          const loopLog = log.clone().tag("sessionID", sessionID)
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
-            yield* slog.info("loop", { step })
+            loopLog.debug("loop", { step })
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
@@ -1345,7 +1349,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
-              yield* slog.info("exiting loop")
+              loopLog.debug("exiting loop")
               break
             }
 
@@ -1544,7 +1548,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
 
       const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
+        // Use direct Log instead of EffectLogger to avoid TUI leakage
+        log.clone().tag("sessionID", input.sessionID).debug("command", { command: input.command, agent: input.agent })
         const cmd = yield* commands.get(input.command)
         if (!cmd) {
           const available = (yield* commands.list()).map((c) => c.name)
