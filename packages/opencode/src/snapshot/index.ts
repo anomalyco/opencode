@@ -90,12 +90,19 @@ export namespace Snapshot {
 
           const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
+          const enc = new TextEncoder()
+          const feed = (list: string[]) => Stream.make(enc.encode(list.join("\0") + "\0"))
+
           const git = Effect.fnUntraced(
-            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+            function* (
+              cmd: string[],
+              opts?: { cwd?: string; env?: Record<string, string>; stdin?: ChildProcess.CommandInput },
+            ) {
               const proc = ChildProcess.make("git", cmd, {
                 cwd: opts?.cwd,
                 env: opts?.env,
                 extendEnv: true,
+                stdin: opts?.stdin,
               })
               const handle = yield* spawner.spawn(proc)
               const [text, stderr] = yield* Effect.all(
@@ -114,6 +121,59 @@ export namespace Snapshot {
               }),
             ),
           )
+
+          const ignore = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return new Set<string>()
+            const check = yield* git(
+              [
+                ...quote,
+                "--git-dir",
+                path.join(state.worktree, ".git"),
+                "--work-tree",
+                state.worktree,
+                "check-ignore",
+                "--no-index",
+                "--stdin",
+                "-z",
+              ],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+            if (check.code !== 0 && check.code !== 1) return new Set<string>()
+            return new Set(check.text.split("\0").filter(Boolean))
+          })
+
+          const drop = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return
+            yield* git(
+              [
+                ...cfg,
+                ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
+              ],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+          })
+
+          const stage = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return
+            const result = yield* git(
+              [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+            if (result.code === 0) return
+            log.warn("failed to add snapshot files", {
+              exitCode: result.code,
+              stderr: result.stderr,
+            })
+          })
 
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
           const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
@@ -176,60 +236,41 @@ export namespace Snapshot {
             const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
-            // Filter out files that are now gitignored even if previously tracked
-            // Files may have been tracked before being gitignored, so we need to check
-            // against the source project's current gitignore rules
-            // Use --no-index to check purely against patterns (ignoring whether file is tracked)
-            const checkArgs = [
-              ...quote,
-              "--git-dir",
-              path.join(state.worktree, ".git"),
-              "--work-tree",
-              state.worktree,
-              "check-ignore",
-              "--no-index",
-              "--",
-              ...all,
-            ]
-            const check = yield* git(checkArgs, { cwd: state.directory })
-            const ignored =
-              check.code === 0 ? new Set(check.text.trim().split("\n").filter(Boolean)) : new Set<string>()
-            const filtered = all.filter((item) => !ignored.has(item))
+            // Resolve source-repo ignore rules against the exact candidate set.
+            // --no-index keeps this pattern-based even when a path is already tracked.
+            const ignored = yield* ignore(all)
 
             // Remove newly-ignored files from snapshot index to prevent re-adding
             if (ignored.size > 0) {
               const ignoredFiles = Array.from(ignored)
               log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
-              yield* git([...cfg, ...args(["rm", "--cached", "-f", "--", ...ignoredFiles])], {
-                cwd: state.directory,
-              })
+              yield* drop(ignoredFiles)
             }
 
-            if (!filtered.length) return
+            const allow = all.filter((item) => !ignored.has(item))
+            if (!allow.length) return
 
-            const large = (yield* Effect.all(
-              filtered.map((item) =>
-                fs
-                  .stat(path.join(state.directory, item))
-                  .pipe(Effect.catch(() => Effect.void))
-                  .pipe(
-                    Effect.map((stat) => {
-                      if (!stat || stat.type !== "File") return
-                      const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
-                      return size > limit ? item : undefined
-                    }),
-                  ),
-              ),
-              { concurrency: 8 },
-            )).filter((item): item is string => Boolean(item))
-            yield* sync(large)
-            const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
-            if (result.code !== 0) {
-              log.warn("failed to add snapshot files", {
-                exitCode: result.code,
-                stderr: result.stderr,
-              })
-            }
+            const large = new Set(
+              (yield* Effect.all(
+                allow.map((item) =>
+                  fs
+                    .stat(path.join(state.directory, item))
+                    .pipe(Effect.catch(() => Effect.void))
+                    .pipe(
+                      Effect.map((stat) => {
+                        if (!stat || stat.type !== "File") return
+                        const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+                        return size > limit ? item : undefined
+                      }),
+                    ),
+                ),
+                { concurrency: 8 },
+              )).filter((item): item is string => Boolean(item)),
+            )
+            const block = new Set(untracked.filter((item) => large.has(item)))
+            yield* sync(Array.from(block))
+            // Stage only the allowed candidate paths so snapshot updates stay scoped.
+            yield* stage(allow.filter((item) => !block.has(item)))
           })
 
           const cleanup = Effect.fnUntraced(function* () {
@@ -295,33 +336,14 @@ export namespace Snapshot {
                   .map((x) => x.trim())
                   .filter(Boolean)
 
-                // Filter out files that are now gitignored
-                if (files.length > 0) {
-                  const checkArgs = [
-                    ...quote,
-                    "--git-dir",
-                    path.join(state.worktree, ".git"),
-                    "--work-tree",
-                    state.worktree,
-                    "check-ignore",
-                    "--no-index",
-                    "--",
-                    ...files,
-                  ]
-                  const check = yield* git(checkArgs, { cwd: state.directory })
-                  if (check.code === 0) {
-                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
-                    const filtered = files.filter((item) => !ignored.has(item))
-                    return {
-                      hash,
-                      files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
-                    }
-                  }
-                }
+                // Hide ignored-file removals from the user-facing patch output.
+                const ignored = yield* ignore(files)
 
                 return {
                   hash,
-                  files: files.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files
+                    .filter((item) => !ignored.has(item))
+                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                 }
               }),
             )
@@ -672,27 +694,12 @@ export namespace Snapshot {
                     ]
                   })
 
-                // Filter out files that are now gitignored
-                if (rows.length > 0) {
-                  const files = rows.map((r) => r.file)
-                  const checkArgs = [
-                    ...quote,
-                    "--git-dir",
-                    path.join(state.worktree, ".git"),
-                    "--work-tree",
-                    state.worktree,
-                    "check-ignore",
-                    "--no-index",
-                    "--",
-                    ...files,
-                  ]
-                  const check = yield* git(checkArgs, { cwd: state.directory })
-                  if (check.code === 0) {
-                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
-                    const filtered = rows.filter((r) => !ignored.has(r.file))
-                    rows.length = 0
-                    rows.push(...filtered)
-                  }
+                // Hide ignored-file removals from the user-facing diff output.
+                const ignored = yield* ignore(rows.map((r) => r.file))
+                if (ignored.size > 0) {
+                  const filtered = rows.filter((r) => !ignored.has(r.file))
+                  rows.length = 0
+                  rows.push(...filtered)
                 }
 
                 const step = 100

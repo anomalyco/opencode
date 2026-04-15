@@ -10,7 +10,7 @@ import { File } from "@/file"
 import { Vcs } from "@/project/vcs"
 import { Snapshot } from "@/snapshot"
 import { Bus } from "@/bus"
-import { Observability } from "./oltp"
+import { Observability } from "./observability"
 
 export const BootstrapLayer = Layer.mergeAll(
   Plugin.defaultLayer,

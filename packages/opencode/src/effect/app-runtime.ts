@@ -1,6 +1,6 @@
 import { Layer, ManagedRuntime } from "effect"
-import { memoMap } from "./run-service"
-import { Observability } from "./oltp"
+import { attach, memoMap } from "./run-service"
+import { Observability } from "./observability"
 
 import { AppFileSystem } from "@/filesystem"
 import { Bus } from "@/bus"
@@ -49,7 +49,7 @@ import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
 
 export const AppLayer = Layer.mergeAll(
-  // Observability.layer,
+  Observability.layer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
@@ -95,6 +95,27 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-).pipe(Layer.provide(Observability.layer))
+)
 
-export const AppRuntime = ManagedRuntime.make(AppLayer, { memoMap })
+const rt = ManagedRuntime.make(AppLayer, { memoMap })
+type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
+const wrap = (effect: Parameters<typeof rt.runSync>[0]) => attach(effect as never) as never
+
+export const AppRuntime: Runtime = {
+  runSync(effect) {
+    return rt.runSync(wrap(effect))
+  },
+  runPromise(effect, options) {
+    return rt.runPromise(wrap(effect), options)
+  },
+  runPromiseExit(effect, options) {
+    return rt.runPromiseExit(wrap(effect), options)
+  },
+  runFork(effect) {
+    return rt.runFork(wrap(effect))
+  },
+  runCallback(effect) {
+    return rt.runCallback(wrap(effect))
+  },
+  dispose: () => rt.dispose(),
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/server",
+  "version": "1.4.6",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./openapi": "./src/openapi.ts",
+    "./definition": "./src/definition/index.ts",
+    "./definition/api": "./src/definition/api.ts",
+    "./definition/question": "./src/definition/question.ts",
+    "./api": "./src/api/index.ts",
+    "./api/question": "./src/api/question.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  }
+}
