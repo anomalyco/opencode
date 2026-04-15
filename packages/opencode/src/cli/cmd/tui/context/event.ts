@@ -17,11 +17,7 @@ export function useEvent() {
         if (event.workspace === project.workspace.current()) {
           handler(event.payload)
         }
-
-        return
-      }
-
-      if (event.directory === project.instance.directory()) {
+      } else if (event.directory === project.instance.directory()) {
         handler(event.payload)
       }
     })
