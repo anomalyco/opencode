@@ -35,7 +35,7 @@ export namespace Agent {
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
-      permission: Permission.Ruleset,
+      permission: Permission.Ruleset.zod,
       model: z
         .object({
           modelID: ModelID.zod,
