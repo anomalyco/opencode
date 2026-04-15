@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, onMount, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -38,6 +38,8 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
+import { useAudioRecording } from "@/hooks/use-audio-recording"
+import { showToast } from "@opencode-ai/ui/toast"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
@@ -113,6 +115,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const audio = useAudioRecording()
+  const [transcribing, setTranscribing] = createSignal(false)
+  const [sttEnabled, setSttEnabled] = createSignal(false)
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -524,6 +529,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     renderEditor(parts)
     if (cursor !== null) setCursorPosition(editorRef, cursor)
   }
+
+  onMount(() => {
+    fetch(`${sdk.url}/stt/status`, {
+      headers: { "x-opencode-directory": encodeURIComponent(sdk.directory) },
+    })
+      .then((res) => res.json() as Promise<{ enabled: boolean }>)
+      .then((data) => setSttEnabled(data.enabled))
+      .catch(() => {})
+  })
 
   createEffect(() => {
     params.id
@@ -1419,7 +1433,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="pointer-events-none absolute bottom-2 left-2">
             <div
               aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
+              class="pointer-events-auto flex items-center gap-1"
               style={{
                 "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
@@ -1443,6 +1457,79 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Icon name="plus" class="size-4.5" />
                 </Button>
               </TooltipKeybind>
+              <Show when={sttEnabled()}>
+                <Tooltip
+                  placement="top"
+                  value={
+                    transcribing()
+                      ? language.t("prompt.action.transcribing")
+                      : audio.recording()
+                        ? language.t("prompt.action.stopRecording")
+                        : language.t("prompt.action.startRecording")
+                  }
+                >
+                  <Button
+                    data-action="prompt-mic"
+                    type="button"
+                    variant="ghost"
+                    class="size-8 p-0"
+                    style={buttons()}
+                    disabled={store.mode !== "normal" || transcribing()}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={
+                      audio.recording()
+                        ? language.t("prompt.action.stopRecording")
+                        : language.t("prompt.action.startRecording")
+                    }
+                    onClick={async () => {
+                      if (audio.recording()) {
+                        const blob = await audio.stop()
+                        setTranscribing(true)
+                        const form = new FormData()
+                        form.append("audio", blob, "recording.wav")
+                        fetch(`${sdk.url}/stt/transcribe`, {
+                          method: "POST",
+                          body: form,
+                          headers: {
+                            "x-opencode-directory": encodeURIComponent(sdk.directory),
+                          },
+                        })
+                          .then((res) => {
+                            if (!res.ok) throw new Error(`STT error: ${res.status}`)
+                            return res.json() as Promise<{ text: string }>
+                          })
+                          .then(({ text }) => {
+                            editorRef.focus()
+                            document.execCommand("insertText", false, text)
+                          })
+                          .catch(() => {
+                            showToast({
+                              title: language.t("prompt.error.sttFailed"),
+                              variant: "error",
+                            })
+                          })
+                          .finally(() => setTranscribing(false))
+                      } else {
+                        audio.start().catch((err) => {
+                          const msg =
+                            err.name === "NotAllowedError"
+                              ? language.t("prompt.error.micPermission")
+                              : err.name === "NotFoundError"
+                                ? language.t("prompt.error.micNotFound")
+                                : language.t("prompt.error.sttFailed")
+                          showToast({ title: msg, variant: "error" })
+                        })
+                      }
+                    }}
+                  >
+                    <Icon
+                      name={audio.recording() ? "stop" : "microphone"}
+                      class="size-4.5"
+                      style={audio.recording() ? { color: "var(--color-red-500, #ef4444)" } : undefined}
+                    />
+                  </Button>
+                </Tooltip>
+              </Show>
             </div>
           </div>
         </div>

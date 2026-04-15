@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg, RGBA } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -96,6 +96,8 @@ export function Prompt(props: PromptProps) {
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
+  const [recording, setRecording] = createSignal(false)
+  const [transcribing, setTranscribing] = createSignal(false)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
 
@@ -107,6 +109,55 @@ export function Prompt(props: PromptProps) {
     })
     if (sync.data.provider.length === 0) {
       dialog.replace(() => <DialogProviderConnect />)
+    }
+  }
+
+  function sttFetch(path: string, method = "POST") {
+    return sdk.fetch(`${sdk.url}/stt${path}`, {
+      method,
+      headers: {
+        "x-opencode-directory": encodeURIComponent(sdk.directory ?? ""),
+      },
+    })
+  }
+
+  async function toggleVoiceRecord() {
+    if (recording()) {
+      setRecording(false)
+      setTranscribing(true)
+      try {
+        const res = await sttFetch("/record/stop")
+        if (!res.ok) {
+          const body = await res.text().catch(() => "")
+          toast.show({ variant: "error", message: `Transcription failed: ${body}`, duration: 5000 })
+          setTranscribing(false)
+          return
+        }
+        const { text } = (await res.json()) as { text: string }
+        if (text && input && !input.isDestroyed) {
+          input.focus()
+          input.insertText(text)
+        } else if (!text) {
+          toast.show({ variant: "warning", message: "No speech detected", duration: 3000 })
+        }
+      } catch (err) {
+        toast.show({ variant: "error", message: `Transcription error: ${err}`, duration: 5000 })
+      } finally {
+        setTranscribing(false)
+      }
+    } else {
+      try {
+        const res = await sttFetch("/record/start")
+        if (!res.ok) {
+          const body = await res.text().catch(() => "")
+          toast.show({ variant: "error", message: `Recording failed: ${body}`, duration: 5000 })
+          return
+        }
+        setRecording(true)
+        toast.show({ variant: "info", message: "Recording... press Enter to stop", duration: 3000 })
+      } catch (err) {
+        toast.show({ variant: "error", message: `Recording error: ${err}`, duration: 5000 })
+      }
     }
   }
 
@@ -394,6 +445,16 @@ export function Prompt(props: PromptProps) {
           ))
         },
       },
+      {
+        title: recording() ? "Stop recording" : "Record voice",
+        value: "prompt.voice",
+        category: "Prompt",
+        slash: { name: "record" },
+        onSelect: (dialog) => {
+          dialog.clear()
+          toggleVoiceRecord()
+        },
+      },
     ]
   })
 
@@ -598,6 +659,22 @@ export function Prompt(props: PromptProps) {
     }
     if (props.disabled) return
     if (autocomplete?.visible) return
+
+    // Handle /record command and Enter-to-stop
+    if (recording()) {
+      input.clear()
+      setStore("prompt", { input: "", parts: [] })
+      await toggleVoiceRecord()
+      return
+    }
+    const rawInput = store.prompt.input?.trim() ?? ""
+    if (rawInput === "/record") {
+      input.clear()
+      setStore("prompt", { input: "", parts: [] })
+      await toggleVoiceRecord()
+      return
+    }
+
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
@@ -824,6 +901,7 @@ export function Prompt(props: PromptProps) {
   }
 
   const highlight = createMemo(() => {
+    if (recording()) return RGBA.fromInts(239, 68, 68)
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
     return local.agent.color(local.agent.current().name)
@@ -837,6 +915,8 @@ export function Prompt(props: PromptProps) {
   })
 
   const placeholderText = createMemo(() => {
+    if (transcribing()) return "Transcribing..."
+    if (recording()) return "Recording... press Enter to stop"
     if (props.showPlaceholder === false) return undefined
     if (store.mode === "shell") {
       if (!shell().length) return undefined
@@ -1105,7 +1185,13 @@ export function Prompt(props: PromptProps) {
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
                 <text fg={highlight()}>
-                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                  {recording()
+                    ? "● Recording"
+                    : transcribing()
+                      ? "⟳ Transcribing"
+                      : store.mode === "shell"
+                        ? "Shell"
+                        : Locale.titlecase(local.agent.current().name)}{" "}
                 </text>
                 <Show when={store.mode === "normal"}>
                   <box flexDirection="row" gap={1}>

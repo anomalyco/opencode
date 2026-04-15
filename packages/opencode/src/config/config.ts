@@ -1011,6 +1011,15 @@ export namespace Config {
             error: "For custom LSP servers, 'extensions' array is required.",
           },
         ),
+      stt: z
+        .object({
+          url: z.string().describe("Base URL of the STT API (e.g. https://api.openai.com/v1)"),
+          apiKey: z.string().optional().describe("API key. Falls back to OPENCODE_STT_API_KEY env var"),
+          model: z.string().default("whisper-1").describe("Transcription model ID"),
+          language: z.string().optional().describe("ISO-639-1 language hint (e.g. 'en')"),
+        })
+        .optional()
+        .describe("Speech-to-text configuration for voice input"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),

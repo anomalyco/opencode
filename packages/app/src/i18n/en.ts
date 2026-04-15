@@ -282,6 +282,13 @@ export const dict = {
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
+  "prompt.action.startRecording": "Record audio",
+  "prompt.action.stopRecording": "Stop recording",
+  "prompt.action.transcribing": "Transcribing...",
+  "prompt.error.micPermission": "Microphone access denied",
+  "prompt.error.micNotFound": "No microphone found",
+  "prompt.error.sttNotConfigured": "Speech-to-text is not configured",
+  "prompt.error.sttFailed": "Transcription failed",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",

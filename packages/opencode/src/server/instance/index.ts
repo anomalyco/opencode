@@ -21,6 +21,7 @@ import { McpRoutes } from "./mcp"
 import { FileRoutes } from "./file"
 import { ConfigRoutes } from "./config"
 import { ExperimentalRoutes } from "./experimental"
+import { SttRoutes } from "./stt"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { WorkspaceRouterMiddleware } from "./middleware"
@@ -41,6 +42,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
     .route("/tui", TuiRoutes())
+    .route("/stt", SttRoutes())
     .post(
       "/instance/dispose",
       describeRoute({
