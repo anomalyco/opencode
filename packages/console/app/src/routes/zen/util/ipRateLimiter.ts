@@ -6,14 +6,7 @@ import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { Subscription } from "@opencode-ai/console-core/subscription.js"
 
-export function createRateLimiter(
-  modelId: string,
-  allowAnonymous: boolean | undefined,
-  rateLimit: number | undefined,
-  rawIp: string,
-  request: Request,
-) {
-  if (!allowAnonymous) return
+export function createRateLimiter(modelId: string, rateLimit: number | undefined, rawIp: string, request: Request) {
   const dict = i18n(localeFromRequest(request))
 
   const limits = Subscription.getFreeLimits()
