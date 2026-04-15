@@ -151,23 +151,6 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 ---
 
-### list
-
-اعرض قائمة بالملفات والمجلدات في مسار محدد.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-تعرض هذه الأداة محتويات المجلد. وتقبل أنماط glob لتصفية النتائج.
-
----
-
 ### lsp (experimental)
 
 تفاعل مع خوادم LSP التي قمت بتهيئتها للحصول على ميزات ذكاء الشفرة مثل التعاريف والمراجع ومعلومات التحويم وتسلسل الاستدعاءات.
@@ -341,7 +324,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ## التفاصيل الداخلية
 
-داخليا، تستخدم أدوات مثل `grep` و`glob` و`list` أداة [ripgrep](https://github.com/BurntSushi/ripgrep) في الخلفية. افتراضيا، يحترم ripgrep أنماط `.gitignore`، ما يعني أن الملفات والمجلدات المدرجة في `.gitignore` ستُستبعد من عمليات البحث وعرض القوائم.
+داخليا، تستخدم أدوات مثل `grep` و`glob` [ripgrep](https://github.com/BurntSushi/ripgrep) في الخلفية. افتراضيا، يحترم ripgrep أنماط `.gitignore`، ما يعني أن الملفات والمجلدات المدرجة في `.gitignore` ستُستبعد من عمليات البحث وعرض القوائم.
 
 ---
 

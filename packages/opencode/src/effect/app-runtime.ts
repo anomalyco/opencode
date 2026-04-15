@@ -1,8 +1,8 @@
 import { Layer, ManagedRuntime } from "effect"
-import { memoMap } from "./run-service"
-import { Observability } from "./oltp"
+import { attach, memoMap } from "./run-service"
+import { Observability } from "./observability"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
 import { Account } from "@/account"
@@ -47,14 +47,31 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
+import * as Effect from "effect/Effect"
+
+// Adjusts the default Config layer to ensure that plugins are always initialised before
+// any other layers read the current config
+const ConfigWithPluginPriority = Layer.effect(
+  Config.Service,
+  Effect.gen(function* () {
+    const config = yield* Config.Service
+    const plugin = yield* Plugin.Service
+
+    return {
+      ...config,
+      get: () => Effect.andThen(plugin.init(), config.get),
+      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
+      getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
+    }
+  }),
+).pipe(Layer.provide(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
 
 export const AppLayer = Layer.mergeAll(
-  // Observability.layer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
-  Config.defaultLayer,
+  ConfigWithPluginPriority,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
   FileTime.defaultLayer,
@@ -95,6 +112,27 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-).pipe(Layer.provide(Observability.layer))
+).pipe(Layer.provideMerge(Observability.layer))
 
-export const AppRuntime = ManagedRuntime.make(AppLayer, { memoMap })
+const rt = ManagedRuntime.make(AppLayer, { memoMap })
+type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
+const wrap = (effect: Parameters<typeof rt.runSync>[0]) => attach(effect as never) as never
+
+export const AppRuntime: Runtime = {
+  runSync(effect) {
+    return rt.runSync(wrap(effect))
+  },
+  runPromise(effect, options) {
+    return rt.runPromise(wrap(effect), options)
+  },
+  runPromiseExit(effect, options) {
+    return rt.runPromiseExit(wrap(effect), options)
+  },
+  runFork(effect) {
+    return rt.runFork(wrap(effect))
+  },
+  runCallback(effect) {
+    return rt.runCallback(wrap(effect))
+  },
+  dispose: () => rt.dispose(),
+}

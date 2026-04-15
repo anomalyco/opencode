@@ -1,5 +1,5 @@
 import { Provider } from "../provider/provider"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { NotFoundError } from "../storage/db"
 import { Session } from "../session"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -86,7 +86,7 @@ const zipped = compress()
 export const CompressionMiddleware: MiddlewareHandler = (c, next) => {
   const path = c.req.path
   const method = c.req.method
-  if (path === "/event" || path === "/global/event" || path === "/global/sync-event") return next()
+  if (path === "/event" || path === "/global/event") return next()
   if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return next()
   return zipped(c, next)
 }

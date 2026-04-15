@@ -13,7 +13,6 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
-import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -178,7 +177,6 @@ export const Terminal = (props: TerminalProps) => {
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
-  const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
     restore &&
@@ -349,9 +347,6 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
-    probe.init()
-    cleanups.push(() => probe.drop())
-
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
@@ -381,8 +376,6 @@ export const Terminal = (props: TerminalProps) => {
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
-          probe.render(data)
-          probe.settle()
           done?.()
         }),
       )
@@ -534,7 +527,6 @@ export const Terminal = (props: TerminalProps) => {
         const handleOpen = () => {
           if (disposed) return
           tries = 0
-          probe.connect()
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
         }
@@ -599,13 +591,6 @@ export const Terminal = (props: TerminalProps) => {
         socket.addEventListener("close", handleClose)
       }
 
-      probe.control({
-        disconnect: () => {
-          if (!ws) return
-          ws.close(4_000, "e2e")
-        },
-      })
-
       open()
     }
 
@@ -645,7 +630,6 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
-      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

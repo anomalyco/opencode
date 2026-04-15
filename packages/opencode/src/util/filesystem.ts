@@ -5,7 +5,7 @@ import { realpathSync } from "fs"
 import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
-import { Glob } from "./glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace Filesystem {
   // Fast sync version for metadata checks

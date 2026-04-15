@@ -292,6 +292,8 @@ export function LiteSection() {
             <li>Mimo-V2-Omni</li>
             <li>MiniMax M2.5</li>
             <li>MiniMax M2.7</li>
+            <li>Qwen3.5 Plus</li>
+            <li>Qwen3.6 Plus</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
