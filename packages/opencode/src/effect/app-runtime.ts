@@ -2,7 +2,7 @@ import { Layer, ManagedRuntime } from "effect"
 import { attach, memoMap } from "./run-service"
 import { Observability } from "./observability"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
 import { Account } from "@/account"

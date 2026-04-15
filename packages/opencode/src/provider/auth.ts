@@ -1,5 +1,5 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
 import { Plugin } from "../plugin"

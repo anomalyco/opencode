@@ -11,8 +11,8 @@ import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
 import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
+import { checksum } from "@opencode-ai/shared/util/encode"
 import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type SnapshotFileDiff, type VcsFileDiff } from "@opencode-ai/sdk/v2"
@@ -388,6 +388,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     let wrapper: HTMLDivElement | undefined
                     const file = diff.file
 
+                    // binary files have empty diffs that we can't render
+                    const diffCanRender = () => diff.additions !== 0 && diff.deletions !== 0
+
                     const expanded = createMemo(() => open().includes(file))
                     const mounted = createMemo(() => expanded() && (!!store.visible[file] || pinned(file)))
                     const force = () => !!store.force[file]
@@ -496,14 +499,14 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                     return (
                       <Accordion.Item
-                        value={file}
+                        value={diffCanRender() ? file : null!}
                         id={diffId(file)}
                         data-file={file}
                         data-slot="session-review-accordion-item"
                         data-selected={props.focusedFile === file ? "" : undefined}
                       >
                         <StickyAccordionHeader>
-                          <Accordion.Trigger>
+                          <Accordion.Trigger disabled={!diffCanRender()} class="cursor-default">
                             <div data-slot="session-review-trigger-content">
                               <div data-slot="session-review-file-info">
                                 <FileIcon node={{ path: file, type: "file" }} />
@@ -512,7 +515,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
-                                  <Show when={props.onViewFile}>
+                                  <Show when={props.onViewFile && diffCanRender()}>
                                     <Tooltip value={openFileLabel()} placement="top" gutter={4}>
                                       <button
                                         data-slot="session-review-view-button"
@@ -553,9 +556,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <DiffChanges changes={diff} />
                                   </Match>
                                 </Switch>
-                                <span data-slot="session-review-diff-chevron">
-                                  <Icon name="chevron-down" size="small" />
-                                </span>
+                                <Show when={diffCanRender()}>
+                                  <span data-slot="session-review-diff-chevron">
+                                    <Icon name="chevron-down" size="small" />
+                                  </span>
+                                </Show>
                               </div>
                             </div>
                           </Accordion.Trigger>

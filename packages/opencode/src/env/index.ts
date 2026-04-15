@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace Env {
   type State = Record<string, string | undefined>
@@ -35,22 +34,4 @@ export namespace Env {
   )
 
   export const defaultLayer = layer
-
-  const rt = makeRuntime(Service, defaultLayer)
-
-  export function get(key: string) {
-    return rt.runSync((svc) => svc.get(key))
-  }
-
-  export function all() {
-    return rt.runSync((svc) => svc.all())
-  }
-
-  export function set(key: string, value: string) {
-    return rt.runSync((svc) => svc.set(key, value))
-  }
-
-  export function remove(key: string) {
-    return rt.runSync((svc) => svc.remove(key))
-  }
 }
