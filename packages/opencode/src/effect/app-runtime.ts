@@ -51,7 +51,7 @@ import * as Effect from "effect/Effect"
 
 // Adjusts the default Config layer to ensure that plugins are always initialised before
 // any other layers read the current config
-const PluginPriorityConfigLayer = Layer.unwrap(
+const ConfigWithPluginPriority = Layer.unwrap(
   Effect.gen(function* () {
     const configSvc = yield* Config.Service
     const pluginSvc = yield* Plugin.Service
@@ -71,7 +71,7 @@ export const AppLayer = Layer.mergeAll(
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
-  PluginPriorityConfigLayer,
+  ConfigWithPluginPriority,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
   FileTime.defaultLayer,
