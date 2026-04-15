@@ -114,14 +114,14 @@ export namespace Permission {
   })
 
   export interface Interface {
-    readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<void, Error>
+    readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<string | undefined, Error>
     readonly reply: (input: z.infer<typeof ReplyInput>) => Effect.Effect<void>
     readonly list: () => Effect.Effect<Request[]>
   }
 
   interface PendingEntry {
     info: Request
-    deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
+    deferred: Deferred.Deferred<string | undefined, RejectedError | CorrectedError>
   }
 
   interface State {
@@ -180,6 +180,10 @@ export namespace Permission {
           needsAsk = true
         }
 
+        if (request.metadata?.force_sandbox_prompt) {
+          needsAsk = true
+        }
+
         if (!needsAsk) return
 
         const id = request.id ?? PermissionID.ascending()
@@ -189,7 +193,7 @@ export namespace Permission {
         }
         log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
-        const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+        const deferred = yield* Deferred.make<string | undefined, RejectedError | CorrectedError>()
         pending.set(id, { info, deferred })
         yield* bus.publish(Event.Asked, info)
         return yield* Effect.ensuring(
@@ -231,7 +235,7 @@ export namespace Permission {
           return
         }
 
-        yield* Deferred.succeed(existing.deferred, undefined)
+        yield* Deferred.succeed(existing.deferred, input.message)
         if (input.reply === "once") return
 
         for (const pattern of existing.info.always) {
@@ -254,7 +258,7 @@ export namespace Permission {
             requestID: item.info.id,
             reply: "always",
           })
-          yield* Deferred.succeed(item.deferred, undefined)
+          yield* Deferred.succeed(item.deferred, input.message)
         }
       })
 

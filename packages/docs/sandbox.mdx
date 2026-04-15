@@ -15,11 +15,13 @@ Sandboxing is currently supported strictly on macOS and Linux. If you are on Win
 
 OpenCode's sandboxing architecture isolates environments via an overlay pattern. Sandboxing policies are configured within a dedicated `securecode.json` configuration file overlaid on top of your local environment, typically located at `~/.config/opencode/securecode.json`. 
 
-By default, sandboxing is disabled. To enable it, define a `bash_sandbox` block with `enabled: true`. 
+By default, OpenCode operates in an interactive `"prompt"` mode for the `bash_sandbox`. When executing bash commands natively on macOS or Linux, the UI will proactively prompt the user with interactive terminal buttons (`[Run Sandbox (Once)]` / `[Run Native (Once)]`) allowing for per-execution isolation choices. 
+
+You can bypass this prompt completely by defining a `bash_sandbox` block and enforcing the sandbox globally (`enabled: true`) or disabling it permanently (`enabled: false`).
 
 ### Configuration Example
 
-Here is an example `bash_sandbox` configuration block:
+Here is an example `bash_sandbox` configuration block that strictly enforces sandboxing without prompting:
 
 ```json ~/.config/opencode/securecode.json
 {

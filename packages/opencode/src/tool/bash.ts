@@ -22,6 +22,8 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { getSandboxProvider, type SandboxProvider } from "../sandbox/provider"
 import { Config } from "../config/config"
 
+const sessionSandboxChoices = new Map<string, boolean>()
+
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const PS = new Set(["powershell", "pwsh"])
@@ -65,6 +67,12 @@ const Parameters = z.object({
     .describe(
       "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
     ),
+  request_native_elevation: z
+    .boolean()
+    .describe(
+      "If command execution fails explicitly due to sandbox isolation privileges, set this to true to interrupt execution and request the user's manual authorization to execute natively without confinement. ONLY set this to true if the previous command demonstrably failed with an access error. Never use this preemptively.",
+    )
+    .optional(),
 })
 
 type Part = {
@@ -222,7 +230,7 @@ const parse = Effect.fn("BashTool.parse")(function* (command: string, ps: boolea
   return tree.rootNode
 })
 
-const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) {
+const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan, forceSandboxPrompt?: boolean) {
   if (scan.dirs.size > 0) {
     const globs = Array.from(scan.dirs).map((dir) => {
       if (process.platform === "win32") return AppFileSystem.normalizePathPattern(path.join(dir, "*"))
@@ -236,12 +244,12 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
     })
   }
 
-  if (scan.patterns.size === 0) return
-  yield* ctx.ask({
+  if (scan.patterns.size === 0) return undefined
+  return yield* ctx.ask({
     permission: "bash",
     patterns: Array.from(scan.patterns),
     always: Array.from(scan.always),
-    metadata: {},
+    metadata: forceSandboxPrompt ? { force_sandbox_prompt: true } : {},
   })
 })
 
@@ -392,10 +400,13 @@ export const BashTool = Tool.define(
         description: string
       },
       ctx: Tool.Context,
+      forceSandboxChoice?: boolean,
     ) {
       let output = ""
       let expired = false
       let aborted = false
+      let runtimeSandboxed = false
+      let providerName = ""
 
       yield* ctx.metadata({
         metadata: {
@@ -409,18 +420,21 @@ export const BashTool = Tool.define(
           
           const config = yield* configSvc.get()
           const sandboxConfig = config.bash_sandbox || {}
-          let enabled = sandboxConfig.enabled
-          if (enabled === undefined || enabled === "auto") {
-            enabled = process.platform !== "win32" && process.env.NODE_ENV !== "test"
+          let enabled: boolean | "prompt" | "auto" | undefined = sandboxConfig.enabled
+          if (forceSandboxChoice !== undefined) {
+             enabled = forceSandboxChoice
+          } else if (enabled === undefined || enabled === "auto") {
+            enabled = (process.platform !== "win32" && process.env.NODE_ENV !== "test") ? "prompt" : false
           }
-          const providerName = sandboxConfig.provider || "srt"
+          
+          providerName = sandboxConfig.provider || "srt"
           const envWhitelist = sandboxConfig.env_whitelist
           const networkDomains = sandboxConfig.domains
           const denyWorkspacePatterns = sandboxConfig.deny_workspace_patterns
           const denyBinaries = sandboxConfig.deny_binaries
 
           let provider: SandboxProvider | undefined
-          if (enabled) {
+          if (enabled === true || enabled === "prompt") {
             if (process.platform === "win32") {
               throw new Error(`Sandboxing is strictly required by configuration, but is not supported on Windows natively. Please disable 'bash_sandbox' in your config or run on macOS/Linux.`)
             }
@@ -429,6 +443,16 @@ export const BashTool = Tool.define(
               throw new Error(`Sandboxing is strictly required by configuration, but the '${providerName}' provider is unavailable.`)
             }
           }
+
+          runtimeSandboxed = provider !== undefined
+          yield* ctx.metadata({
+            metadata: {
+              output: "",
+              description: input.description,
+              sandboxed: runtimeSandboxed,
+              provider: providerName
+            },
+          })
 
           const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env, provider, { envWhitelist, networkDomains, denyWorkspacePatterns, denyBinaries }))
 
@@ -440,6 +464,8 @@ export const BashTool = Tool.define(
                 metadata: {
                   output: preview(output),
                   description: input.description,
+                  sandboxed: runtimeSandboxed,
+                  provider: providerName
                 },
               })
             }),
@@ -490,6 +516,8 @@ export const BashTool = Tool.define(
           output: preview(output),
           exit: code,
           description: input.description,
+          sandboxed: runtimeSandboxed,
+          provider: providerName
         },
         output,
       }
@@ -505,13 +533,15 @@ export const BashTool = Tool.define(
             : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
         log.info("bash tool using shell", { shell })
 
+        let generatedDescription = DESCRIPTION.replaceAll("${directory}", Instance.directory)
+          .replaceAll("${os}", process.platform)
+          .replaceAll("${shell}", name)
+          .replaceAll("${chaining}", chain)
+          .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
+          .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES))
+
         return {
-          description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
-            .replaceAll("${os}", process.platform)
-            .replaceAll("${shell}", name)
-            .replaceAll("${chaining}", chain)
-            .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-            .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+          description: generatedDescription,
           parameters: Parameters,
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
@@ -522,13 +552,47 @@ export const BashTool = Tool.define(
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
+              const config = yield* configSvc.get()
+              const sandboxConfig = config.bash_sandbox || {}
+              let enabled = sandboxConfig.enabled
+              if (enabled === undefined || enabled === "auto") {
+                enabled = (process.platform !== "win32" && process.env.NODE_ENV !== "test") ? "prompt" : false
+              }
+              const isPrompt = enabled === "prompt"
+              
+              if (params.request_native_elevation && !isPrompt) {
+                throw new Error("You attempted to invoke a native elevation request, but the user's configuration enforces strict sandbox boundaries or has manually locked out interactive prompts. The sandbox perimeter is absolute and bypasses are locked. You must accomplish this task entirely confined within the sandbox or fail gracefully.")
+              }
+
               const ps = PS.has(name)
               const root = yield* parse(params.command, ps)
               const scan = yield* collect(root, cwd, ps, shell)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
-              yield* ask(ctx, scan)
+              
+              let matchedSandboxChoice: boolean | undefined = undefined
+              if (scan.always.size > 0 && Array.from(scan.always).every(p => sessionSandboxChoices.has(p))) {
+                matchedSandboxChoice = Array.from(scan.always).some(p => sessionSandboxChoices.get(p) === false) ? false : true
+              }
 
-              return yield* run(
+              // Only pop the interactive UI bypass menu if a persistent session choice hasn't already been made.
+              // This protects users from AI agents proactively spamming the elevation flag on every subsequent command.
+              const forceSandboxPrompt = matchedSandboxChoice === undefined && params.request_native_elevation === true
+              const choice = yield* ask(ctx, scan, forceSandboxPrompt)
+              let forceSandboxChoice: boolean | undefined = matchedSandboxChoice
+
+              if (forceSandboxPrompt && choice) {
+                 if (choice === "sandbox") forceSandboxChoice = true
+                 else if (choice === "native") forceSandboxChoice = false
+                 else if (choice === "always_sandbox") {
+                    for (const pattern of scan.always) sessionSandboxChoices.set(pattern, true)
+                    forceSandboxChoice = true
+                 } else if (choice === "always_native") {
+                    for (const pattern of scan.always) sessionSandboxChoices.set(pattern, false)
+                    forceSandboxChoice = false
+                 }
+              }
+
+              const execution = yield* run(
                 {
                   shell,
                   name,
@@ -539,7 +603,18 @@ export const BashTool = Tool.define(
                   description: params.description,
                 },
                 ctx,
+                forceSandboxChoice
               )
+
+              if (execution.metadata.exit !== 0) {
+                if (isPrompt) {
+                  execution.output += "\n\n<system_hint>\nThis command failed with a non-zero exit code. If you suspect it failed due to sandbox constraints (e.g. network proxy block, permission denied), you MUST retry the command explicitly utilizing `request_native_elevation: true` to request the user grant a native environment bypass. This will seamlessly provide the user with an authorization prompt.\n</system_hint>"
+                } else {
+                  execution.output += "\n\n<system_hint>\nThis command failed with a non-zero exit code. Your environment configuration strictly enforces sandbox boundaries (`enabled: true`), meaning `request_native_elevation` is explicitly forbidden. You must accomplish this task entirely confined within the sandbox or explain to the user why it is structurally impossible.\n</system_hint>"
+                }
+              }
+
+              return execution;
             }),
         }
       })

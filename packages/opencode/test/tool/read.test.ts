@@ -31,7 +31,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed(undefined),
 }
 
 const it = testEffect(
@@ -100,6 +100,7 @@ const asks = () => {
       ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
+          return undefined
         }),
     },
   }
@@ -240,6 +241,7 @@ describe("tool.read env file permissions", () => {
                           throw new Permission.DeniedError({ ruleset: info.permission })
                         }
                       }
+                      return undefined
                     }),
                 }
 

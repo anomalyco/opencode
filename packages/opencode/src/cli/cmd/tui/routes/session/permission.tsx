@@ -134,6 +134,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+    sandboxChoice: undefined as string | undefined,
   })
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
@@ -183,11 +184,16 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           escapeKey="cancel"
           onSelect={(option) => {
             setStore("stage", "permission")
-            if (option === "cancel") return
+            if (option === "cancel") {
+               setStore("sandboxChoice", undefined)
+               return
+            }
             sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
+              message: store.sandboxChoice
             })
+            setStore("sandboxChoice", undefined)
           }}
         />
       </Match>
@@ -429,20 +435,28 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             </box>
           )
 
+          const isSandboxPrompt = props.request.metadata?.force_sandbox_prompt
+          const promptOptions = isSandboxPrompt
+             ? { once_sandbox: "Run Sandbox (Once)", once_native: "Run Native (Once)", always_sandbox: "Always Sandbox", always_native: "Always Native", reject: "Reject" } as Record<string, string>
+             : { once: "Allow once", always: "Allow always", reject: "Reject" } as Record<string, string>
+
           const body = (
             <Prompt
               title="Permission required"
               header={header()}
               body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={promptOptions}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
-                if (option === "always") {
+                const opt = option as string
+                if (opt.startsWith("always")) {
+                  if (opt === "always_sandbox") setStore("sandboxChoice", "always_sandbox")
+                  else if (opt === "always_native") setStore("sandboxChoice", "always_native")
                   setStore("stage", "always")
                   return
                 }
-                if (option === "reject") {
+                if (opt === "reject") {
                   if (session()?.parentID) {
                     setStore("stage", "reject")
                     return
@@ -453,9 +467,15 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   })
                   return
                 }
+
+                let msg: string | undefined = undefined
+                if (opt === "once_sandbox") msg = "sandbox"
+                else if (opt === "once_native") msg = "native"
+
                 sdk.client.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
+                  message: msg
                 })
               }}
             />

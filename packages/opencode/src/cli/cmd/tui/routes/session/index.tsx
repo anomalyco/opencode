@@ -1736,6 +1736,7 @@ function InlineTool(props: {
 
 function BlockTool(props: {
   title: string
+  badge?: JSX.Element
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
@@ -1766,12 +1767,20 @@ function BlockTool(props: {
       <Show
         when={props.spinner}
         fallback={
-          <text paddingLeft={3} fg={theme.textMuted}>
-            {props.title}
-          </text>
+          <box paddingLeft={3} flexDirection="row" gap={1}>
+            <text fg={theme.textMuted}>{props.title}</text>
+            <Show when={props.badge}>
+              {props.badge}
+            </Show>
+          </box>
         }
       >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+        <box flexDirection="row" gap={1}>
+          <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+          <Show when={props.badge}>
+            {props.badge}
+          </Show>
+        </box>
       </Show>
       {props.children}
       <Show when={error()}>
@@ -1814,9 +1823,22 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const title = createMemo(() => {
     const desc = props.input.description ?? "Shell"
     const wd = workdirDisplay()
+    
     if (!wd) return `# ${desc}`
     if (desc.includes(wd)) return `# ${desc}`
     return `# ${desc} in ${wd}`
+  })
+
+  const badge = createMemo(() => {
+    const meta = props.metadata as any
+    if (meta.sandboxed) {
+      return (
+        <box backgroundColor={theme.accent} paddingLeft={1} paddingRight={1}>
+          <text fg={theme.background}>Sandboxed[{meta.provider || "srt"}]</text>
+        </box>
+      )
+    }
+    return undefined
   })
 
   return (
@@ -1824,6 +1846,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
       <Match when={props.metadata.output !== undefined}>
         <BlockTool
           title={title()}
+          badge={badge()}
           part={props.part}
           spinner={isRunning()}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
@@ -1842,6 +1865,11 @@ function Bash(props: ToolProps<typeof BashTool>) {
       <Match when={true}>
         <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
           {props.input.command}
+          <Show when={(props.metadata as any).sandboxed}>
+            <span style={{ bg: theme.accent, fg: theme.background }}>
+              {" Sandboxed[" + ((props.metadata as any).provider || "srt") + "] "}
+            </span>
+          </Show>
         </InlineTool>
       </Match>
     </Switch>

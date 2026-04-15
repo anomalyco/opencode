@@ -40,7 +40,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed(undefined),
 }
 
 Shell.acceptable.reset()
@@ -123,6 +123,7 @@ const capture = (requests: Array<Omit<Permission.Request, "id" | "sessionID" | "
     Effect.sync(() => {
       requests.push(req)
       if (stop) throw stop
+      return undefined
     }),
 })
 

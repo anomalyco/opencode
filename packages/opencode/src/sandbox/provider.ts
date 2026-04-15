@@ -51,6 +51,11 @@ export class SrtProvider extends SandboxProvider {
     const denyWrite: string[] = []
     const denyRead = [os.homedir()]
 
+    // Hard-block securecode/opencode configuration directories to prevent sandbox escape mutations
+    const localOpencodeDir = path.join(options.cwd, ".opencode")
+    denyWrite.push(localOpencodeDir)
+    denyRead.push(localOpencodeDir)
+
     if (options.denyWorkspacePatterns) {
       for (const pattern of options.denyWorkspacePatterns) {
         try {

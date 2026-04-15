@@ -212,7 +212,7 @@ describe("tool.task", () => {
             extra: { promptOps },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed(undefined),
           },
         )
 
@@ -252,7 +252,7 @@ describe("tool.task", () => {
               metadata: () => Effect.void,
               ask: (input) =>
                 Effect.sync(() => {
-                  calls.push(input)
+                  calls.push(input); return undefined;
                 }),
             },
           )
@@ -299,7 +299,7 @@ describe("tool.task", () => {
             extra: { promptOps },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed(undefined),
           },
         )
 
@@ -338,7 +338,7 @@ describe("tool.task", () => {
               extra: { promptOps },
               messages: [],
               metadata: () => Effect.void,
-              ask: () => Effect.void,
+              ask: () => Effect.succeed(undefined),
             },
           )
 

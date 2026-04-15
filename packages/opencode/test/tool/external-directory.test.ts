@@ -28,7 +28,7 @@ function makeCtx() {
     ...baseCtx,
     ask: (req) =>
       Effect.sync(() => {
-        requests.push(req)
+        requests.push(req); return undefined
       }),
   }
   return { requests, ctx }

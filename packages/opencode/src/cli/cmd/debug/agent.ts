@@ -185,6 +185,7 @@ async function createToolContext(agent: Agent.Info) {
             throw new Permission.DeniedError({ ruleset })
           }
         }
+        return undefined
       })
     },
   }

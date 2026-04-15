@@ -170,7 +170,7 @@ Use this skill.
             ...baseCtx,
             ask: (req) =>
               Effect.sync(() => {
-                requests.push(req)
+                requests.push(req); return undefined
               }),
           }
 

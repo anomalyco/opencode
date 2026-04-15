@@ -1064,7 +1064,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       extra: { bypassCwdCheck: true, ...extra },
                       messages: [],
                       metadata: () => Effect.void,
-                      ask: () => Effect.void,
+                      ask: () => Effect.succeed(undefined),
                     })
                     .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
                 }

@@ -54,7 +54,7 @@ type AskInput = {
 }
 
 type ToolCtx = typeof baseCtx & {
-  ask: (input: AskInput) => Effect.Effect<void>
+  ask: (input: AskInput) => Effect.Effect<string | undefined>
 }
 
 const execute = async (params: { patchText: string }, ctx: ToolCtx) => {
@@ -70,6 +70,7 @@ const makeCtx = () => {
     ask: (input) =>
       Effect.sync(() => {
         calls.push(input)
+        return undefined
       }),
   }
 

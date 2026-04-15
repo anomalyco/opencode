@@ -327,7 +327,7 @@ export namespace Config {
 
   export const SandboxOptions = z
     .object({
-      enabled: z.union([z.boolean(), z.literal("auto")]).optional().describe("Enable or enforce sandbox containerization"),
+      enabled: z.union([z.boolean(), z.literal("auto"), z.literal("prompt")]).optional().describe("Enable or enforce sandbox containerization"),
       provider: z.literal("srt").optional().describe("The sandbox runtime provider to use (default: srt)"),
       domains: z.array(z.string()).optional().describe("Whitelisted domains for the sandbox proxy. Empty array airgaps the container"),
       env_whitelist: z.array(z.string()).optional().describe("Whitelist of environment variables passed to the sandboxed shell"),
@@ -1455,7 +1455,7 @@ export namespace Config {
         const deps: Fiber.Fiber<void, never>[] = []
 
         for (const dir of unique(directories)) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || dir.endsWith(path.sep + "opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
