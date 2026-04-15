@@ -1659,6 +1659,14 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Minimum number of lines in pasted content before it is summarized (default: 3)
+     */
+    paste_min_lines?: number
+    /**
+     * Minimum character length of pasted content before it is summarized (default: 150)
+     */
+    paste_min_length?: number
   }
 }
 

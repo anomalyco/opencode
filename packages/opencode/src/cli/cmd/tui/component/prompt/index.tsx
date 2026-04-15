@@ -1068,8 +1068,10 @@ export function Prompt(props: PromptProps) {
                 }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+                const minLines = sync.data.config.experimental?.paste_min_lines ?? 3
+                const minLength = sync.data.config.experimental?.paste_min_length ?? 150
                 if (
-                  (lineCount >= 3 || pastedContent.length > 150) &&
+                  (lineCount >= minLines || pastedContent.length > minLength) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()

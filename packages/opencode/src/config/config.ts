@@ -1051,6 +1051,18 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          paste_min_lines: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Minimum number of lines in pasted content before it is summarized (default: 3)"),
+          paste_min_length: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Minimum character length of pasted content before it is summarized (default: 150)"),
         })
         .optional(),
     })
