@@ -1,5 +1,5 @@
 import { sep } from "node:path"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace FileIgnore {
   const FOLDERS = new Set([

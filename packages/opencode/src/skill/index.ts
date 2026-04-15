@@ -2,19 +2,18 @@ import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
-import { NamedError } from "@opencode-ai/util/error"
+import { Effect, Layer, Context } from "effect"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
-import { Filesystem } from "@/util/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { Log } from "../util/log"
 import { Discovery } from "./discovery"
 
@@ -139,28 +138,20 @@ export namespace Skill {
     config: Config.Interface,
     discovery: Discovery.Interface,
     bus: Bus.Interface,
+    fsys: AppFileSystem.Interface,
     directory: string,
     worktree: string,
   ) {
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
       for (const dir of EXTERNAL_DIRS) {
         const root = path.join(Global.Path.home, dir)
-        const isDir = yield* Effect.promise(() => Filesystem.isDir(root))
-        if (!isDir) continue
+        if (!(yield* fsys.isDir(root))) continue
         yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
       }
 
-      const upDirs = yield* Effect.promise(async () => {
-        const dirs: string[] = []
-        for await (const root of Filesystem.up({
-          targets: EXTERNAL_DIRS,
-          start: directory,
-          stop: worktree,
-        })) {
-          dirs.push(root)
-        }
-        return dirs
-      })
+      const upDirs = yield* fsys
+        .up({ targets: EXTERNAL_DIRS, start: directory, stop: worktree })
+        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
       for (const root of upDirs) {
         yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
@@ -176,8 +167,7 @@ export namespace Skill {
     for (const item of cfg.skills?.paths ?? []) {
       const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
       const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
-      const isDir = yield* Effect.promise(() => Filesystem.isDir(dir))
-      if (!isDir) {
+      if (!(yield* fsys.isDir(dir))) {
         log.warn("skill path not found", { path: dir })
         continue
       }
@@ -196,18 +186,19 @@ export namespace Skill {
     log.info("init", { count: Object.keys(state.skills).length })
   })
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
 
-  export const layer: Layer.Layer<Service, never, Discovery.Service | Config.Service | Bus.Service> = Layer.effect(
+  export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
       const config = yield* Config.Service
       const bus = yield* Bus.Service
+      const fsys = yield* AppFileSystem.Service
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
           const s: State = { skills: {}, dirs: new Set() }
-          yield* loadSkills(s, config, discovery, bus, ctx.directory, ctx.worktree)
+          yield* loadSkills(s, config, discovery, bus, fsys, ctx.directory, ctx.worktree)
           return s
         }),
       )
@@ -238,47 +229,36 @@ export namespace Skill {
     }),
   )
 
-  export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(Discovery.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Bus.layer),
+    Layer.provide(AppFileSystem.defaultLayer),
   )
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) return "No skills are currently available."
-
     if (opts.verbose) {
       return [
         "<available_skills>",
-        ...list.flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
-          "  </skill>",
-        ]),
+        ...list
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .flatMap((skill) => [
+            "  <skill>",
+            `    <name>${skill.name}</name>`,
+            `    <description>${skill.description}</description>`,
+            `    <location>${pathToFileURL(skill.location).href}</location>`,
+            "  </skill>",
+          ]),
         "</available_skills>",
       ].join("\n")
     }
 
-    return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
-  }
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(name: string) {
-    return runPromise((skill) => skill.get(name))
-  }
-
-  export async function all() {
-    return runPromise((skill) => skill.all())
-  }
-
-  export async function dirs() {
-    return runPromise((skill) => skill.dirs())
-  }
-
-  export async function available(agent?: Agent.Info) {
-    return runPromise((skill) => skill.available(agent))
+    return [
+      "## Available Skills",
+      ...list
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+        .map((skill) => `- **${skill.name}**: ${skill.description}`),
+    ].join("\n")
   }
 }

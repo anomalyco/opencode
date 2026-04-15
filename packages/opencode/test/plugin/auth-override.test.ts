@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Effect } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
@@ -39,14 +40,18 @@ describe("plugin.auth-override", () => {
     const methods = await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        return ProviderAuth.methods()
+        return Effect.runPromise(
+          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
+        )
       },
     })
 
     const plainMethods = await Instance.provide({
       directory: plain.path,
       fn: async () => {
-        return ProviderAuth.methods()
+        return Effect.runPromise(
+          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
+        )
       },
     })
 
