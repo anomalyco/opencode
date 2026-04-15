@@ -37,13 +37,6 @@ export namespace Permission {
     .pipe(withStatics((s) => ({ zod: zod(s) })))
   export type Ruleset = Schema.Schema.Type<typeof Ruleset>
 
-  export class Tool extends Schema.Class<Tool>("PermissionTool")({
-    messageID: MessageID,
-    callID: Schema.String,
-  }) {
-    static readonly zod = zod(this)
-  }
-
   export class Request extends Schema.Class<Request>("PermissionRequest")({
     id: PermissionID,
     sessionID: SessionID,
@@ -51,7 +44,12 @@ export namespace Permission {
     patterns: Schema.Array(Schema.String),
     metadata: Schema.Record(Schema.String, Schema.Unknown),
     always: Schema.Array(Schema.String),
-    tool: Schema.optional(Tool),
+    tool: Schema.optional(
+      Schema.Struct({
+        messageID: MessageID,
+        callID: Schema.String,
+      }),
+    ),
   }) {
     static readonly zod = zod(this)
   }
@@ -85,7 +83,7 @@ export namespace Permission {
           sessionID: SessionID,
           requestID: PermissionID,
           reply: Reply,
-        }).annotate({ identifier: "PermissionReplied" }),
+        }),
       ),
     ),
   }
