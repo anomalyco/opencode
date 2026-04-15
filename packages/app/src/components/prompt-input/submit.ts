@@ -3,7 +3,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
-import type { Accessor } from "solid-js"
+import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -138,13 +138,17 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
     })
 
-  setBusy()
-  add()
+  batch(() => {
+    setBusy()
+    add()
+  })
 
   try {
     if (!(await wait())) {
-      setIdle()
-      remove()
+      batch(() => {
+        setIdle()
+        remove()
+      })
       return false
     }
 
@@ -158,8 +162,10 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     })
     return true
   } catch (err) {
-    setIdle()
-    remove()
+    batch(() => {
+      setIdle()
+      remove()
+    })
     throw err
   }
 }
