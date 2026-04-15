@@ -6,9 +6,9 @@ import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { Npm } from "../npm"
-import { Hash } from "../util/hash"
+import { Hash } from "@opencode-ai/shared/util/hash"
 import { Plugin } from "../plugin"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
@@ -19,9 +19,9 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Effect, Layer, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 
 // Direct imports for bundled providers
@@ -1043,6 +1043,7 @@ export namespace Provider {
       const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
           using _ = log.time("state")
+          const bridge = yield* EffectBridge.make()
           const cfg = yield* config.get()
           const modelsDev = yield* Effect.promise(() => ModelsDev.get())
           const database = mapValues(modelsDev, fromModelsDevProvider)
@@ -1223,8 +1224,7 @@ export namespace Provider {
 
             const options = yield* Effect.promise(() =>
               plugin.auth!.loader!(
-                () =>
-                  Effect.runPromise(auth.get(providerID).pipe(Effect.orDie, Effect.provide(EffectLogger.layer))) as any,
+                () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
                 database[plugin.auth!.provider],
               ),
             )
@@ -1529,21 +1529,6 @@ export namespace Provider {
         if (s.models.has(key)) return s.models.get(key)!
 
         return yield* Effect.promise(async () => {
-          const url = (() => {
-            const item = envs["OPENCODE_E2E_LLM_URL"]
-            if (typeof item !== "string" || item === "") return
-            return item
-          })()
-          if (url) {
-            const language = createOpenAICompatible({
-              name: model.providerID,
-              apiKey: "test-key",
-              baseURL: url,
-            }).chatModel(model.api.id)
-            s.models.set(key, language)
-            return language
-          }
-
           const provider = s.providers[model.providerID]
           const sdk = await resolveSDK(model, s, envs)
 

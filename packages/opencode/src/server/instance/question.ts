@@ -8,6 +8,12 @@ import z from "zod"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
+const Reply = z.object({
+  answers: Question.Answer.zod
+    .array()
+    .describe("User answers in order of questions (each answer is an array of selected labels)"),
+})
+
 export const QuestionRoutes = lazy(() =>
   new Hono()
     .get(
@@ -56,7 +62,7 @@ export const QuestionRoutes = lazy(() =>
           requestID: QuestionID.zod,
         }),
       ),
-      validator("json", Question.Reply.zod),
+      validator("json", Reply),
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")

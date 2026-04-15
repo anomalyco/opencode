@@ -8,7 +8,7 @@ import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
 import { Filesystem } from "../util/filesystem"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace JsonMigration {
   const log = Log.create({ service: "json-migration" })
