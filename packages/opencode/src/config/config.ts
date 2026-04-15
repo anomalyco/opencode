@@ -604,8 +604,8 @@ export namespace Config {
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
-      messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
+      messages_first: z.string().optional().default("ctrl+g,ctrl+home").describe("Navigate to first message"),
+      messages_last: z.string().optional().default("ctrl+alt+g,ctrl+end").describe("Navigate to last message"),
       messages_next: z.string().optional().default("none").describe("Navigate to next message"),
       messages_previous: z.string().optional().default("none").describe("Navigate to previous message"),
       messages_last_user: z.string().optional().default("none").describe("Navigate to last user message"),
@@ -645,14 +645,14 @@ export namespace Config {
       input_select_right: z.string().optional().default("shift+right").describe("Select right in input"),
       input_select_up: z.string().optional().default("shift+up").describe("Select up in input"),
       input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
-      input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
-      input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
+      input_line_home: z.string().optional().default("ctrl+a,home").describe("Move to start of line in input"),
+      input_line_end: z.string().optional().default("ctrl+e,end").describe("Move to end of line in input"),
       input_select_line_home: z
         .string()
         .optional()
-        .default("ctrl+shift+a")
+        .default("ctrl+shift+a,shift+home")
         .describe("Select to start of line in input"),
-      input_select_line_end: z.string().optional().default("ctrl+shift+e").describe("Select to end of line in input"),
+      input_select_line_end: z.string().optional().default("ctrl+shift+e,shift+end").describe("Select to end of line in input"),
       input_visual_line_home: z.string().optional().default("alt+a").describe("Move to start of visual line in input"),
       input_visual_line_end: z.string().optional().default("alt+e").describe("Move to end of visual line in input"),
       input_select_visual_line_home: z
@@ -665,14 +665,14 @@ export namespace Config {
         .optional()
         .default("alt+shift+e")
         .describe("Select to end of visual line in input"),
-      input_buffer_home: z.string().optional().default("home").describe("Move to start of buffer in input"),
-      input_buffer_end: z.string().optional().default("end").describe("Move to end of buffer in input"),
+      input_buffer_home: z.string().optional().default("ctrl+home").describe("Move to start of buffer in input"),
+      input_buffer_end: z.string().optional().default("ctrl+end").describe("Move to end of buffer in input"),
       input_select_buffer_home: z
         .string()
         .optional()
-        .default("shift+home")
+        .default("ctrl+shift+home")
         .describe("Select to start of buffer in input"),
-      input_select_buffer_end: z.string().optional().default("shift+end").describe("Select to end of buffer in input"),
+      input_select_buffer_end: z.string().optional().default("ctrl+shift+end").describe("Select to end of buffer in input"),
       input_delete_line: z.string().optional().default("ctrl+shift+d").describe("Delete line in input"),
       input_delete_to_line_end: z.string().optional().default("ctrl+k").describe("Delete to end of line in input"),
       input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
