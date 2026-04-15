@@ -930,6 +930,10 @@ export function Prompt(props: PromptProps) {
                 }
                 // DEBUG: Log key events to diagnose Command+V issue
                 console.log("DEBUG keydown:", { name: e.name, ctrl: e.ctrl, meta: e.meta, shift: e.shift })
+                // Show toast for meta+key combos to help diagnose
+                if (e.meta && (e.name === "v" || e.name === "c")) {
+                  toast.show({ message: `DEBUG: meta+${e.name} detected`, variant: "info", duration: 2000 })
+                }
                 // ULTRA AGGRESSIVE: Block ANY exit attempt when meta or ctrl is held
                 // This is a last-resort fix for Mac Command+V which may not arrive as expected
                 if (e.meta || e.ctrl) {
