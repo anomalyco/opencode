@@ -20,7 +20,7 @@ export namespace Terminal {
 
   function mode(bg: RGBA | null): "dark" | "light" {
     if (!bg) return "dark"
-    const luminance = (0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b) / 255
+    const luminance = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
     return luminance > 0.5 ? "light" : "dark"
   }
 
