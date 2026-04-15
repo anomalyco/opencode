@@ -144,7 +144,7 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
-      permission: Permission.Ruleset.optional(),
+      permission: Permission.Ruleset.zod.optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -193,7 +193,7 @@ export namespace Session {
   export const RemoveInput = SessionID.zod
   export const SetTitleInput = z.object({ sessionID: SessionID.zod, title: z.string() })
   export const SetArchivedInput = z.object({ sessionID: SessionID.zod, time: z.number().optional() })
-  export const SetPermissionInput = z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset })
+  export const SetPermissionInput = z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset.zod })
   export const SetRevertInput = z.object({
     sessionID: SessionID.zod,
     revert: Info.shape.revert,

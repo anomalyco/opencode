@@ -121,14 +121,13 @@ Why `question` first:
 
 Do not re-architect business logic during the HTTP migration. `HttpApi` handlers should call the same Effect services already used by the Hono handlers.
 
-### 4. Run in parallel before replacing
+### 4. Build in parallel, do not bridge into Hono
 
-Prefer mounting an experimental `HttpApi` surface alongside the existing Hono routes first. That lowers migration risk and lets us compare:
+The `HttpApi` implementation lives under `src/server/instance/httpapi/` as a standalone Effect HTTP server. It is **not mounted into the Hono app**. There is no `toWebHandler` bridge, no Hono `Handler` export, and no `.route()` call wiring it into `experimental.ts`.
 
-- handler ergonomics
-- OpenAPI output
-- auth and middleware integration
-- test ergonomics
+The standalone server (`httpapi/server.ts`) can be started independently and proves the routes work. Tests exercise it via `HttpRouter.serve` with `NodeHttpServer.layerTest`.
+
+The goal is to build enough route coverage in the Effect server that the Hono server can eventually be replaced entirely. Until then, the two implementations exist side by side but are completely separate processes.
 
 ### 5. Migrate JSON route groups gradually
 
@@ -218,17 +217,15 @@ Placement rule:
 
 Suggested file layout for a repeatable spike:
 
-- `src/server/instance/httpapi/question.ts`
-- `src/server/instance/httpapi/index.ts`
-- `test/server/question-httpapi.test.ts`
-- `test/server/question-httpapi-openapi.test.ts`
+- `src/server/instance/httpapi/question.ts` — contract and handler layer for one route group
+- `src/server/instance/httpapi/server.ts` — standalone Effect HTTP server that composes all groups
+- `test/server/question-httpapi.test.ts` — end-to-end test against the real service
 
 Suggested responsibilities:
 
-- `question.ts` defines the `HttpApi` contract and `HttpApiBuilder.group(...)` handlers for the experimental slice
-- `index.ts` combines experimental `HttpApi` groups and exposes the mounted handler or layer
-- `question-httpapi.test.ts` proves the route works end-to-end against the real service
-- `question-httpapi-openapi.test.ts` proves the generated OpenAPI is acceptable for the migrated endpoints
+- `question.ts` defines the `HttpApi` contract and `HttpApiBuilder.group(...)` handlers
+- `server.ts` composes all route groups into one `HttpRouter.serve` layer with shared middleware (auth, instance lookup)
+- tests use `ExperimentalHttpApiServer.layerTest` to run against a real in-process HTTP server
 
 ## Example migration shape
 
@@ -248,11 +245,12 @@ Each route-group spike should follow the same shape.
 - keep handler bodies thin
 - keep transport mapping at the HTTP boundary only
 
-### 3. Mounting
+### 3. Standalone server
 
-- mount under an experimental prefix such as `/experimental/httpapi`
-- keep existing Hono routes unchanged
-- expose separate OpenAPI output for the experimental slice first
+- the Effect HTTP server is self-contained in `httpapi/server.ts`
+- it is **not** mounted into the Hono app — no bridge, no `toWebHandler`
+- route paths use the `/experimental/httpapi` prefix so they match the eventual cutover
+- each route group exposes its own OpenAPI doc endpoint
 
 ### 4. Verification
 
@@ -263,53 +261,32 @@ Each route-group spike should follow the same shape.
 
 ## Boundary composition
 
-The first slices should keep the existing outer server composition and only replace the route contract and handler layer.
+The standalone Effect server owns its own middleware stack. It does not share middleware with the Hono server.
 
 ### Auth
 
-- keep `AuthMiddleware` at the outer Hono app level
-- do not duplicate auth checks inside each `HttpApi` group for the first parallel slices
-- treat auth as an already-satisfied transport concern before the request reaches the `HttpApi` handler
-
-Practical rule:
-
-- if a route is currently protected by the shared server middleware stack, the experimental `HttpApi` route should stay mounted behind that same stack
+- the standalone server implements auth as an `HttpApiMiddleware.Service` using `HttpApiSecurity.basic`
+- each route group's `HttpApi` is wrapped with `.middleware(Authorization)` before being served
+- this is independent of the Hono `AuthMiddleware` — when the Effect server eventually replaces Hono, this becomes the only auth layer
 
 ### Instance and workspace lookup
 
-- keep `WorkspaceRouterMiddleware` as the source of truth for resolving `directory`, `workspace`, and session-derived workspace context
-- let that middleware provide `Instance.current` and `WorkspaceContext` before the request reaches the `HttpApi` handler
-- keep the `HttpApi` handlers unaware of path-to-instance lookup details when the existing Hono middleware already handles them
-
-Practical rule:
-
-- `HttpApi` handlers should yield services from context and assume the correct instance has already been provided
-- only move instance lookup into the `HttpApi` layer if we later decide to migrate the outer middleware boundary itself
+- the standalone server resolves instance context via an `HttpRouter.middleware` that reads `x-opencode-directory` headers and `directory` query params
+- this is the Effect equivalent of the Hono `WorkspaceRouterMiddleware`
+- `HttpApi` handlers yield services from context and assume the correct instance has already been provided
 
 ### Error mapping
 
 - keep domain and service errors typed in the service layer
 - declare typed transport errors on the endpoint only when the route can actually return them intentionally
-- prefer explicit endpoint-level error schemas over relying on the outer Hono `ErrorMiddleware` for expected route behavior
-
-Practical rule:
-
-- request decoding failures should remain transport-level `400`s
+- request decoding failures are transport-level `400`s handled by Effect `HttpApi` automatically
 - storage or lookup failures that are part of the route contract should be declared as typed endpoint errors
-- unexpected defects can still fall through to the outer error middleware while the slice is experimental
-
-For the current parallel slices, this means:
-
-- auth still composes outside `HttpApi`
-- instance selection still composes outside `HttpApi`
-- success payloads should be schema-defined from canonical Effect schemas
-- known route errors should be modeled at the endpoint boundary incrementally instead of all at once
 
 ## Exit criteria for the spike
 
 The first slice is successful if:
 
-- the endpoints run in parallel with the current Hono routes
+- the standalone Effect server starts and serves the endpoints independently of the Hono server
 - the handlers reuse the existing Effect service
 - request decoding and response shapes are schema-defined from canonical Effect schemas
 - any remaining Zod boundary usage is derived from `.zod` or clearly temporary
@@ -324,8 +301,8 @@ The first parallel `question` spike gave us a concrete pattern to reuse.
 - scalar or collection schemas such as `Question.Answer` should stay as schemas and use helpers like `withStatics(...)` instead of being forced into classes.
 - if an `HttpApi` success schema uses `Schema.Class`, the handler or underlying service needs to return real schema instances rather than plain objects.
 - internal event payloads can stay anonymous when we want to avoid adding extra named OpenAPI component churn for non-route shapes.
-- the experimental slice should stay mounted in parallel and keep calling the existing service layer unchanged.
-- compare generated OpenAPI semantically at the route and schema level; in the current setup the exported OpenAPI paths do not include the outer Hono mount prefix.
+- the experimental slice should stay as a standalone Effect server and keep calling the existing service layer unchanged.
+- compare generated OpenAPI semantically at the route and schema level.
 
 ## Route inventory
 

@@ -33,7 +33,7 @@ export const PermissionRoutes = lazy(() =>
           requestID: PermissionID.zod,
         }),
       ),
-      validator("json", z.object({ reply: Permission.Reply, message: z.string().optional() })),
+      validator("json", z.object({ reply: Permission.Reply.zod, message: z.string().optional() })),
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")
@@ -60,7 +60,7 @@ export const PermissionRoutes = lazy(() =>
             description: "List of pending permissions",
             content: {
               "application/json": {
-                schema: resolver(Permission.Request.array()),
+                schema: resolver(Permission.Request.zod.array()),
               },
             },
           },

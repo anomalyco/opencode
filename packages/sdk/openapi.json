@@ -8143,7 +8143,8 @@
         "type": "object",
         "properties": {
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "callID": {
             "type": "string"
@@ -8155,10 +8156,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "questions": {
             "description": "Questions to ask",
@@ -8196,10 +8199,12 @@
         "type": "object",
         "properties": {
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "requestID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que.*"
           },
           "answers": {
             "type": "array",
@@ -8227,10 +8232,12 @@
         "type": "object",
         "properties": {
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "requestID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que.*"
           }
         },
         "required": ["sessionID", "requestID"]
