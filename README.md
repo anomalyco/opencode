@@ -26,18 +26,24 @@ Once installed, simply run `securecode` in your terminal to start the TUI.
 
 ---
 
-## Configuration Security Defaults
+## Configuration Protection Policy
 
-SecureCode automatically applies absolute, un-bypassable blocks on all `.opencode` configuration directories. The target working directory's `.opencode` folder, as well as `~/.opencode`, are intrinsically hard-blocked from both read and write access (`denyRead`, `denyWrite`) across every active sandbox.
+SecureCode sandbox blocks access to all `.opencode` configuration directories. The active workspace `.opencode` folder, `~/.config/opencode`, and `~/.opencode` are marked `denyRead` and `denyWrite` across all sandboxes.
 
-This is fundamentally necessary to guarantee that sandboxed AI bash processes and hijacked MCPs cannot edit or escalate their own internal configurations to orchestrate a silent perimeter breach.
+This prevents sandboxed bash processes and MCPs from modifying internal configurations and escalating privileges.
 
-SecureCode integrates with the pre-existing `.opencode` directory paths, so you do not need to reconfigure your standard environments. However, it relies exclusively on a completely separate file named `securecode.json` (or `securecode.jsonc`) to apply sandbox barriers. This ensures your base upstream permissions (like `"permission": { "bash": "allow" }` configured inside `opencode.json`) remain strictly decoupled from the sandbox execution environment overlay.
+Additionally, the default SRT sandbox enforces strict containment baselines out-of-the-box:
+- **Filesystem**: Read and write capabilities are restricted to the active working directory and `/tmp` (with read-only exceptions limited to development toolchains like `.nvm` or `.cargo`). The user's home directory is explicitly masked via `denyRead`.
+- **Networking**: All network egress is disabled by default. Sandboxed processes operate within a network airgap unless specific domains are whitelisted.
 
-Create these configurations at `~/.opencode/securecode.json` (for global rules) and/or `.opencode/securecode.json` inside individual project workspaces. Below are several configuration exemplars ranging from low-friction basics to zero-trust deployments.
+## Setting Up Configurations
 
-#### 1. The Secure Automated Default (Recommended)
-This profile provides the best balance of friction-less AI automation and strict network/environment isolation. It relies on the interplay of two configurations to run commands automatically confined in the sandbox, while safely allowing the AI to dynamically request your permission to bypass network airgaps.
+SecureCode integrates with the existing XDG and `.opencode` directory paths. However, it requires an additional configuration file called `securecode.json` to host the specific parameters for the sandbox.
+
+Create these configurations at `~/.config/opencode/securecode.json` (global rules) and/or `.opencode/securecode.json` (workspace rules). Below are configuration profiles.
+
+#### 1. Automation Default (Recommended)
+This profile provides AI automation with network/environment isolation. It runs commands automatically in the sandbox, allowing SecureCode to request permission to bypass the sandbox and run commands natively if necessary.
 
 **`~/.opencode/opencode.json` (Automation Layer)**:
 ```jsonc
@@ -65,10 +71,10 @@ This profile provides the best balance of friction-less AI automation and strict
 }
 ```
 
-*How it works*: With `"prompt"` mode and `bash: "allow"` combined, the AI executes all queries silently and instantaneously inside the secure `srt` container. However, if the sandbox structurally blocks a command (e.g. proxy denial), the AI can explicitly deploy `request_native_elevation`. This seamlessly transforms the UI into an interactive `[Run Sandbox] / [Run Native]` prompt, allowing you to manually verify its bypass request, temporarily or permanently for that specific command.
+*Mechanism*: With `"prompt"` mode and `bash: "allow"`, SecureCode executes queries inside the `srt` container. If the sandbox blocks a command, SecureCode triggers `request_native_elevation`, invoking an interactive `[Run Sandbox] / [Run Native]` prompt.
 
-### 2. Strict Containment (Zero Fallbacks)
-If you require an infrastructure that strictly cannot be bypassed under any circumstances from the UI, enable strict isolation. The AI operates automatically, but its boundaries are absolute.
+### 2. Strict Containment
+This profile forces all bash commands to execute inside the sandbox permanently. There is no way to bypass the sandbox or request native execution as in the previous option.
 
 **`~/.opencode/securecode.json`**:
 ```jsonc
@@ -80,10 +86,10 @@ If you require an infrastructure that strictly cannot be bypassed under any circ
 }
 ```
 
-*How it works*: The sandbox perimeter relies on `true` instead of `"prompt"`. The AI continues to run automatically but is physically blocked from utilizing native escalation requests. If an isolated execution hits a firewall, it structurally fails permanently in that environment.
+*Mechanism*: Using `enabled: true` instead of `"prompt"` removes the native execution prompt overlay. All commands execute within the sandbox, and any command hitting a perimeter restriction will fail.
 
-### 3. Paranoid Mode (Internal Defenses)
-Designed for ultra-sensitive zero-trust architecture, this restricts the AI perfectly to explicit host data, aggressively cleaning OS environment leakage and blocking inbound/outbound external data extractions.
+### 3. Granular Policy
+This profile demonstrates how to control specific environment variables, whitelist network domains, and deny access to sensitive workspace files like `.env`.
 
 **`~/.opencode/securecode.json`**:
 ```jsonc
@@ -91,9 +97,11 @@ Designed for ultra-sensitive zero-trust architecture, this restricts the AI perf
   "bash_sandbox": {
     "enabled": true,
     "provider": "srt",
-    "domains": [], // Empty array forces absolute network airgap
+    "domains": [
+      "api.github.com",
+      "registry.npmjs.org"
+    ],
     "env_whitelist": [
-      // Only pass necessary variables. Drops sensitive payload leaks!
       "PATH", "HOME", "TERM", "LANG", "USER", "SHELL", "TMPDIR"
     ],
     "deny_workspace_patterns": [
@@ -106,29 +114,8 @@ Designed for ultra-sensitive zero-trust architecture, this restricts the AI perf
 }
 ```
 
-### 4. Completely Interactive (Zero Automation)
-If you do not want the AI running commands in the background silently—sandboxed or not—you can revoke the automation layer while maintaining sandbox boundaries.
-
-**`~/.opencode/opencode.json`**:
-```jsonc
-{
-  "permission": {
-    "bash": "ask" // Overrides automation. Forces generic [Accept] prompts for EVERY execution.
-  }
-}
-```
-**`~/.opencode/securecode.json`**:
-```jsonc
-{
-  "bash_sandbox": {
-    "enabled": "prompt",
-    "provider": "srt"
-  }
-}
-```
-
-### 5. Complete Relax (Development Mode)
-Disables execution boundaries totally. Commands run natively on the original file directories and host OS stack instantly. Use this if you are actively debugging your own native codebase deployments where root-level dependencies or Docker containers are critical and `srt` emulation is failing.
+### 4. Disabled
+Disables execution boundaries. Commands run natively on the host OS. Use this when debugging local deployments where `srt` emulation fails.
 
 **`~/.opencode/securecode.json`**:
 ```jsonc
