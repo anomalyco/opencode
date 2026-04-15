@@ -8,6 +8,7 @@ import { ProjectID } from "../../project/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { InstanceBootstrap } from "../../project/bootstrap"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export const ProjectRoutes = lazy(() =>
   new Hono()
@@ -74,16 +75,15 @@ export const ProjectRoutes = lazy(() =>
       async (c) => {
         const dir = Instance.directory
         const prev = Instance.project
-        const next = await Project.initGit({
-          directory: dir,
-          project: prev,
-        })
+        const next = await AppRuntime.runPromise(
+          Project.Service.use((svc) => svc.initGit({ directory: dir, project: prev })),
+        )
         if (next.id === prev.id && next.vcs === prev.vcs && next.worktree === prev.worktree) return c.json(next)
         await Instance.reload({
           directory: dir,
           worktree: dir,
           project: next,
-          init: InstanceBootstrap,
+          init: () => AppRuntime.runPromise(InstanceBootstrap),
         })
         return c.json(next)
       },
@@ -111,7 +111,7 @@ export const ProjectRoutes = lazy(() =>
       async (c) => {
         const projectID = c.req.valid("param").projectID
         const body = c.req.valid("json")
-        const project = await Project.update({ ...body, projectID })
+        const project = await AppRuntime.runPromise(Project.Service.use((svc) => svc.update({ ...body, projectID })))
         return c.json(project)
       },
     ),
