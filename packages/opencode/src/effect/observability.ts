@@ -46,6 +46,18 @@ export namespace Observability {
     const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
     const SdkBase = await import("@opentelemetry/sdk-trace-base")
 
+    // @effect/opentelemetry creates a NodeTracerProvider but never calls
+    // register(), so the global @opentelemetry/api context manager stays
+    // as the no-op default. Non-Effect code (like the AI SDK) that calls
+    // tracer.startActiveSpan() relies on context.active() to find the
+    // parent span — without a real context manager every span starts a
+    // new trace. Registering AsyncLocalStorageContextManager fixes this.
+    const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
+    const { context } = await import("@opentelemetry/api")
+    const mgr = new AsyncLocalStorageContextManager()
+    mgr.enable()
+    context.setGlobalContextManager(mgr)
+
     return NodeSdk.layer(() => ({
       resource,
       spanProcessor: new SdkBase.BatchSpanProcessor(
