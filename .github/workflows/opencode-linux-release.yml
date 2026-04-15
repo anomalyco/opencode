@@ -26,7 +26,7 @@ jobs:
 
       - name: Prepare linux-x64 release assets
         run: |
-          cp packages/opencode/dist/opencode-linux-x64.tar.gz ./opencode-linux-x64.tar.gz
+          tar -C packages/opencode/dist/opencode-linux-x64/bin -czf ./opencode-linux-x64.tar.gz opencode
           sha256sum ./opencode-linux-x64.tar.gz | tee ./opencode-linux-x64.tar.gz.sha256
 
       - name: Publish release assets
