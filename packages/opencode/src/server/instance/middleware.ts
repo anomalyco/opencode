@@ -63,7 +63,7 @@ async function getSessionWorkspace(url: URL) {
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
-  const log = Log.Default.clone().tag("service", "workspace-router")
+  const log = Log.create({ service: "workspace-router" })
 
   return async (c, next) => {
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
