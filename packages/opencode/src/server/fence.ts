@@ -70,10 +70,7 @@ export const FenceMiddleware: MiddlewareHandler = async (c, next) => {
 
   const prev = load()
   await next()
-
   const current = diff(prev, load())
-
-  console.log("FENCE DIFF", current, load())
 
   if (Object.keys(current).length > 0) {
     log.info("header", {
