@@ -19,14 +19,14 @@
     "test:unit": "bun test --preload ./happydom.ts ./src",
     "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
-    "test:e2e:local": "bun script/e2e-local.ts",
+    "test:e2e:local": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report"
   },
   "license": "MIT",
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
-    "@playwright/test": "1.57.0",
+    "@playwright/test": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "catalog:",

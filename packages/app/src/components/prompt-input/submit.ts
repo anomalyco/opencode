@@ -13,7 +13,6 @@ import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { promptProbe } from "@/testing/prompt"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
@@ -307,7 +306,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     input.addToHistory(currentPrompt, mode)
     input.resetHistoryNavigation()
-    promptProbe.start()
 
     const projectDirectory = sdk.directory
     const isNewSession = !params.id
@@ -427,7 +425,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    promptProbe.submit({ sessionID: session.id, directory: sessionDirectory })
     input.onSubmit?.()
 
     if (mode === "shell") {

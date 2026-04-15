@@ -9,7 +9,9 @@
     "./openapi": "./src/openapi.ts",
     "./definition": "./src/definition/index.ts",
     "./definition/api": "./src/definition/api.ts",
-    "./api": "./src/api/index.ts"
+    "./definition/question": "./src/definition/question.ts",
+    "./api": "./src/api/index.ts",
+    "./api/question": "./src/api/question.ts"
   },
   "files": [
     "dist"
@@ -20,5 +22,8 @@
   },
   "devDependencies": {
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "effect": "catalog:"
   }
 }
