@@ -1277,7 +1277,7 @@ export namespace Config {
         return yield* cachedGlobal
       })
 
-      const install = Effect.fnUntraced(function* (dir: string) {
+      const install = Effect.fn("Config.install")(function* (dir: string) {
         const pkg = path.join(dir, "package.json")
         const gitignore = path.join(dir, ".gitignore")
         const plugin = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
@@ -1345,7 +1345,7 @@ export namespace Config {
         )
       })
 
-      const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
+      const loadInstanceState = Effect.fn("Config.loadInstanceState")(function* (ctx: InstanceContext) {
         const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
@@ -1468,13 +1468,16 @@ export namespace Config {
           log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
-        const activeOrg = Option.getOrUndefined(
-          yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+        const active = Option.getOrUndefined(
+          yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
-        if (activeOrg) {
+        if (active?.active_org_id) {
+          const accountID = active.id
+          const orgID = active.active_org_id
+          const url = active.url
           yield* Effect.gen(function* () {
             const [configOpt, tokenOpt] = yield* Effect.all(
-              [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
+              [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
               { concurrency: 2 },
             )
             if (Option.isSome(tokenOpt)) {
@@ -1482,10 +1485,8 @@ export namespace Config {
               yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
             }
 
-            activeOrgName = activeOrg.org.name
-
             if (Option.isSome(configOpt)) {
-              const source = `${activeOrg.account.url}/api/config`
+              const source = `${url}/api/config`
               const next = yield* loadConfig(JSON.stringify(configOpt.value), {
                 dir: path.dirname(source),
                 source,
@@ -1496,6 +1497,7 @@ export namespace Config {
               yield* merge(source, next, "global")
             }
           }).pipe(
+            Effect.withSpan("Config.loadActiveOrgConfig"),
             Effect.catch((err) => {
               log.debug("failed to fetch remote account config", {
                 error: err instanceof Error ? err.message : String(err),
