@@ -47,7 +47,6 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
-import { Env } from "@/env"
 
 export const AppLayer = Layer.mergeAll(
   Observability.layer,
@@ -96,7 +95,6 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-  Env.defaultLayer,
 )
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
