@@ -12,17 +12,12 @@ import { Config } from "../../config/config"
 import { ConsoleState } from "../../config/console-state"
 import { Account, AccountID, OrgID } from "../../account"
 import { AppRuntime } from "../../effect/app-runtime"
-import { AppLayer } from "../../effect/app-runtime"
-import { memoMap } from "../../effect/run-service"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Option } from "effect"
 import { WorkspaceRoutes } from "./workspace"
 import { Agent } from "@/agent/agent"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { QuestionApi, QuestionLive } from "./httpapi/question"
 
 const ConsoleOrgOption = z.object({
   accountID: z.string(),
@@ -42,26 +37,8 @@ const ConsoleSwitchBody = z.object({
   orgID: z.string(),
 })
 
-const question = lazy(() =>
-  HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      AppLayer,
-      HttpApiBuilder.layer(QuestionApi, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
-        Layer.provide(QuestionLive),
-        Layer.provide(HttpServer.layerServices),
-      ),
-    ),
-    {
-      disableLogger: true,
-      memoMap,
-    },
-  ),
-)
-
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
-    .all("/httpapi/question", (c, _next) => question().handler(c.req.raw))
-    .all("/httpapi/question/*", (c, _next) => question().handler(c.req.raw))
     .get(
       "/console",
       describeRoute({
