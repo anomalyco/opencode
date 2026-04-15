@@ -3,15 +3,6 @@
   "provider": {
     "opencode": {
       "options": {},
-      "models": {
-        "claude-opus-4-6": {
-          "limit": {
-            "context": 20000,
-            "input": 20000,
-            "output": 1000,
-          },
-        },
-      },
     },
     "github-copilot": {
       "models": {
