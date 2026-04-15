@@ -35,7 +35,6 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -243,23 +242,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
-  const tip = () => {
-    if (working()) {
-      return (
-        <div class="flex items-center gap-2">
-          <span>{language.t("prompt.action.stop")}</span>
-          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-        </div>
-      )
-    }
-
-    return (
-      <div class="flex items-center gap-2">
-        <span>{language.t("prompt.action.send")}</span>
-        <Icon name="enter" size="small" class="text-icon-base" />
-      </div>
-    )
-  }
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -297,6 +279,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
+  const blank = createMemo(() => {
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
+  })
+  const stopping = createMemo(() => working() && blank())
+  const tip = () => {
+    if (stopping()) {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.action.stop")}</span>
+          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+        </div>
+      )
+    }
+
+    return (
+      <div class="flex items-center gap-2">
+        <span>{language.t("prompt.action.send")}</span>
+        <Icon name="enter" size="small" class="text-icon-base" />
+      </div>
+    )
+  }
 
   const contextItems = createMemo(() => {
     const items = prompt.context.items()
@@ -631,7 +638,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
-    promptProbe.select(cmd.id)
     closePopover()
     const images = imageAttachments()
 
@@ -720,21 +726,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
     })
   })
-
-  if (promptEnabled()) {
-    createEffect(() => {
-      promptProbe.set({
-        popover: store.popover,
-        slash: {
-          active: slashActive() ?? null,
-          ids: slashFlat().map((cmd) => cmd.id),
-        },
-      })
-    })
-
-    onCleanup(() => promptProbe.clear())
-  }
-
   const selectPopoverActive = () => {
     if (store.popover === "at") {
       const items = atFlat()
@@ -1071,17 +1062,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
     return permission.isAutoAccepting(id, sdk.directory)
   })
-  const acceptLabel = createMemo(() =>
-    language.t(accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable"),
-  )
-  const toggleAccept = () => {
-    if (!params.id) {
-      permission.toggleAutoAcceptDirectory(sdk.directory)
-      return
-    }
-
-    permission.toggleAutoAccept(params.id, sdk.directory)
-  }
 
   const { abort, handleSubmit } = createPromptSubmit({
     info,
@@ -1325,11 +1305,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (
-              target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
-              )
-            ) {
+            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
               return
             }
             editorRef?.focus()
@@ -1407,17 +1383,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
+              <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                  disabled={store.mode !== "normal" || (!working() && blank())}
                   tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={working() ? "stop" : "arrow-up"}
+                  icon={stopping() ? "stop" : "arrow-up"}
                   variant="primary"
                   class="size-8"
                   style={buttons()}
-                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
               </Tooltip>
             </div>
@@ -1589,28 +1565,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </TooltipKeybind>
                   </div>
                 </Show>
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={acceptLabel()}
-                  keybind={command.keybind("permissions.autoaccept")}
-                >
-                  <Button
-                    data-action="prompt-permissions"
-                    variant="ghost"
-                    onClick={toggleAccept}
-                    classList={{
-                      "h-7 w-7 p-0 shrink-0 flex items-center justify-center": true,
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
-                    }}
-                    style={control()}
-                    aria-label={acceptLabel()}
-                    aria-pressed={accepting()}
-                  >
-                    <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
-                  </Button>
-                </TooltipKeybind>
               </div>
             </div>
           </div>

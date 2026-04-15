@@ -1,9 +1,8 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { AppFileSystem } from "@/filesystem"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -49,7 +48,7 @@ export namespace McpAuth {
     readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/McpAuth") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/McpAuth") {}
 
   export const layer = Layer.effect(
     Service,
@@ -141,33 +140,5 @@ export namespace McpAuth {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  // Async facades for backward compat (used by McpOAuthProvider, CLI)
-
-  export const get = async (mcpName: string) => runPromise((svc) => svc.get(mcpName))
-
-  export const getForUrl = async (mcpName: string, serverUrl: string) =>
-    runPromise((svc) => svc.getForUrl(mcpName, serverUrl))
-
-  export const all = async () => runPromise((svc) => svc.all())
-
-  export const set = async (mcpName: string, entry: Entry, serverUrl?: string) =>
-    runPromise((svc) => svc.set(mcpName, entry, serverUrl))
-
-  export const remove = async (mcpName: string) => runPromise((svc) => svc.remove(mcpName))
-
-  export const updateTokens = async (mcpName: string, tokens: Tokens, serverUrl?: string) =>
-    runPromise((svc) => svc.updateTokens(mcpName, tokens, serverUrl))
-
-  export const updateClientInfo = async (mcpName: string, clientInfo: ClientInfo, serverUrl?: string) =>
-    runPromise((svc) => svc.updateClientInfo(mcpName, clientInfo, serverUrl))
-
-  export const updateCodeVerifier = async (mcpName: string, codeVerifier: string) =>
-    runPromise((svc) => svc.updateCodeVerifier(mcpName, codeVerifier))
-
-  export const updateOAuthState = async (mcpName: string, oauthState: string) =>
-    runPromise((svc) => svc.updateOAuthState(mcpName, oauthState))
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
 }

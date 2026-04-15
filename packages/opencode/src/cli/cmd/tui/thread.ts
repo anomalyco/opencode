@@ -10,7 +10,7 @@ import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
@@ -43,9 +43,10 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 
 function createEventSource(client: RpcClient): EventSource {
   return {
-    on: (handler) => client.on<Event>("event", handler),
-    setWorkspace: (workspaceID) => {
-      void client.call("setWorkspace", { workspaceID })
+    subscribe: async (handler) => {
+      return client.on<GlobalEvent>("global.event", (e) => {
+        handler(e)
+      })
     },
   }
 }
@@ -136,12 +137,18 @@ export const TuiThreadCommand = cmd({
         ),
       })
       worker.onerror = (e) => {
-        Log.Default.error(e)
+        Log.Default.error("thread error", {
+          message: e.message,
+          filename: e.filename,
+          lineno: e.lineno,
+          colno: e.colno,
+          error: e.error,
+        })
       }
 
       const client = Rpc.client<typeof rpc>(worker)
       const error = (e: unknown) => {
-        Log.Default.error(e)
+        Log.Default.error("process error", { error: errorMessage(e) })
       }
       const reload = () => {
         client.call("reload", undefined).catch((err) => {

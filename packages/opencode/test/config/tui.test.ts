@@ -7,11 +7,15 @@ import { Config } from "../../src/config/config"
 import { TuiConfig } from "../../src/config/tui"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
+import { AppRuntime } from "../../src/effect/app-runtime"
 
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+const wintest = process.platform === "win32" ? test : test.skip
+const clear = (wait = false) => AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate(wait)))
+const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
 
 beforeEach(async () => {
-  await Config.invalidate(true)
+  await clear(true)
 })
 
 afterEach(async () => {
@@ -22,7 +26,7 @@ afterEach(async () => {
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.jsonc"), { force: true }).catch(() => {})
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
-  await Config.invalidate(true)
+  await clear(true)
 })
 
 test("keeps server and tui plugin merge semantics aligned", async () => {
@@ -78,7 +82,7 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const server = await Config.get()
+      const server = await load()
       const tui = await TuiConfig.get()
       const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
       const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
@@ -437,6 +441,53 @@ test("merges keybind overrides across precedence layers", async () => {
       const config = await TuiConfig.get()
       expect(config.keybinds?.app_exit).toBe("ctrl+q")
       expect(config.keybinds?.theme_list).toBe("ctrl+k")
+    },
+  })
+})
+
+wintest("defaults Ctrl+Z to input undo on Windows", async () => {
+  await using tmp = await tmpdir()
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
+    },
+  })
+})
+
+wintest("keeps explicit input undo overrides on Windows", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ keybinds: { input_undo: "ctrl+y" } }))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+y")
+    },
+  })
+})
+
+wintest("ignores terminal suspend bindings on Windows", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ keybinds: { terminal_suspend: "alt+z" } }))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.terminal_suspend).toBe("none")
+      expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
     },
   })
 })

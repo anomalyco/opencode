@@ -1,11 +1,10 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, Layer, Schedule, Semaphore, ServiceMap, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Semaphore, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Hash } from "@/util/hash"
 import { Config } from "../config/config"
@@ -22,14 +21,13 @@ export namespace Snapshot {
   export const FileDiff = z
     .object({
       file: z.string(),
-      before: z.string(),
-      after: z.string(),
+      patch: z.string(),
       additions: z.number(),
       deletions: z.number(),
       status: z.enum(["added", "deleted", "modified"]).optional(),
     })
     .meta({
-      ref: "FileDiff",
+      ref: "SnapshotFileDiff",
     })
   export type FileDiff = z.infer<typeof FileDiff>
 
@@ -58,7 +56,7 @@ export namespace Snapshot {
     readonly diffFull: (from: string, to: string) => Effect.Effect<Snapshot.FileDiff[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Snapshot") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
   export const layer: Layer.Layer<
     Service,
@@ -178,8 +176,39 @@ export namespace Snapshot {
             const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
+            // Filter out files that are now gitignored even if previously tracked
+            // Files may have been tracked before being gitignored, so we need to check
+            // against the source project's current gitignore rules
+            // Use --no-index to check purely against patterns (ignoring whether file is tracked)
+            const checkArgs = [
+              ...quote,
+              "--git-dir",
+              path.join(state.worktree, ".git"),
+              "--work-tree",
+              state.worktree,
+              "check-ignore",
+              "--no-index",
+              "--",
+              ...all,
+            ]
+            const check = yield* git(checkArgs, { cwd: state.directory })
+            const ignored =
+              check.code === 0 ? new Set(check.text.trim().split("\n").filter(Boolean)) : new Set<string>()
+            const filtered = all.filter((item) => !ignored.has(item))
+
+            // Remove newly-ignored files from snapshot index to prevent re-adding
+            if (ignored.size > 0) {
+              const ignoredFiles = Array.from(ignored)
+              log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
+              yield* git([...cfg, ...args(["rm", "--cached", "-f", "--", ...ignoredFiles])], {
+                cwd: state.directory,
+              })
+            }
+
+            if (!filtered.length) return
+
             const large = (yield* Effect.all(
-              all.map((item) =>
+              filtered.map((item) =>
                 fs
                   .stat(path.join(state.directory, item))
                   .pipe(Effect.catch(() => Effect.void))
@@ -260,14 +289,39 @@ export namespace Snapshot {
                   log.warn("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
+                const files = result.text
+                  .trim()
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+
+                // Filter out files that are now gitignored
+                if (files.length > 0) {
+                  const checkArgs = [
+                    ...quote,
+                    "--git-dir",
+                    path.join(state.worktree, ".git"),
+                    "--work-tree",
+                    state.worktree,
+                    "check-ignore",
+                    "--no-index",
+                    "--",
+                    ...files,
+                  ]
+                  const check = yield* git(checkArgs, { cwd: state.directory })
+                  if (check.code === 0) {
+                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                    const filtered = files.filter((item) => !ignored.has(item))
+                    return {
+                      hash,
+                      files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                    }
+                  }
+                }
+
                 return {
                   hash,
-                  files: result.text
-                    .trim()
-                    .split("\n")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                 }
               }),
             )
@@ -437,6 +491,144 @@ export namespace Snapshot {
           const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
             return yield* locked(
               Effect.gen(function* () {
+                type Row = {
+                  file: string
+                  status: "added" | "deleted" | "modified"
+                  binary: boolean
+                  additions: number
+                  deletions: number
+                }
+
+                type Ref = {
+                  file: string
+                  side: "before" | "after"
+                  ref: string
+                }
+
+                const show = Effect.fnUntraced(function* (row: Row) {
+                  if (row.binary) return ["", ""]
+                  if (row.status === "added") {
+                    return [
+                      "",
+                      yield* git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(
+                        Effect.map((item) => item.text),
+                      ),
+                    ]
+                  }
+                  if (row.status === "deleted") {
+                    return [
+                      yield* git([...cfg, ...args(["show", `${from}:${row.file}`])]).pipe(
+                        Effect.map((item) => item.text),
+                      ),
+                      "",
+                    ]
+                  }
+                  return yield* Effect.all(
+                    [
+                      git([...cfg, ...args(["show", `${from}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
+                      git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
+                    ],
+                    { concurrency: 2 },
+                  )
+                })
+
+                const load = Effect.fnUntraced(
+                  function* (rows: Row[]) {
+                    const refs = rows.flatMap((row) => {
+                      if (row.binary) return []
+                      if (row.status === "added")
+                        return [{ file: row.file, side: "after", ref: `${to}:${row.file}` } satisfies Ref]
+                      if (row.status === "deleted") {
+                        return [{ file: row.file, side: "before", ref: `${from}:${row.file}` } satisfies Ref]
+                      }
+                      return [
+                        { file: row.file, side: "before", ref: `${from}:${row.file}` } satisfies Ref,
+                        { file: row.file, side: "after", ref: `${to}:${row.file}` } satisfies Ref,
+                      ]
+                    })
+                    if (!refs.length) return new Map<string, { before: string; after: string }>()
+
+                    const proc = ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
+                      cwd: state.directory,
+                      extendEnv: true,
+                      stdin: Stream.make(new TextEncoder().encode(refs.map((item) => item.ref).join("\n") + "\n")),
+                    })
+                    const handle = yield* spawner.spawn(proc)
+                    const [out, err] = yield* Effect.all(
+                      [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
+                      { concurrency: 2 },
+                    )
+                    const code = yield* handle.exitCode
+                    if (code !== 0) {
+                      log.info("git cat-file --batch failed during snapshot diff, falling back to per-file git show", {
+                        stderr: err,
+                        refs: refs.length,
+                      })
+                      return
+                    }
+
+                    const fail = (msg: string, extra?: Record<string, string>) => {
+                      log.info(msg, { ...extra, refs: refs.length })
+                      return undefined
+                    }
+
+                    const map = new Map<string, { before: string; after: string }>()
+                    const dec = new TextDecoder()
+                    let i = 0
+                    for (const ref of refs) {
+                      let end = i
+                      while (end < out.length && out[end] !== 10) end += 1
+                      if (end >= out.length) {
+                        return fail(
+                          "git cat-file --batch returned a truncated header during snapshot diff, falling back to per-file git show",
+                        )
+                      }
+
+                      const head = dec.decode(out.slice(i, end))
+                      i = end + 1
+                      const hit = map.get(ref.file) ?? { before: "", after: "" }
+                      if (head.endsWith(" missing")) {
+                        map.set(ref.file, hit)
+                        continue
+                      }
+
+                      const match = head.match(/^[0-9a-f]+ blob (\d+)$/)
+                      if (!match) {
+                        return fail(
+                          "git cat-file --batch returned an unexpected header during snapshot diff, falling back to per-file git show",
+                          { head },
+                        )
+                      }
+
+                      const size = Number(match[1])
+                      if (!Number.isInteger(size) || size < 0 || i + size >= out.length || out[i + size] !== 10) {
+                        return fail(
+                          "git cat-file --batch returned truncated content during snapshot diff, falling back to per-file git show",
+                          { head },
+                        )
+                      }
+
+                      const text = dec.decode(out.slice(i, i + size))
+                      if (ref.side === "before") hit.before = text
+                      if (ref.side === "after") hit.after = text
+                      map.set(ref.file, hit)
+                      i += size + 1
+                    }
+
+                    if (i !== out.length) {
+                      return fail(
+                        "git cat-file --batch returned trailing data during snapshot diff, falling back to per-file git show",
+                      )
+                    }
+
+                    return map
+                  },
+                  Effect.scoped,
+                  Effect.catch(() =>
+                    Effect.succeed<Map<string, { before: string; after: string }> | undefined>(undefined),
+                  ),
+                )
+
                 const result: Snapshot.FileDiff[] = []
                 const status = new Map<string, "added" | "deleted" | "modified">()
 
@@ -459,30 +651,69 @@ export namespace Snapshot {
                   },
                 )
 
-                for (const line of numstat.text.trim().split("\n")) {
-                  if (!line) continue
-                  const [adds, dels, file] = line.split("\t")
-                  if (!file) continue
-                  const binary = adds === "-" && dels === "-"
-                  const [before, after] = binary
-                    ? ["", ""]
-                    : yield* Effect.all(
-                        [
-                          git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
-                          git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
-                        ],
-                        { concurrency: 2 },
-                      )
-                  const additions = binary ? 0 : parseInt(adds)
-                  const deletions = binary ? 0 : parseInt(dels)
-                  result.push({
-                    file,
-                    before,
-                    after,
-                    additions: Number.isFinite(additions) ? additions : 0,
-                    deletions: Number.isFinite(deletions) ? deletions : 0,
-                    status: status.get(file) ?? "modified",
+                const rows = numstat.text
+                  .trim()
+                  .split("\n")
+                  .filter(Boolean)
+                  .flatMap((line) => {
+                    const [adds, dels, file] = line.split("\t")
+                    if (!file) return []
+                    const binary = adds === "-" && dels === "-"
+                    const additions = binary ? 0 : parseInt(adds)
+                    const deletions = binary ? 0 : parseInt(dels)
+                    return [
+                      {
+                        file,
+                        status: status.get(file) ?? "modified",
+                        binary,
+                        additions: Number.isFinite(additions) ? additions : 0,
+                        deletions: Number.isFinite(deletions) ? deletions : 0,
+                      } satisfies Row,
+                    ]
                   })
+
+                // Filter out files that are now gitignored
+                if (rows.length > 0) {
+                  const files = rows.map((r) => r.file)
+                  const checkArgs = [
+                    ...quote,
+                    "--git-dir",
+                    path.join(state.worktree, ".git"),
+                    "--work-tree",
+                    state.worktree,
+                    "check-ignore",
+                    "--no-index",
+                    "--",
+                    ...files,
+                  ]
+                  const check = yield* git(checkArgs, { cwd: state.directory })
+                  if (check.code === 0) {
+                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                    const filtered = rows.filter((r) => !ignored.has(r.file))
+                    rows.length = 0
+                    rows.push(...filtered)
+                  }
+                }
+
+                const step = 100
+                const patch = (file: string, before: string, after: string) =>
+                  formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+
+                for (let i = 0; i < rows.length; i += step) {
+                  const run = rows.slice(i, i + step)
+                  const text = yield* load(run)
+
+                  for (const row of run) {
+                    const hit = text?.get(row.file) ?? { before: "", after: "" }
+                    const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
+                    result.push({
+                      file: row.file,
+                      patch: row.binary ? "" : patch(row.file, before, after),
+                      additions: row.additions,
+                      deletions: row.deletions,
+                      status: row.status,
+                    })
+                  }
                 }
 
                 return result
@@ -538,34 +769,4 @@ export namespace Snapshot {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Config.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function track() {
-    return runPromise((svc) => svc.track())
-  }
-
-  export async function patch(hash: string) {
-    return runPromise((svc) => svc.patch(hash))
-  }
-
-  export async function restore(snapshot: string) {
-    return runPromise((svc) => svc.restore(snapshot))
-  }
-
-  export async function revert(patches: Patch[]) {
-    return runPromise((svc) => svc.revert(patches))
-  }
-
-  export async function diff(hash: string) {
-    return runPromise((svc) => svc.diff(hash))
-  }
-
-  export async function diffFull(from: string, to: string) {
-    return runPromise((svc) => svc.diffFull(from, to))
-  }
 }

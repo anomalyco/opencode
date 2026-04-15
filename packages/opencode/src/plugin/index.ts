@@ -1,4 +1,10 @@
-import type { Hooks, PluginInput, Plugin as PluginInstance, PluginModule } from "@opencode-ai/plugin"
+import type {
+  Hooks,
+  PluginInput,
+  Plugin as PluginInstance,
+  PluginModule,
+  WorkspaceAdaptor as PluginWorkspaceAdaptor,
+} from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -10,12 +16,15 @@ import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
-import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
+import { Effect, Layer, Context, Stream } from "effect"
+import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { registerAdaptor } from "@/control-plane/adaptors"
+import type { WorkspaceAdaptor } from "@/control-plane/types"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -43,10 +52,17 @@ export namespace Plugin {
     readonly init: () => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Plugin") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin]
+  const INTERNAL_PLUGINS: PluginInstance[] = [
+    CodexAuthPlugin,
+    CopilotAuthPlugin,
+    GitlabAuthPlugin,
+    PoeAuthPlugin,
+    CloudflareWorkersAuthPlugin,
+    CloudflareAIGatewayAuthPlugin,
+  ]
 
   function isServerPlugin(value: unknown): value is PluginInstance {
     return typeof value === "function"
@@ -75,7 +91,11 @@ export namespace Plugin {
   }
 
   function publishPluginError(bus: Bus.Interface, message: string) {
-    Effect.runFork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+    Effect.runFork(
+      bus
+        .publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        .pipe(Effect.provide(EffectLogger.layer)),
+    )
   }
 
   async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
@@ -111,7 +131,7 @@ export namespace Plugin {
                   Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
                 }
               : undefined,
-            fetch: async (...args) => Server.Default().fetch(...args),
+            fetch: async (...args) => (await Server.Default()).app.fetch(...args),
           })
           const cfg = yield* config.get()
           const input: PluginInput = {
@@ -119,10 +139,16 @@ export namespace Plugin {
             project: ctx.project,
             worktree: ctx.worktree,
             directory: ctx.directory,
+            experimental_workspace: {
+              register(type: string, adaptor: PluginWorkspaceAdaptor) {
+                registerAdaptor(ctx.project.id, type, adaptor as WorkspaceAdaptor)
+              },
+            },
             get serverUrl(): URL {
               return Server.url ?? new URL("http://localhost:4096")
             },
-            $: Bun.$,
+            // @ts-expect-error
+            $: typeof Bun === "undefined" ? undefined : Bun.$,
           }
 
           for (const plugin of INTERNAL_PLUGINS) {
@@ -196,13 +222,15 @@ export namespace Plugin {
                 return message
               },
             }).pipe(
-              Effect.catch((message) =>
-                bus.publish(Session.Event.Error, {
-                  error: new NamedError.Unknown({
-                    message: `Failed to load plugin ${load.spec}: ${message}`,
-                  }).toObject(),
-                }),
-              ),
+              Effect.catch(() => {
+                // TODO: make proper events for this
+                // bus.publish(Session.Event.Error, {
+                //   error: new NamedError.Unknown({
+                //     message: `Failed to load plugin ${load.spec}: ${message}`,
+                //   }).toObject(),
+                // })
+                return Effect.void
+              }),
             )
           }
 
@@ -261,21 +289,4 @@ export namespace Plugin {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function trigger<
-    Name extends TriggerName,
-    Input = Parameters<Required<Hooks>[Name]>[0],
-    Output = Parameters<Required<Hooks>[Name]>[1],
-  >(name: Name, input: Input, output: Output): Promise<Output> {
-    return runPromise((svc) => svc.trigger(name, input, output))
-  }
-
-  export async function list(): Promise<Hooks[]> {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
 }

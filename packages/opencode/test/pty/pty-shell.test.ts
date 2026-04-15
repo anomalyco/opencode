@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
 import { Pty } from "../../src/pty"
 import { Shell } from "../../src/shell/shell"
@@ -17,14 +19,18 @@ describe("pty shell args", () => {
         await using dir = await tmpdir()
         await Instance.provide({
           directory: dir.path,
-          fn: async () => {
-            const info = await Pty.create({ command: ps, title: "pwsh" })
-            try {
-              expect(info.args).toEqual([])
-            } finally {
-              await Pty.remove(info.id)
-            }
-          },
+          fn: () =>
+            AppRuntime.runPromise(
+              Effect.gen(function* () {
+                const pty = yield* Pty.Service
+                const info = yield* pty.create({ command: ps, title: "pwsh" })
+                try {
+                  expect(info.args).toEqual([])
+                } finally {
+                  yield* pty.remove(info.id)
+                }
+              }),
+            ),
         })
       },
       { timeout: 30000 },
@@ -43,14 +49,18 @@ describe("pty shell args", () => {
         await using dir = await tmpdir()
         await Instance.provide({
           directory: dir.path,
-          fn: async () => {
-            const info = await Pty.create({ command: bash, title: "bash" })
-            try {
-              expect(info.args).toEqual(["-l"])
-            } finally {
-              await Pty.remove(info.id)
-            }
-          },
+          fn: () =>
+            AppRuntime.runPromise(
+              Effect.gen(function* () {
+                const pty = yield* Pty.Service
+                const info = yield* pty.create({ command: bash, title: "bash" })
+                try {
+                  expect(info.args).toEqual(["-l"])
+                } finally {
+                  yield* pty.remove(info.id)
+                }
+              }),
+            ),
         })
       },
       { timeout: 30000 },
