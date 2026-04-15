@@ -1,32 +1,57 @@
-import { Component, createMemo } from "solid-js"
-import { useSync } from "@/context/sync"
+import { Component, createMemo, createResource } from "solid-js"
 import { usePrompt } from "@/context/prompt"
+import { useSDK } from "@/context/sdk"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { useLanguage } from "@/context/language"
 
-interface SkillItem {
+type SkillItem = {
   name: string
   description?: string
-  source?: string
+}
+
+// Module-level cache to avoid re-fetching on every dialog open
+let cachedSkills: SkillItem[] | undefined = undefined
+let cachedSkillsPromise: Promise<SkillItem[]> | undefined = undefined
+
+const loadSkills = async (sdk: ReturnType<typeof useSDK>): Promise<SkillItem[]> => {
+  // Return cached data immediately if available
+  if (cachedSkills) return cachedSkills
+
+  // Return in-flight promise if already loading
+  if (cachedSkillsPromise) return cachedSkillsPromise
+
+  // Start loading and cache the promise
+  cachedSkillsPromise = (async () => {
+    const result = await sdk.client.app.skills({}, { throwOnError: true })
+    const skills = (result.data ?? []).map((item) => ({
+      name: item.name,
+      description: item.description,
+    }))
+    cachedSkills = skills
+    cachedSkillsPromise = undefined // Clear promise cache after completion
+    return skills
+  })()
+
+  return cachedSkillsPromise
 }
 
 export const DialogSelectSkill: Component = () => {
-  const sync = useSync()
+  const sdk = useSDK()
   const prompt = usePrompt()
   const dialog = useDialog()
   const language = useLanguage()
 
-  const items = createMemo((): SkillItem[] =>
-    sync.data.command
-      .filter((cmd) => cmd.source === "skill")
-      .map((cmd) => ({
-        name: cmd.name,
-        description: cmd.description,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+  // Use sdk.client as source to only reload if client changes
+  // Provide cached data as initialValue to avoid flash of empty state
+  const [skills] = createResource(
+    () => sdk.client,
+    () => loadSkills(sdk),
+    { initialValue: cachedSkills },
   )
+
+  const items = createMemo(() => (skills() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
   const handleSelect = (item: SkillItem | undefined) => {
     if (!item) return
