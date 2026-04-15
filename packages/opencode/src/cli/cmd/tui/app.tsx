@@ -57,7 +57,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
-import { TuiConfig } from "@/config/tui"
+import { TuiConfig } from "@test/cli/tui/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 

@@ -14,7 +14,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 
 import { Config } from "@/config/config"
-import { TuiConfig } from "@/config/tui"
+import { TuiConfig } from "@test/cli/tui/config/tui"
 import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"

@@ -29,7 +29,11 @@ import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, createEffect, on } from "solid-js"
 import { Log } from "@/util/log"
-import { ConsoleState, emptyConsoleState, type ConsoleState as ConsoleStateType } from "@/config/console-state"
+import {
+  ConsoleState,
+  emptyConsoleState,
+  type ConsoleState as ConsoleStateType,
+} from "@test/cli/tui/config/console-state"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",

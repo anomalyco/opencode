@@ -5,7 +5,7 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { Global } from "../../../src/global"
-import { TuiConfig } from "../../../src/config/tui"
+import { TuiConfig } from "./config/tui"
 import { Filesystem } from "../../../src/util/filesystem"
 
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")

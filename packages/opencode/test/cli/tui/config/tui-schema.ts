@@ -1,5 +1,5 @@
 import z from "zod"
-import { Config } from "./config"
+import { Config } from "@/config/config"
 
 const KeybindOverride = z
   .object(

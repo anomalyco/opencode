@@ -5,7 +5,7 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { mockTuiRuntime } from "../../fixture/tui-runtime"
-import { TuiConfig } from "../../../src/config/tui"
+import { TuiConfig } from "./config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
