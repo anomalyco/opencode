@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { Plugin } from "@/plugin"
 import { ProjectID } from "@/project/schema"
 import { Instance } from "@/project/instance"
 import { MessageID, SessionID } from "@/session/schema"
@@ -142,6 +143,7 @@ export namespace Permission {
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const plugin = yield* Plugin.Service
       const state = yield* InstanceState.make<State>(
         Effect.fn("Permission.state")(function* (ctx) {
           const row = Database.use((db) =>
@@ -183,6 +185,23 @@ export namespace Permission {
         }
 
         if (!needsAsk) return
+
+        const hook = yield* plugin.trigger(
+          "permission.ask",
+          { permission: request.permission, patterns: request.patterns, metadata: request.metadata },
+          { status: "ask" as Action, reason: undefined as string | undefined },
+        )
+        if (hook.status === "allow") {
+          log.info("plugin auto-approved", { permission: request.permission, patterns: request.patterns })
+          return
+        }
+        if (hook.status === "deny") {
+          log.info("plugin auto-denied", { permission: request.permission, patterns: request.patterns })
+          return yield* new DeniedError({
+            ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            reason: hook.reason,
+          })
+        }
 
         const id = request.id ?? PermissionID.ascending()
         const info: Request = {
@@ -308,5 +327,5 @@ export namespace Permission {
     return result
   }
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
 }

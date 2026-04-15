@@ -13,7 +13,7 @@ process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
 const { Plugin } = await import("../../src/plugin/index")
 
-const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(Bus.layer)), Plugin.defaultLayer)
+const env = Layer.mergeAll(Permission.defaultLayer, Plugin.defaultLayer)
 
 afterEach(async () => {
   await Instance.disposeAll()

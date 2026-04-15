@@ -10,8 +10,7 @@ import { provideInstance, provideTmpdirInstance, tmpdir, tmpdirScoped } from "..
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
-const bus = Bus.layer
-const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(bus)), bus, CrossSpawnSpawner.defaultLayer)
+const env = Layer.mergeAll(Permission.defaultLayer, Bus.layer, CrossSpawnSpawner.defaultLayer)
 const it = testEffect(env)
 
 afterEach(async () => {
