@@ -30,6 +30,7 @@ import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
+import { isPromptInputTrayEnabled } from "@/utils/feature-flags"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -98,7 +99,6 @@ const EXAMPLES = [
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 const HIDE_CONTEXT_ITEMS = true
-const HIDE_PROMPT_INPUT_TRAY = true
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -169,6 +169,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     pathFromTab: files.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
   }).activeFileTab
+  const showPromptInputTray = createMemo(() => isPromptInputTrayEnabled())
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -1434,7 +1435,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
         </div>
       </DockShellForm>
-      <Show when={!HIDE_PROMPT_INPUT_TRAY && (store.mode === "normal" || store.mode === "shell")}>
+      <Show when={showPromptInputTray() && (store.mode === "normal" || store.mode === "shell")}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">

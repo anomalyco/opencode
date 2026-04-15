@@ -467,6 +467,32 @@ test("defaultModel respects config model setting", async () => {
   })
 })
 
+test("defaultModel prefers OpenRouter Gemini 3 Flash Preview when available", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+      set("OPENROUTER_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const model = await defaultModel()
+      expect(String(model.providerID)).toBe("openrouter")
+      expect(String(model.modelID)).toBe("google/gemini-3-flash-preview")
+    },
+  })
+})
+
 test("provider with baseURL from config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

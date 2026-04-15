@@ -61,6 +61,10 @@ import { ModelID, ProviderID } from "./schema"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  const preferredDefaultModel = {
+    providerID: ProviderID.make("openrouter"),
+    modelID: ModelID.make("google/gemini-3-flash-preview"),
+  }
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -1646,6 +1650,9 @@ export namespace Provider {
           if (!provider.models[entry.modelID]) continue
           return { providerID: entry.providerID, modelID: entry.modelID }
         }
+
+        const preferred = s.providers[preferredDefaultModel.providerID]
+        if (preferred?.models[preferredDefaultModel.modelID]) return preferredDefaultModel
 
         const provider = Object.values(s.providers).find(
           (p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id),

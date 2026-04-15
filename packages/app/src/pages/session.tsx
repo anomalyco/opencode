@@ -30,6 +30,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/shared/util/encode"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { GigaChatWatermark } from "@/components/gigachat-watermark"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -1923,6 +1924,10 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
+          <div class="pointer-events-none absolute inset-y-0 right-0 z-0 hidden items-center pr-3 lg:flex" style={{ opacity: 0.1 }}>
+            <GigaChatWatermark class="w-[220px] text-text-strong" />
+          </div>
+
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
