@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
-import { Glob } from "./glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
