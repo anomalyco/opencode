@@ -788,7 +788,14 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+    if (
+      input.model.providerID === "openai" || 
+      (
+        input.model.api.npm === "@ai-sdk/openai-compatible" && 
+        input.providerOptions?.setCacheKey !== false
+      ) ||
+      input.providerOptions?.setCacheKey === true
+    ) {
       result["promptCacheKey"] = input.sessionID
     }
 
