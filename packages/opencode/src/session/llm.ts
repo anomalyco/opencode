@@ -21,6 +21,8 @@ import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { makeRuntime } from "@/effect/run-service"
+import * as Option from "effect/Option"
+import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -312,6 +314,10 @@ export namespace LLM {
             })
           }
 
+          const tracer = cfg.experimental?.openTelemetry
+            ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
+            : undefined
+
           return streamText({
             onError(error) {
               l.error("stream error", {
@@ -383,6 +389,8 @@ export namespace LLM {
             }),
             experimental_telemetry: {
               isEnabled: cfg.experimental?.openTelemetry,
+              functionId: "session.llm",
+              tracer,
               metadata: {
                 userId: cfg.username ?? "unknown",
                 sessionId: input.sessionID,
