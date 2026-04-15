@@ -12,7 +12,7 @@ import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { MessageID, PartID } from "@/session/schema"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
@@ -446,7 +446,7 @@ export function Prompt(props: PromptProps) {
 
   onCleanup(() => {
     if (store.prompt.input) {
-      stashed = { prompt: { input: store.prompt.input, parts: store.prompt.parts }, cursor: input.cursorOffset }
+      stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
     props.ref?.(undefined)
   })
