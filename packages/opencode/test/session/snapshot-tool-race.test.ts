@@ -12,12 +12,14 @@
  * tools internally during multi-step processing before emitting events.
  */
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import fs from "fs/promises"
 import path from "path"
 import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Log } from "../../src/util/log"
@@ -27,7 +29,6 @@ import { TestLLMServer } from "../lib/llm-server"
 
 // Same layer setup as prompt-effect.test.ts
 import { NodeFileSystem } from "@effect/platform-node"
-import { Layer } from "effect"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
@@ -38,7 +39,10 @@ import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider/provider"
+import { Env } from "../../src/env"
 import { Question } from "../../src/question"
+import { Skill } from "../../src/skill"
+import { SystemPrompt } from "../../src/session/system"
 import { Todo } from "../../src/session/todo"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
@@ -51,6 +55,8 @@ import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { AppFileSystem } from "../../src/filesystem"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Ripgrep } from "../../src/file/ripgrep"
+import { Format } from "../../src/format"
 
 Log.init({ print: false })
 
@@ -103,7 +109,7 @@ const filetime = Layer.succeed(
     read: () => Effect.void,
     get: () => Effect.succeed(undefined),
     assert: () => Effect.void,
-    withLock: (_filepath, fn) => Effect.promise(fn),
+    withLock: (_filepath, fn) => fn(),
   }),
 )
 
@@ -116,6 +122,7 @@ function makeHttp() {
     Session.defaultLayer,
     Snapshot.defaultLayer,
     LLM.defaultLayer,
+    Env.defaultLayer,
     AgentSvc.defaultLayer,
     Command.defaultLayer,
     Permission.defaultLayer,
@@ -131,22 +138,31 @@ function makeHttp() {
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(Layer.provide(SessionSummary.defaultLayer), Layer.provideMerge(deps))
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
+    SessionSummary.defaultLayer,
     SessionPrompt.layer.pipe(
+      Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(SessionSummary.defaultLayer),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
+      Layer.provide(SystemPrompt.defaultLayer),
       Layer.provideMerge(deps),
     ),
   )
@@ -188,6 +204,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
     Effect.fnUntraced(function* ({ dir, llm }) {
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
 
       const session = yield* sessions.create({
         title: "snapshot race test",
@@ -232,9 +249,9 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       expect(tool?.state.status).toBe("completed")
 
       // Poll for diff — summarize() is fire-and-forget
-      let diff: Awaited<ReturnType<typeof SessionSummary.diff>> = []
+      let diff: Array<{ file: string }> = []
       for (let i = 0; i < 50; i++) {
-        diff = yield* Effect.promise(() => SessionSummary.diff({ sessionID: session.id }))
+        diff = yield* summary.diff({ sessionID: session.id })
         if (diff.length > 0) break
         yield* Effect.sleep("100 millis")
       }

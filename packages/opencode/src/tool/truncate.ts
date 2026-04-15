@@ -1,8 +1,7 @@
 import { NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Context } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { evaluate } from "@/permission/evaluate"
 import { Identifier } from "../id/id"
@@ -41,7 +40,7 @@ export namespace Truncate {
     readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Truncate") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Truncate") {}
 
   export const layer = Layer.effect(
     Service,
@@ -49,7 +48,9 @@ export namespace Truncate {
       const fs = yield* AppFileSystem.Service
 
       const cleanup = Effect.fn("Truncate.cleanup")(function* () {
-        const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - Duration.toMillis(RETENTION)))
+        const cutoff = Identifier.timestamp(
+          Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)),
+        )
         const entries = yield* fs.readDirectory(TRUNCATION_DIR).pipe(
           Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
           Effect.catch(() => Effect.succeed([])),
@@ -135,10 +136,4 @@ export namespace Truncate {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(NodePath.layer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return runPromise((s) => s.output(text, options, agent))
-  }
 }

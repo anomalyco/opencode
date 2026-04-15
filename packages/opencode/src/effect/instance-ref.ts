@@ -1,6 +1,10 @@
-import { ServiceMap } from "effect"
+import { Context } from "effect"
 import type { InstanceContext } from "@/project/instance"
 
-export const InstanceRef = ServiceMap.Reference<InstanceContext | undefined>("~opencode/InstanceRef", {
+export const InstanceRef = Context.Reference<InstanceContext | undefined>("~opencode/InstanceRef", {
+  defaultValue: () => undefined,
+})
+
+export const WorkspaceRef = Context.Reference<string | undefined>("~opencode/WorkspaceRef", {
   defaultValue: () => undefined,
 })

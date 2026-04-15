@@ -1,11 +1,10 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
-import { modelEnabled, modelProbe } from "@/testing/model-selection"
 import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
@@ -388,53 +387,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
       },
     }
-
-    if (modelEnabled()) {
-      const probe = Symbol("model-probe")
-
-      modelProbe.bind(probe, {
-        setAgent: agent.set,
-        setModel: model.set,
-        setVariant: model.variant.set,
-      })
-
-      createEffect(() => {
-        const agent = result.agent.current()
-        const model = result.model.current()
-        modelProbe.set(probe, {
-          dir: sdk.directory,
-          sessionID: id(),
-          last: store.last,
-          agent: agent?.name,
-          model: model
-            ? {
-                providerID: model.provider.id,
-                modelID: model.id,
-                name: model.name,
-              }
-            : undefined,
-          variant: result.model.variant.current() ?? null,
-          selected: result.model.variant.selected(),
-          configured: result.model.variant.configured(),
-          pick: scope(),
-          base: undefined,
-          current: store.current,
-          variants: result.model.variant.list(),
-          models: result.model
-            .list()
-            .filter((item) => result.model.visible({ providerID: item.provider.id, modelID: item.id }))
-            .map((item) => ({
-              providerID: item.provider.id,
-              modelID: item.id,
-              name: item.name,
-            })),
-          agents: result.agent.list().map((item) => ({ name: item.name })),
-        })
-      })
-
-      onCleanup(() => modelProbe.clear(probe))
-    }
-
     return result
   },
 })

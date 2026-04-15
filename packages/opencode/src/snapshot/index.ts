@@ -1,11 +1,10 @@
-import { Cause, Duration, Effect, Layer, Schedule, Semaphore, ServiceMap, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Semaphore, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Hash } from "@/util/hash"
 import { Config } from "../config/config"
@@ -57,7 +56,7 @@ export namespace Snapshot {
     readonly diffFull: (from: string, to: string) => Effect.Effect<Snapshot.FileDiff[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Snapshot") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
   export const layer: Layer.Layer<
     Service,
@@ -91,12 +90,19 @@ export namespace Snapshot {
 
           const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
+          const enc = new TextEncoder()
+          const feed = (list: string[]) => Stream.make(enc.encode(list.join("\0") + "\0"))
+
           const git = Effect.fnUntraced(
-            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+            function* (
+              cmd: string[],
+              opts?: { cwd?: string; env?: Record<string, string>; stdin?: ChildProcess.CommandInput },
+            ) {
               const proc = ChildProcess.make("git", cmd, {
                 cwd: opts?.cwd,
                 env: opts?.env,
                 extendEnv: true,
+                stdin: opts?.stdin,
               })
               const handle = yield* spawner.spawn(proc)
               const [text, stderr] = yield* Effect.all(
@@ -115,6 +121,59 @@ export namespace Snapshot {
               }),
             ),
           )
+
+          const ignore = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return new Set<string>()
+            const check = yield* git(
+              [
+                ...quote,
+                "--git-dir",
+                path.join(state.worktree, ".git"),
+                "--work-tree",
+                state.worktree,
+                "check-ignore",
+                "--no-index",
+                "--stdin",
+                "-z",
+              ],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+            if (check.code !== 0 && check.code !== 1) return new Set<string>()
+            return new Set(check.text.split("\0").filter(Boolean))
+          })
+
+          const drop = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return
+            yield* git(
+              [
+                ...cfg,
+                ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
+              ],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+          })
+
+          const stage = Effect.fnUntraced(function* (files: string[]) {
+            if (!files.length) return
+            const result = yield* git(
+              [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
+              {
+                cwd: state.directory,
+                stdin: feed(files),
+              },
+            )
+            if (result.code === 0) return
+            log.warn("failed to add snapshot files", {
+              exitCode: result.code,
+              stderr: result.stderr,
+            })
+          })
 
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
           const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
@@ -177,29 +236,41 @@ export namespace Snapshot {
             const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
-            const large = (yield* Effect.all(
-              all.map((item) =>
-                fs
-                  .stat(path.join(state.directory, item))
-                  .pipe(Effect.catch(() => Effect.void))
-                  .pipe(
-                    Effect.map((stat) => {
-                      if (!stat || stat.type !== "File") return
-                      const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
-                      return size > limit ? item : undefined
-                    }),
-                  ),
-              ),
-              { concurrency: 8 },
-            )).filter((item): item is string => Boolean(item))
-            yield* sync(large)
-            const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
-            if (result.code !== 0) {
-              log.warn("failed to add snapshot files", {
-                exitCode: result.code,
-                stderr: result.stderr,
-              })
+            // Resolve source-repo ignore rules against the exact candidate set.
+            // --no-index keeps this pattern-based even when a path is already tracked.
+            const ignored = yield* ignore(all)
+
+            // Remove newly-ignored files from snapshot index to prevent re-adding
+            if (ignored.size > 0) {
+              const ignoredFiles = Array.from(ignored)
+              log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
+              yield* drop(ignoredFiles)
             }
+
+            const allow = all.filter((item) => !ignored.has(item))
+            if (!allow.length) return
+
+            const large = new Set(
+              (yield* Effect.all(
+                allow.map((item) =>
+                  fs
+                    .stat(path.join(state.directory, item))
+                    .pipe(Effect.catch(() => Effect.void))
+                    .pipe(
+                      Effect.map((stat) => {
+                        if (!stat || stat.type !== "File") return
+                        const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+                        return size > limit ? item : undefined
+                      }),
+                    ),
+                ),
+                { concurrency: 8 },
+              )).filter((item): item is string => Boolean(item)),
+            )
+            const block = new Set(untracked.filter((item) => large.has(item)))
+            yield* sync(Array.from(block))
+            // Stage only the allowed candidate paths so snapshot updates stay scoped.
+            yield* stage(allow.filter((item) => !block.has(item)))
           })
 
           const cleanup = Effect.fnUntraced(function* () {
@@ -259,13 +330,19 @@ export namespace Snapshot {
                   log.warn("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
+                const files = result.text
+                  .trim()
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+
+                // Hide ignored-file removals from the user-facing patch output.
+                const ignored = yield* ignore(files)
+
                 return {
                   hash,
-                  files: result.text
-                    .trim()
-                    .split("\n")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
+                  files: files
+                    .filter((item) => !ignored.has(item))
                     .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                 }
               }),
@@ -616,6 +693,15 @@ export namespace Snapshot {
                       } satisfies Row,
                     ]
                   })
+
+                // Hide ignored-file removals from the user-facing diff output.
+                const ignored = yield* ignore(rows.map((r) => r.file))
+                if (ignored.size > 0) {
+                  const filtered = rows.filter((r) => !ignored.has(r.file))
+                  rows.length = 0
+                  rows.push(...filtered)
+                }
+
                 const step = 100
                 const patch = (file: string, before: string, after: string) =>
                   formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
@@ -690,34 +776,4 @@ export namespace Snapshot {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Config.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function track() {
-    return runPromise((svc) => svc.track())
-  }
-
-  export async function patch(hash: string) {
-    return runPromise((svc) => svc.patch(hash))
-  }
-
-  export async function restore(snapshot: string) {
-    return runPromise((svc) => svc.restore(snapshot))
-  }
-
-  export async function revert(patches: Patch[]) {
-    return runPromise((svc) => svc.revert(patches))
-  }
-
-  export async function diff(hash: string) {
-    return runPromise((svc) => svc.diff(hash))
-  }
-
-  export async function diffFull(from: string, to: string) {
-    return runPromise((svc) => svc.diffFull(from, to))
-  }
 }
