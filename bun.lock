@@ -255,7 +255,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.3.7",
+      "version": "1.3.9",
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -365,7 +365,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.3.7",
+      "version": "1.3.9",
       "bin": {
         "opencode": "./bin/opencode",
       },
