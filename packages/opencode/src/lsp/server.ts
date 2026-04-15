@@ -1175,6 +1175,7 @@ export namespace LSPServer {
             "-Dosgi.bundles.defaultStartLevel=4",
             "-Declipse.product=org.eclipse.jdt.ls.core.product",
             "-Dlog.level=ALL",
+            "-Djdt.ls.generatesMetadataFilesAtProjectRoot=false",
             "--add-modules=ALL-SYSTEM",
             "--add-opens java.base/java.util=ALL-UNNAMED",
             "--add-opens java.base/java.lang=ALL-UNNAMED",
