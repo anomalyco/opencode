@@ -1,6 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { Instance } from "@/project/instance"
+import { InstanceState } from "@/effect/instance-state"
+import { SessionID } from "./schema"
+import { Effect, Layer, Context } from "effect"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -28,7 +30,7 @@ export namespace SessionStatus {
     Status: BusEvent.define(
       "session.status",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         status: Info,
       }),
     ),
@@ -36,41 +38,51 @@ export namespace SessionStatus {
     Idle: BusEvent.define(
       "session.idle",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
       }),
     ),
   }
 
-  const state = Instance.state(() => {
-    const data: Record<string, Info> = {}
-    return data
-  })
-
-  export function get(sessionID: string) {
-    return (
-      state()[sessionID] ?? {
-        type: "idle",
-      }
-    )
+  export interface Interface {
+    readonly get: (sessionID: SessionID) => Effect.Effect<Info>
+    readonly list: () => Effect.Effect<Map<SessionID, Info>>
+    readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
   }
 
-  export function list() {
-    return state()
-  }
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStatus") {}
 
-  export function set(sessionID: string, status: Info) {
-    Bus.publish(Event.Status, {
-      sessionID,
-      status,
-    })
-    if (status.type === "idle") {
-      // deprecated
-      Bus.publish(Event.Idle, {
-        sessionID,
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+
+      const state = yield* InstanceState.make(
+        Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
+      )
+
+      const get = Effect.fn("SessionStatus.get")(function* (sessionID: SessionID) {
+        const data = yield* InstanceState.get(state)
+        return data.get(sessionID) ?? { type: "idle" as const }
       })
-      delete state()[sessionID]
-      return
-    }
-    state()[sessionID] = status
-  }
+
+      const list = Effect.fn("SessionStatus.list")(function* () {
+        return new Map(yield* InstanceState.get(state))
+      })
+
+      const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
+        const data = yield* InstanceState.get(state)
+        yield* bus.publish(Event.Status, { sessionID, status })
+        if (status.type === "idle") {
+          yield* bus.publish(Event.Idle, { sessionID })
+          data.delete(sessionID)
+          return
+        }
+        data.set(sessionID, status)
+      })
+
+      return Service.of({ get, list, set })
+    }),
+  )
+
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 }

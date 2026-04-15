@@ -1,5 +1,6 @@
-import { createEffect, onCleanup, type JSX } from "solid-js"
-import type { FileDiff } from "@opencode-ai/sdk/v2"
+import { createEffect, createSignal, onCleanup, type JSX } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type {
   SessionReviewCommentActions,
@@ -13,10 +14,12 @@ import type { LineComment } from "@/context/comments"
 
 export type DiffStyle = "unified" | "split"
 
+type ReviewDiff = SnapshotFileDiff | VcsFileDiff
+
 export interface SessionReviewTabProps {
   title?: JSX.Element
   empty?: JSX.Element
-  diffs: () => FileDiff[]
+  diffs: () => ReviewDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
@@ -30,19 +33,14 @@ export interface SessionReviewTabProps {
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
+  commentMentions?: {
+    items: (query: string) => string[] | Promise<string[]>
+  }
   classes?: {
     root?: string
     header?: string
     container?: string
   }
-}
-
-export function StickyAddButton(props: { children: JSX.Element }) {
-  return (
-    <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
-      {props.children}
-    </div>
-  )
 }
 
 export function SessionReviewTab(props: SessionReviewTabProps) {
@@ -128,13 +126,6 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
-    if (scroll) {
-      scroll.removeEventListener("wheel", handleInteraction, { capture: true })
-      scroll.removeEventListener("mousewheel", handleInteraction, { capture: true })
-      scroll.removeEventListener("pointerdown", handleInteraction, { capture: true })
-      scroll.removeEventListener("touchstart", handleInteraction, { capture: true })
-      scroll.removeEventListener("keydown", handleInteraction, { capture: true })
-    }
   })
 
   return (
@@ -143,11 +134,11 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       empty={props.empty}
       scrollRef={(el) => {
         scroll = el
-        el.addEventListener("wheel", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("mousewheel", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("pointerdown", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("touchstart", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("keydown", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "keydown", handleInteraction, { capture: true })
         props.onScrollRef?.(el)
         queueRestore()
       }}
@@ -170,6 +161,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       onLineCommentUpdate={props.onLineCommentUpdate}
       onLineCommentDelete={props.onLineCommentDelete}
       lineCommentActions={props.lineCommentActions}
+      lineCommentMention={props.commentMentions}
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}

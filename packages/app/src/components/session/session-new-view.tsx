@@ -13,7 +13,6 @@ const ROOT_CLASS = "size-full flex flex-col"
 
 interface NewSessionViewProps {
   worktree: string
-  onWorktreeChange: (value: string) => void
 }
 
 export function NewSessionView(props: NewSessionViewProps) {

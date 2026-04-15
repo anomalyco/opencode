@@ -1,3 +1,4 @@
+import type { Stripe } from "stripe"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import type { APIEvent } from "@solidjs/start/server"
 import { and, Database, eq, sql } from "@opencode-ai/console-core/drizzle/index.js"
@@ -111,27 +112,17 @@ export async function POST(input: APIEvent) {
         const customerID = body.data.object.customer as string
         const invoiceID = body.data.object.latest_invoice as string
         const subscriptionID = body.data.object.id as string
+        const paymentMethodID = body.data.object.default_payment_method as string
 
         if (!workspaceID) throw new Error("Workspace ID not found")
         if (!userID) throw new Error("User ID not found")
         if (!customerID) throw new Error("Customer ID not found")
         if (!invoiceID) throw new Error("Invoice ID not found")
         if (!subscriptionID) throw new Error("Subscription ID not found")
-
-        // get payment id from invoice
-        const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
-          expand: ["payments"],
-        })
-        const paymentID = invoice.payments?.data[0].payment.payment_intent as string
-        if (!paymentID) throw new Error("Payment ID not found")
+        if (!paymentMethodID) throw new Error("Payment method ID not found")
 
         // get payment method for the payment intent
-        const paymentIntent = await Billing.stripe().paymentIntents.retrieve(paymentID, {
-          expand: ["payment_method"],
-        })
-        const paymentMethod = paymentIntent.payment_method
-        if (!paymentMethod || typeof paymentMethod === "string") throw new Error("Payment method not expanded")
-
+        const paymentMethod = await Billing.stripe().paymentMethods.retrieve(paymentMethodID)
         await Actor.provide("system", { workspaceID }, async () => {
           // look up current billing
           const billing = await Billing.get()
@@ -200,26 +191,18 @@ export async function POST(input: APIEvent) {
         const amountInCents = body.data.object.amount_paid
         const customerID = body.data.object.customer as string
         const subscriptionID = body.data.object.parent?.subscription_details?.subscription as string
+        const productID = body.data.object.lines?.data[0].pricing?.price_details?.product as string
 
         if (!customerID) throw new Error("Customer ID not found")
         if (!invoiceID) throw new Error("Invoice ID not found")
         if (!subscriptionID) throw new Error("Subscription ID not found")
 
         // get coupon id from subscription
-        const subscriptionData = await Billing.stripe().subscriptions.retrieve(subscriptionID, {
-          expand: ["discounts"],
-        })
-        const couponID =
-          typeof subscriptionData.discounts[0] === "string"
-            ? subscriptionData.discounts[0]
-            : subscriptionData.discounts[0]?.coupon?.id
-        const productID = subscriptionData.items.data[0].price.product as string
-
-        // get payment id from invoice
         const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
-          expand: ["payments"],
+          expand: ["discounts", "payments"],
         })
-        const paymentID = invoice.payments?.data[0].payment.payment_intent as string
+        const paymentID = invoice.payments?.data[0]?.payment.payment_intent as string
+        const couponID = (invoice.discounts[0] as Stripe.Discount).coupon?.id as string
         if (!paymentID) {
           // payment id can be undefined when using coupon
           if (!couponID) throw new Error("Payment ID not found")
@@ -244,6 +227,7 @@ export async function POST(input: APIEvent) {
             customerID,
             enrichment: {
               type: productID === LiteData.productID() ? "lite" : "subscription",
+              currency: body.data.object.currency === "inr" ? "inr" : undefined,
               couponID,
             },
           }),
@@ -331,16 +315,17 @@ export async function POST(input: APIEvent) {
       )
       if (!workspaceID) throw new Error("Workspace ID not found")
 
-      const amount = await Database.use((tx) =>
+      const payment = await Database.use((tx) =>
         tx
           .select({
             amount: PaymentTable.amount,
+            enrichment: PaymentTable.enrichment,
           })
           .from(PaymentTable)
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
-          .then((rows) => rows[0]?.amount),
+          .then((rows) => rows[0]),
       )
-      if (!amount) throw new Error("Payment not found")
+      if (!payment) throw new Error("Payment not found")
 
       await Database.transaction(async (tx) => {
         await tx
@@ -350,12 +335,15 @@ export async function POST(input: APIEvent) {
           })
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
 
-        await tx
-          .update(BillingTable)
-          .set({
-            balance: sql`${BillingTable.balance} - ${amount}`,
-          })
-          .where(eq(BillingTable.workspaceID, workspaceID))
+        // deduct balance only for top up
+        if (!payment.enrichment?.type) {
+          await tx
+            .update(BillingTable)
+            .set({
+              balance: sql`${BillingTable.balance} - ${payment.amount}`,
+            })
+            .where(eq(BillingTable.workspaceID, workspaceID))
+        }
       })
     }
   })()

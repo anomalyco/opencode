@@ -21,7 +21,7 @@ const releaseId = process.env.OPENCODE_RELEASE
 if (!releaseId) throw new Error("OPENCODE_RELEASE is required")
 
 const version = process.env.OPENCODE_VERSION
-if (!releaseId) throw new Error("OPENCODE_VERSION is required")
+if (!version) throw new Error("OPENCODE_VERSION is required")
 
 const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
 if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required")
@@ -54,7 +54,10 @@ const assets = release.assets ?? []
 const assetByName = new Map(assets.map((asset) => [asset.name, asset]))
 
 const latestAsset = assetByName.get("latest.json")
-if (!latestAsset) throw new Error("latest.json asset not found")
+if (!latestAsset) {
+  console.log("latest.json not found, skipping tauri finalization")
+  process.exit(0)
+}
 
 const latestRes = await fetch(latestAsset.url, {
   headers: {
@@ -101,6 +104,7 @@ const targets = [
   { key: "linux-x86_64-rpm", asset: "opencode-desktop-linux-x86_64.rpm" },
   { key: "linux-aarch64-deb", asset: "opencode-desktop-linux-arm64.deb" },
   { key: "linux-aarch64-rpm", asset: "opencode-desktop-linux-aarch64.rpm" },
+  { key: "windows-aarch64-nsis", asset: "opencode-desktop-windows-arm64.exe" },
   { key: "windows-x86_64-nsis", asset: "opencode-desktop-windows-x64.exe" },
   { key: "darwin-x86_64-app", asset: "opencode-desktop-darwin-x64.app.tar.gz" },
   {
@@ -129,6 +133,7 @@ const alias = (key: string, source: string) => {
 
 alias("linux-x86_64", "linux-x86_64-deb")
 alias("linux-aarch64", "linux-aarch64-deb")
+alias("windows-aarch64", "windows-aarch64-nsis")
 alias("windows-x86_64", "windows-x86_64-nsis")
 alias("darwin-x86_64", "darwin-x86_64-app")
 alias("darwin-aarch64", "darwin-aarch64-app")

@@ -60,6 +60,8 @@ function toolEvent(
   const payload: EventMessagePartUpdated = {
     type: "message.part.updated",
     properties: {
+      sessionID: sessionId,
+      time: Date.now(),
       part: {
         id: `part_${opts.callID}`,
         sessionID: sessionId,
@@ -287,6 +289,46 @@ describe("acp.agent event subscription", () => {
 
         expect((updates.get(sessionA) ?? []).includes("agent_message_chunk")).toBe(false)
         expect((updates.get(sessionB) ?? []).includes("agent_message_chunk")).toBe(true)
+
+        stop()
+      },
+    })
+  })
+
+  test("does not emit user_message_chunk for live prompt parts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              time: Date.now(),
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_user",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(
+          sessionUpdates
+            .filter((u) => u.sessionId === sessionId)
+            .some((u) => u.update.sessionUpdate === "user_message_chunk"),
+        ).toBe(false)
 
         stop()
       },

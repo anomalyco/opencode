@@ -1,18 +1,88 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import os from "os"
-import { PermissionNext } from "../../src/permission/next"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Bus } from "../../src/bus"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Permission } from "../../src/permission"
+import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, provideTmpdirInstance, tmpdir, tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import { MessageID, SessionID } from "../../src/session/schema"
+
+const bus = Bus.layer
+const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(bus)), bus, CrossSpawnSpawner.defaultLayer)
+const it = testEffect(env)
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
+
+const rejectAll = (message?: string) =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    for (const req of yield* permission.list()) {
+      yield* permission.reply({
+        requestID: req.id,
+        reply: "reject",
+        message,
+      })
+    }
+  })
+
+const waitForPending = (count: number) =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    for (let i = 0; i < 100; i++) {
+      const list = yield* permission.list()
+      if (list.length === count) return list
+      yield* Effect.sleep("10 millis")
+    }
+    return yield* Effect.fail(new Error(`timed out waiting for ${count} pending permission request(s)`))
+  })
+
+const fail = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const exit = yield* self.pipe(Effect.exit)
+    if (Exit.isFailure(exit)) return Cause.squash(exit.cause)
+    throw new Error("expected permission effect to fail")
+  })
+
+const ask = (input: Parameters<Permission.Interface["ask"]>[0]) =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    return yield* permission.ask(input)
+  })
+
+const reply = (input: Parameters<Permission.Interface["reply"]>[0]) =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    return yield* permission.reply(input)
+  })
+
+const list = () =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    return yield* permission.list()
+  })
+
+function withDir(options: { git?: boolean } | undefined, self: (dir: string) => Effect.Effect<any, any, any>) {
+  return provideTmpdirInstance(self, options)
+}
+
+function withProvided(dir: string) {
+  return <A, E, R>(self: Effect.Effect<A, E, R>) => self.pipe(provideInstance(dir))
+}
 
 // fromConfig tests
 
 test("fromConfig - string value becomes wildcard rule", () => {
-  const result = PermissionNext.fromConfig({ bash: "allow" })
+  const result = Permission.fromConfig({ bash: "allow" })
   expect(result).toEqual([{ permission: "bash", pattern: "*", action: "allow" }])
 })
 
 test("fromConfig - object value converts to rules array", () => {
-  const result = PermissionNext.fromConfig({ bash: { "*": "allow", rm: "deny" } })
+  const result = Permission.fromConfig({ bash: { "*": "allow", rm: "deny" } })
   expect(result).toEqual([
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "bash", pattern: "rm", action: "deny" },
@@ -20,7 +90,7 @@ test("fromConfig - object value converts to rules array", () => {
 })
 
 test("fromConfig - mixed string and object values", () => {
-  const result = PermissionNext.fromConfig({
+  const result = Permission.fromConfig({
     bash: { "*": "allow", rm: "deny" },
     edit: "allow",
     webfetch: "ask",
@@ -34,51 +104,51 @@ test("fromConfig - mixed string and object values", () => {
 })
 
 test("fromConfig - empty object", () => {
-  const result = PermissionNext.fromConfig({})
+  const result = Permission.fromConfig({})
   expect(result).toEqual([])
 })
 
 test("fromConfig - expands tilde to home directory", () => {
-  const result = PermissionNext.fromConfig({ external_directory: { "~/projects/*": "allow" } })
+  const result = Permission.fromConfig({ external_directory: { "~/projects/*": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: `${os.homedir()}/projects/*`, action: "allow" }])
 })
 
 test("fromConfig - expands $HOME to home directory", () => {
-  const result = PermissionNext.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
+  const result = Permission.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: `${os.homedir()}/projects/*`, action: "allow" }])
 })
 
 test("fromConfig - expands $HOME without trailing slash", () => {
-  const result = PermissionNext.fromConfig({ external_directory: { $HOME: "allow" } })
+  const result = Permission.fromConfig({ external_directory: { $HOME: "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
 })
 
 test("fromConfig - does not expand tilde in middle of path", () => {
-  const result = PermissionNext.fromConfig({ external_directory: { "/some/~/path": "allow" } })
+  const result = Permission.fromConfig({ external_directory: { "/some/~/path": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
 })
 
 test("fromConfig - expands exact tilde to home directory", () => {
-  const result = PermissionNext.fromConfig({ external_directory: { "~": "allow" } })
+  const result = Permission.fromConfig({ external_directory: { "~": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
 })
 
 test("evaluate - matches expanded tilde pattern", () => {
-  const ruleset = PermissionNext.fromConfig({ external_directory: { "~/projects/*": "allow" } })
-  const result = PermissionNext.evaluate("external_directory", `${os.homedir()}/projects/file.txt`, ruleset)
+  const ruleset = Permission.fromConfig({ external_directory: { "~/projects/*": "allow" } })
+  const result = Permission.evaluate("external_directory", `${os.homedir()}/projects/file.txt`, ruleset)
   expect(result.action).toBe("allow")
 })
 
 test("evaluate - matches expanded $HOME pattern", () => {
-  const ruleset = PermissionNext.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
-  const result = PermissionNext.evaluate("external_directory", `${os.homedir()}/projects/file.txt`, ruleset)
+  const ruleset = Permission.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
+  const result = Permission.evaluate("external_directory", `${os.homedir()}/projects/file.txt`, ruleset)
   expect(result.action).toBe("allow")
 })
 
 // merge tests
 
 test("merge - simple concatenation", () => {
-  const result = PermissionNext.merge(
+  const result = Permission.merge(
     [{ permission: "bash", pattern: "*", action: "allow" }],
     [{ permission: "bash", pattern: "*", action: "deny" }],
   )
@@ -89,7 +159,7 @@ test("merge - simple concatenation", () => {
 })
 
 test("merge - adds new permission", () => {
-  const result = PermissionNext.merge(
+  const result = Permission.merge(
     [{ permission: "bash", pattern: "*", action: "allow" }],
     [{ permission: "edit", pattern: "*", action: "deny" }],
   )
@@ -100,7 +170,7 @@ test("merge - adds new permission", () => {
 })
 
 test("merge - concatenates rules for same permission", () => {
-  const result = PermissionNext.merge(
+  const result = Permission.merge(
     [{ permission: "bash", pattern: "foo", action: "ask" }],
     [{ permission: "bash", pattern: "*", action: "deny" }],
   )
@@ -111,7 +181,7 @@ test("merge - concatenates rules for same permission", () => {
 })
 
 test("merge - multiple rulesets", () => {
-  const result = PermissionNext.merge(
+  const result = Permission.merge(
     [{ permission: "bash", pattern: "*", action: "allow" }],
     [{ permission: "bash", pattern: "rm", action: "ask" }],
     [{ permission: "edit", pattern: "*", action: "allow" }],
@@ -124,12 +194,12 @@ test("merge - multiple rulesets", () => {
 })
 
 test("merge - empty ruleset does nothing", () => {
-  const result = PermissionNext.merge([{ permission: "bash", pattern: "*", action: "allow" }], [])
+  const result = Permission.merge([{ permission: "bash", pattern: "*", action: "allow" }], [])
   expect(result).toEqual([{ permission: "bash", pattern: "*", action: "allow" }])
 })
 
 test("merge - preserves rule order", () => {
-  const result = PermissionNext.merge(
+  const result = Permission.merge(
     [
       { permission: "edit", pattern: "src/*", action: "allow" },
       { permission: "edit", pattern: "src/secret/*", action: "deny" },
@@ -144,41 +214,36 @@ test("merge - preserves rule order", () => {
 })
 
 test("merge - config permission overrides default ask", () => {
-  // Simulates: defaults have "*": "ask", config sets bash: "allow"
-  const defaults: PermissionNext.Ruleset = [{ permission: "*", pattern: "*", action: "ask" }]
-  const config: PermissionNext.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
-  const merged = PermissionNext.merge(defaults, config)
+  const defaults: Permission.Ruleset = [{ permission: "*", pattern: "*", action: "ask" }]
+  const config: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
+  const merged = Permission.merge(defaults, config)
 
-  // Config's bash allow should override default ask
-  expect(PermissionNext.evaluate("bash", "ls", merged).action).toBe("allow")
-  // Other permissions should still be ask (from defaults)
-  expect(PermissionNext.evaluate("edit", "foo.ts", merged).action).toBe("ask")
+  expect(Permission.evaluate("bash", "ls", merged).action).toBe("allow")
+  expect(Permission.evaluate("edit", "foo.ts", merged).action).toBe("ask")
 })
 
 test("merge - config ask overrides default allow", () => {
-  // Simulates: defaults have bash: "allow", config sets bash: "ask"
-  const defaults: PermissionNext.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
-  const config: PermissionNext.Ruleset = [{ permission: "bash", pattern: "*", action: "ask" }]
-  const merged = PermissionNext.merge(defaults, config)
+  const defaults: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
+  const config: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "ask" }]
+  const merged = Permission.merge(defaults, config)
 
-  // Config's ask should override default allow
-  expect(PermissionNext.evaluate("bash", "ls", merged).action).toBe("ask")
+  expect(Permission.evaluate("bash", "ls", merged).action).toBe("ask")
 })
 
 // evaluate tests
 
 test("evaluate - exact pattern match", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [{ permission: "bash", pattern: "rm", action: "deny" }])
+  const result = Permission.evaluate("bash", "rm", [{ permission: "bash", pattern: "rm", action: "deny" }])
   expect(result.action).toBe("deny")
 })
 
 test("evaluate - wildcard pattern match", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [{ permission: "bash", pattern: "*", action: "allow" }])
+  const result = Permission.evaluate("bash", "rm", [{ permission: "bash", pattern: "*", action: "allow" }])
   expect(result.action).toBe("allow")
 })
 
 test("evaluate - last matching rule wins", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [
+  const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "bash", pattern: "rm", action: "deny" },
   ])
@@ -186,7 +251,7 @@ test("evaluate - last matching rule wins", () => {
 })
 
 test("evaluate - last matching rule wins (wildcard after specific)", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [
+  const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "rm", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
@@ -194,14 +259,12 @@ test("evaluate - last matching rule wins (wildcard after specific)", () => {
 })
 
 test("evaluate - glob pattern match", () => {
-  const result = PermissionNext.evaluate("edit", "src/foo.ts", [
-    { permission: "edit", pattern: "src/*", action: "allow" },
-  ])
+  const result = Permission.evaluate("edit", "src/foo.ts", [{ permission: "edit", pattern: "src/*", action: "allow" }])
   expect(result.action).toBe("allow")
 })
 
 test("evaluate - last matching glob wins", () => {
-  const result = PermissionNext.evaluate("edit", "src/components/Button.tsx", [
+  const result = Permission.evaluate("edit", "src/components/Button.tsx", [
     { permission: "edit", pattern: "src/*", action: "deny" },
     { permission: "edit", pattern: "src/components/*", action: "allow" },
   ])
@@ -209,8 +272,7 @@ test("evaluate - last matching glob wins", () => {
 })
 
 test("evaluate - order matters for specificity", () => {
-  // If more specific rule comes first, later wildcard overrides it
-  const result = PermissionNext.evaluate("edit", "src/components/Button.tsx", [
+  const result = Permission.evaluate("edit", "src/components/Button.tsx", [
     { permission: "edit", pattern: "src/components/*", action: "allow" },
     { permission: "edit", pattern: "src/*", action: "deny" },
   ])
@@ -218,31 +280,29 @@ test("evaluate - order matters for specificity", () => {
 })
 
 test("evaluate - unknown permission returns ask", () => {
-  const result = PermissionNext.evaluate("unknown_tool", "anything", [
+  const result = Permission.evaluate("unknown_tool", "anything", [
     { permission: "bash", pattern: "*", action: "allow" },
   ])
   expect(result.action).toBe("ask")
 })
 
 test("evaluate - empty ruleset returns ask", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [])
+  const result = Permission.evaluate("bash", "rm", [])
   expect(result.action).toBe("ask")
 })
 
 test("evaluate - no matching pattern returns ask", () => {
-  const result = PermissionNext.evaluate("edit", "etc/passwd", [
-    { permission: "edit", pattern: "src/*", action: "allow" },
-  ])
+  const result = Permission.evaluate("edit", "etc/passwd", [{ permission: "edit", pattern: "src/*", action: "allow" }])
   expect(result.action).toBe("ask")
 })
 
 test("evaluate - empty rules array returns ask", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [])
+  const result = Permission.evaluate("bash", "rm", [])
   expect(result.action).toBe("ask")
 })
 
 test("evaluate - multiple matching patterns, last wins", () => {
-  const result = PermissionNext.evaluate("edit", "src/secret.ts", [
+  const result = Permission.evaluate("edit", "src/secret.ts", [
     { permission: "edit", pattern: "*", action: "ask" },
     { permission: "edit", pattern: "src/*", action: "allow" },
     { permission: "edit", pattern: "src/secret.ts", action: "deny" },
@@ -251,7 +311,7 @@ test("evaluate - multiple matching patterns, last wins", () => {
 })
 
 test("evaluate - non-matching patterns are skipped", () => {
-  const result = PermissionNext.evaluate("edit", "src/foo.ts", [
+  const result = Permission.evaluate("edit", "src/foo.ts", [
     { permission: "edit", pattern: "*", action: "ask" },
     { permission: "edit", pattern: "test/*", action: "deny" },
     { permission: "edit", pattern: "src/*", action: "allow" },
@@ -260,7 +320,7 @@ test("evaluate - non-matching patterns are skipped", () => {
 })
 
 test("evaluate - exact match at end wins over earlier wildcard", () => {
-  const result = PermissionNext.evaluate("bash", "/bin/rm", [
+  const result = Permission.evaluate("bash", "/bin/rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "bash", pattern: "/bin/rm", action: "deny" },
   ])
@@ -268,7 +328,7 @@ test("evaluate - exact match at end wins over earlier wildcard", () => {
 })
 
 test("evaluate - wildcard at end overrides earlier exact match", () => {
-  const result = PermissionNext.evaluate("bash", "/bin/rm", [
+  const result = Permission.evaluate("bash", "/bin/rm", [
     { permission: "bash", pattern: "/bin/rm", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
@@ -278,24 +338,24 @@ test("evaluate - wildcard at end overrides earlier exact match", () => {
 // wildcard permission tests
 
 test("evaluate - wildcard permission matches any permission", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [{ permission: "*", pattern: "*", action: "deny" }])
+  const result = Permission.evaluate("bash", "rm", [{ permission: "*", pattern: "*", action: "deny" }])
   expect(result.action).toBe("deny")
 })
 
 test("evaluate - wildcard permission with specific pattern", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [{ permission: "*", pattern: "rm", action: "deny" }])
+  const result = Permission.evaluate("bash", "rm", [{ permission: "*", pattern: "rm", action: "deny" }])
   expect(result.action).toBe("deny")
 })
 
 test("evaluate - glob permission pattern", () => {
-  const result = PermissionNext.evaluate("mcp_server_tool", "anything", [
+  const result = Permission.evaluate("mcp_server_tool", "anything", [
     { permission: "mcp_*", pattern: "*", action: "allow" },
   ])
   expect(result.action).toBe("allow")
 })
 
 test("evaluate - specific permission and wildcard permission combined", () => {
-  const result = PermissionNext.evaluate("bash", "rm", [
+  const result = Permission.evaluate("bash", "rm", [
     { permission: "*", pattern: "*", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
@@ -303,7 +363,7 @@ test("evaluate - specific permission and wildcard permission combined", () => {
 })
 
 test("evaluate - wildcard permission does not match when specific exists", () => {
-  const result = PermissionNext.evaluate("edit", "src/foo.ts", [
+  const result = Permission.evaluate("edit", "src/foo.ts", [
     { permission: "*", pattern: "*", action: "deny" },
     { permission: "edit", pattern: "src/*", action: "allow" },
   ])
@@ -311,7 +371,7 @@ test("evaluate - wildcard permission does not match when specific exists", () =>
 })
 
 test("evaluate - multiple matching permission patterns combine rules", () => {
-  const result = PermissionNext.evaluate("mcp_dangerous", "anything", [
+  const result = Permission.evaluate("mcp_dangerous", "anything", [
     { permission: "*", pattern: "*", action: "ask" },
     { permission: "mcp_*", pattern: "*", action: "allow" },
     { permission: "mcp_dangerous", pattern: "*", action: "deny" },
@@ -320,7 +380,7 @@ test("evaluate - multiple matching permission patterns combine rules", () => {
 })
 
 test("evaluate - wildcard permission fallback for unknown tool", () => {
-  const result = PermissionNext.evaluate("unknown_tool", "anything", [
+  const result = Permission.evaluate("unknown_tool", "anything", [
     { permission: "*", pattern: "*", action: "ask" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
@@ -328,32 +388,29 @@ test("evaluate - wildcard permission fallback for unknown tool", () => {
 })
 
 test("evaluate - permission patterns sorted by length regardless of object order", () => {
-  // specific permission listed before wildcard, but specific should still win
-  const result = PermissionNext.evaluate("bash", "rm", [
+  const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "*", pattern: "*", action: "deny" },
   ])
-  // With flat list, last matching rule wins - so "*" matches bash and wins
   expect(result.action).toBe("deny")
 })
 
 test("evaluate - merges multiple rulesets", () => {
-  const config: PermissionNext.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
-  const approved: PermissionNext.Ruleset = [{ permission: "bash", pattern: "rm", action: "deny" }]
-  // approved comes after config, so rm should be denied
-  const result = PermissionNext.evaluate("bash", "rm", config, approved)
+  const config: Permission.Ruleset = [{ permission: "bash", pattern: "*", action: "allow" }]
+  const approved: Permission.Ruleset = [{ permission: "bash", pattern: "rm", action: "deny" }]
+  const result = Permission.evaluate("bash", "rm", config, approved)
   expect(result.action).toBe("deny")
 })
 
 // disabled tests
 
 test("disabled - returns empty set when all tools allowed", () => {
-  const result = PermissionNext.disabled(["bash", "edit", "read"], [{ permission: "*", pattern: "*", action: "allow" }])
+  const result = Permission.disabled(["bash", "edit", "read"], [{ permission: "*", pattern: "*", action: "allow" }])
   expect(result.size).toBe(0)
 })
 
 test("disabled - disables tool when denied", () => {
-  const result = PermissionNext.disabled(
+  const result = Permission.disabled(
     ["bash", "edit", "read"],
     [
       { permission: "*", pattern: "*", action: "allow" },
@@ -365,9 +422,9 @@ test("disabled - disables tool when denied", () => {
   expect(result.has("read")).toBe(false)
 })
 
-test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
-  const result = PermissionNext.disabled(
-    ["edit", "write", "patch", "multiedit", "bash"],
+test("disabled - disables edit/write/apply_patch/multiedit when edit denied", () => {
+  const result = Permission.disabled(
+    ["edit", "write", "apply_patch", "multiedit", "bash"],
     [
       { permission: "*", pattern: "*", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
@@ -375,13 +432,13 @@ test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
   )
   expect(result.has("edit")).toBe(true)
   expect(result.has("write")).toBe(true)
-  expect(result.has("patch")).toBe(true)
+  expect(result.has("apply_patch")).toBe(true)
   expect(result.has("multiedit")).toBe(true)
   expect(result.has("bash")).toBe(false)
 })
 
 test("disabled - does not disable when partially denied", () => {
-  const result = PermissionNext.disabled(
+  const result = Permission.disabled(
     ["bash"],
     [
       { permission: "bash", pattern: "*", action: "allow" },
@@ -392,14 +449,12 @@ test("disabled - does not disable when partially denied", () => {
 })
 
 test("disabled - does not disable when action is ask", () => {
-  const result = PermissionNext.disabled(["bash", "edit"], [{ permission: "*", pattern: "*", action: "ask" }])
+  const result = Permission.disabled(["bash", "edit"], [{ permission: "*", pattern: "*", action: "ask" }])
   expect(result.size).toBe(0)
 })
 
 test("disabled - does not disable when specific allow after wildcard deny", () => {
-  // Tool is NOT disabled because a specific allow after wildcard deny means
-  // there's at least some usage allowed
-  const result = PermissionNext.disabled(
+  const result = Permission.disabled(
     ["bash"],
     [
       { permission: "bash", pattern: "*", action: "deny" },
@@ -410,7 +465,7 @@ test("disabled - does not disable when specific allow after wildcard deny", () =
 })
 
 test("disabled - does not disable when wildcard allow after deny", () => {
-  const result = PermissionNext.disabled(
+  const result = Permission.disabled(
     ["bash"],
     [
       { permission: "bash", pattern: "rm *", action: "deny" },
@@ -421,7 +476,7 @@ test("disabled - does not disable when wildcard allow after deny", () => {
 })
 
 test("disabled - disables multiple tools", () => {
-  const result = PermissionNext.disabled(
+  const result = Permission.disabled(
     ["bash", "edit", "webfetch"],
     [
       { permission: "bash", pattern: "*", action: "deny" },
@@ -435,14 +490,14 @@ test("disabled - disables multiple tools", () => {
 })
 
 test("disabled - wildcard permission denies all tools", () => {
-  const result = PermissionNext.disabled(["bash", "edit", "read"], [{ permission: "*", pattern: "*", action: "deny" }])
+  const result = Permission.disabled(["bash", "edit", "read"], [{ permission: "*", pattern: "*", action: "deny" }])
   expect(result.has("bash")).toBe(true)
   expect(result.has("edit")).toBe(true)
   expect(result.has("read")).toBe(true)
 })
 
 test("disabled - specific allow overrides wildcard deny", () => {
-  const result = PermissionNext.disabled(
+  const result = Permission.disabled(
     ["bash", "edit", "read"],
     [
       { permission: "*", pattern: "*", action: "deny" },
@@ -456,13 +511,11 @@ test("disabled - specific allow overrides wildcard deny", () => {
 
 // ask tests
 
-test("ask - resolves immediately when action is allow", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const result = await PermissionNext.ask({
-        sessionID: "session_test",
+it.live("ask - resolves immediately when action is allow", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const result = yield* ask({
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -470,192 +523,483 @@ test("ask - resolves immediately when action is allow", async () => {
         ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
       })
       expect(result).toBeUndefined()
-    },
-  })
-})
+    }),
+  ),
+)
 
-test("ask - throws RejectedError when action is deny", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await expect(
-        PermissionNext.ask({
-          sessionID: "session_test",
+it.live("ask - throws DeniedError when action is deny", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
           permission: "bash",
           patterns: ["rm -rf /"],
           metadata: {},
           always: [],
           ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
         }),
-      ).rejects.toBeInstanceOf(PermissionNext.DeniedError)
-    },
-  })
-})
+      )
+      expect(err).toBeInstanceOf(Permission.DeniedError)
+    }),
+  ),
+)
 
-test("ask - returns pending promise when action is ask", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const promise = PermissionNext.ask({
-        sessionID: "session_test",
+it.live("ask - stays pending when action is ask", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
         always: [],
         ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  ),
+)
+
+it.live("ask - adds request to pending list", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { cmd: "ls" },
+        always: ["ls"],
+        tool: {
+          messageID: MessageID.make("msg_test"),
+          callID: "call_test",
+        },
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items).toHaveLength(1)
+      expect(items[0]).toMatchObject({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { cmd: "ls" },
+        always: ["ls"],
+        tool: {
+          messageID: MessageID.make("msg_test"),
+          callID: "call_test",
+        },
       })
-      // Promise should be pending, not resolved
-      expect(promise).toBeInstanceOf(Promise)
-      // Don't await - just verify it returns a promise
-    },
-  })
-})
+
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  ),
+)
+
+it.live("ask - publishes asked event", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      let seen: Permission.Request | undefined
+      const unsub = yield* bus.subscribeCallback(Permission.Event.Asked, (event) => {
+        seen = event.properties
+      })
+
+      try {
+        const fiber = yield* ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: { cmd: "ls" },
+          always: ["ls"],
+          tool: {
+            messageID: MessageID.make("msg_test"),
+            callID: "call_test",
+          },
+          ruleset: [],
+        }).pipe(Effect.forkScoped)
+
+        expect(yield* waitForPending(1)).toHaveLength(1)
+        expect(seen).toBeDefined()
+        expect(seen).toMatchObject({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["ls"],
+        })
+
+        yield* rejectAll()
+        yield* Fiber.await(fiber)
+      } finally {
+        unsub()
+      }
+    }),
+  ),
+)
 
 // reply tests
 
-test("reply - once resolves the pending ask", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const askPromise = PermissionNext.ask({
-        id: "permission_test1",
-        sessionID: "session_test",
+it.live("reply - once resolves the pending ask", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        id: PermissionID.make("per_test1"),
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
         always: [],
         ruleset: [],
-      })
+      }).pipe(Effect.forkScoped)
 
-      await PermissionNext.reply({
-        requestID: "permission_test1",
-        reply: "once",
-      })
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionID.make("per_test1"), reply: "once" })
+      yield* Fiber.join(fiber)
+    }),
+  ),
+)
 
-      await expect(askPromise).resolves.toBeUndefined()
-    },
-  })
-})
-
-test("reply - reject throws RejectedError", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const askPromise = PermissionNext.ask({
-        id: "permission_test2",
-        sessionID: "session_test",
+it.live("reply - reject throws RejectedError", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        id: PermissionID.make("per_test2"),
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
         always: [],
         ruleset: [],
-      })
+      }).pipe(Effect.forkScoped)
 
-      await PermissionNext.reply({
-        requestID: "permission_test2",
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionID.make("per_test2"), reply: "reject" })
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+    }),
+  ),
+)
+
+it.live("reply - reject with message throws CorrectedError", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        id: PermissionID.make("per_test2b"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* reply({
+        requestID: PermissionID.make("per_test2b"),
         reply: "reject",
+        message: "Use a safer command",
       })
 
-      await expect(askPromise).rejects.toBeInstanceOf(PermissionNext.RejectedError)
-    },
-  })
-})
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(err).toBeInstanceOf(Permission.CorrectedError)
+        expect(String(err)).toContain("Use a safer command")
+      }
+    }),
+  ),
+)
 
-test("reply - always persists approval and resolves", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const askPromise = PermissionNext.ask({
-        id: "permission_test3",
-        sessionID: "session_test",
-        permission: "bash",
-        patterns: ["ls"],
-        metadata: {},
-        always: ["ls"],
-        ruleset: [],
-      })
+it.live("reply - always persists approval and resolves", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+    const fiber = yield* ask({
+      id: PermissionID.make("per_test3"),
+      sessionID: SessionID.make("session_test"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: ["ls"],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
 
-      await PermissionNext.reply({
-        requestID: "permission_test3",
-        reply: "always",
-      })
+    yield* waitForPending(1).pipe(run)
+    yield* reply({ requestID: PermissionID.make("per_test3"), reply: "always" }).pipe(run)
+    yield* Fiber.join(fiber)
 
-      await expect(askPromise).resolves.toBeUndefined()
-    },
-  })
-  // Re-provide to reload state with stored permissions
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      // Stored approval should allow without asking
-      const result = await PermissionNext.ask({
-        sessionID: "session_test2",
-        permission: "bash",
-        patterns: ["ls"],
-        metadata: {},
-        always: [],
-        ruleset: [],
-      })
-      expect(result).toBeUndefined()
-    },
-  })
-})
+    const result = yield* ask({
+      sessionID: SessionID.make("session_test2"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(run)
+    expect(result).toBeUndefined()
+  }),
+)
 
-test("reply - reject cancels all pending for same session", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const askPromise1 = PermissionNext.ask({
-        id: "permission_test4a",
-        sessionID: "session_same",
+it.live("reply - reject cancels all pending for same session", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const a = yield* ask({
+        id: PermissionID.make("per_test4a"),
+        sessionID: SessionID.make("session_same"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
         always: [],
         ruleset: [],
-      })
+      }).pipe(Effect.forkScoped)
 
-      const askPromise2 = PermissionNext.ask({
-        id: "permission_test4b",
-        sessionID: "session_same",
+      const b = yield* ask({
+        id: PermissionID.make("per_test4b"),
+        sessionID: SessionID.make("session_same"),
         permission: "edit",
         patterns: ["foo.ts"],
         metadata: {},
         always: [],
         ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(2)
+      yield* reply({ requestID: PermissionID.make("per_test4a"), reply: "reject" })
+
+      const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      expect(Exit.isFailure(ea)).toBe(true)
+      expect(Exit.isFailure(eb)).toBe(true)
+      if (Exit.isFailure(ea)) expect(Cause.squash(ea.cause)).toBeInstanceOf(Permission.RejectedError)
+      if (Exit.isFailure(eb)) expect(Cause.squash(eb.cause)).toBeInstanceOf(Permission.RejectedError)
+    }),
+  ),
+)
+
+it.live("reply - always resolves matching pending requests in same session", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const a = yield* ask({
+        id: PermissionID.make("per_test5a"),
+        sessionID: SessionID.make("session_same"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const b = yield* ask({
+        id: PermissionID.make("per_test5b"),
+        sessionID: SessionID.make("session_same"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(2)
+      yield* reply({ requestID: PermissionID.make("per_test5a"), reply: "always" })
+
+      yield* Fiber.join(a)
+      yield* Fiber.join(b)
+      expect(yield* list()).toHaveLength(0)
+    }),
+  ),
+)
+
+it.live("reply - always keeps other session pending", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const a = yield* ask({
+        id: PermissionID.make("per_test6a"),
+        sessionID: SessionID.make("session_a"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const b = yield* ask({
+        id: PermissionID.make("per_test6b"),
+        sessionID: SessionID.make("session_b"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(2)
+      yield* reply({ requestID: PermissionID.make("per_test6a"), reply: "always" })
+
+      yield* Fiber.join(a)
+      expect((yield* list()).map((item) => item.id)).toEqual([PermissionID.make("per_test6b")])
+
+      yield* rejectAll()
+      yield* Fiber.await(b)
+    }),
+  ),
+)
+
+it.live("reply - publishes replied event", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      let resolve!: (value: { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }) => void
+      const seen = Effect.promise<{
+        sessionID: SessionID
+        requestID: PermissionID
+        reply: Permission.Reply
+      }>(
+        () =>
+          new Promise((res) => {
+            resolve = res
+          }),
+      )
+
+      const fiber = yield* ask({
+        id: PermissionID.make("per_test7"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+
+      const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
+        resolve(event.properties)
       })
 
-      // Catch rejections before they become unhandled
-      const result1 = askPromise1.catch((e) => e)
-      const result2 = askPromise2.catch((e) => e)
+      try {
+        yield* reply({ requestID: PermissionID.make("per_test7"), reply: "once" })
+        yield* Fiber.join(fiber)
+        expect(yield* seen).toEqual({
+          sessionID: SessionID.make("session_test"),
+          requestID: PermissionID.make("per_test7"),
+          reply: "once",
+        })
+      } finally {
+        unsub()
+      }
+    }),
+  ),
+)
 
-      // Reject the first one
-      await PermissionNext.reply({
-        requestID: "permission_test4a",
-        reply: "reject",
-      })
+it.live("permission requests stay isolated by directory", () =>
+  Effect.gen(function* () {
+    const one = yield* tmpdirScoped({ git: true })
+    const two = yield* tmpdirScoped({ git: true })
+    const runOne = withProvided(one)
+    const runTwo = withProvided(two)
 
-      // Both should be rejected
-      expect(await result1).toBeInstanceOf(PermissionNext.RejectedError)
-      expect(await result2).toBeInstanceOf(PermissionNext.RejectedError)
-    },
-  })
-})
+    const a = yield* ask({
+      id: PermissionID.make("per_dir_a"),
+      sessionID: SessionID.make("session_dir_a"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(runOne, Effect.forkScoped)
 
-test("ask - checks all patterns and stops on first deny", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await expect(
-        PermissionNext.ask({
-          sessionID: "session_test",
+    const b = yield* ask({
+      id: PermissionID.make("per_dir_b"),
+      sessionID: SessionID.make("session_dir_b"),
+      permission: "bash",
+      patterns: ["pwd"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(runTwo, Effect.forkScoped)
+
+    const onePending = yield* waitForPending(1).pipe(runOne)
+    const twoPending = yield* waitForPending(1).pipe(runTwo)
+
+    expect(onePending).toHaveLength(1)
+    expect(twoPending).toHaveLength(1)
+    expect(onePending[0].id).toBe(PermissionID.make("per_dir_a"))
+    expect(twoPending[0].id).toBe(PermissionID.make("per_dir_b"))
+
+    yield* reply({ requestID: onePending[0].id, reply: "reject" }).pipe(runOne)
+    yield* reply({ requestID: twoPending[0].id, reply: "reject" }).pipe(runTwo)
+
+    yield* Fiber.await(a)
+    yield* Fiber.await(b)
+  }),
+)
+
+it.live("pending permission rejects on instance dispose", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+    const fiber = yield* ask({
+      id: PermissionID.make("per_dispose"),
+      sessionID: SessionID.make("session_dispose"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
+    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => Instance.dispose() }))
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+  }),
+)
+
+it.live("pending permission rejects on instance reload", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+    const fiber = yield* ask({
+      id: PermissionID.make("per_reload"),
+      sessionID: SessionID.make("session_reload"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
+    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+  }),
+)
+
+it.live("reply - does nothing for unknown requestID", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      yield* reply({ requestID: PermissionID.make("per_unknown"), reply: "once" })
+      expect(yield* list()).toHaveLength(0)
+    }),
+  ),
+)
+
+it.live("ask - checks all patterns and stops on first deny", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
           permission: "bash",
           patterns: ["echo hello", "rm -rf /"],
           metadata: {},
@@ -665,18 +1009,17 @@ test("ask - checks all patterns and stops on first deny", async () => {
             { permission: "bash", pattern: "rm *", action: "deny" },
           ],
         }),
-      ).rejects.toBeInstanceOf(PermissionNext.DeniedError)
-    },
-  })
-})
+      )
+      expect(err).toBeInstanceOf(Permission.DeniedError)
+    }),
+  ),
+)
 
-test("ask - allows all patterns when all match allow rules", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const result = await PermissionNext.ask({
-        sessionID: "session_test",
+it.live("ask - allows all patterns when all match allow rules", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const result = yield* ask({
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["echo hello", "ls -la", "pwd"],
         metadata: {},
@@ -684,6 +1027,54 @@ test("ask - allows all patterns when all match allow rules", async () => {
         ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
       })
       expect(result).toBeUndefined()
-    },
-  })
-})
+    }),
+  ),
+)
+
+it.live("ask - should deny even when an earlier pattern is ask", () =>
+  withDir({ git: true }, () =>
+    Effect.gen(function* () {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["echo hello", "rm -rf /"],
+          metadata: {},
+          always: [],
+          ruleset: [
+            { permission: "bash", pattern: "echo *", action: "ask" },
+            { permission: "bash", pattern: "rm *", action: "deny" },
+          ],
+        }),
+      )
+
+      expect(err).toBeInstanceOf(Permission.DeniedError)
+      expect(yield* list()).toHaveLength(0)
+    }),
+  ),
+)
+
+it.live("ask - abort should clear pending request", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+
+    const fiber = yield* ask({
+      id: PermissionID.make("per_reload"),
+      sessionID: SessionID.make("session_reload"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+    }).pipe(run, Effect.forkScoped)
+
+    const pending = yield* waitForPending(1).pipe(run)
+    expect(pending).toHaveLength(1)
+    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+  }),
+)

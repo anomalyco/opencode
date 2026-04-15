@@ -8,7 +8,7 @@ const dict: Record<string, string> = {
   "prompt.placeholder.shell": "Run a shell command...",
   "prompt.placeholder.summarizeComment": "Summarize this comment",
   "prompt.placeholder.summarizeComments": "Summarize these comments",
-  "prompt.action.attachFile": "Attach file",
+  "prompt.action.attachFile": "Attach files",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
   "prompt.attachment.remove": "Remove attachment",

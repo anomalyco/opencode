@@ -1,6 +1,7 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { createSignal, Match, splitProps, Switch, type JSX } from "solid-js"
+import { createEffect, Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   value: JSX.Element
@@ -32,7 +33,12 @@ export function TooltipKeybind(props: TooltipKeybindProps) {
 }
 
 export function Tooltip(props: TooltipProps) {
-  const [open, setOpen] = createSignal(false)
+  let ref: HTMLDivElement | undefined
+  const [state, setState] = createStore({
+    open: false,
+    block: false,
+    expand: false,
+  })
   const [local, others] = splitProps(props, [
     "children",
     "class",
@@ -40,15 +46,88 @@ export function Tooltip(props: TooltipProps) {
     "contentStyle",
     "inactive",
     "forceOpen",
+    "ignoreSafeArea",
     "value",
   ])
+
+  const close = () => setState("open", false)
+
+  const inside = () => {
+    const active = document.activeElement
+    if (!ref || !active) return false
+    return ref.contains(active)
+  }
+
+  const drop = (expand = state.expand) => {
+    if (expand) return
+    if (ref?.matches(":hover")) return
+    if (inside()) return
+    setState("block", false)
+  }
+
+  const sync = () => {
+    const expand = !!ref?.querySelector('[aria-expanded="true"], [data-expanded]')
+    setState("expand", expand)
+    if (expand) {
+      setState("block", true)
+      close()
+      return
+    }
+    drop(expand)
+  }
+
+  const arm = () => {
+    setState("block", true)
+    close()
+  }
+
+  const leave = () => {
+    if (!inside()) close()
+    drop()
+  }
+
+  createEffect(() => {
+    if (!ref) return
+    sync()
+    const obs = new MutationObserver(sync)
+    obs.observe(ref, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["aria-expanded", "data-expanded"],
+    })
+    onCleanup(() => obs.disconnect())
+  })
 
   return (
     <Switch>
       <Match when={local.inactive}>{local.children}</Match>
       <Match when={true}>
-        <KobalteTooltip gutter={4} {...others} closeDelay={0} open={local.forceOpen || open()} onOpenChange={setOpen}>
-          <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
+        <KobalteTooltip
+          gutter={4}
+          {...others}
+          closeDelay={0}
+          ignoreSafeArea={local.ignoreSafeArea ?? true}
+          open={local.forceOpen || state.open}
+          onOpenChange={(open) => {
+            if (local.forceOpen) return
+            if (state.block && open) return
+            setState("open", open)
+          }}
+        >
+          <KobalteTooltip.Trigger
+            ref={ref}
+            as={"div"}
+            data-component="tooltip-trigger"
+            class={local.class}
+            onPointerDownCapture={arm}
+            onKeyDownCapture={(event: KeyboardEvent) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              arm()
+            }}
+            onPointerLeave={leave}
+            onFocusOut={() => requestAnimationFrame(() => drop())}
+          >
             {local.children}
           </KobalteTooltip.Trigger>
           <KobalteTooltip.Portal>
