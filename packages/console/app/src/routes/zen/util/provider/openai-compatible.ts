@@ -6,12 +6,14 @@ type Usage = {
   total_tokens?: number
   // used by moonshot
   cached_tokens?: number
-  // used by xai
+  // used by xai & alibaba
   prompt_tokens_details?: {
     text_tokens?: number
     audio_tokens?: number
     image_tokens?: number
     cached_tokens?: number
+    // used by alibaba
+    cache_creation_input_tokens?: number
   }
   completion_tokens_details?: {
     reasoning_tokens?: number
@@ -62,6 +64,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
     const outputTokens = usage.completion_tokens ?? 0
     const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? undefined
     let cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
+    const cacheWriteTokens = usage.prompt_tokens_details?.cache_creation_input_tokens ?? undefined
 
     if (adjustCacheUsage && !cacheReadTokens) {
       cacheReadTokens = Math.floor(inputTokens * 0.9)
@@ -72,7 +75,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
       outputTokens,
       reasoningTokens,
       cacheReadTokens,
-      cacheWrite5mTokens: undefined,
+      cacheWrite5mTokens: cacheWriteTokens,
       cacheWrite1hTokens: undefined,
     }
   },

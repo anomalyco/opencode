@@ -4,8 +4,7 @@ import { Global } from "../global"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import { AppFileSystem } from "@/filesystem"
-import { makeRuntime } from "@/effect/run-service"
-import { Effect, Exit, Layer, Option, RcMap, Schema, ServiceMap, TxReentrantLock } from "effect"
+import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { Git } from "@/git"
 
 export namespace Storage {
@@ -66,7 +65,7 @@ export namespace Storage {
     readonly list: (prefix: string[]) => Effect.Effect<string[][], AppFileSystem.Error>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Storage") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Storage") {}
 
   function file(dir: string, key: string[]) {
     return path.join(dir, ...key) + ".json"
@@ -331,26 +330,4 @@ export namespace Storage {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function remove(key: string[]) {
-    return runPromise((svc) => svc.remove(key))
-  }
-
-  export async function read<T>(key: string[]) {
-    return runPromise((svc) => svc.read<T>(key))
-  }
-
-  export async function update<T>(key: string[], fn: (draft: T) => void) {
-    return runPromise((svc) => svc.update<T>(key, fn))
-  }
-
-  export async function write<T>(key: string[], content: T) {
-    return runPromise((svc) => svc.write(key, content))
-  }
-
-  export async function list(prefix: string[]) {
-    return runPromise((svc) => svc.list(prefix))
-  }
 }

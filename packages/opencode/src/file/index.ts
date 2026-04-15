@@ -3,7 +3,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Git } from "@/git"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
+import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
@@ -338,12 +339,13 @@ export namespace File {
     }) => Effect.Effect<string[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/File") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/File") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const appFs = yield* AppFileSystem.Service
+      const rg = yield* Ripgrep.Service
       const git = yield* Git.Service
 
       const state = yield* InstanceState.make<State>(
@@ -383,7 +385,10 @@ export namespace File {
 
           next.dirs = Array.from(dirs).toSorted()
         } else {
-          const files = yield* Effect.promise(() => Array.fromAsync(Ripgrep.files({ cwd: Instance.directory })))
+          const files = yield* rg.files({ cwd: Instance.directory }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => [...chunk]),
+          )
           const seen = new Set<string>()
           for (const file of files) {
             next.files.push(file)
@@ -644,7 +649,11 @@ export namespace File {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+  )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

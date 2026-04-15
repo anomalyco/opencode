@@ -122,20 +122,21 @@ export async function bootstrapGlobal(input: {
         }),
       ),
   ]
-
-  showErrors({
-    errors: errors(await runAll(fast)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
+  await runAll(fast)
+  // showErrors({
+  //   errors: errors(await runAll(fast)),
+  //   title: input.requestFailedTitle,
+  //   translate: input.translate,
+  //   formatMoreCount: input.formatMoreCount,
+  // })
   await waitForPaint()
-  showErrors({
-    errors: errors(await runAll(slow)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
+  await runAll(slow)
+  // showErrors({
+  //   errors: errors(),
+  //   title: input.requestFailedTitle,
+  //   translate: input.translate,
+  //   formatMoreCount: input.formatMoreCount,
+  // })
   input.setGlobalStore("ready", true)
 }
 

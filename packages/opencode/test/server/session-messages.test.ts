@@ -1,13 +1,34 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Session } from "../../src/session"
+import { Session as SessionNs } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
+
+function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
+  return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
+}
+
+const svc = {
+  ...SessionNs,
+  create(input?: SessionNs.CreateInput) {
+    return run(SessionNs.Service.use((svc) => svc.create(input)))
+  },
+  remove(id: SessionID) {
+    return run(SessionNs.Service.use((svc) => svc.remove(id)))
+  },
+  updateMessage<T extends MessageV2.Info>(msg: T) {
+    return run(SessionNs.Service.use((svc) => svc.updateMessage(msg)))
+  },
+  updatePart<T extends MessageV2.Part>(part: T) {
+    return run(SessionNs.Service.use((svc) => svc.updatePart(part)))
+  },
+}
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -30,7 +51,7 @@ async function fill(sessionID: SessionID, count: number, time = (i: number) => D
   for (let i = 0; i < count; i++) {
     const id = MessageID.ascending()
     ids.push(id)
-    await Session.updateMessage({
+    await svc.updateMessage({
       id,
       sessionID,
       role: "user",
@@ -40,7 +61,7 @@ async function fill(sessionID: SessionID, count: number, time = (i: number) => D
       tools: {},
       mode: "",
     } as unknown as MessageV2.Info)
-    await Session.updatePart({
+    await svc.updatePart({
       id: PartID.ascending(),
       sessionID,
       messageID: id,
@@ -58,7 +79,7 @@ describe("session messages endpoint", () => {
       Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const session = await Session.create({})
+          const session = await svc.create({})
           const ids = await fill(session.id, 5)
           const app = Server.Default().app
 
@@ -75,7 +96,7 @@ describe("session messages endpoint", () => {
           const bBody = (await b.json()) as MessageV2.WithParts[]
           expect(bBody.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
 
-          await Session.remove(session.id)
+          await svc.remove(session.id)
         },
       }),
     )
@@ -87,7 +108,7 @@ describe("session messages endpoint", () => {
       Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const session = await Session.create({})
+          const session = await svc.create({})
           const ids = await fill(session.id, 3)
           const app = Server.Default().app
 
@@ -96,7 +117,7 @@ describe("session messages endpoint", () => {
           const body = (await res.json()) as MessageV2.WithParts[]
           expect(body.map((item) => item.info.id)).toEqual(ids)
 
-          await Session.remove(session.id)
+          await svc.remove(session.id)
         },
       }),
     )
@@ -108,7 +129,7 @@ describe("session messages endpoint", () => {
       Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const session = await Session.create({})
+          const session = await svc.create({})
           const app = Server.Default().app
 
           const bad = await app.request(`/session/${session.id}/message?limit=2&before=bad`)
@@ -117,7 +138,7 @@ describe("session messages endpoint", () => {
           const miss = await app.request(`/session/ses_missing/message?limit=2`)
           expect(miss.status).toBe(404)
 
-          await Session.remove(session.id)
+          await svc.remove(session.id)
         },
       }),
     )
@@ -129,7 +150,7 @@ describe("session messages endpoint", () => {
       Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const session = await Session.create({})
+          const session = await svc.create({})
           await fill(session.id, 520)
           const app = Server.Default().app
 
@@ -138,7 +159,7 @@ describe("session messages endpoint", () => {
           const body = (await res.json()) as MessageV2.WithParts[]
           expect(body).toHaveLength(510)
 
-          await Session.remove(session.id)
+          await svc.remove(session.id)
         },
       }),
     )
@@ -147,7 +168,7 @@ describe("session messages endpoint", () => {
 
 describe("session.prompt_async error handling", () => {
   test("prompt_async route has error handler for detached prompt call", async () => {
-    const src = await Bun.file(new URL("../../src/server/routes/session.ts", import.meta.url)).text()
+    const src = await Bun.file(new URL("../../src/server/instance/session.ts", import.meta.url)).text()
     const start = src.indexOf('"/:sessionID/prompt_async"')
     const end = src.indexOf('"/:sessionID/command"', start)
     expect(start).toBeGreaterThan(-1)
