@@ -923,7 +923,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-        const agentName = input.agent || (yield* agents.defaultAgent())
+        const prev = (yield* MessageV2.filterCompactedEffect(input.sessionID)).findLast(
+          (m) => m.info.role === "user" && !!m.info.agent,
+        )
+        const agentName = input.agent || prev?.info.agent || (yield* agents.defaultAgent())
         const ag = yield* agents.get(agentName)
         if (!ag) {
           const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -1355,6 +1358,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
+              const fresh = yield* MessageV2.filterCompactedEffect(sessionID)
+              const newest = fresh.findLast((m) => m.info.role === "user")
+              if (newest && newest.info.id > lastAssistant.id) {
+                yield* slog.info("continuing loop for new user")
+                continue
+              }
               yield* slog.info("exiting loop")
               break
             }

@@ -748,6 +748,43 @@ it.live(
 )
 
 it.live(
+  "cancel does not restart session via prompt retry loop",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "CancelNoRestart",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        yield* llm.hang
+
+        const fiber = yield* prompt
+          .prompt({
+            sessionID: chat.id,
+            agent: "build",
+            parts: [{ type: "text", text: "hello" }],
+          })
+          .pipe(Effect.forkChild)
+
+        yield* llm.wait(1)
+        expect(yield* llm.calls).toBe(1)
+
+        yield* prompt.cancel(chat.id)
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+
+        yield* Effect.sleep("200 millis")
+        expect(yield* llm.calls).toBe(1)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  5_000,
+)
+
+it.live(
   "cancel records MessageAbortedError on interrupted process",
   () =>
     provideTmpdirServer(

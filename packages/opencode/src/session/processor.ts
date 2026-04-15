@@ -560,6 +560,11 @@ export namespace SessionProcessor {
                   }
                 }),
               ),
+              // Safety timeout: if the stream hangs (stuck tool, lost context),
+              // interrupt after 30 minutes rather than blocking the session forever.
+              // The interrupt triggers onInterrupt above which calls halt().
+              Effect.timeout("30 minutes"),
+              Effect.asVoid,
               Effect.catchCauseIf(
                 (cause) => !Cause.hasInterruptsOnly(cause),
                 (cause) => Effect.fail(Cause.squash(cause)),

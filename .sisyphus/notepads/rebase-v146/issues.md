@@ -1,0 +1,2 @@
+- `bun typecheck` initially failed because workspace dependencies were not installed in this jj workspace (`tsgo` missing from PATH). Running `bun install` at repo root restored the expected toolchain and `bun typecheck` then passed.
+- `lsp_diagnostics` still reports TypeScript errors on `prompt.ts`, `prompt-effect.test.ts`, and the two branch regression tests even after `bun typecheck` passes; this appears to be a tsserver/LSP mismatch against the repo's `tsgo`-based typecheck path rather than a blocking `tsgo` error.

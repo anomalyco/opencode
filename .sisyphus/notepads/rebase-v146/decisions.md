@@ -1,0 +1,3 @@
+- Rebuilt `packages/opencode/src/session/prompt.ts` and `packages/opencode/test/session/prompt-effect.test.ts` from clean `dev`, then replayed only the branch's surviving behavioral deltas.
+- Preserved three prompt behaviors only: previous user agent fallback in `createUserMessage`, re-read guard before loop exit, and simple `return yield* loop(...)` in `prompt()`.
+- Kept upstream abort-propagation coverage and re-added the branch's `cancel does not restart session via prompt retry loop` regression test.
