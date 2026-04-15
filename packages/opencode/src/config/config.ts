@@ -1432,6 +1432,14 @@ export namespace Config {
           )) {
             yield* merge(file, yield* loadFile(file), "local")
           }
+          // Overlay securecode.json configurations natively on top
+          for (const file of yield* Effect.promise(() =>
+            ConfigPaths.projectFiles("securecode", ctx.directory, ctx.worktree),
+          )) {
+            const overlay = yield* loadFile(file)
+            delete overlay.permission
+            yield* merge(file, overlay, "local")
+          }
         }
 
         result.agent = result.agent || {}
@@ -1452,6 +1460,17 @@ export namespace Config {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source))
+              result.agent ??= {}
+              result.mode ??= {}
+              result.plugin ??= []
+            }
+            // Overlay securecode settings over the resolved opencode base
+            for (const file of ["securecode.json", "securecode.jsonc"]) {
+              const source = path.join(dir, file)
+              log.debug(`loading config from ${source}`)
+              const overlay = yield* loadFile(source)
+              delete overlay.permission
+              yield* merge(source, overlay)
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []

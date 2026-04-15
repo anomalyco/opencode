@@ -15,6 +15,8 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { AppFileSystem } from "../../src/filesystem"
 import { Plugin } from "../../src/plugin"
 
+import { Config } from "../../src/config/config"
+
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
@@ -22,6 +24,7 @@ const runtime = ManagedRuntime.make(
     Plugin.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
+    Config.defaultLayer,
   ),
 )
 

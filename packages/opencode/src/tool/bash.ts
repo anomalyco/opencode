@@ -307,6 +307,7 @@ export const BashTool = Tool.define(
     const spawner = yield* ChildProcessSpawner
     const fs = yield* AppFileSystem.Service
     const plugin = yield* Plugin.Service
+    const configSvc = yield* Config.Service
 
     const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
@@ -406,9 +407,12 @@ export const BashTool = Tool.define(
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
           
-          const config = yield* Effect.promise(() => Config.get())
+          const config = yield* configSvc.get()
           const sandboxConfig = config.bash_sandbox || {}
-          const enabled = sandboxConfig.enabled === true || sandboxConfig.enabled === "auto"
+          let enabled = sandboxConfig.enabled
+          if (enabled === undefined || enabled === "auto") {
+            enabled = process.platform !== "win32" && process.env.NODE_ENV !== "test"
+          }
           const providerName = sandboxConfig.provider || "srt"
           const envWhitelist = sandboxConfig.env_whitelist
           const networkDomains = sandboxConfig.domains

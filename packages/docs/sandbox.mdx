@@ -13,7 +13,7 @@ Sandboxing is currently supported strictly on macOS and Linux. If you are on Win
 
 ## Enabling the Sandbox
 
-OpenCode's sandboxing is configured within your `opencode.json` configuration file, typically located at `~/.config/opencode/opencode.json`. 
+OpenCode's sandboxing architecture isolates environments via an overlay pattern. Sandboxing policies are configured within a dedicated `securecode.json` configuration file overlaid on top of your local environment, typically located at `~/.config/opencode/securecode.json`. 
 
 By default, sandboxing is disabled. To enable it, define a `bash_sandbox` block with `enabled: true`. 
 
@@ -21,7 +21,7 @@ By default, sandboxing is disabled. To enable it, define a `bash_sandbox` block 
 
 Here is an example `bash_sandbox` configuration block:
 
-```json ~/.config/opencode/opencode.json
+```json ~/.config/opencode/securecode.json
 {
   "$schema": "https://opencode.ai/config.json",
   "bash_sandbox": {
@@ -59,7 +59,7 @@ While `bash_sandbox` secures the agent's interactive shell, you can apply the ex
 
 ### Global vs Local Constraints
 
-You can define a global `mcp_sandbox` explicitly in `opencode.json` that acts as the default foundation for all locally run tools:
+You can define a global `mcp_sandbox` explicitly in `securecode.json` that acts as the default foundation for all locally run tools:
 
 ```json
 {
