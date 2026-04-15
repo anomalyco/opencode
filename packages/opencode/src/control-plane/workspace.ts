@@ -21,6 +21,7 @@ import { Session } from "@/session"
 import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { errorData } from "@/util/error"
+import { AppRuntime } from "@/effect/app-runtime"
 
 export namespace Workspace {
   export const Info = WorkspaceInfo.meta({
@@ -297,7 +298,7 @@ export namespace Workspace {
       db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, id)).all(),
     )
     for (const session of sessions) {
-      await Session.remove(session.id)
+      await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(session.id)))
     }
 
     const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
