@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node"
-import { Context, Effect, Exit, Layer, Scope, Schema } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { Context, Effect, Exit, Layer, Redacted, Scope, Schema } from "effect"
+import { HttpApiBuilder, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { AppRuntime } from "@/effect/app-runtime"
@@ -44,24 +44,55 @@ export namespace ExperimentalHttpApiServer {
     }
   }
 
-  const auth = HttpRouter.middleware()(
+  class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+    "Unauthorized",
+    { message: Schema.String },
+    { httpApiStatus: 401 },
+  ) {}
+
+  class Authorization extends HttpApiMiddleware.Service<Authorization>()("@opencode/ExperimentalHttpApiAuthorization", {
+    error: Unauthorized,
+    security: {
+      basic: HttpApiSecurity.basic,
+    },
+  }) {}
+
+  const normalize = HttpRouter.middleware()(
     Effect.gen(function* () {
       return (effect) =>
         Effect.gen(function* () {
-          if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
-
           const query = yield* HttpServerRequest.schemaSearchParams(Query)
-          const headers = yield* HttpServerRequest.schemaHeaders(Headers)
-          const header = query.auth_token ? `Basic ${query.auth_token}` : headers.authorization
-          const expected = `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`
-          if (header === expected) return yield* effect
-
-          return text("Unauthorized", 401, {
-            "www-authenticate": 'Basic realm="opencode experimental httpapi"',
+          if (!query.auth_token) return yield* effect
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const next = req.modify({
+            headers: {
+              ...req.headers,
+              authorization: `Basic ${query.auth_token}`,
+            },
           })
+          return yield* effect.pipe(Effect.provideService(HttpServerRequest.HttpServerRequest, next))
         })
     }),
   ).layer
+
+  const auth = Layer.succeed(
+    Authorization,
+    Authorization.of({
+      basic: (effect, { credential }) =>
+        Effect.gen(function* () {
+          if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
+
+          const user = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+          if (credential.username !== user) {
+            return yield* new Unauthorized({ message: "Unauthorized" })
+          }
+          if (Redacted.value(credential.password) !== Flag.OPENCODE_SERVER_PASSWORD) {
+            return yield* new Unauthorized({ message: "Unauthorized" })
+          }
+          return yield* effect
+        }),
+    }),
+  )
 
   const instance = HttpRouter.middleware()(
     Effect.gen(function* () {
@@ -88,14 +119,16 @@ export namespace ExperimentalHttpApiServer {
   export async function listen(opts: { hostname: string; port: number }): Promise<Listener> {
     const scope = await Effect.runPromise(Scope.make())
     const serverLayer = NodeHttpServer.layer(createServer, { port: opts.port, host: opts.hostname })
+    const QuestionSecured = QuestionApi.middleware(Authorization)
+    const PermissionSecured = PermissionApi.middleware(Authorization)
     const routes = Layer.mergeAll(
-      HttpApiBuilder.layer(QuestionApi, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
+      HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
         Layer.provide(QuestionLive),
       ),
-      HttpApiBuilder.layer(PermissionApi, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
+      HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
         Layer.provide(PermissionLive),
       ),
-    ).pipe(Layer.provide(auth), Layer.provide(instance))
+    ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
     const live = Layer.mergeAll(
       serverLayer,
       HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(Layer.provide(serverLayer)),
