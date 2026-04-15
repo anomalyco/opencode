@@ -446,7 +446,7 @@ export function Prompt(props: PromptProps) {
 
   onCleanup(() => {
     if (store.prompt.input) {
-      stashed = { prompt: structuredClone(store.prompt), cursor: input.cursorOffset }
+      stashed = { prompt: { input: store.prompt.input, parts: store.prompt.parts }, cursor: input.cursorOffset }
     }
     props.ref?.(undefined)
   })
