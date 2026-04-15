@@ -12,8 +12,8 @@ export namespace Observability {
   const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
     ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
         (acc, x) => {
-          const [key, value] = x.split("=")
-          acc[key] = value
+          const [key, ...value] = x.split("=")
+          acc[key] = value.join("=")
           return acc
         },
         {} as Record<string, string>,

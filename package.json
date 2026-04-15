@@ -58,7 +58,7 @@
       "marked": "17.0.1",
       "marked-shiki": "1.2.1",
       "remend": "1.3.0",
-      "@playwright/test": "1.51.0",
+      "@playwright/test": "1.59.1",
       "typescript": "5.8.2",
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",
