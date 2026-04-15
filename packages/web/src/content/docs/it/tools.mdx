@@ -149,22 +149,6 @@ Trova file tramite pattern matching.
 
 Cerca file usando pattern glob come `**/*.js` o `src/**/*.ts`. Restituisce i percorsi corrispondenti ordinati per data di modifica.
 
----
-
-### list
-
-Elenca file e directory in un percorso specifico.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Questo strumento elenca il contenuto di una directory. Accetta pattern glob per filtrare i risultati.
 
 ---
 
@@ -341,7 +325,7 @@ I server MCP (Model Context Protocol) permettono di integrare strumenti e serviz
 
 ## Interni
 
-Internamente, strumenti come `grep`, `glob` e `list` usano [ripgrep](https://github.com/BurntSushi/ripgrep) sotto al cofano. Di default, ripgrep rispetta i pattern di `.gitignore`, quindi i file e le directory elencati in `.gitignore` vengono esclusi da ricerche ed elenchi.
+Internamente, strumenti come `grep` e `glob` usano [ripgrep](https://github.com/BurntSushi/ripgrep) sotto al cofano. Di default, ripgrep rispetta i pattern di `.gitignore`, quindi i file e le directory elencati in `.gitignore` vengono esclusi da ricerche ed elenchi.
 
 ---
 

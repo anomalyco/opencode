@@ -149,22 +149,6 @@ Encuentre archivos por coincidencia de patrones.
 
 Busque archivos usando patrones globales como `**/*.js` o `src/**/*.ts`. Devuelve rutas de archivos coincidentes ordenadas por hora de modificación.
 
----
-
-### list
-
-Enumere archivos y directorios en una ruta determinada.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Esta herramienta enumera el contenido del directorio. Acepta patrones globales para filtrar resultados.
 
 ---
 
@@ -341,7 +325,7 @@ Los servidores MCP (Model Context Protocol) le permiten integrar herramientas y 
 
 ## Internos
 
-Internamente, herramientas como `grep`, `glob` y `list` usan [ripgrep](https://github.com/BurntSushi/ripgrep) bajo el capó. De forma predeterminada, ripgrep respeta los patrones `.gitignore`, lo que significa que los archivos y directorios enumerados en su `.gitignore` se excluirán de las búsquedas y listados.
+Internamente, herramientas como `grep` y `glob` usan [ripgrep](https://github.com/BurntSushi/ripgrep) bajo el capó. De forma predeterminada, ripgrep respeta los patrones `.gitignore`, lo que significa que los archivos y directorios enumerados en su `.gitignore` se excluirán de las búsquedas y listados.
 
 ---
 

@@ -156,22 +156,6 @@ Findet Dateien per Musterabgleich.
 
 Sucht nach Dateien mit Glob-Mustern wie `**/*.js` oder `src/**/*.ts`. Gibt passende Dateipfade sortiert nach Aenderungsdatum zurueck.
 
----
-
-### list
-
-Listet Dateien und Verzeichnisse in einem Pfad auf.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Dieses Tool listet Verzeichnisinhalte auf. Es akzeptiert Glob-Muster zum Filtern der Ergebnisse.
 
 ---
 
@@ -350,7 +334,7 @@ Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
 
 ## Interna
 
-Intern verwenden Tools wie `grep`, `glob` und `list` [ripgrep](https://github.com/BurntSushi/ripgrep).
+Intern verwenden Tools wie `grep` und `glob` [ripgrep](https://github.com/BurntSushi/ripgrep).
 Standardmaessig beachtet ripgrep `.gitignore`, daher werden dort aufgefuehrte Dateien und Ordner nicht durchsucht.
 
 ---

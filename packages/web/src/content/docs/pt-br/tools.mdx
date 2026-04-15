@@ -149,22 +149,6 @@ Encontre arquivos por correspondência de padrões.
 
 Pesquise arquivos usando padrões glob como `**/*.js` ou `src/**/*.ts`. Retorna caminhos de arquivos correspondentes ordenados por tempo de modificação.
 
----
-
-### list
-
-Liste arquivos e diretórios em um determinado caminho.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Esta ferramenta lista o conteúdo do diretório. Aceita padrões glob para filtrar resultados.
 
 ---
 
@@ -341,7 +325,7 @@ Servidores MCP (Model Context Protocol) permitem que você integre ferramentas e
 
 ## Internos
 
-Internamente, ferramentas como `grep`, `glob` e `list` usam [ripgrep](https://github.com/BurntSushi/ripgrep) por trás dos panos. Por padrão, o ripgrep respeita padrões `.gitignore`, o que significa que arquivos e diretórios listados em seu `.gitignore` serão excluídos de buscas e listagens.
+Internamente, ferramentas como `grep` e `glob` usam [ripgrep](https://github.com/BurntSushi/ripgrep) por trás dos panos. Por padrão, o ripgrep respeita padrões `.gitignore`, o que significa que arquivos e diretórios listados em seu `.gitignore` serão excluídos de buscas e listagens.
 
 ---
 
