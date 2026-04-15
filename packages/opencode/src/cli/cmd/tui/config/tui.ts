@@ -164,9 +164,8 @@ export namespace TuiConfig {
       const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
         Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
       )
-
       return Service.of({ get, waitForDependencies })
-    }),
+    }).pipe(Effect.withSpan("TuiConfig.layer")),
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Npm.defaultLayer))
@@ -175,6 +174,10 @@ export namespace TuiConfig {
 
   export async function waitForDependencies() {
     await runPromise((svc) => svc.waitForDependencies())
+  }
+
+  export async function get() {
+    return runPromise((svc) => svc.get())
   }
 
   async function loadFile(filepath: string): Promise<Info> {

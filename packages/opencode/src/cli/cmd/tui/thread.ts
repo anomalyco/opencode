@@ -8,15 +8,13 @@ import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
 import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
-import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
-import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
-import { Effect, Layer } from "effect"
+import { TuiConfig } from "./config/tui"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -178,13 +176,9 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await Effect.runPromise(
-        Effect.gen(function* () {
-          const cfg = yield* TuiConfig.Service
-          return yield* cfg.get()
-        }).pipe(Effect.provide(TuiConfig.defaultLayer)),
-      )
-      const network = await resolveNetworkOptions(args)
+      const config = await TuiConfig.get()
+
+      const network = resolveNetworkOptionsNoConfig(args)
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
@@ -239,3 +233,4 @@ export const TuiThreadCommand = cmd({
     process.exit(0)
   },
 })
+// scratch
