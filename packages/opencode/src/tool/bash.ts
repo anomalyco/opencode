@@ -239,7 +239,7 @@ function tail(text: string, maxLines: number, maxBytes: number) {
         let start = buf.length - maxBytes
         if (start < 0) start = 0
         while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++
-        out.unshift(buf.slice(start).toString("utf-8"))
+        out.unshift(buf.subarray(start).toString("utf-8"))
       }
       break
     }
