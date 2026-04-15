@@ -1468,13 +1468,13 @@ export namespace Config {
           log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
-        const active = Option.getOrUndefined(
+        const activeAccount = Option.getOrUndefined(
           yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
-        if (active?.active_org_id) {
-          const accountID = active.id
-          const orgID = active.active_org_id
-          const url = active.url
+        if (activeAccount?.active_org_id) {
+          const accountID = activeAccount.id
+          const orgID = activeAccount.active_org_id
+          const url = activeAccount.url
           yield* Effect.gen(function* () {
             const [configOpt, tokenOpt] = yield* Effect.all(
               [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
