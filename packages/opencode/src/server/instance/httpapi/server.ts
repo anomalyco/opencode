@@ -1,5 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node"
-import { Context, Effect, Exit, Layer, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Scope, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
@@ -12,6 +12,17 @@ import { Instance } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { PermissionApi, PermissionLive } from "./permission"
 import { QuestionApi, QuestionLive } from "./question"
+
+const Query = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  workspace: Schema.optional(Schema.String),
+  auth_token: Schema.optional(Schema.String),
+})
+
+const Headers = Schema.Struct({
+  authorization: Schema.optional(Schema.String),
+  "x-opencode-directory": Schema.optional(Schema.String),
+})
 
 export namespace ExperimentalHttpApiServer {
   export type Listener = {
@@ -33,39 +44,46 @@ export namespace ExperimentalHttpApiServer {
     }
   }
 
-  const auth = <E, R>(effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
+  const auth = HttpRouter.middleware()(
     Effect.gen(function* () {
-      if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
+      return (effect) =>
+        Effect.gen(function* () {
+          if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
 
-      const req = yield* HttpServerRequest.HttpServerRequest
-      const url = new URL(req.url, "http://localhost")
-      const token = url.searchParams.get("auth_token")
-      const header = token ? `Basic ${token}` : req.headers.authorization
-      const expected = `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`
-      if (header === expected) return yield* effect
+          const query = yield* HttpServerRequest.schemaSearchParams(Query)
+          const headers = yield* HttpServerRequest.schemaHeaders(Headers)
+          const header = query.auth_token ? `Basic ${query.auth_token}` : headers.authorization
+          const expected = `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`
+          if (header === expected) return yield* effect
 
-      return text("Unauthorized", 401, {
-        "www-authenticate": 'Basic realm="opencode experimental httpapi"',
-      })
-    })
+          return text("Unauthorized", 401, {
+            "www-authenticate": 'Basic realm="opencode experimental httpapi"',
+          })
+        })
+    }),
+  ).layer
 
-  const instance = <E, R>(effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
+  const instance = HttpRouter.middleware()(
     Effect.gen(function* () {
-      const req = yield* HttpServerRequest.HttpServerRequest
-      const url = new URL(req.url, "http://localhost")
-      const raw = url.searchParams.get("directory") || req.headers["x-opencode-directory"] || process.cwd()
-      const workspace = url.searchParams.get("workspace") || undefined
-      const ctx = yield* Effect.promise(() =>
-        Instance.provide({
-          directory: Filesystem.resolve(decode(raw)),
-          init: () => AppRuntime.runPromise(InstanceBootstrap),
-          fn: () => Instance.current,
-        }),
-      )
+      return (effect) =>
+        Effect.gen(function* () {
+          const query = yield* HttpServerRequest.schemaSearchParams(Query)
+          const headers = yield* HttpServerRequest.schemaHeaders(Headers)
+          const raw = query.directory || headers["x-opencode-directory"] || process.cwd()
+          const workspace = query.workspace || undefined
+          const ctx = yield* Effect.promise(() =>
+            Instance.provide({
+              directory: Filesystem.resolve(decode(raw)),
+              init: () => AppRuntime.runPromise(InstanceBootstrap),
+              fn: () => Instance.current,
+            }),
+          )
 
-      const next = workspace ? effect.pipe(Effect.provideService(WorkspaceRef, workspace)) : effect
-      return yield* next.pipe(Effect.provideService(InstanceRef, ctx))
-    })
+          const next = workspace ? effect.pipe(Effect.provideService(WorkspaceRef, workspace)) : effect
+          return yield* next.pipe(Effect.provideService(InstanceRef, ctx))
+        })
+    }),
+  ).layer
 
   export async function listen(opts: { hostname: string; port: number }): Promise<Listener> {
     const scope = await Effect.runPromise(Scope.make())
@@ -77,14 +95,10 @@ export namespace ExperimentalHttpApiServer {
       HttpApiBuilder.layer(PermissionApi, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
         Layer.provide(PermissionLive),
       ),
-    )
+    ).pipe(Layer.provide(auth), Layer.provide(instance))
     const live = Layer.mergeAll(
       serverLayer,
-      HttpRouter.serve(routes, {
-        disableListenLog: true,
-        disableLogger: true,
-        middleware: (effect) => auth(instance(effect)),
-      }).pipe(Layer.provide(serverLayer)),
+      HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(Layer.provide(serverLayer)),
     )
 
     const ctx = await Effect.runPromise(Layer.buildWithMemoMap(live, memoMap, scope))
