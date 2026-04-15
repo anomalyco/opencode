@@ -1362,8 +1362,8 @@ unix(
 
           expect(tool.state.metadata.truncated).toBe(true)
           expect(typeof tool.state.metadata.outputPath).toBe("string")
-          expect(tool.state.output).toContain("The tool call succeeded but the output was truncated.")
-          expect(tool.state.output).toContain("Full output saved to:")
+          expect(tool.state.output).toMatch(/\.\.\.output truncated\.\.\./)
+          expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
           expect(tool.state.output).not.toContain("Tool execution aborted")
         }),
       { git: true, config: providerCfg },
