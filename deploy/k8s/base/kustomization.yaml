@@ -8,7 +8,6 @@ resources:
   - 01-relay.yaml
   - 02-opencode-api.yaml
   - 02b-opencode-frontend.yaml
-  - 02c-opencode-pvc.yaml
   - 03-executor.yaml
   - 04-ingress.yaml
 
@@ -23,5 +22,5 @@ images:
     newName: registry.digitalocean.com/veritly-registry/opencode-frontend
     newTag: latest
   - name: opencode-veritly-executor-api
-    newName: registry.digitalocean.com/veritly-registry/executor-api
+    newName: registry.digitalocean.com/veritly-registry/opencode-executor
     newTag: latest

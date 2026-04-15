@@ -1,0 +1,16 @@
+FROM oven/bun:1.3.10-slim
+
+WORKDIR /app
+
+COPY packages/executor/package.json ./package.json
+
+RUN bun install --production --no-save
+
+COPY packages/executor/src ./src
+
+ENV PORT=7777
+ENV VERITLY_EXECUTOR_MODE=local
+
+EXPOSE 7777
+
+CMD ["bun", "run", "src/server.ts"]

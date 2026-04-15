@@ -25,17 +25,19 @@ spec:
         env:
         - name: PORT
           value: "8080"
+        - name: RELAY_BACKEND_HEALTH_URL
+          value: "http://opencode-api:3000/healthz"
         - name: VERITLY_WS_DEBUG
           value: "0"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /livez
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8080
           initialDelaySeconds: 2
           periodSeconds: 5

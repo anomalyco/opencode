@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /** Hosted API origin for the main OpenCode HTTP API. */
+  readonly VITE_OPENCODE_SERVER_URL?: string
   /**
    * Single backend origin: `/universer-api/*` + `/v1/files/*`.
    * Docker: `http://127.0.0.1:8000` — go-compat: `http://127.0.0.1:8099`

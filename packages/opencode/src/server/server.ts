@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { proxy } from "hono/proxy";
-import { basicAuth } from "hono/basic-auth";
+import { getCookie } from "hono/cookie";
 import z from "zod";
 import { Provider } from "../provider/provider";
 import { NamedError } from "@opencode-ai/util/error";
@@ -46,6 +46,14 @@ import { MDNS } from "./mdns";
 import { lazy } from "@/util/lazy";
 import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly";
 import path from "path";
+import { apiHealthReport, isPublicHealthPath } from "./health";
+import { AuthRoutes, type SessionUser } from "./routes/auth";
+import {
+	createWorkOSClient,
+	requireCookiePassword,
+	validateWorkosSession,
+	WORKOS_SESSION_COOKIE_NAME,
+} from "@veritly/auth-shared";
 
 // This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false;
@@ -110,7 +118,7 @@ export namespace Server {
 						status: 500,
 					});
 				})
-				// CORS must run before basicAuth: otherwise 401/403 responses omit ACAO and the browser blames CORS
+				// CORS must run before auth: otherwise 401/403 responses omit ACAO and the browser blames CORS
 				// (e.g. UI on https://local-4444… fetching https://local-4096…/global/health with Basic).
 				.use(
 					cors({
@@ -143,14 +151,55 @@ export namespace Server {
 						},
 					}),
 				)
-				.use((c, next) => {
-					// Allow CORS preflight requests to succeed without auth.
-					// Browser clients sending Authorization headers will preflight with OPTIONS.
+				.get("/livez", (c) => c.text("ok"))
+				.get("/health", async (c) => {
+					const report = await apiHealthReport();
+					return c.json(report, report.ok ? 200 : 503);
+				})
+				.get("/healthz", async (c) => {
+					const report = await apiHealthReport();
+					return c.json(report, report.ok ? 200 : 503);
+				})
+				.use(async (c, next) => {
 					if (c.req.method === "OPTIONS") return next();
-					const password = Flag.OPENCODE_SERVER_PASSWORD;
-					if (!password) return next();
-					const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode";
-					return basicAuth({ username, password })(c, next);
+					if (isPublicHealthPath(c.req.path)) return next();
+
+					const workosConfigured = Flag.OPENCODE_WORKOS_ENABLED;
+					if (!workosConfigured) {
+						const password = Flag.OPENCODE_SERVER_PASSWORD;
+						if (!password) return next();
+						const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode";
+						c.set("auth", { type: "basic", username, password });
+						return next();
+					}
+
+					const sessionData = getCookie(c, WORKOS_SESSION_COOKIE_NAME);
+					if (!sessionData) {
+						return c.json({ error: "Unauthorized" }, 401);
+					}
+
+					try {
+						const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"]);
+						const apiKey = process.env["WORKOS_API_KEY"];
+						const clientId = process.env["WORKOS_CLIENT_ID"];
+
+						if (!apiKey || !clientId) {
+							return c.json({ error: "WorkOS not configured" }, 500);
+						}
+
+						const workos = createWorkOSClient({ apiKey, clientId });
+						const result = await validateWorkosSession({ workos, sessionData, cookiePassword });
+
+						if (!result.ok) {
+							return c.json({ error: "Invalid session" }, 401);
+						}
+
+						c.set("auth", { type: "workos", user: result.user });
+					} catch {
+						return c.json({ error: "Authentication failed" }, 401);
+					}
+
+					return next();
 				})
 				.use(async (c, next) => {
 					const skipLogging = c.req.path === "/log";
@@ -170,6 +219,7 @@ export namespace Server {
 					}
 				})
 				.route("/global", GlobalRoutes())
+				.route("/auth", AuthRoutes)
 				.put(
 					"/auth/:providerID",
 					describeRoute({
@@ -620,18 +670,7 @@ export namespace Server {
 					const local = await serveLocalApp(path);
 					if (local) return local;
 
-					const response = await proxy(`https://app.opencode.ai${path}`, {
-						...c.req,
-						headers: {
-							...c.req.raw.headers,
-							host: "app.opencode.ai",
-						},
-					});
-					response.headers.set(
-						"Content-Security-Policy",
-						"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-					);
-					return response;
+					return c.json({ error: "Not found", path }, 404);
 				})
 		);
 	};

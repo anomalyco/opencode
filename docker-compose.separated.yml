@@ -1,16 +1,39 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: veritly
+      POSTGRES_USER: veritly
+      POSTGRES_PASSWORD: veritly
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veritly"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   opencode-api:
     image: opencode-veritly-api:lean
     ports:
-      - "8000:3000"
+      - "8001:3000"
     environment:
       - OPENCODE_DISABLE_LOCAL_FILESYSTEM=false
-      - OPENCODE_DISABLE_LOCAL_FILESYSTEM=false
       - DEPLOYMENT_ENVIRONMENT=local
-      - VITE_UNIVER_BACKEND_URL=http://localhost:18765
+      - DATABASE_URL=postgresql://veritly:veritly@postgres:5432/veritly
+      - VERITLY_TENANT_USER_ID=default
       - VERITLY_WS_DEBUG=0
+      - WORKOS_API_KEY=${WORKOS_API_KEY:?WORKOS_API_KEY required}
+      - WORKOS_CLIENT_ID=${WORKOS_CLIENT_ID:?WORKOS_CLIENT_ID required}
+      - WORKOS_REDIRECT_URI=${WORKOS_REDIRECT_URI:-http://localhost:8001/auth/callback}
+      - COOKIE_PASSWORD=${COOKIE_PASSWORD:?COOKIE_PASSWORD required (32+ chars)}
+      - PUBLIC_BASE_URL=http://localhost:8000
+      - NODE_ENV=development
+      - VERITLY_HEALTH_RELAY_URL=
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - ./packages/app/dist:/app/packages/app/dist:ro
       - opencode-data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
@@ -22,7 +45,49 @@ services:
   opencode-frontend:
     image: opencode-veritly-frontend:lean
     ports:
-      - "43002:80"
+      - "8000:80"
+    environment:
+      - PORT=80
+      - FRONTEND_BACKEND_HEALTH_URL=http://opencode-api:3000/healthz
+      - FRONTEND_RELAY_HEALTH_URL=http://relay:8080/healthz
+      - FRONTEND_RELAY_WS_HEALTH_URL=ws://relay:8080/health/ws
+      - FRONTEND_PUBLIC_OPENCODE_SERVER_URL=http://localhost:8001
+      - FRONTEND_PUBLIC_UNIVER_BACKEND_URL=https://univer.veritly.co.uk
+      - FRONTEND_PUBLIC_UNIVER_SDK_WS=wss://relay.veritly.co.uk/ws
+    depends_on:
+      opencode-api:
+        condition: service_started
+      relay:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  relay:
+    image: opencode-veritly-relay:latest
+    ports:
+      - "18766:8080"
+    environment:
+      - PORT=8080
+      - RELAY_BACKEND_HEALTH_URL=http://opencode-api:3000/healthz
+    depends_on:
+      opencode-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  executor:
+    image: opencode-veritly-executor:lean
+    ports:
+      - "7777:7777"
+    environment:
+      - VERITLY_EXECUTOR_MODE=local
 
 volumes:
+  postgres_data:
   opencode-data:

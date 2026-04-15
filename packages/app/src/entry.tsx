@@ -9,6 +9,7 @@ import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
+import { runtimeOpencodeServerUrl } from "@/lib/runtime-config"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
@@ -104,7 +105,7 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
 }
 
 const getCurrentUrl = () => {
-  const configured = import.meta.env.VITE_OPENCODE_SERVER_URL?.trim()
+  const configured = runtimeOpencodeServerUrl()
   if (configured) return new URL(configured, location.origin).toString().replace(/\/+$/, "")
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (import.meta.env.DEV)

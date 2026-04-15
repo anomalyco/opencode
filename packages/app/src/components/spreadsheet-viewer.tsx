@@ -16,6 +16,7 @@ import "@univerjs/presets/lib/styles/preset-sheets-collaboration.css";
 import { createUniverSdk, type AddChartInput, type RangeRect, type SetRangeValuesInput } from "@opencode-ai/univer-sdk";
 import { registerOfficeUnit } from "@/lib/veritly-univer-files";
 import { univerBackendOrigin } from "@/lib/univer-backend-origin";
+import { runtimeUniverSdkWsUrl } from "@/lib/runtime-config";
 import { browserTracer } from "@/lib/telemetry/browser-otel";
 import { context, propagation, SpanStatusCode, type TextMapGetter } from "@opentelemetry/api";
 
@@ -178,7 +179,7 @@ export function SpreadsheetViewer(props: Props) {
 		if (!el || typeof window === "undefined") return;
 		const cur = runtime;
 		if (!cur) return;
-		const wsBase = browserUniverSdkWsUrl(import.meta.env.VITE_UNIVER_SDK_WS);
+		const wsBase = browserUniverSdkWsUrl(runtimeUniverSdkWsUrl());
 		if (!wsBase) {
 			console.warn(
 				"[veritly] VITE_UNIVER_SDK_WS was empty at vite build/dev — the SDK relay WebSocket is disabled. Local: ws://127.0.0.1:18766/ws. Hosted (via OpenCode): /api/univer-sdk-relay/ws — rebuild after setting.",

@@ -22,9 +22,36 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: opencode-frontend
+            name: frontend
             port:
               number: 80
+---
+# Ingress for OpenCode API (public HTTPS health + API)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veritly-api
+  namespace: veritly
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.veritly.co.uk
+    secretName: api-tls
+  rules:
+  - host: api.veritly.co.uk
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api
+            port:
+              number: 3000
 ---
 # Ingress for Relay (WebSocket only - public for browsers)
 apiVersion: networking.k8s.io/v1
@@ -43,10 +70,6 @@ metadata:
     nginx.ingress.kubernetes.io/session-cookie-name: "veritly_relay"
     nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
     nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
-    # Connection upgrades
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx

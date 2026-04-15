@@ -1,0 +1,11 @@
+{
+	"name": "@veritly/executor",
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"start": "bun run src/server.ts"
+	},
+	"dependencies": {
+		"hono": "^4.0.0"
+	}
+}

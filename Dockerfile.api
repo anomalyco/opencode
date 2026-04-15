@@ -15,10 +15,13 @@ COPY packages/script ./packages/script
 COPY packages/sdk/js ./packages/sdk/js
 COPY packages/util ./packages/util
 COPY packages/telemetry-veritly ./packages/telemetry-veritly
+COPY packages/auth-shared ./packages/auth-shared
 
-RUN rm -f bun.lock && bun -e 'const fs=require("fs");const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));pkg.workspaces={packages:["packages/opencode","packages/plugin","packages/script","packages/sdk/js","packages/util","packages/telemetry-veritly"],catalog:pkg.workspaces.catalog};fs.writeFileSync("package.json",JSON.stringify(pkg,null,2));'
+RUN rm -f bun.lock && bun -e 'const fs=require("fs");const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));pkg.workspaces={packages:["packages/opencode","packages/plugin","packages/script","packages/sdk/js","packages/util","packages/telemetry-veritly","packages/auth-shared"],catalog:pkg.workspaces.catalog};fs.writeFileSync("package.json",JSON.stringify(pkg,null,2));'
 
-RUN bun install --production --no-save --ignore-scripts --filter opencode
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client libpq-dev && rm -rf /var/lib/apt/lists/*
+
+RUN bun install --production --no-save --ignore-scripts --filter opencode pg drizzle-orm
 
 ENV XDG_DATA_HOME=/data/.local/share
 ENV XDG_CONFIG_HOME=/data/.config

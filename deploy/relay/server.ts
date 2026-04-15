@@ -2,8 +2,24 @@ import { ServerWebSocket } from "bun";
 
 const port = Number(process.env.PORT ?? process.env.UNIVER_SDK_PORT ?? "8080");
 const wsDebug = process.env.VERITLY_WS_DEBUG === "1";
+const backendHealthUrl = process.env.RELAY_BACKEND_HEALTH_URL?.trim() || "http://opencode-api:3000/healthz";
+const healthTimeoutMs = Number(process.env.VERITLY_HEALTH_TIMEOUT_MS ?? "5000");
 
 const MESSAGING_SYSTEM = "veritly_relay";
+
+function corsHeaders(origin: string | null) {
+	const allowed =
+		origin &&
+		(/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/i.test(origin) ||
+			/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin));
+	return {
+		"access-control-allow-origin": allowed ? origin : "*",
+		"access-control-allow-methods": "GET, OPTIONS",
+		"access-control-allow-headers": "content-type",
+		"access-control-max-age": "600",
+		vary: "Origin",
+	};
+}
 
 function relayAttrs(conn: number, role: string, extra?: Record<string, string | number | boolean>) {
 	return {
@@ -15,7 +31,7 @@ function relayAttrs(conn: number, role: string, extra?: Record<string, string | 
 	};
 }
 
-type RelaySocketData = { role: "browser" | "agent" };
+type RelaySocketData = { role: "browser" | "agent" | "healthcheck" };
 type RelayWebSocket = ServerWebSocket<RelaySocketData>;
 
 export type RequestMsg = {
@@ -62,22 +78,98 @@ function closeWithReason(ws: RelayWebSocket, reason: string) {
 	ws.close(1008, reason);
 }
 
+function timeoutSignal(timeoutMs: number) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
+	return {
+		signal: controller.signal,
+		done() {
+			clearTimeout(timer);
+		},
+	};
+}
+
+async function backendHealthCheck() {
+	const timeout = timeoutSignal(healthTimeoutMs);
+	const startedAt = performance.now();
+	try {
+		const response = await fetch(backendHealthUrl, {
+			method: "GET",
+			headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
+			signal: timeout.signal,
+		});
+		return {
+			ok: response.ok,
+			target: backendHealthUrl,
+			status: response.status,
+			detail: response.ok ? "reachable" : `unexpected status ${response.status}`,
+			latencyMs: Math.round(performance.now() - startedAt),
+		};
+	} catch (error) {
+		return {
+			ok: false,
+			target: backendHealthUrl,
+			detail: error instanceof Error ? error.message : String(error),
+			latencyMs: Math.round(performance.now() - startedAt),
+		};
+	} finally {
+		timeout.done();
+	}
+}
+
+async function relayHealthPayload() {
+	const backend = await backendHealthCheck();
+	return {
+		ok: backend.ok,
+		service: "relay",
+		browserConnected: Boolean(browser),
+		agentCount: agents.size,
+		checks: [
+			{
+				name: "backend",
+				...backend,
+			},
+		],
+	};
+}
+
 Bun.serve({
 	port,
 	fetch(req, server) {
 		const url = new URL(req.url);
+		const origin = req.headers.get("origin");
 
-		if (url.pathname === "/relay/health" || url.pathname === "/health") {
-			return new Response(
-				JSON.stringify({
-					ok: true,
-					browserConnected: Boolean(browser),
-					agentCount: agents.size,
-				}),
-				{
-					headers: { "content-type": "application/json; charset=utf-8" },
+		if (req.method === "OPTIONS" && (url.pathname === "/relay/health" || url.pathname === "/health" || url.pathname === "/healthz")) {
+			return new Response(null, {
+				status: 204,
+				headers: corsHeaders(origin),
+			});
+		}
+
+		if (url.pathname === "/livez") {
+			return new Response("ok", {
+				headers: {
+					"content-type": "text/plain; charset=utf-8",
+					...corsHeaders(origin),
 				},
-			);
+			});
+		}
+
+		if (url.pathname === "/relay/health" || url.pathname === "/health" || url.pathname === "/healthz") {
+			return relayHealthPayload().then((payload) => {
+				return new Response(JSON.stringify(payload), {
+					status: payload.ok ? 200 : 503,
+					headers: {
+						"content-type": "application/json; charset=utf-8",
+						...corsHeaders(origin),
+					},
+				});
+			});
+		}
+
+		if (url.pathname === "/relay/health/ws" || url.pathname === "/health/ws") {
+			const upgraded = server.upgrade(req, { data: { role: "healthcheck" } });
+			return upgraded ? undefined : new Response("upgrade failed", { status: 500 });
 		}
 
 		if (url.pathname !== "/relay/ws" && url.pathname !== "/ws") {
@@ -103,6 +195,12 @@ Bun.serve({
 			const id = ++connSeq;
 			connId.set(ws, id);
 
+			if (ws.data.role === "healthcheck") {
+				sendJson(ws, { ok: true, service: "relay", mode: "ws-healthcheck" });
+				ws.close(1000, "healthcheck complete");
+				return;
+			}
+
 			if (ws.data.role === "browser") {
 				if (browser) {
 					const prev = browser;
@@ -121,6 +219,7 @@ Bun.serve({
 		},
 
 		message(ws: RelayWebSocket, message: string | Buffer<ArrayBuffer>) {
+			if (ws.data.role === "healthcheck") return;
 			const text = String(message);
 			const cid = connId.get(ws) ?? -1;
 			const parsed = safeJsonParse(text);
@@ -182,6 +281,11 @@ Bun.serve({
 
 		close(ws: RelayWebSocket, code: number, reason: string) {
 			const id = connId.get(ws) ?? -1;
+
+			if (ws.data.role === "healthcheck") {
+				dbg("healthcheck disconnected", { connId: id, code, reason });
+				return;
+			}
 
 			if (ws.data.role === "browser") {
 				if (browser !== ws) return;

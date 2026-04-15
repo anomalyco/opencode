@@ -1,11 +1,15 @@
-FROM nginx:alpine
+FROM oven/bun:1.2-alpine
 
-COPY packages/app/dist /usr/share/nginx/html
-COPY packages/app/public /usr/share/nginx/html/public
+WORKDIR /app
 
-RUN chmod -R 755 /usr/share/nginx/html && \
-    chown -R nginx:nginx /usr/share/nginx/html
+RUN printf '{\n  "name": "@veritly/frontend",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module"\n}\n' > package.json
+
+COPY packages/app/dist /app/dist
+COPY deploy/frontend/server.ts /app/server.ts
+
+ENV PORT=80
+ENV FRONTEND_DIST_DIR=/app/dist
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["bun", "run", "server.ts"]

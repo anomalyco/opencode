@@ -22,6 +22,39 @@ spec:
         ports:
         - containerPort: 80
           name: http
+        env:
+        - name: PORT
+          value: "80"
+        - name: FRONTEND_BACKEND_HEALTH_URL
+          value: "http://opencode-api:3000/healthz"
+        - name: FRONTEND_RELAY_HEALTH_URL
+          value: "http://relay:8080/healthz"
+        - name: FRONTEND_RELAY_WS_HEALTH_URL
+          value: "ws://relay:8080/health/ws"
+        - name: FRONTEND_PUBLIC_BACKEND_HEALTH_URL
+          value: "https://api.veritly.co.uk/healthz"
+        - name: FRONTEND_PUBLIC_RELAY_HEALTH_URL
+          value: "https://relay.veritly.co.uk/healthz"
+        - name: FRONTEND_PUBLIC_RELAY_WS_HEALTH_URL
+          value: "wss://relay.veritly.co.uk/health/ws"
+        - name: FRONTEND_PUBLIC_OPENCODE_SERVER_URL
+          value: "https://api.veritly.co.uk"
+        - name: FRONTEND_PUBLIC_UNIVER_BACKEND_URL
+          value: "https://univer.veritly.co.uk"
+        - name: FRONTEND_PUBLIC_UNIVER_SDK_WS
+          value: "wss://relay.veritly.co.uk/ws"
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
         resources:
           requests:
             memory: "64Mi"

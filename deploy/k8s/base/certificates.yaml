@@ -1,0 +1,38 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: veritly-tls
+  namespace: veritly
+spec:
+  secretName: veritly-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - app.veritly.co.uk
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: relay-tls
+  namespace: veritly
+spec:
+  secretName: relay-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - relay.veritly.co.uk
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-tls
+  namespace: veritly
+spec:
+  secretName: api-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - api.veritly.co.uk
