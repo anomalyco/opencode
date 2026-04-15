@@ -2330,6 +2330,24 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
+  describe("sambanova-ai-provider", () => {
+    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+      const model = createMockModel({
+        id: "gpt-oss-120b",
+        providerID: "sambanova",
+        api: {
+          id: "gpt-oss-120b",
+          url: "https://api.sambanova.ai/",
+          npm: "sambanova-ai-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({ reasoningEffort: "low" })
+      expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+  })
+
   describe("@ai-sdk/togetherai", () => {
     test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
       const model = createMockModel({

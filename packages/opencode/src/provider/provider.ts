@@ -40,6 +40,7 @@ import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
 import { createDeepInfra } from "@ai-sdk/deepinfra"
 import { createCerebras } from "@ai-sdk/cerebras"
+import { createSambaNova } from "sambanova-ai-provider"
 import { createCohere } from "@ai-sdk/cohere"
 import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
@@ -135,6 +136,7 @@ export namespace Provider {
     "@ai-sdk/groq": createGroq,
     "@ai-sdk/deepinfra": createDeepInfra,
     "@ai-sdk/cerebras": createCerebras,
+    "sambanova-ai-provider": createSambaNova,
     "@ai-sdk/cohere": createCohere,
     "@ai-sdk/gateway": createGateway,
     "@ai-sdk/togetherai": createTogetherAI,

@@ -492,6 +492,8 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
+      case "sambanova-ai-provider":
+      // https://ai-sdk.dev/providers/community-providers/sambanova
       case "@ai-sdk/togetherai":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/togetherai
       case "@ai-sdk/xai":

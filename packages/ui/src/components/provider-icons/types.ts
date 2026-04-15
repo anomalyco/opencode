@@ -86,6 +86,7 @@ export const iconNames = [
   "cloudferro-sherlock",
   "chutes",
   "cerebras",
+  "sambanova",
   "berget",
   "baseten",
   "bailing",
