@@ -15,20 +15,6 @@ import { Log } from "@/util/log"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
-const hop = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "proxy-connection",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "host",
-  "content-length",
-])
-
 const OPENCODE_WORKSPACE = process.env.OPENCODE_WORKSPACE
 
 const RULES: Array<Rule> = [

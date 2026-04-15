@@ -25,7 +25,7 @@ export const SyncRoutes = lazy(() =>
       describeRoute({
         summary: "Replay sync events",
         description: "Validate and replay a complete sync event history.",
-        operationId: "global.sync-replay",
+        operationId: "sync.replay",
         responses: {
           200: {
             description: "Replayed sync events",
@@ -80,7 +80,7 @@ export const SyncRoutes = lazy(() =>
         summary: "List sync events",
         description:
           "List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history.",
-        operationId: "global.sync-history.list",
+        operationId: "sync.history.list",
         responses: {
           200: {
             description: "Sync events",
