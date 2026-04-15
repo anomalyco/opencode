@@ -48,7 +48,8 @@ export const sansDefault = "System Sans"
 
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+const sansFallback =
+  '"Pretendard", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
 
 const monoBase = monoFallback
 const sansBase = sansFallback
@@ -133,7 +134,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       if (typeof document === "undefined") return
       const root = document.documentElement
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      // UI 폰트는 Pretendard 로 고정
+      root.style.setProperty("--font-family-sans", sansFallback)
     })
 
     return {

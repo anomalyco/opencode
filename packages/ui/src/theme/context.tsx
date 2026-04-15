@@ -162,16 +162,16 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { defaultTheme?: string; onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark") => void }) => {
-    const themeId = normalize(read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme) ?? "oc-2"
-    const colorScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
-    const mode = colorScheme === "system" ? getSystemMode() : colorScheme
+    const themeId = "aura" // TODO: 커스텀 테마 적용
+    const colorScheme: ColorScheme = "light"
+    const mode: "light" | "dark" = "light"
     const [store, setStore] = createStore({
       themes: {
         "oc-2": oc2Theme,
       } as Record<string, DesktopTheme>,
       themeId,
-      colorScheme,
-      mode,
+      colorScheme: colorScheme as ColorScheme,
+      mode: mode as "light" | "dark",
       previewThemeId: null as string | null,
       previewScheme: null as ColorScheme | null,
     })
@@ -251,16 +251,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mediaQuery.addEventListener("change", onMedia)
       onCleanup(() => mediaQuery.removeEventListener("change", onMedia))
 
-      const rawTheme = read(STORAGE_KEYS.THEME_ID)
-      const savedTheme = normalize(rawTheme ?? props.defaultTheme) ?? "oc-2"
-      const savedScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
-      if (rawTheme && rawTheme !== savedTheme) {
-        write(STORAGE_KEYS.THEME_ID, savedTheme)
-        clear()
-      }
+      const savedTheme = "aura" // TODO: 커스텀 테마 적용
+      const savedScheme: ColorScheme = "light"
       if (savedTheme !== store.themeId) setStore("themeId", savedTheme)
       if (savedScheme !== store.colorScheme) setStore("colorScheme", savedScheme)
-      setStore("mode", savedScheme === "system" ? getSystemMode() : savedScheme)
+      setStore("mode", "light")
       void load(savedTheme).then((theme) => {
         if (!theme || store.themeId !== savedTheme) return
         cacheThemeVariants(theme, savedTheme)
