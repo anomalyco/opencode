@@ -300,7 +300,14 @@ export const ProvidersLoginCommand = cmd({
         if (args.url) {
           const url = args.url.replace(/\/+$/, "")
           const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+          const confirmed = await prompts.confirm({
+            message: `Allow running \`${wellknown.auth.command.join(" ")}\` from ${url}?`,
+          })
+          if (!confirmed || prompts.isCancel(confirmed)) {
+            prompts.log.error("Cancelled")
+            prompts.outro("Done")
+            return
+          }
           const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
           })
