@@ -3,7 +3,7 @@ import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
-import fs from "fs/promises"
+import fs from "fs"
 import { Filesystem } from "../../../../util/filesystem"
 import { Process } from "../../../../util/process"
 import { which } from "../../../../util/which"
@@ -12,6 +12,9 @@ import { which } from "../../../../util/which"
  * Writes text to clipboard via OSC 52 escape sequence.
  * This allows clipboard operations to work over SSH by having
  * the terminal emulator handle the clipboard locally.
+ *
+ * Writes to /dev/tty directly to bypass terminal multiplexers
+ * (Zellij, tmux, screen) that intercept OSC52 on stdout.
  */
 function writeOsc52(text: string): void {
   if (!process.stdout.isTTY) return
@@ -19,7 +22,18 @@ function writeOsc52(text: string): void {
   const osc52 = `\x1b]52;c;${base64}\x07`
   const passthrough = process.env["TMUX"] || process.env["STY"]
   const sequence = passthrough ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-  process.stdout.write(sequence)
+
+  // Write to /dev/tty directly to bypass terminal multiplexers.
+  // SSH_TTY is set when connected via SSH, otherwise use /dev/tty.
+  const ttyPath = process.env["SSH_TTY"] || "/dev/tty"
+  try {
+    const fd = fs.openSync(ttyPath, "w")
+    fs.writeSync(fd, sequence)
+    fs.closeSync(fd)
+  } catch {
+    // Fallback to stdout if /dev/tty is unavailable (e.g., Windows)
+    process.stdout.write(sequence)
+  }
 }
 
 export namespace Clipboard {
@@ -62,7 +76,7 @@ export namespace Clipboard {
         return { data: buffer.toString("base64"), mime: "image/png" }
       } catch {
       } finally {
-        await fs.rm(tmpfile, { force: true }).catch(() => {})
+        await fs.promises.rm(tmpfile, { force: true }).catch(() => {})
       }
     }
 
