@@ -18,6 +18,23 @@ import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
 
+/**
+ * Serializes requests to prevent overloading local models (Ollama/M4).
+ * Ensures that even if multiple agents try to talk to the model at once,
+ * they wait in line natively.
+ */
+class RequestQueue {
+  private queue = Promise.resolve()
+
+  async add<T>(fn: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(fn)
+    this.queue = result.then(() => {}).catch(() => {})
+    return result
+  }
+}
+
+const globalRequestQueue = new RequestQueue()
+
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
@@ -1103,11 +1120,13 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
-        })
+        return globalRequestQueue.add(() =>
+          fetchFn(input, {
+            ...opts,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          }),
+        )
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
