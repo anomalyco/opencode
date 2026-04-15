@@ -22,7 +22,7 @@ jobs:
         run: bun install
 
       - name: Build OpenCode binaries
-        run: bun --cwd packages/opencode run build
+        run: bun run --cwd packages/opencode build
 
       - name: Prepare linux-x64 release assets
         working-directory: packages/opencode
