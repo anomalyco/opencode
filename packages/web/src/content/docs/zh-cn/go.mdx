@@ -59,6 +59,8 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **MiMo-V2-Pro**
 - **MiMo-V2-Omni**
 - **MiniMax M2.5**
+- **Qwen3.5 Plus**
+- **Qwen3.6 Plus**
 - **MiniMax M2.7**
 
 随着我们进行测试和添加新模型，该列表可能会发生变化。
@@ -77,11 +79,17 @@ OpenCode Go 包含以下限制：
 
 下表提供了基于典型 Go 使用模式的预估请求数：
 
-|                 | GLM-5.1 | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
-| --------------- | ------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
-| 每 5 小时请求数 | 880     | 1,150 | 1,850     | 1,290       | 2,150        | 14,000       | 20,000       |
-| 每周请求数      | 2,150   | 2,880 | 4,630     | 3,225       | 5,450        | 35,000       | 50,000       |
-| 每月请求数      | 4,300   | 5,750 | 9,250     | 6,450       | 10,900       | 70,000       | 100,000      |
+| Model        | 每 5 小时请求数 | 每周请求数 | 每月请求数 |
+| ------------ | --------------- | ---------- | ---------- |
+| GLM-5.1      | 880             | 2,150      | 4,300      |
+| GLM-5        | 1,150           | 2,880      | 5,750      |
+| Kimi K2.5    | 1,850           | 4,630      | 9,250      |
+| MiMo-V2-Pro  | 1,290           | 3,225      | 6,450      |
+| MiMo-V2-Omni | 2,150           | 5,450      | 10,900     |
+| Qwen3.6 Plus | 3,300           | 8,200      | 16,300     |
+| MiniMax M2.7 | 3,400           | 8,500      | 17,000     |
+| MiniMax M2.5 | 6,300           | 15,900     | 31,800     |
+| Qwen3.5 Plus | 10,200          | 25,200     | 50,500     |
 
 预估值基于观察到的平均请求模式：
 
@@ -90,6 +98,8 @@ OpenCode Go 包含以下限制：
 - MiMo-V2-Pro — 每次请求 350 个输入 token，41,000 个缓存 token，250 个输出 token
 - MiMo-V2-Omni — 每次请求 1000 个输入 token，60,000 个缓存 token，140 个输出 token
 - MiniMax M2.7/M2.5 — 每次请求 300 个输入 token，55,000 个缓存 token，125 个输出 token
+- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
+- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
 
 你可以在 **<a href={console}>控制台</a>** 中跟踪你当前的使用情况。
 
@@ -120,6 +130,8 @@ OpenCode Go 包含以下限制：
 | MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus | qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus | qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
 你 OpenCode 配置中的 [模型 ID](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，对于 Kimi K2.5，你将在配置中使用 `opencode-go/kimi-k2.5`。
 

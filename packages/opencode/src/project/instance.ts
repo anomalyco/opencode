@@ -1,12 +1,12 @@
 import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
+import { makeRuntime } from "@/effect/run-service"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { LocalContext } from "../util/local-context"
 import { Project } from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
-import { State } from "./state"
 
 export interface InstanceContext {
   directory: string
@@ -16,12 +16,11 @@ export interface InstanceContext {
 
 const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
+const project = makeRuntime(Project.Service, Project.defaultLayer)
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
 }
-
-function emitDisposed(directory: string) {}
 
 function boot(input: { directory: string; init?: () => Promise<any>; worktree?: string; project?: Project.Info }) {
   return iife(async () => {
@@ -32,11 +31,13 @@ function boot(input: { directory: string; init?: () => Promise<any>; worktree?: 
             worktree: input.worktree,
             project: input.project,
           }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-            directory: input.directory,
-            worktree: sandbox,
-            project,
-          }))
+        : await project
+            .runPromise((svc) => svc.fromDirectory(input.directory))
+            .then(({ project, sandbox }) => ({
+              directory: input.directory,
+              worktree: sandbox,
+              project,
+            }))
     await context.provide(ctx, async () => {
       await input.init?.()
     })
@@ -115,13 +116,10 @@ export const Instance = {
   restore<R>(ctx: InstanceContext, fn: () => R): R {
     return context.provide(ctx, fn)
   },
-  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
-    return State.create(() => Instance.directory, init, dispose)
-  },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await disposeInstance(directory)
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
 
@@ -143,7 +141,7 @@ export const Instance = {
     const directory = Instance.directory
     const project = Instance.project
     Log.Default.info("disposing instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await disposeInstance(directory)
     cache.delete(directory)
 
     GlobalBus.emit("event", {

@@ -48,7 +48,9 @@ export namespace Truncate {
       const fs = yield* AppFileSystem.Service
 
       const cleanup = Effect.fn("Truncate.cleanup")(function* () {
-        const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - Duration.toMillis(RETENTION)))
+        const cutoff = Identifier.timestamp(
+          Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)),
+        )
         const entries = yield* fs.readDirectory(TRUNCATION_DIR).pipe(
           Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
           Effect.catch(() => Effect.succeed([])),

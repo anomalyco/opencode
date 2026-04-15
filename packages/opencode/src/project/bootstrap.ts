@@ -9,24 +9,30 @@ import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
-import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
+import * as Effect from "effect/Effect"
 
-export async function InstanceBootstrap() {
+export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  await Plugin.init()
-  void BootstrapRuntime.runPromise(ShareNext.Service.use((svc) => svc.init()))
-  void BootstrapRuntime.runPromise(Format.Service.use((svc) => svc.init()))
-  await LSP.init()
-  File.init()
-  void BootstrapRuntime.runPromise(FileWatcher.Service.use((svc) => svc.init()))
-  Vcs.init()
-  Snapshot.init()
+  yield* Plugin.Service.use((svc) => svc.init())
+  yield* Effect.all(
+    [
+      LSP.Service,
+      ShareNext.Service,
+      Format.Service,
+      File.Service,
+      FileWatcher.Service,
+      Vcs.Service,
+      Snapshot.Service,
+    ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
+  )
 
-  Bus.subscribe(Command.Event.Executed, async (payload) => {
-    if (payload.properties.name === Command.Default.INIT) {
-      Project.setInitialized(Instance.project.id)
-    }
-  })
-}
+  yield* Bus.Service.use((svc) =>
+    svc.subscribeCallback(Command.Event.Executed, async (payload) => {
+      if (payload.properties.name === Command.Default.INIT) {
+        Project.setInitialized(Instance.project.id)
+      }
+    }),
+  )
+}).pipe(Effect.withSpan("InstanceBootstrap"))
