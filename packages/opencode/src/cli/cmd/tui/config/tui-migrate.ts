@@ -4,7 +4,6 @@ import { unique } from "remeda"
 import z from "zod"
 import { ConfigPaths } from "@/config/paths"
 import { TuiInfo, TuiOptions } from "./tui-schema"
-import { Instance } from "@/project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { Filesystem } from "@/util/filesystem"
@@ -26,6 +25,7 @@ const TuiLegacy = z
   .strip()
 
 interface MigrateInput {
+  cwd: string
   directories: string[]
   custom?: string
   managed: string
@@ -134,10 +134,8 @@ async function backupAndStripLegacy(file: string, source: string) {
     })
 }
 
-async function opencodeFiles(input: { directories: string[]; managed: string }) {
-  const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-    ? []
-    : await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.worktree)
+async function opencodeFiles(input: { directories: string[]; managed: string; cwd: string }) {
+  const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("opencode", input.cwd)
   const files = [...project, ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode")]
   for (const dir of unique(input.directories)) {
     files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))

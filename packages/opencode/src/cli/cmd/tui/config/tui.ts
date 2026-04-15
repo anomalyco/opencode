@@ -15,6 +15,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Npm } from "@opencode-ai/shared/npm"
 import { Installation } from "@/installation"
+import { CurrentWorkingDirectory } from "./cwd"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -87,7 +88,7 @@ export namespace TuiConfig {
     const directories = await ConfigPaths.directories(ctx.directory)
     const custom = customPath()
     const managed = Config.managedConfigDir()
-    await migrateTuiConfig({ directories, custom, managed })
+    await migrateTuiConfig({ directories, custom, managed, cwd: ctx.directory })
     // Re-compute after migration since migrateTuiConfig may have created new tui.json files
     projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
 
@@ -142,34 +143,26 @@ export namespace TuiConfig {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const { InstanceState } = yield* Effect.promise(() => import("@/effect/instance-state"))
+      const directory = yield* CurrentWorkingDirectory
       const npm = yield* Npm.Service
-
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("TuiConfig.state")(function* (ctx) {
-          const data = yield* Effect.promise(() => loadState({ directory: ctx.directory }))
-          const deps = yield* Effect.forEach(
-            data.dirs,
-            (dir) =>
-              npm
-                .install(dir, {
-                  add: ["@opencode-ai/plugin" + (Installation.isLocal() ? "" : "@" + Installation.VERSION)],
-                })
-                .pipe(Effect.forkScoped),
-            {
-              concurrency: "unbounded",
-            },
-          )
-          return { config: data.config, deps }
-        }),
+      const data = yield* Effect.promise(() => loadState({ directory }))
+      const deps = yield* Effect.forEach(
+        data.dirs,
+        (dir) =>
+          npm
+            .install(dir, {
+              add: ["@opencode-ai/plugin" + (Installation.isLocal() ? "" : "@" + Installation.VERSION)],
+            })
+            .pipe(Effect.forkScoped),
+        {
+          concurrency: "unbounded",
+        },
       )
 
-      const get = Effect.fn("TuiConfig.get")(() => InstanceState.use(state, (s) => s.config))
+      const get = Effect.fn("TuiConfig.get")(() => Effect.succeed(data.config))
 
       const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
-        InstanceState.useEffect(state, (s) =>
-          Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
-        ),
+        Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
       )
 
       return Service.of({ get, waitForDependencies })
