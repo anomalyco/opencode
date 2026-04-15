@@ -1,6 +1,6 @@
 import { DateTime, Effect, Layer, Option, Semaphore, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
 import { Filesystem } from "@/util/filesystem"

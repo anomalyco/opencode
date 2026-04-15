@@ -1,4 +1,4 @@
-import { Npm } from "@/npm"
+import { Npm } from "../npm"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"

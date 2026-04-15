@@ -1,6 +1,6 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { fileURLToPath } from "url"
 import { Effect, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
