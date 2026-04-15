@@ -24,6 +24,21 @@ export namespace LSPServer {
       .catch(() => false)
   const run = (cmd: string[], opts: Process.RunOptions = {}) => Process.run(cmd, { ...opts, nothrow: true })
   const output = (cmd: string[], opts: Process.RunOptions = {}) => Process.text(cmd, { ...opts, nothrow: true })
+  const java = async (min: number) => {
+    if (!which("java")) {
+      log.error(`Java ${min} or newer is required. Please install it first.`)
+      return false
+    }
+    const javaMajorVersion = await run(["java", "-version"]).then((result) => {
+      const m = /"(\d+)\.\d+\.\d+"/.exec(result.stderr.toString())
+      return !m ? undefined : parseInt(m[1])
+    })
+    if (javaMajorVersion == null || javaMajorVersion < min) {
+      log.error(`Java ${min} or newer is required.`)
+      return false
+    }
+    return true
+  }
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -1094,19 +1109,9 @@ export namespace LSPServer {
     },
     extensions: [".java"],
     async spawn(root) {
-      const java = which("java")
-      if (!java) {
-        log.error("Java 21 or newer is required to run the JDTLS. Please install it first.")
-        return
-      }
-      const javaMajorVersion = await run(["java", "-version"]).then((result) => {
-        const m = /"(\d+)\.\d+\.\d+"/.exec(result.stderr.toString())
-        return !m ? undefined : parseInt(m[1])
-      })
-      if (javaMajorVersion == null || javaMajorVersion < 21) {
-        log.error("JDTLS requires at least Java 21.")
-        return
-      }
+      if (!(await java(21))) return
+      const javaBin = which("java")
+      if (!javaBin) return
       const distPath = path.join(Global.Path.bin, "jdtls")
       const launcherDir = path.join(distPath, "plugins")
       const installed = await pathExists(launcherDir)
@@ -1163,7 +1168,7 @@ export namespace LSPServer {
       const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
       return {
         process: spawn(
-          java,
+          javaBin,
           [
             "-jar",
             launcherJar,
@@ -1934,6 +1939,116 @@ export namespace LSPServer {
         process: spawn(bin, ["--lsp"], {
           cwd: root,
         }),
+      }
+    },
+  }
+
+  export const Metals: Info = {
+    id: "metals",
+    extensions: [".scala", ".sbt", ".sc"],
+    root: NearestRoot(["build.sbt", "build.sc", ".scala-build", "project/build.properties"]),
+    async spawn(root) {
+      let bin = which("metals")
+
+      if (!bin) {
+        if (!(await java(17))) return
+
+        let cs = which("cs") || which("coursier")
+        if (!cs) {
+          cs = path.join(Global.Path.bin, "cs" + (process.platform === "win32" ? ".exe" : ""))
+          if (!(await Filesystem.exists(cs))) {
+            if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+            log.info("downloading coursier")
+
+            const platform = process.platform
+            const arch = process.arch
+
+            let url: string
+            if (platform === "darwin") {
+              url =
+                arch === "arm64"
+                  ? "https://github.com/coursier/coursier/releases/latest/download/cs-aarch64-apple-darwin.gz"
+                  : "https://github.com/coursier/launchers/raw/master/cs-x86_64-apple-darwin.gz"
+            } else if (platform === "linux") {
+              url =
+                arch === "arm64"
+                  ? "https://github.com/coursier/launchers/raw/master/cs-aarch64-pc-linux.gz"
+                  : "https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz"
+            } else if (platform === "win32") {
+              url = "https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-win32.zip"
+            } else {
+              log.error(`Platform ${platform} is not supported for coursier auto-download`)
+              return
+            }
+
+            const response = await fetch(url)
+            if (!response.ok) {
+              log.error("Failed to download coursier")
+              return
+            }
+
+            const ext = platform === "win32" ? "zip" : "gz"
+            const tempPath = path.join(Global.Path.bin, `cs.${ext}`)
+            if (response.body) await Filesystem.writeStream(tempPath, response.body)
+
+            if (ext === "zip") {
+              const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+                .then(() => true)
+                .catch((error) => {
+                  log.error("Failed to extract coursier archive", { error })
+                  return false
+                })
+              if (!ok) return
+            } else {
+              await run(["gunzip", "-f", tempPath], { cwd: Global.Path.bin })
+            }
+
+            await fs.rm(tempPath, { force: true }).catch(() => {})
+
+            if (!(await Filesystem.exists(cs))) {
+              log.error("Failed to extract coursier binary")
+              return
+            }
+
+            if (platform !== "win32") {
+              await fs.chmod(cs, 0o755).catch(() => {})
+            }
+
+            log.info("installed coursier", { bin: cs })
+          }
+        }
+
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing metals via coursier")
+
+        const installDir = Global.Path.bin
+        const proc = Process.spawn([cs, "install", "metals", "--install-dir", installDir], {
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install metals")
+          return
+        }
+
+        bin = path.join(installDir, "metals" + (process.platform === "win32" ? ".bat" : ""))
+        if (!(await Filesystem.exists(bin))) {
+          log.error("Failed to install metals binary")
+          return
+        }
+        log.info("installed metals", { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+        initialization: {
+          statusBarProvider: "log-message",
+          isHttpEnabled: true,
+        },
       }
     },
   }
