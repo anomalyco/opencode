@@ -25,8 +25,13 @@ jobs:
         run: bun --cwd packages/opencode run build
 
       - name: Prepare linux-x64 release assets
+        working-directory: packages/opencode
         run: |
-          tar -C packages/opencode/dist/opencode-linux-x64/bin -czf ./opencode-linux-x64.tar.gz opencode
+          ls -la dist
+          ls -la dist/opencode-linux-x64
+          ls -la dist/opencode-linux-x64/bin
+          tar -C dist/opencode-linux-x64/bin -czf ../../opencode-linux-x64.tar.gz opencode
+          cd ../..
           sha256sum ./opencode-linux-x64.tar.gz | tee ./opencode-linux-x64.tar.gz.sha256
 
       - name: Publish release assets
