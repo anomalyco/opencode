@@ -1,10 +1,9 @@
-import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Context, Stream } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
@@ -151,7 +150,7 @@ export namespace Vcs {
     root: Git.Base | undefined
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
   export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service | Bus.Service> = Layer.effect(
     Service,
@@ -161,39 +160,37 @@ export namespace Vcs {
       const bus = yield* Bus.Service
 
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Vcs.state")((ctx) =>
-          Effect.gen(function* () {
-            if (ctx.project.vcs !== "git") {
-              return { current: undefined, root: undefined }
-            }
+        Effect.fn("Vcs.state")(function* (ctx) {
+          if (ctx.project.vcs !== "git") {
+            return { current: undefined, root: undefined }
+          }
 
-            const get = Effect.fnUntraced(function* () {
-              return yield* git.branch(ctx.directory)
-            })
-            const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
-              concurrency: 2,
-            })
-            const value = { current, root }
-            log.info("initialized", { branch: value.current, default_branch: value.root?.name })
+          const get = Effect.fnUntraced(function* () {
+            return yield* git.branch(ctx.directory)
+          })
+          const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
+            concurrency: 2,
+          })
+          const value = { current, root }
+          log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
-            yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
-              Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
-              Stream.runForEach((_evt) =>
-                Effect.gen(function* () {
-                  const next = yield* get()
-                  if (next !== value.current) {
-                    log.info("branch changed", { from: value.current, to: next })
-                    value.current = next
-                    yield* bus.publish(Event.BranchUpdated, { branch: next })
-                  }
-                }),
-              ),
-              Effect.forkScoped,
-            )
+          yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
+            Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
+            Stream.runForEach((_evt) =>
+              Effect.gen(function* () {
+                const next = yield* get()
+                if (next !== value.current) {
+                  log.info("branch changed", { from: value.current, to: next })
+                  value.current = next
+                  yield* bus.publish(Event.BranchUpdated, { branch: next })
+                }
+              }),
+            ),
+            Effect.forkScoped,
+          )
 
-            return value
-          }),
-        ),
+          return value
+        }),
       )
 
       return Service.of({
@@ -228,27 +225,9 @@ export namespace Vcs {
     }),
   )
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(Git.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function branch() {
-    return runPromise((svc) => svc.branch())
-  }
-
-  export async function defaultBranch() {
-    return runPromise((svc) => svc.defaultBranch())
-  }
-
-  export async function diff(mode: Mode) {
-    return runPromise((svc) => svc.diff(mode))
-  }
 }

@@ -272,10 +272,6 @@ export type TuiState = {
     directory: string
   }
   readonly vcs: { branch?: string } | undefined
-  readonly workspace: {
-    list: () => ReadonlyArray<Workspace>
-    get: (workspaceID: string) => Workspace | undefined
-  }
   session: {
     count: () => number
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>

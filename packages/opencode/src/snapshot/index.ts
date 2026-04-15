@@ -1,11 +1,10 @@
-import { Cause, Duration, Effect, Layer, Schedule, Semaphore, ServiceMap, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Semaphore, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Hash } from "@/util/hash"
 import { Config } from "../config/config"
@@ -57,7 +56,7 @@ export namespace Snapshot {
     readonly diffFull: (from: string, to: string) => Effect.Effect<Snapshot.FileDiff[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Snapshot") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
   export const layer: Layer.Layer<
     Service,
@@ -177,8 +176,39 @@ export namespace Snapshot {
             const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
+            // Filter out files that are now gitignored even if previously tracked
+            // Files may have been tracked before being gitignored, so we need to check
+            // against the source project's current gitignore rules
+            // Use --no-index to check purely against patterns (ignoring whether file is tracked)
+            const checkArgs = [
+              ...quote,
+              "--git-dir",
+              path.join(state.worktree, ".git"),
+              "--work-tree",
+              state.worktree,
+              "check-ignore",
+              "--no-index",
+              "--",
+              ...all,
+            ]
+            const check = yield* git(checkArgs, { cwd: state.directory })
+            const ignored =
+              check.code === 0 ? new Set(check.text.trim().split("\n").filter(Boolean)) : new Set<string>()
+            const filtered = all.filter((item) => !ignored.has(item))
+
+            // Remove newly-ignored files from snapshot index to prevent re-adding
+            if (ignored.size > 0) {
+              const ignoredFiles = Array.from(ignored)
+              log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
+              yield* git([...cfg, ...args(["rm", "--cached", "-f", "--", ...ignoredFiles])], {
+                cwd: state.directory,
+              })
+            }
+
+            if (!filtered.length) return
+
             const large = (yield* Effect.all(
-              all.map((item) =>
+              filtered.map((item) =>
                 fs
                   .stat(path.join(state.directory, item))
                   .pipe(Effect.catch(() => Effect.void))
@@ -259,14 +289,39 @@ export namespace Snapshot {
                   log.warn("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
+                const files = result.text
+                  .trim()
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+
+                // Filter out files that are now gitignored
+                if (files.length > 0) {
+                  const checkArgs = [
+                    ...quote,
+                    "--git-dir",
+                    path.join(state.worktree, ".git"),
+                    "--work-tree",
+                    state.worktree,
+                    "check-ignore",
+                    "--no-index",
+                    "--",
+                    ...files,
+                  ]
+                  const check = yield* git(checkArgs, { cwd: state.directory })
+                  if (check.code === 0) {
+                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                    const filtered = files.filter((item) => !ignored.has(item))
+                    return {
+                      hash,
+                      files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                    }
+                  }
+                }
+
                 return {
                   hash,
-                  files: result.text
-                    .trim()
-                    .split("\n")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                 }
               }),
             )
@@ -616,6 +671,30 @@ export namespace Snapshot {
                       } satisfies Row,
                     ]
                   })
+
+                // Filter out files that are now gitignored
+                if (rows.length > 0) {
+                  const files = rows.map((r) => r.file)
+                  const checkArgs = [
+                    ...quote,
+                    "--git-dir",
+                    path.join(state.worktree, ".git"),
+                    "--work-tree",
+                    state.worktree,
+                    "check-ignore",
+                    "--no-index",
+                    "--",
+                    ...files,
+                  ]
+                  const check = yield* git(checkArgs, { cwd: state.directory })
+                  if (check.code === 0) {
+                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
+                    const filtered = rows.filter((r) => !ignored.has(r.file))
+                    rows.length = 0
+                    rows.push(...filtered)
+                  }
+                }
+
                 const step = 100
                 const patch = (file: string, before: string, after: string) =>
                   formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
@@ -690,34 +769,4 @@ export namespace Snapshot {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Config.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
-
-  export async function track() {
-    return runPromise((svc) => svc.track())
-  }
-
-  export async function patch(hash: string) {
-    return runPromise((svc) => svc.patch(hash))
-  }
-
-  export async function restore(snapshot: string) {
-    return runPromise((svc) => svc.restore(snapshot))
-  }
-
-  export async function revert(patches: Patch[]) {
-    return runPromise((svc) => svc.revert(patches))
-  }
-
-  export async function diff(hash: string) {
-    return runPromise((svc) => svc.diff(hash))
-  }
-
-  export async function diffFull(from: string, to: string) {
-    return runPromise((svc) => svc.diffFull(from, to))
-  }
 }

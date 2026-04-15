@@ -8,10 +8,9 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { makeRuntime } from "@/effect/run-service"
+import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
@@ -100,7 +99,7 @@ export namespace Project {
     readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Project") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
 
   type GitResult = { code: number; text: string; stderr: string }
 
@@ -137,6 +136,8 @@ export namespace Project {
       const emitUpdated = (data: Info) =>
         Effect.sync(() =>
           GlobalBus.emit("event", {
+            directory: "global",
+            project: data.id,
             payload: { type: Event.Updated.type, properties: data },
           }),
         )
@@ -158,7 +159,7 @@ export namespace Project {
         return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
           Effect.map((x) => x.trim()),
           Effect.map(ProjectID.make),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.catch(() => Effect.void),
         )
       })
 
@@ -461,19 +462,6 @@ export namespace Project {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  // ---------------------------------------------------------------------------
-  // Promise-based API (delegates to Effect service via runPromise)
-  // ---------------------------------------------------------------------------
-
-  export function fromDirectory(directory: string) {
-    return runPromise((svc) => svc.fromDirectory(directory))
-  }
-
-  export function discover(input: Info) {
-    return runPromise((svc) => svc.discover(input))
-  }
 
   export function list() {
     return Database.use((db) =>
@@ -495,25 +483,5 @@ export namespace Project {
     Database.use((db) =>
       db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
     )
-  }
-
-  export function initGit(input: { directory: string; project: Info }) {
-    return runPromise((svc) => svc.initGit(input))
-  }
-
-  export function update(input: UpdateInput) {
-    return runPromise((svc) => svc.update(input))
-  }
-
-  export function sandboxes(id: ProjectID) {
-    return runPromise((svc) => svc.sandboxes(id))
-  }
-
-  export function addSandbox(id: ProjectID, directory: string) {
-    return runPromise((svc) => svc.addSandbox(id, directory))
-  }
-
-  export function removeSandbox(id: ProjectID, directory: string) {
-    return runPromise((svc) => svc.removeSandbox(id, directory))
   }
 }
