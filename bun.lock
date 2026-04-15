@@ -512,6 +512,7 @@
         "effect": "catalog:",
       },
       "devDependencies": {
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
       },
     },
@@ -528,9 +529,11 @@
         "mime-types": "3.0.2",
         "minimatch": "10.2.5",
         "semver": "catalog:",
+        "xdg-basedir": "5.1.0",
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@types/bun": "catalog:",
         "@types/semver": "catalog:",
       },
     },
