@@ -16,25 +16,18 @@ export namespace BusEvent {
   }
 
   export function payloads() {
-    return z
-      .discriminatedUnion(
-        "type",
-        registry
-          .entries()
-          .map(([type, def]) => {
-            return z
-              .object({
-                type: z.literal(type),
-                properties: def.properties,
-              })
-              .meta({
-                ref: "Event" + "." + def.type,
-              })
+    return registry
+      .entries()
+      .map(([type, def]) => {
+        return z
+          .object({
+            type: z.literal(type),
+            properties: def.properties,
           })
-          .toArray() as any,
-      )
-      .meta({
-        ref: "Event",
+          .meta({
+            ref: "Event" + "." + def.type,
+          })
       })
+      .toArray()
   }
 }

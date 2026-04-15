@@ -55,7 +55,7 @@ const TIPS = [
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
-  "Drag and drop images into the terminal to add them as context",
+  "Drag and drop images or PDFs into the terminal to add them as context",
   "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
@@ -148,5 +148,7 @@ const TIPS = [
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
   "Use {highlight}/rename{/highlight} to rename the current session",
-  "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
+  ...(process.platform === "win32"
+    ? ["Press {highlight}Ctrl+Z{/highlight} to undo changes in your prompt"]
+    : ["Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell"]),
 ]

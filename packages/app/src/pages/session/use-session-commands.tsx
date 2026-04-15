@@ -12,7 +12,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
-import { findLast } from "@opencode-ai/util/array"
+import { findLast } from "@opencode-ai/shared/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -52,11 +52,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return
     return sync.session.get(id)
   }
-  const hasReview = () => {
-    const id = params.id
-    if (!id) return false
-    return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
-  }
+  const hasReview = () => !!params.id
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)

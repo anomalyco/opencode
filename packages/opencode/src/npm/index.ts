@@ -1,6 +1,6 @@
 import semver from "semver"
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
@@ -11,6 +11,7 @@ import { Arborist } from "@npmcli/arborist"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
+  const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
 
   export const InstallFailedError = NamedError.create(
     "NpmInstallFailedError",
@@ -19,8 +20,13 @@ export namespace Npm {
     }),
   )
 
+  export function sanitize(pkg: string) {
+    if (!illegal) return pkg
+    return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
+  }
+
   function directory(pkg: string) {
-    return path.join(Global.Path.cache, "packages", pkg)
+    return path.join(Global.Path.cache, "packages", sanitize(pkg))
   }
 
   function resolveEntryPoint(name: string, dir: string) {
@@ -67,6 +73,7 @@ export namespace Npm {
       binLinks: true,
       progress: false,
       savePrefix: "",
+      ignoreScripts: true,
     })
     const tree = await arborist.loadVirtual().catch(() => {})
     if (tree) {
@@ -106,6 +113,7 @@ export namespace Npm {
         binLinks: true,
         progress: false,
         savePrefix: "",
+        ignoreScripts: true,
       })
       await arb.reify().catch(() => {})
     }

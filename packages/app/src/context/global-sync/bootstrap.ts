@@ -11,8 +11,8 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { retry } from "@opencode-ai/util/retry"
+import { getFilename } from "@opencode-ai/shared/util/path"
+import { retry } from "@opencode-ai/shared/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -122,20 +122,21 @@ export async function bootstrapGlobal(input: {
         }),
       ),
   ]
-
-  showErrors({
-    errors: errors(await runAll(fast)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
+  await runAll(fast)
+  // showErrors({
+  //   errors: errors(await runAll(fast)),
+  //   title: input.requestFailedTitle,
+  //   translate: input.translate,
+  //   formatMoreCount: input.formatMoreCount,
+  // })
   await waitForPaint()
-  showErrors({
-    errors: errors(await runAll(slow)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
+  await runAll(slow)
+  // showErrors({
+  //   errors: errors(),
+  //   title: input.requestFailedTitle,
+  //   translate: input.translate,
+  //   formatMoreCount: input.formatMoreCount,
+  // })
   input.setGlobalStore("ready", true)
 }
 
@@ -248,7 +249,7 @@ export async function bootstrapDirectory(input: {
         input.sdk.vcs.get().then((x) => {
           const next = x.data ?? input.store.vcs
           input.setStore("vcs", next)
-          if (next?.branch) input.vcsCache.setStore("value", next)
+          if (next) input.vcsCache.setStore("value", next)
         }),
       ),
     () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),

@@ -16,14 +16,24 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionSummary } from "../../src/session/summary"
 import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { reply, TestLLMServer } from "../lib/llm-server"
+import { raw, reply, TestLLMServer } from "../lib/llm-server"
 
 Log.init({ print: false })
+
+const summary = Layer.succeed(
+  SessionSummary.Service,
+  SessionSummary.Service.of({
+    summarize: () => Effect.void,
+    diff: () => Effect.succeed([]),
+    computeDiff: () => Effect.succeed([]),
+  }),
+)
 
 const ref = {
   providerID: ProviderID.make("test"),
@@ -149,14 +159,17 @@ const deps = Layer.mergeAll(
   Session.defaultLayer,
   Snapshot.defaultLayer,
   AgentSvc.defaultLayer,
-  Permission.layer,
+  Permission.defaultLayer,
   Plugin.defaultLayer,
   Config.defaultLayer,
   LLM.defaultLayer,
   Provider.defaultLayer,
   status,
 ).pipe(Layer.provideMerge(infra))
-const env = Layer.mergeAll(TestLLMServer.layer, SessionProcessor.layer.pipe(Layer.provideMerge(deps)))
+const env = Layer.mergeAll(
+  TestLLMServer.layer,
+  SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps)),
+)
 
 const it = testEffect(env)
 
@@ -213,6 +226,93 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         expect(value).toBe("continue")
         expect(calls).toBe(1)
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests preserve text start time", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const gate = defer<void>()
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { content: "hello" } }],
+              },
+            ],
+            wait: gate.promise,
+            tail: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "stop" }],
+              },
+            ],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "hi" }],
+            tools: {},
+          })
+          .pipe(Effect.forkChild)
+
+        yield* Effect.promise(async () => {
+          const stop = Date.now() + 500
+          while (Date.now() < stop) {
+            const text = MessageV2.parts(msg.id).find((part): part is MessageV2.TextPart => part.type === "text")
+            if (text?.time?.start) return
+            await Bun.sleep(10)
+          }
+          throw new Error("timed out waiting for text part")
+        })
+        yield* Effect.sleep("20 millis")
+        gate.resolve()
+
+        const exit = yield* Fiber.await(run)
+        const text = MessageV2.parts(msg.id).find((part): part is MessageV2.TextPart => part.type === "text")
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+        expect(text?.text).toBe("hello")
+        expect(text?.time?.start).toBeDefined()
+        expect(text?.time?.end).toBeDefined()
+        if (!text?.time?.start || !text.time.end) return
+        expect(text.time.start).toBeLessThan(text.time.end)
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),
@@ -593,9 +693,6 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)
-        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
-          yield* handle.abort()
-        }
         const parts = MessageV2.parts(msg.id)
         const call = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 
@@ -607,6 +704,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         expect(call?.state.status).toBe("error")
         if (call?.state.status === "error") {
           expect(call.state.error).toBe("Tool execution aborted")
+          expect(call.state.metadata?.interrupted).toBe(true)
           expect(call.state.time.end).toBeDefined()
         }
       }),
@@ -665,9 +763,6 @@ it.live("session.processor effect tests record aborted errors and idle state", (
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)
-        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
-          yield* handle.abort()
-        }
         yield* Effect.promise(() => seen.promise)
         const stored = MessageV2.get({ sessionID: chat.id, messageID: msg.id })
         const state = yield* sts.get(chat.id)
