@@ -133,7 +133,33 @@ export namespace Plugin {
               : undefined,
             fetch: async (...args) => (await Server.Default()).app.fetch(...args),
           })
-          const cfg = yield* config.get()
+          // #region motel debug
+          yield* Effect.logInfo("plugin state config start", {
+            "debug.session": "instance-bootstrap",
+            "debug.hypothesis": "A",
+            "debug.step": "before-config-get",
+            "debug.label": "Plugin.state before Config.get",
+          })
+          // #endregion motel debug
+          const cfg = yield* config.get().pipe(
+            Effect.withSpan("PluginDebug.config", {
+              attributes: {
+                "debug.session": "instance-bootstrap",
+                "debug.hypothesis": "A",
+                "debug.step": "config-get",
+                "debug.label": "Plugin.state Config.get",
+              },
+            }),
+          )
+          // #region motel debug
+          yield* Effect.logInfo("plugin state config done", {
+            "debug.session": "instance-bootstrap",
+            "debug.hypothesis": "C",
+            "debug.step": "after-config-get",
+            "debug.label": "Plugin.state after Config.get",
+            plugin_count: cfg.plugin_origins?.length ?? 0,
+          })
+          // #endregion motel debug
           const input: PluginInput = {
             client,
             project: ctx.project,
