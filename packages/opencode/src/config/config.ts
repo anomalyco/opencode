@@ -1469,34 +1469,13 @@ export namespace Config {
         }
 
         const activeOrg = Option.getOrUndefined(
-          yield* accountSvc.activeOrg().pipe(
-            Effect.withSpan("ConfigDebug.activeOrg", {
-              attributes: {
-                "debug.session": "instance-bootstrap",
-                "debug.hypothesis": "B",
-                "debug.step": "active-org",
-                "debug.label": "Config.state activeOrg lookup",
-              },
-            }),
-            Effect.catch(() => Effect.succeed(Option.none())),
-          ),
+          yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
         if (activeOrg) {
           yield* Effect.gen(function* () {
             const [configOpt, tokenOpt] = yield* Effect.all(
               [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
               { concurrency: 2 },
-            ).pipe(
-              Effect.withSpan("ConfigDebug.activeOrgFetch", {
-                attributes: {
-                  "debug.session": "instance-bootstrap",
-                  "debug.hypothesis": "B",
-                  "debug.step": "remote-config",
-                  "debug.label": "Config.state active org config/token fetch",
-                  "debug.account": activeOrg.account.id,
-                  "debug.org": activeOrg.org.id,
-                },
-              }),
             )
             if (Option.isSome(tokenOpt)) {
               process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value

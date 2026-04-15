@@ -1280,7 +1280,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return { info, parts }
       }, Effect.scoped)
 
-      const promptInner: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
+      const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
         function* (input: PromptInput) {
           const session = yield* sessions.get(input.sessionID)
           yield* revert.cleanup(session)
@@ -1300,53 +1300,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return yield* loop({ sessionID: input.sessionID })
         },
       )
-
-      // #region motel debug
-      const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = (input) =>
-        Effect.gen(function* () {
-          const span = yield* Effect.currentSpan.pipe(Effect.option)
-          const sid = Option.isSome(span) ? span.value.spanId : "none"
-          const tid = Option.isSome(span) ? span.value.traceId : "none"
-          yield* Effect.logInfo("debug: prompt wrapper entry (before Effect.fn span)", {
-            debug: {
-              session: "missing-roots",
-              hypothesis: "span-never-ends",
-              step: "pre-entry",
-              label: "before SessionPrompt.prompt span",
-            },
-            spanId: sid,
-            traceId: tid,
-          })
-          return yield* promptInner(input).pipe(
-            Effect.tap(() =>
-              Effect.gen(function* () {
-                const s = yield* Effect.currentSpan.pipe(Effect.option)
-                yield* Effect.logInfo("debug: prompt completed", {
-                  debug: {
-                    session: "missing-roots",
-                    hypothesis: "span-never-ends",
-                    step: "post-success",
-                    label: "SessionPrompt.prompt returned",
-                  },
-                  spanId: Option.isSome(s) ? s.value.spanId : "none",
-                  traceId: Option.isSome(s) ? s.value.traceId : "none",
-                })
-              }),
-            ),
-            Effect.onExit((exit) =>
-              Effect.logInfo("debug: prompt onExit", {
-                debug: {
-                  session: "missing-roots",
-                  hypothesis: "span-never-ends",
-                  step: "exit",
-                  label: "SessionPrompt.prompt onExit",
-                },
-                exitTag: exit._tag,
-              }),
-            ),
-          )
-        })
-      // #endregion motel debug
 
       const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
         const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")

@@ -15,23 +15,7 @@ import * as Effect from "effect/Effect"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  // #region motel debug
-  yield* Effect.logInfo("bootstrap plugin init start", {
-    "debug.session": "instance-bootstrap",
-    "debug.hypothesis": "D",
-    "debug.step": "before-plugin-init",
-    "debug.label": "InstanceBootstrap awaiting Plugin.init",
-  })
-  // #endregion motel debug
   yield* Plugin.Service.use((svc) => svc.init())
-  // #region motel debug
-  yield* Effect.logInfo("bootstrap plugin init done", {
-    "debug.session": "instance-bootstrap",
-    "debug.hypothesis": "D",
-    "debug.step": "after-plugin-init",
-    "debug.label": "InstanceBootstrap finished Plugin.init",
-  })
-  // #endregion motel debug
   yield* Effect.all(
     [
       LSP.Service,
