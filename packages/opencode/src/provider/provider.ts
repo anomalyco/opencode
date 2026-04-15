@@ -1585,6 +1585,8 @@ export namespace Provider {
       const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderID) {
         const cfg = yield* config.get()
 
+        if (cfg.small_model === "") return undefined
+
         if (cfg.small_model) {
           const parsed = parseModel(cfg.small_model)
           return yield* getModel(parsed.providerID, parsed.modelID)
