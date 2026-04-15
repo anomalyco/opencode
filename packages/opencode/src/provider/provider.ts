@@ -864,37 +864,40 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const litellmAuth = yield* dep.auth("litellm")
 
-      // Skip discovery when there is no configuration at all
-      if (
-        !providerConfig &&
-        !Env.get("LITELLM_API_KEY") &&
-        !Env.get("LITELLM_HOST") &&
-        !Env.get("LITELLM_BASE_URL") &&
-        litellmAuth?.type !== "api"
+      const [apiKeyEnv, hostEnv, baseUrlEnv, customHeadersEnv, timeoutEnv] = yield* Effect.all(
+        [
+          dep.get("LITELLM_API_KEY"),
+          dep.get("LITELLM_HOST"),
+          dep.get("LITELLM_BASE_URL"),
+          dep.get("LITELLM_CUSTOM_HEADERS"),
+          dep.get("LITELLM_TIMEOUT"),
+        ],
+        { concurrency: "unbounded" },
       )
+
+      // Skip discovery when there is no configuration at all
+      if (!providerConfig && !apiKeyEnv && !hostEnv && !baseUrlEnv && litellmAuth?.type !== "api")
         return { autoload: false }
 
-      const baseURL =
-        providerConfig?.options?.baseURL ??
-        Env.get("LITELLM_HOST") ??
-        Env.get("LITELLM_BASE_URL") ??
-        "http://localhost:4000"
+      const baseURL = providerConfig?.options?.baseURL ?? hostEnv ?? baseUrlEnv ?? "http://localhost:4000"
 
       const apiKey = (() => {
         if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
-        const envKey = Env.get("LITELLM_API_KEY")
-        if (envKey) return envKey
+        if (apiKeyEnv) return apiKeyEnv
         if (litellmAuth?.type === "api") return litellmAuth.key
         return undefined
       })()
 
-      const customHeaders = yield* Effect.promise(() =>
-        Promise.resolve(Env.get("LITELLM_CUSTOM_HEADERS"))
-          .then((raw) => (raw ? (JSON.parse(raw) as Record<string, string>) : {}))
-          .catch(() => ({})),
-      )
+      const customHeaders = (() => {
+        if (!customHeadersEnv) return {}
+        try {
+          return JSON.parse(customHeadersEnv) as Record<string, string>
+        } catch {
+          return {}
+        }
+      })()
 
-      const timeout = Number(Env.get("LITELLM_TIMEOUT") ?? "5000")
+      const timeout = Number(timeoutEnv ?? "5000")
       const discovered = yield* Effect.promise(() =>
         LiteLLM.discover(baseURL, {
           apiKey,

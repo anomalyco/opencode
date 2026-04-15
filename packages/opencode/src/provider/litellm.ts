@@ -1,5 +1,4 @@
 import { Log } from "../util/log"
-import { Env } from "../env"
 import type { Provider } from "./provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -213,7 +212,7 @@ export namespace LiteLLM {
       timeout?: number
     },
   ): Promise<Record<string, Provider.Model> | undefined> {
-    const timeout = options?.timeout ?? Number(Env.get("LITELLM_TIMEOUT") ?? "5000")
+    const timeout = options?.timeout ?? 5000
     const base = host.replace(/\/+$/, "")
 
     const headers: Record<string, string> = {
