@@ -291,6 +291,55 @@ Legacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and
 
 ---
 
+### Voice
+
+Configure voice transcription for Whisper or LALM with the `voice` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "voice": {
+    "type": "whisper",
+    "whisper": {
+      "url": "http://127.0.0.1:5000/v1/audio/transcriptions",
+      "apiKey": "{env:OPENCODE_WHISPER_API_KEY}",
+      "model": "whisper-1",
+      "language": "en"
+    }
+  }
+}
+```
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "voice": {
+    "type": "lalm",
+    "lalm": {
+      "model": "opencode/gemini-3-flash",
+      "system": "You are a professional speech-to-text transcriber. Your task is to transcribe the audio into text.",
+      "prompt": "Keep technical terms unchanged."
+    }
+  }
+}
+```
+
+Available options:
+
+- `type` - Transcription provider (`whisper` or `lalm`, default: `lalm`).
+- `whisper.url` - Whisper transcription endpoint URL.
+- `whisper.apiKey` - API key for the Whisper service.
+- `whisper.model` - Whisper model name (default: `whisper-1`).
+- `whisper.language` - Optional language hint (e.g. `en`).
+- `lalm.model` - Large Audio Language Model name in `provider/model` format (e.g. `opencode/gemini-3-flash`, `opencode-go/mimo-v2-omni`). Authentication is handled by the provider config.
+- `lalm.prompt` - Optional base prompt for transcription.
+- `lalm.system` - Optional system prompt for transcription.
+- `lalm.instruction` - Instruction text appended after the audio content to guide transcription behavior (default: `"Transcribe the audio between <audio starts> and <audio ends>..."`).
+- `lalm.audio_input_format` - Audio input format for the LLM API. `"input_audio"` (default) sends audio as OpenAI-style base64 parts. `"audio_url"` sends audio as data-URL parts (required by SiliconFlow/Qwen-style APIs).
+- `context_pairs` - Number of recent user/assistant conversation pairs to include as transcription context (default: `3`, range: 1–10).
+
+---
+
 ### Server
 
 You can configure server settings for the `opencode serve` and `opencode web` commands through the `server` option.

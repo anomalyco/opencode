@@ -379,6 +379,10 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
     "sounds": {
       "error": "./sounds/error.mp3"
     }
+  },
+  "voice": {
+    "command": ["ffmpeg", "-y", "-f", "pulse", "-i", "default", "-ac", "1", "-ar", "16000", "-f", "mp3", "{output}"],
+    "mime": "audio/mpeg"
   }
 }
 ```
@@ -397,6 +401,9 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `voice` - Configures the TUI audio recorder.
+  - `command` - Recorder command template as an array of strings. Use `{output}` as a placeholder for the output file path. When unset, opencode auto-detects an available recorder (ffmpeg, arecord, sox, or rec).
+  - `mime` - MIME type of the recorded audio file (default: `"audio/mpeg"`).
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
 
