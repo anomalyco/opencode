@@ -178,6 +178,47 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
+  test("retries 500 errors even when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Internal server error",
+      isRetryable: false,
+      statusCode: 500,
+      responseBody: '{"type":"api_error","message":"Internal server error"}',
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Internal server error")
+  })
+
+  test("retries 502 bad gateway errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad gateway",
+      isRetryable: false,
+      statusCode: 502,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Bad gateway")
+  })
+
+  test("retries 503 service unavailable errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Service unavailable",
+      isRetryable: false,
+      statusCode: 503,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Service unavailable")
+  })
+
+  test("does not retry 4xx errors when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad request",
+      isRetryable: false,
+      statusCode: 400,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
   test("retries ZlibError decompression failures", () => {
     const error = new MessageV2.APIError({
       message: "Response decompression failed",
