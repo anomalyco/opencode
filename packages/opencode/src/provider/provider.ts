@@ -822,19 +822,29 @@ export namespace Provider {
    * Returns models or emty object if fails
    */
   async function populateDynamicModels(providerID: string, provider: any): Promise<Record<string, Model>> {
-    // Get base URL from config or thrown an exception
+    const authSvc = await Effect.runPromise(
+      Effect.gen(function* () {
+        const svc = yield* Auth.Service
+        return svc
+      }).pipe(Effect.provide(Auth.defaultLayer)),
+    )
+
     const baseURL = provider.options?.baseURL
     if (!baseURL) {
-      log.error("Missing baseURL for dynamic model discovery", { providerID })
-      throw new InitError({ providerID: providerID })
+      log.warn("Missing baseURL for dynamic model discovery", { providerID })
+      return {}
     }
 
-    // Get auth credentials
     const key = provider.options?.apiKey
-    const auth = key ? { type: "api", key: key } : await Auth.get(providerID)
+    let authInfo: Auth.Info | undefined
+    if (key) {
+      authInfo = { type: "api" as const, key }
+    } else {
+      authInfo = await Effect.runPromise(authSvc.get(providerID))
+    }
 
-    // Discover models
-    const discoveredModels = await discoverModelsFromEndpoint(providerID, baseURL, auth?.type === "api" ? auth : null)
+    const authType = authInfo?.type === "api" ? authInfo : null
+    const discoveredModels = await discoverModelsFromEndpoint(providerID, baseURL, authType)
     return discoveredModels
   }
 
@@ -1394,7 +1404,12 @@ export namespace Provider {
             if (provider.options) partial.options = provider.options
             const hasExplicitModels = Object.keys(provider.models ?? {}).length > 0
             if (!hasExplicitModels && provider.dynamicModelList) {
-              partial.models = yield* Effect.promise(() => populateDynamicModels(providerID, provider))
+              try {
+                partial.models = yield* Effect.promise(() => populateDynamicModels(providerID, provider))
+              } catch (err) {
+                log.warn("Dynamic model discovery failed", { providerID, error: err })
+                partial.models = {}
+              }
             }
             mergeProvider(providerID, partial)
           }

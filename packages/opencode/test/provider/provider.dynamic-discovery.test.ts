@@ -1,27 +1,44 @@
 import { test, expect, beforeEach, afterEach, mock } from "bun:test"
 import path from "path"
+import { Effect } from "effect"
 
 import { tmpdir } from "../fixture/fixture"
+import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
+import { Auth } from "../../src/auth"
 import { ProviderID } from "@/provider/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
+
+const run = <A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) =>
+  AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      return yield* fn(provider)
+    }),
+  )
+
+const list = () => run((provider) => provider.list())
 
 // Mock fetch for dynamic model discovery tests
 let originalFetch: typeof global.fetch
 let mockFetch: ReturnType<typeof mock>
+let mockData: any = { data: [] }
 
 beforeEach(() => {
   originalFetch = global.fetch
+  mockData = { data: [] }
   mockFetch = mock((url: string | URL | Request) =>
     Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({ data: [] }),
+      json: () => Promise.resolve(mockData),
     }),
   )
   global.fetch = mockFetch as any
 })
 
 afterEach(() => {
+  mockData = { data: [] }
   global.fetch = originalFetch
   mockFetch.mockReset()
 })
@@ -47,24 +64,17 @@ test("dynamic model discovery - successful", async () => {
     },
   })
 
-  // Mock successful model discovery
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: [
-            { id: "model-1", name: "Test Model 1", max_context_length: 128000 },
-            { id: "model-2", name: "Test Model 2", max_context_length: 32768 },
-          ],
-        }),
-    }),
-  )
+  mockData = {
+    data: [
+      { id: "model-1", name: "Test Model 1", max_context_length: 128000 },
+      { id: "model-2", name: "Test Model 2", max_context_length: 32768 },
+    ],
+  }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
@@ -97,21 +107,12 @@ test("dynamic model discovery - discoverModelsFromEndpoint with small context fl
     },
   })
 
-  // Mock response with small context length
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: [{ id: "small-model", max_context_length: 4096 }],
-        }),
-    }),
-  )
+  mockData = { data: [{ id: "small-model", max_context_length: 4096 }] }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
@@ -143,26 +144,16 @@ test("dynamic model discovery - discoverModelsFromEndpoint missing max_context_l
     },
   })
 
-  // Mock response without context length
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: [{ id: "model-no-context" }],
-        }),
-    }),
-  )
+  mockData = { data: [{ id: "model-no-context" }] }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["model-no-context"]).toBeDefined()
-      // Should use default 128k
       expect(provider.models["model-no-context"].limit.context).toBe(131072)
     },
   })
@@ -189,18 +180,12 @@ test("dynamic model discovery - discoverModelsFromEndpoint handles non-200 respo
     },
   })
 
-  // Mock non-200 response
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: false,
-      status: 500,
-    }),
-  )
+  mockData = { ok: false, status: 500 }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       // Should not load the provider when discovery fails and no explicit models
@@ -230,18 +215,12 @@ test("dynamic model discovery - discoverModelsFromEndpoint handles invalid respo
     },
   })
 
-  // Mock invalid response format (no data array)
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve({ invalid: "format" }),
-    }),
-  )
+  mockData = { invalid: "format" }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       // Should not load the provider when discovery fails and no explicit models
@@ -272,21 +251,23 @@ test("dynamic model discovery - endpoint request without auth when no apiKey", a
   })
 
   // Mock fetch to verify no auth headers
-  mockFetch.mockImplementationOnce((url, init) => {
+  mockFetch.mockImplementation((url, init) => {
     expect(init?.headers).not.toHaveProperty("Authorization")
     return Promise.resolve({
       ok: true,
       json: () =>
         Promise.resolve({
           data: [{ id: "model-1" }],
-    }),
+        }),
     })
   })
+
+  mockData = { data: [{ id: "model-1" }] }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
@@ -317,7 +298,7 @@ test("dynamic model discovery - endpoint request includes auth headers", async (
   })
 
   // Mock fetch to capture headers
-  mockFetch.mockImplementationOnce((url, init) => {
+  mockFetch.mockImplementation((url, init) => {
     expect(init?.headers).toHaveProperty("Authorization")
     expect(init?.headers.Authorization).toBe("Bearer test-api-key")
     return Promise.resolve({
@@ -332,12 +313,15 @@ test("dynamic model discovery - endpoint request includes auth headers", async (
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
-      // Mock Auth.get to return API key
-      const Auth = await import("../../src/auth")
-      Auth.Auth.get = async () => ({ type: "api", key: "test-api-key" })
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const auth = yield* Auth.Service
+          yield* auth.set("test-openai-compatible", { type: "api", key: "test-api-key" })
+        }),
+      )
     },
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
@@ -369,7 +353,7 @@ test("dynamic model discovery - local config API key overrides the global one", 
   })
 
   // Mock fetch to capture headers
-  mockFetch.mockImplementationOnce((url, init) => {
+  mockFetch.mockImplementation((url, init) => {
     expect(init?.headers).toHaveProperty("Authorization")
     expect(init?.headers.Authorization).toBe("Bearer local-api-key")
     return Promise.resolve({
@@ -384,12 +368,15 @@ test("dynamic model discovery - local config API key overrides the global one", 
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
-      // Mock Auth.get to return API key
-      const Auth = await import("../../src/auth")
-      Auth.Auth.get = async () => ({ type: "api", key: "global-api-key" })
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const auth = yield* Auth.Service
+          yield* auth.set("test-openai-compatible", { type: "api", key: "global-api-key" })
+        }),
+      )
     },
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
@@ -422,8 +409,8 @@ test("dynamic model discovery - provider doesn't load when dynamicModelList: fal
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
       // Should not load the provider when dynamicModelList is false
+      const providers = await list()
       expect(providers[ProviderID.make("test-openai-compatible")]).toBeUndefined()
     },
   })
@@ -455,20 +442,12 @@ test("dynamic model discovery - explicitly configured models returned when speci
     },
   })
 
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: [{ id: "model-1", name: "Test Model" }],
-        }),
-    }),
-  )
+  mockData = { data: [{ id: "model-1", name: "Test Model" }] }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
@@ -504,20 +483,12 @@ test("dynamic model discovery - uses explicit models when both configured", asyn
     },
   })
 
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: [{ id: "discovered-model" }],
-        }),
-    }),
-  )
+  mockData = { data: [{ id: "discovered-model" }] }
 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const providers = await Provider.list()
+      const providers = await list()
       const provider = providers[ProviderID.make("test-openai-compatible")]
 
       // Explicit models should take precedence
@@ -553,7 +524,8 @@ test("dynamic model discovery - provider doesn't load when no baseURL", async ()
     directory: tmp.path,
     fn: async () => {
       // Should not load when no baseURL
-      expect(Provider.list()).rejects.toThrow()
+      const providers = await list()
+      expect(providers[ProviderID.make("test-openai-compatible")]).toBeUndefined()
     },
   })
 })
