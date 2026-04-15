@@ -163,13 +163,18 @@ export namespace Server {
 				.use(async (c, next) => {
 					if (c.req.method === "OPTIONS") return next();
 					if (isPublicHealthPath(c.req.path)) return next();
+					if (
+						c.req.path.startsWith("/auth/login") ||
+						c.req.path.startsWith("/auth/callback") ||
+						c.req.path.startsWith("/auth/logout") ||
+						c.req.path.startsWith("/auth/session")
+					)
+						return next();
 
 					const workosConfigured = Flag.OPENCODE_WORKOS_ENABLED;
 					if (!workosConfigured) {
 						const password = Flag.OPENCODE_SERVER_PASSWORD;
 						if (!password) return next();
-						const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode";
-						c.set("auth", { type: "basic", username, password });
 						return next();
 					}
 
@@ -193,8 +198,6 @@ export namespace Server {
 						if (!result.ok) {
 							return c.json({ error: "Invalid session" }, 401);
 						}
-
-						c.set("auth", { type: "workos", user: result.user });
 					} catch {
 						return c.json({ error: "Authentication failed" }, 401);
 					}

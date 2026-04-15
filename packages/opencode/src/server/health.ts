@@ -75,6 +75,7 @@ function normalizeBaseUrl(input: string) {
 function relayHealthUrl() {
 	const explicit = process.env.VERITLY_HEALTH_RELAY_URL?.trim();
 	if (explicit) return explicit;
+	if (explicit === "") return undefined;
 
 	const ws = process.env.VITE_UNIVER_SDK_WS?.trim();
 	if (!ws) return "http://relay:8080/healthz";

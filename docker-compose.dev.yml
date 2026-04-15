@@ -37,16 +37,15 @@ services:
     image: opencode-veritly-api:lean
     ports:
       - "8000:3000"
+    env_file:
+      - .env
     environment:
       - OPENCODE_DISABLE_LOCAL_FILESYSTEM=false
+      - OPENCODE_WORKOS_ENABLED=true
       - DEPLOYMENT_ENVIRONMENT=local
       - DATABASE_URL=postgresql://veritly:veritly@postgres:5432/veritly
       - VERITLY_TENANT_USER_ID=default
       - VERITLY_WS_DEBUG=0
-      - WORKOS_API_KEY=${WORKOS_API_KEY:?WORKOS_API_KEY required}
-      - WORKOS_CLIENT_ID=${WORKOS_CLIENT_ID:?WORKOS_CLIENT_ID required}
-      - WORKOS_REDIRECT_URI=${WORKOS_REDIRECT_URI:-http://localhost:8000/auth/callback}
-      - COOKIE_PASSWORD=${COOKIE_PASSWORD:?COOKIE_PASSWORD required}
       - PUBLIC_BASE_URL=http://localhost:4444
       - NODE_ENV=development
       - VERITLY_HEALTH_RELAY_URL=

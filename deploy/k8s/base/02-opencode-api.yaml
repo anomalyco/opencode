@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
       - name: opencode-api
-        image: registry.digitalocean.com/veritly-registry/opencode-api:latest
-        imagePullPolicy: IfNotPresent
+        image: registry.digitalocean.com/veritly-registry/opencode-api:workos-test
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000
           name: http
@@ -89,6 +89,13 @@ spec:
             configMapKeyRef:
               name: veritly-config
               key: OPENCODE_WORKOS_ENABLED
+        - name: PUBLIC_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: veritly-config
+              key: PUBLIC_BASE_URL
+        - name: VERITLY_HEALTH_RELAY_URL
+          value: ""
         livenessProbe:
           httpGet:
             path: /livez

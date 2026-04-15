@@ -28,7 +28,7 @@ export function getPool() {
 
 export function getDb() {
 	if (!_db) {
-		_db = drizzle(getPool(), { schema });
+		_db = drizzle({ client: getPool(), schema });
 	}
 	return _db;
 }

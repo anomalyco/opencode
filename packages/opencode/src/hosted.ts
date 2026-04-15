@@ -43,7 +43,8 @@ if (usePg) {
 	await setupPostgresTables();
 } else {
 	log.info("using sqlite");
-	const { Database, JsonMigration } = await import("./storage/db");
+	const { Database } = await import("./storage/db");
+	const { JsonMigration } = await import("./storage/json-migration");
 	const marker = path.join(Global.Path.data, "opencode.db");
 	if (!(await Filesystem.exists(marker))) {
 		process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL);
