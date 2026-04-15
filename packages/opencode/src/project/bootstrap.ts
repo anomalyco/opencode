@@ -17,16 +17,15 @@ export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   yield* Effect.all(
     [
-      Plugin.Service.use((svc) => svc.init()),
-      LSP.Service.use((svc) => svc.init()),
-      ShareNext.Service.use((svc) => svc.init()),
-      Format.Service.use((svc) => svc.init()),
-      File.Service.use((svc) => svc.init()),
-      FileWatcher.Service.use((svc) => svc.init()),
-      Vcs.Service.use((svc) => svc.init()),
-      Snapshot.Service.use((svc) => svc.init()),
-    ].map((e) => Effect.forkDetach(e)),
-    { concurrency: "unbounded" },
+      Plugin.Service,
+      LSP.Service,
+      ShareNext.Service,
+      Format.Service,
+      File.Service,
+      FileWatcher.Service,
+      Vcs.Service,
+      Snapshot.Service,
+    ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
   )
 
   yield* Bus.Service.use((svc) =>
