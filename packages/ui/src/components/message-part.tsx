@@ -2,6 +2,7 @@ import {
   Component,
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   Match,
@@ -49,6 +50,9 @@ import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
+import { getSharedHighlighter } from "@pierre/diffs"
+import { bundledLanguages, type BundledLanguage } from "shiki"
+import { isServer } from "solid-js/web"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
 import { TextShimmer } from "./text-shimmer"
@@ -1171,7 +1175,96 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   )
 }
 
-type HighlightSegment = { text: string; type?: "file" | "agent" }
+type HighlightSegment = { text: string; type?: "file" | "agent" | "code-inline" | "code-block"; lang?: string }
+
+const COLLAPSE_LINES = 8
+
+function parseCode(text: string): HighlightSegment[] {
+  const count = (text.match(/```/g) ?? []).length
+  // if fenced code blocks are unbalanced, auto-close the last fence
+  const src = count % 2 !== 0 ? text + "\n```" : text
+  const result: HighlightSegment[] = []
+  const re = /```([\w.-]*)[^\S\r\n]*\r?\n?([\s\S]*?)```|`([^`\n]+)`/g
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(src)) !== null) {
+    if (match.index > last) {
+      const chunk = result.some((s) => s.type === "code-block")
+        ? src.slice(last, match.index).replace(/^\n+/, "")
+        : src.slice(last, match.index)
+      if (chunk) result.push({ text: chunk })
+    }
+    if (match[2] !== undefined) {
+      result.push({ text: match[2], type: "code-block", lang: match[1] || undefined })
+    } else {
+      result.push({ text: match[3], type: "code-inline" })
+    }
+    last = match.index + match[0].length
+  }
+  if (last < src.length) {
+    const chunk = result.some((s) => s.type === "code-block")
+      ? src.slice(last).replace(/^\n+/, "")
+      : src.slice(last)
+    if (chunk) result.push({ text: chunk })
+  }
+  return result
+}
+
+async function highlight(code: string, lang: string | undefined) {
+  if (isServer) return null
+  const highlighter = await getSharedHighlighter({
+    themes: ["OpenCode"],
+    langs: [],
+    preferredHighlighter: "shiki-wasm",
+  })
+  let language = lang || "text"
+  if (!(language in bundledLanguages)) language = "text"
+  if (!highlighter.getLoadedLanguages().includes(language)) {
+    await highlighter.loadLanguage(language as BundledLanguage)
+  }
+  return highlighter.codeToHtml(code, { lang: language, theme: "OpenCode", tabindex: false })
+}
+
+function CodeBlock(props: { text: string; lang?: string }) {
+  const lines = createMemo(() => props.text.trimEnd().split("\n"))
+  const collapsible = createMemo(() => lines().length > COLLAPSE_LINES)
+  const [open, setOpen] = createSignal(false)
+  const preview = createMemo(() => lines().slice(0, COLLAPSE_LINES).join("\n"))
+  const extra = createMemo(() => lines().length - COLLAPSE_LINES)
+  const i18n = useI18n()
+
+  const src = createMemo(() => ({
+    code: collapsible() && !open() ? preview() : props.text.trimEnd(),
+    lang: props.lang,
+  }))
+
+  const [html] = createResource(src, (s) => highlight(s.code, s.lang))
+
+  return (
+    <div data-slot="user-message-code-block">
+      <Show when={props.lang}>
+        <span data-slot="user-message-code-lang">{props.lang}</span>
+      </Show>
+      <Show
+        when={html()}
+        fallback={<pre><code>{src().code}</code></pre>}
+      >
+        {(h) => <div data-slot="user-message-code-highlighted" innerHTML={h()} />}
+      </Show>
+      <Show when={collapsible()}>
+        <button
+          type="button"
+          data-slot="user-message-code-toggle"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open()
+            ? i18n.t("ui.message.codeBlock.showLess")
+            : i18n.t("ui.message.codeBlock.showMore", { count: String(extra()) })}
+        </button>
+      </Show>
+    </div>
+  )
+}
 
 function HighlightedText(props: { text: string; references: FilePart[]; agents: AgentPart[] }) {
   const segments = createMemo(() => {
@@ -1186,28 +1279,35 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
         .map((a) => ({ start: a.source!.start, end: a.source!.end, type: "agent" as const })),
     ].sort((a, b) => a.start - b.start)
 
-    const result: HighlightSegment[] = []
+    const raw: HighlightSegment[] = []
     let lastIndex = 0
 
     for (const ref of allRefs) {
       if (ref.start < lastIndex) continue
-
-      if (ref.start > lastIndex) {
-        result.push({ text: text.slice(lastIndex, ref.start) })
-      }
-
-      result.push({ text: text.slice(ref.start, ref.end), type: ref.type })
+      if (ref.start > lastIndex) raw.push({ text: text.slice(lastIndex, ref.start) })
+      raw.push({ text: text.slice(ref.start, ref.end), type: ref.type })
       lastIndex = ref.end
     }
 
-    if (lastIndex < text.length) {
-      result.push({ text: text.slice(lastIndex) })
-    }
+    if (lastIndex < text.length) raw.push({ text: text.slice(lastIndex) })
 
-    return result
+    return raw.flatMap((seg) => (seg.type ? [seg] : parseCode(seg.text)))
   })
 
-  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
+  return (
+    <For each={segments()}>
+      {(seg) => (
+        <Switch fallback={<span data-highlight={seg.type}>{seg.text}</span>}>
+          <Match when={seg.type === "code-block"}>
+            <CodeBlock text={seg.text} lang={seg.lang} />
+          </Match>
+          <Match when={seg.type === "code-inline"}>
+            <code data-slot="user-message-code-inline">{seg.text}</code>
+          </Match>
+        </Switch>
+      )}
+    </For>
+  )
 }
 
 export function Part(props: MessagePartProps) {

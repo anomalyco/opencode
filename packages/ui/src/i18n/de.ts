@@ -162,4 +162,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Fehler kopieren",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+
+  "ui.message.codeBlock.showMore": "{{count}} weitere Zeilen anzeigen",
+  "ui.message.codeBlock.showLess": "Weniger anzeigen",
 } satisfies Partial<Record<Keys, string>>

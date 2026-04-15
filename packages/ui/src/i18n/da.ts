@@ -156,4 +156,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Kopier fejl",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+
+  "ui.message.codeBlock.showMore": "Vis {{count}} flere linjer",
+  "ui.message.codeBlock.showLess": "Vis mindre",
 }

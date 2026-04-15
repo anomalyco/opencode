@@ -26,8 +26,8 @@
     font-size: var(--font-size-base);
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
-    margin-top: 2rem;
-    margin-bottom: 0.75rem;
+    margin-top: 1rem;
+    margin-bottom: 0.375rem;
     line-height: var(--line-height-large);
   }
 
@@ -40,7 +40,8 @@
 
   /* Paragraphs */
   p {
-    margin-bottom: 1rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
   }
 
   /* Links */
@@ -117,7 +118,7 @@
   hr {
     border: none;
     height: 0;
-    margin: 2.5rem 0;
+    margin: 1rem 0;
   }
 
   .shiki {
@@ -129,6 +130,11 @@
 
   [data-component="markdown-code"] {
     position: relative;
+
+    pre {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
   }
 
   [data-slot="markdown-copy-button"] {
@@ -201,8 +207,8 @@
   }
 
   pre {
-    margin-top: 2rem;
-    margin-bottom: 2rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
     overflow: auto;
 
     scrollbar-width: none;
@@ -229,7 +235,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 1.5rem 0;
+    margin: 0.75rem 0;
     font-size: var(--font-size-base);
     display: block;
     overflow-x: auto;
