@@ -928,6 +928,8 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                // DEBUG: Log key events to diagnose Command+V issue
+                console.log("DEBUG keydown:", { name: e.name, ctrl: e.ctrl, meta: e.meta, shift: e.shift })
                 // ULTRA AGGRESSIVE: Block ANY exit attempt when meta or ctrl is held
                 // This is a last-resort fix for Mac Command+V which may not arrive as expected
                 if (e.meta || e.ctrl) {
@@ -958,6 +960,12 @@ export function Prompt(props: PromptProps) {
                 }
                 // Normal exit check (only when no modifiers)
                 if (keybind.match("app_exit", e)) {
+                  console.log("DEBUG: app_exit triggered!", {
+                    name: e.name,
+                    ctrl: e.ctrl,
+                    meta: e.meta,
+                    input: store.prompt.input,
+                  })
                   if (store.prompt.input === "") {
                     await exit()
                     // Don't preventDefault - let textarea potentially handle the event
