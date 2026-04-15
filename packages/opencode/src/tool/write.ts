@@ -56,7 +56,7 @@ export const WriteTool = Tool.define(
 
           yield* fs.writeWithDirs(filepath, params.content)
           yield* format.file(filepath)
-          yield* bus.publish(File.Event.Edited, { file: filepath })
+          yield* bus.publish(File.Event.Edited, { file: filepath, sessionID: ctx.sessionID })
           yield* bus.publish(FileWatcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",

@@ -88,7 +88,7 @@ export const EditTool = Tool.define(
                 })
                 yield* afs.writeWithDirs(filePath, params.newString)
                 yield* format.file(filePath)
-                yield* bus.publish(File.Event.Edited, { file: filePath })
+                yield* bus.publish(File.Event.Edited, { file: filePath, sessionID: ctx.sessionID })
                 yield* bus.publish(FileWatcher.Event.Updated, {
                   file: filePath,
                   event: existed ? "change" : "add",
@@ -129,7 +129,7 @@ export const EditTool = Tool.define(
 
               yield* afs.writeWithDirs(filePath, contentNew)
               yield* format.file(filePath)
-              yield* bus.publish(File.Event.Edited, { file: filePath })
+              yield* bus.publish(File.Event.Edited, { file: filePath, sessionID: ctx.sessionID })
               yield* bus.publish(FileWatcher.Event.Updated, {
                 file: filePath,
                 event: "change",

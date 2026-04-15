@@ -227,7 +227,7 @@ export const ApplyPatchTool = Tool.define(
 
         if (edited) {
           yield* format.file(edited)
-          yield* bus.publish(File.Event.Edited, { file: edited })
+          yield* bus.publish(File.Event.Edited, { file: edited, sessionID: ctx.sessionID })
         }
       }
 

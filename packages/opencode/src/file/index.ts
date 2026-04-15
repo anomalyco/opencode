@@ -79,6 +79,7 @@ export namespace File {
       "file.edited",
       z.object({
         file: z.string(),
+        sessionID: z.string(),
       }),
     ),
   }
