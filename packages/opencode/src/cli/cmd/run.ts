@@ -15,7 +15,6 @@ import { Permission } from "../../permission"
 import { Tool } from "../../tool/tool"
 import { GlobTool } from "../../tool/glob"
 import { GrepTool } from "../../tool/grep"
-import { ListTool } from "../../tool/ls"
 import { ReadTool } from "../../tool/read"
 import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
@@ -100,14 +99,6 @@ function grep(info: ToolProps<typeof GrepTool>) {
     icon: "✱",
     title,
     ...(description && { description }),
-  })
-}
-
-function list(info: ToolProps<typeof ListTool>) {
-  const dir = info.input.path ? normalizePath(info.input.path) : ""
-  inline({
-    icon: "→",
-    title: dir ? `List ${dir}` : "List",
   })
 }
 
@@ -420,7 +411,6 @@ export const RunCommand = cmd({
           if (part.tool === "bash") return bash(props<typeof BashTool>(part))
           if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
           if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
-          if (part.tool === "list") return list(props<typeof ListTool>(part))
           if (part.tool === "read") return read(props<typeof ReadTool>(part))
           if (part.tool === "write") return write(props<typeof WriteTool>(part))
           if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))

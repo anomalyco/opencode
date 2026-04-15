@@ -1,14 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
+import { spawn } from "child_process"
 import path from "path"
-import { Flock } from "../../src/util/flock"
-import { Hash } from "../../src/util/hash"
-import { Process } from "../../src/util/process"
-import { Filesystem } from "../../src/util/filesystem"
-import { tmpdir } from "../fixture/fixture"
-
-const root = path.join(import.meta.dir, "../..")
-const worker = path.join(import.meta.dir, "../fixture/flock-worker.ts")
+import os from "os"
+import { Flock } from "@opencode-ai/shared/util/flock"
+import { Hash } from "@opencode-ai/shared/util/hash"
 
 type Msg = {
   key: string
@@ -21,6 +17,19 @@ type Msg = {
   ready?: string
   active?: string
   done?: string
+}
+
+const root = path.join(import.meta.dir, "../..")
+const worker = path.join(import.meta.dir, "../fixture/flock-worker.ts")
+
+async function tmpdir() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "flock-test-"))
+  return {
+    path: dir,
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
 }
 
 function lock(dir: string, key: string) {
@@ -51,19 +60,53 @@ async function wait(file: string, timeout = 3_000) {
 }
 
 function run(msg: Msg) {
-  return Process.run([process.execPath, worker, JSON.stringify(msg)], {
-    cwd: root,
-    nothrow: true,
+  return new Promise<{ code: number; stdout: Buffer; stderr: Buffer }>((resolve) => {
+    const proc = spawn(process.execPath, [worker, JSON.stringify(msg)], {
+      cwd: root,
+    })
+
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+
+    proc.stdout?.on("data", (data) => stdout.push(Buffer.from(data)))
+    proc.stderr?.on("data", (data) => stderr.push(Buffer.from(data)))
+
+    proc.on("close", (code) => {
+      resolve({
+        code: code ?? 1,
+        stdout: Buffer.concat(stdout),
+        stderr: Buffer.concat(stderr),
+      })
+    })
   })
 }
 
-function spawn(msg: Msg) {
-  return Process.spawn([process.execPath, worker, JSON.stringify(msg)], {
+function spawnWorker(msg: Msg) {
+  return spawn(process.execPath, [worker, JSON.stringify(msg)], {
     cwd: root,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
+    stdio: ["ignore", "pipe", "pipe"],
   })
+}
+
+function stopWorker(proc: ReturnType<typeof spawnWorker>) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve()
+
+  if (process.platform !== "win32" || !proc.pid) {
+    proc.kill()
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve) => {
+    const killProc = spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"])
+    killProc.on("close", () => {
+      proc.kill()
+      resolve()
+    })
+  })
+}
+
+async function readJson<T>(p: string): Promise<T> {
+  return JSON.parse(await fs.readFile(p, "utf8"))
 }
 
 describe("util.flock", () => {
@@ -104,7 +147,7 @@ describe("util.flock", () => {
     const dir = path.join(tmp.path, "locks")
     const key = "flock:timeout"
     const ready = path.join(tmp.path, "ready")
-    const proc = spawn({
+    const proc = spawnWorker({
       key,
       dir,
       ready,
@@ -131,8 +174,8 @@ describe("util.flock", () => {
       expect(seen.length).toBeGreaterThan(0)
       expect(seen.every((x) => x === key)).toBe(true)
     } finally {
-      await Process.stop(proc).catch(() => undefined)
-      await proc.exited.catch(() => undefined)
+      await stopWorker(proc).catch(() => undefined)
+      await new Promise((resolve) => proc.on("close", resolve))
     }
   }, 15_000)
 
@@ -141,7 +184,7 @@ describe("util.flock", () => {
     const dir = path.join(tmp.path, "locks")
     const key = "flock:crash"
     const ready = path.join(tmp.path, "ready")
-    const proc = spawn({
+    const proc = spawnWorker({
       key,
       dir,
       ready,
@@ -151,8 +194,8 @@ describe("util.flock", () => {
     })
 
     await wait(ready, 5_000)
-    await Process.stop(proc)
-    await proc.exited.catch(() => undefined)
+    await stopWorker(proc)
+    await new Promise((resolve) => proc.on("close", resolve))
 
     let hit = false
     await Flock.withLock(
@@ -276,7 +319,7 @@ describe("util.flock", () => {
     await Flock.withLock(
       key,
       async () => {
-        const json = await Filesystem.readJson<{
+        const json = await readJson<{
           token?: unknown
           pid?: unknown
           hostname?: unknown
@@ -324,7 +367,7 @@ describe("util.flock", () => {
     const err = await Flock.withLock(
       key,
       async () => {
-        const json = await Filesystem.readJson<{ token?: string }>(meta)
+        const json = await readJson<{ token?: string }>(meta)
         json.token = "tampered"
         await fs.writeFile(meta, JSON.stringify(json, null, 2))
       },

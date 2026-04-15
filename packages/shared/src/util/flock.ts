@@ -2,11 +2,25 @@ import path from "path"
 import os from "os"
 import { randomBytes, randomUUID } from "crypto"
 import { mkdir, readFile, rm, stat, utimes, writeFile } from "fs/promises"
-import { Global } from "@/global"
-import { Hash } from "@/util/hash"
+import { Hash } from "./hash"
+import { Effect } from "effect"
+
+export type FlockGlobal = {
+  state: string
+}
 
 export namespace Flock {
-  const root = path.join(Global.Path.state, "locks")
+  let global: FlockGlobal | undefined
+
+  export function setGlobal(g: FlockGlobal) {
+    global = g
+  }
+
+  const root = () => {
+    if (!global) throw new Error("Flock global not set")
+    return path.join(global.state, "locks")
+  }
+
   // Defaults for callers that do not provide timing options.
   const defaultOpts = {
     staleMs: 60_000,
@@ -301,7 +315,7 @@ export namespace Flock {
       baseDelayMs: input.baseDelayMs ?? defaultOpts.baseDelayMs,
       maxDelayMs: input.maxDelayMs ?? defaultOpts.maxDelayMs,
     }
-    const dir = input.dir ?? root
+    const dir = input.dir ?? root()
 
     await mkdir(dir, { recursive: true })
     const lockfile = path.join(dir, Hash.fast(key) + ".lock")
@@ -330,4 +344,11 @@ export namespace Flock {
     input.signal?.throwIfAborted()
     return await fn()
   }
+
+  export const effect = Effect.fn("Flock.effect")(function* (key: string) {
+    return yield* Effect.acquireRelease(
+      Effect.promise((signal) => Flock.acquire(key, { signal })),
+      (foo) => Effect.promise(() => foo.release()),
+    ).pipe(Effect.asVoid)
+  })
 }

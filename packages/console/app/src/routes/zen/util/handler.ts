@@ -222,22 +222,23 @@ export async function handler(
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
-    if (!isStream) {
+    if (!isStream || res.status === 429) {
       const json = await res.json()
-      const usageInfo = providerInfo.normalizeUsage(json.usage)
-      const costInfo = calculateCost(modelInfo, usageInfo)
-      await trialLimiter?.track(usageInfo)
       await rateLimiter?.track()
-      await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
-      await reload(billingSource, authInfo, costInfo)
+      if (json.usage) {
+        const usageInfo = providerInfo.normalizeUsage(json.usage)
+        const costInfo = calculateCost(modelInfo, usageInfo)
+        await trialLimiter?.track(usageInfo)
+        await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+        await reload(billingSource, authInfo, costInfo)
+        json.cost = calculateOccurredCost(billingSource, costInfo)
+      }
+      if (json.error?.message) {
+        json.error.message = `Error from provider${providerInfo.displayName ? ` (${providerInfo.displayName})` : ""}: ${json.error.message}`
+      }
 
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)
-      const body = JSON.stringify(
-        responseConverter({
-          ...json,
-          cost: calculateOccurredCost(billingSource, costInfo),
-        }),
-      )
+      const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
       dataDumper?.provideResponse(body)

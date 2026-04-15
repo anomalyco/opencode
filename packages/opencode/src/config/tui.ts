@@ -13,7 +13,7 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })

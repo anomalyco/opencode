@@ -15,7 +15,6 @@ import * as Effect from "effect/Effect"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  yield* Plugin.Service.use((svc) => svc.init())
   yield* Effect.all(
     [
       LSP.Service,
