@@ -519,21 +519,29 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: "Favorite cycle",
+      title: "Next Favorite Model",
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
-      category: "Agent",
-      hidden: true,
+      category: "Model",
+      slash: {
+        name: "f1",
+        aliases: ["nextfav", "favnext"],
+      },
+      suggested: true,
       onSelect: () => {
         local.model.cycleFavorite(1)
       },
     },
     {
-      title: "Favorite cycle reverse",
+      title: "Previous Favorite Model",
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
-      category: "Agent",
-      hidden: true,
+      category: "Model",
+      slash: {
+        name: "f2",
+        aliases: ["prevfav", "favprev"],
+      },
+      suggested: true,
       onSelect: () => {
         local.model.cycleFavorite(-1)
       },
