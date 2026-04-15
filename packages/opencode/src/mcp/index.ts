@@ -22,6 +22,7 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
+import { Atum } from "../atum"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
 import { Effect, Exit, Layer, Option, Context, Stream } from "effect"
@@ -261,7 +262,7 @@ export namespace MCP {
           (t) =>
             Effect.tryPromise({
               try: () => {
-                const client = new Client({ name: "opencode", version: Installation.VERSION })
+                const client = new Client({ name: "atum", version: Installation.VERSION })
                 return withTimeout(client.connect(t), timeout).then(() => client)
               },
               catch: (e) => (e instanceof Error ? e : new Error(String(e))),
@@ -347,7 +348,7 @@ export namespace MCP {
                   return bus
                     .publish(TuiEvent.ToastShow, {
                       title: "MCP Authentication Required",
-                      message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+                      message: `Server "${key}" requires authentication. Run: atum mcp auth ${key}`,
                       variant: "warning",
                       duration: 8000,
                     })
@@ -389,7 +390,7 @@ export namespace MCP {
           cwd,
           env: {
             ...process.env,
-            ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+            ...(cmd === "atum" || cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
             ...mcp.environment,
           },
         })
@@ -484,7 +485,17 @@ export namespace MCP {
       const state = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
           const cfg = yield* cfgSvc.get()
-          const config = cfg.mcp ?? {}
+          const config: Record<string, McpEntry> = { ...cfg.mcp }
+
+          // Inject built-in Atum MCP server if credentials are present and user hasn't overridden it
+          if (!config["atum"] && Atum.hasCredentials()) {
+            const atumConfig = Atum.mcpConfig()
+            if (atumConfig) {
+              log.info("injecting built-in atum mcp server")
+              config["atum"] = atumConfig
+            }
+          }
+
           const s: State = {
             status: {},
             clients: {},
@@ -513,6 +524,35 @@ export namespace MCP {
                   s.clients[key] = result.mcpClient
                   s.defs[key] = result.defs!
                   watch(s, key, result.mcpClient, mcp.timeout)
+
+                  // As soon as the atum MCP client connects, fire off agent fetches immediately
+                  // — don't wait for other MCP servers to finish connecting
+                  if (key === "atum") {
+                    const callTool = async (name: string, args: Record<string, unknown>) => {
+                      return result.mcpClient!.callTool(
+                        { name, arguments: args },
+                        CallToolResultSchema,
+                        { timeout: DEFAULT_TIMEOUT },
+                      )
+                    }
+                    Atum.setMcpCallTool(callTool)
+
+                    // Default agent config (critical path) and agent list run concurrently
+                    yield* Effect.all([
+                      Effect.tryPromise(() => Atum.fetchAgentConfig(Atum.DEFAULT_AGENT_ID, callTool)).pipe(
+                        Effect.catch((err) => {
+                          log.warn("failed to fetch default agent config at startup", { agentId: Atum.DEFAULT_AGENT_ID, error: err })
+                          return Effect.void
+                        }),
+                      ),
+                      Effect.tryPromise(() => Atum.fetchAgentList(callTool)).pipe(
+                        Effect.catch((err) => {
+                          log.warn("failed to fetch atum agent list at startup", { error: err })
+                          return Effect.void
+                        }),
+                      ),
+                    ], { concurrency: "unbounded" })
+                  }
                 }
               }),
             { concurrency: "unbounded" },
@@ -562,6 +602,13 @@ export namespace MCP {
         for (const [key, mcp] of Object.entries(config)) {
           if (!isMcpConfigured(mcp)) continue
           result[key] = s.status[key] ?? { status: "disabled" }
+        }
+
+        // Include injected servers (e.g. built-in atum) not in user config
+        for (const key of Object.keys(s.status)) {
+          if (!(key in result)) {
+            result[key] = s.status[key]
+          }
         }
 
         return result
@@ -751,7 +798,7 @@ export namespace MCP {
 
         return yield* Effect.tryPromise({
           try: () => {
-            const client = new Client({ name: "opencode", version: Installation.VERSION })
+            const client = new Client({ name: "atum", version: Installation.VERSION })
             return client.connect(transport).then(() => ({ authorizationUrl: "", oauthState }))
           },
           catch: (error) => error,
