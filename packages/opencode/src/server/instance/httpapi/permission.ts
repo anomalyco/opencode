@@ -10,7 +10,7 @@ import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/permission"
 
-const Api = HttpApi.make("permission")
+export const PermissionApi = HttpApi.make("permission")
   .add(
     HttpApiGroup.make("permission")
       .add(
@@ -50,10 +50,8 @@ const Api = HttpApi.make("permission")
     }),
   )
 
-const PermissionLive = HttpApiBuilder.group(
-  Api,
-  "permission",
-  Effect.fn("PermissionHttpApi.handlers")(function* (handlers) {
+export const PermissionLive = Layer.unwrap(
+  Effect.gen(function* () {
     const svc = yield* Permission.Service
 
     const list = Effect.fn("PermissionHttpApi.list")(function* () {
@@ -72,15 +70,17 @@ const PermissionLive = HttpApiBuilder.group(
       return true
     })
 
-    return handlers.handle("list", list).handle("reply", reply)
+    return HttpApiBuilder.group(PermissionApi, "permission", (handlers) =>
+      handlers.handle("list", list).handle("reply", reply),
+    )
   }),
-)
+).pipe(Layer.provide(Permission.defaultLayer))
 
 const web = lazy(() =>
   HttpRouter.toWebHandler(
     Layer.mergeAll(
       AppLayer,
-      HttpApiBuilder.layer(Api, { openapiPath: `${root}/doc` }).pipe(
+      HttpApiBuilder.layer(PermissionApi, { openapiPath: `${root}/doc` }).pipe(
         Layer.provide(PermissionLive),
         Layer.provide(HttpServer.layerServices),
       ),

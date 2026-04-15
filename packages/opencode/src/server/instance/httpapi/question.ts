@@ -11,7 +11,9 @@ import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/question"
 
-const QuestionLive = makeQuestionHandler({
+export const QuestionApi = questionApi
+
+export const QuestionLive = makeQuestionHandler({
   list: Effect.fn("QuestionHttpApi.host.list")(function* () {
     const svc = yield* Question.Service
     return yield* svc.list()
@@ -29,7 +31,7 @@ const web = lazy(() =>
   HttpRouter.toWebHandler(
     Layer.mergeAll(
       AppLayer,
-      HttpApiBuilder.layer(questionApi, { openapiPath: `${root}/doc` }).pipe(
+      HttpApiBuilder.layer(QuestionApi, { openapiPath: `${root}/doc` }).pipe(
         Layer.provide(QuestionLive),
         Layer.provide(HttpServer.layerServices),
       ),

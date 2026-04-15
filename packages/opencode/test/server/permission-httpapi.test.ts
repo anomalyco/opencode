@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Instance } from "../../src/project/instance"
 import { Permission } from "../../src/permission"
-import { Server } from "../../src/server/server"
+import { ExperimentalHttpApiServer } from "../../src/server/instance/httpapi/server"
 import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
@@ -18,7 +18,7 @@ afterEach(async () => {
 describe("experimental permission httpapi", () => {
   test("lists pending permissions, replies, and serves docs", async () => {
     await using tmp = await tmpdir({ git: true })
-    const app = Server.Default().app
+    const server = await ExperimentalHttpApiServer.listen({ hostname: "127.0.0.1", port: 0 })
     const headers = {
       "content-type": "application/json",
       "x-opencode-directory": tmp.path,
@@ -39,37 +39,39 @@ describe("experimental permission httpapi", () => {
       },
     })
 
-    const list = await app.request("/experimental/httpapi/permission", {
-      headers,
-    })
+    try {
+      const list = await fetch(`${server.url}/experimental/httpapi/permission`, { headers })
 
-    expect(list.status).toBe(200)
-    const items = await list.json()
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({
-      permission: "bash",
-      patterns: ["ls"],
-      metadata: { cmd: "ls" },
-      always: ["ls"],
-    })
+      expect(list.status).toBe(200)
+      const items = await list.json()
+      expect(items).toHaveLength(1)
+      expect(items[0]).toMatchObject({
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { cmd: "ls" },
+        always: ["ls"],
+      })
 
-    const doc = await app.request("/experimental/httpapi/permission/doc", {
-      headers,
-    })
+      const doc = await fetch(`${server.url}/experimental/httpapi/permission/doc`, { headers })
 
-    expect(doc.status).toBe(200)
-    const spec = await doc.json()
-    expect(spec.paths["/experimental/httpapi/permission"]?.get?.operationId).toBe("permission.list")
-    expect(spec.paths["/experimental/httpapi/permission/{requestID}/reply"]?.post?.operationId).toBe("permission.reply")
+      expect(doc.status).toBe(200)
+      const spec = await doc.json()
+      expect(spec.paths["/experimental/httpapi/permission"]?.get?.operationId).toBe("permission.list")
+      expect(spec.paths["/experimental/httpapi/permission/{requestID}/reply"]?.post?.operationId).toBe(
+        "permission.reply",
+      )
 
-    const reply = await app.request(`/experimental/httpapi/permission/${items[0].id}/reply`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ reply: "once" }),
-    })
+      const reply = await fetch(`${server.url}/experimental/httpapi/permission/${items[0].id}/reply`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ reply: "once" }),
+      })
 
-    expect(reply.status).toBe(200)
-    expect(await reply.json()).toBe(true)
-    expect(await pending).toBeUndefined()
+      expect(reply.status).toBe(200)
+      expect(await reply.json()).toBe(true)
+      expect(await pending).toBeUndefined()
+    } finally {
+      await server.stop()
+    }
   })
 })

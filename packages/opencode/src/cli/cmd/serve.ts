@@ -1,4 +1,5 @@
 import { Server } from "../../server/server"
+import { ExperimentalHttpApiServer } from "../../server/instance/httpapi/server"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
@@ -17,8 +18,18 @@ export const ServeCommand = cmd({
     const opts = await resolveNetworkOptions(args)
     const server = await Server.listen(opts)
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    const httpapi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI_PORT
+      ? await ExperimentalHttpApiServer.listen({
+          hostname: opts.hostname,
+          port: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI_PORT,
+        })
+      : undefined
+    if (httpapi) {
+      console.log(`experimental httpapi listening on http://${httpapi.hostname}:${httpapi.port}`)
+    }
 
     await new Promise(() => {})
+    await httpapi?.stop()
     await server.stop()
   },
 })
