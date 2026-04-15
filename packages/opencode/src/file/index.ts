@@ -408,11 +408,11 @@ export namespace File {
         s.cache = next
       })
 
-      let cachedScan = yield* Effect.cached(Effect.forkDetach(scan().pipe(Effect.catchCause(() => Effect.void))))
+      let cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
 
       const ensure = Effect.fn("File.ensure")(function* () {
         yield* cachedScan
-        cachedScan = yield* Effect.cached(Effect.forkDetach(scan().pipe(Effect.catchCause(() => Effect.void))))
+        cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
       })
 
       const gitText = Effect.fnUntraced(function* (args: string[]) {
@@ -420,7 +420,7 @@ export namespace File {
       })
 
       const init = Effect.fn("File.init")(function* () {
-        yield* ensure()
+        yield* ensure().pipe(Effect.forkChild)
       })
 
       const status = Effect.fn("File.status")(function* () {
