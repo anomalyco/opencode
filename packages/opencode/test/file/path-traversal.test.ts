@@ -44,12 +44,14 @@ describe("Filesystem.contains", () => {
     }),
   )
 
-  it.effect("handles prefix collision edge cases", () =>
-    Effect.sync(() => {
-      expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
-      expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
-    }),
-  )
+  test("handles prefix collision edge cases", () => {
+    expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
+    expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
+  })
+
+  test("blocks Windows paths outside parent on different roots", () => {
+    expect(Filesystem.contains("C:/Users/yiwen/.config/opencode/quick-assistant", "D:/apps/opencode")).toBe(false)
+  })
 })
 
 /*
