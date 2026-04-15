@@ -1,34 +1,44 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { AppRuntime } from "../../src/effect/app-runtime"
-import { Instance } from "../../src/project/instance"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { Permission } from "../../src/permission"
+import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { ExperimentalHttpApiServer } from "../../src/server/instance/httpapi/server"
 import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import { Effect, Fiber } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 
 Log.init({ print: false })
 
-const ask = (input: Permission.AskInput) => AppRuntime.runPromise(Permission.Service.use((svc) => svc.ask(input)))
-
-afterEach(async () => {
-  await Instance.disposeAll()
-})
+const it = testEffect(ExperimentalHttpApiServer.layerTest)
 
 describe("experimental permission httpapi", () => {
-  test("lists pending permissions, replies, and serves docs", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const server = await ExperimentalHttpApiServer.listen({ hostname: "127.0.0.1", port: 0 })
-    const headers = {
-      "content-type": "application/json",
-      "x-opencode-directory": tmp.path,
-    }
-    let pending!: ReturnType<typeof ask>
+  it.live("lists pending permissions, replies, and serves docs", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.promise(() => tmpdir({ git: true }))
+      yield* Effect.addFinalizer(() => Effect.promise(() => tmp[Symbol.asyncDispose]()))
+      yield* Effect.addFinalizer(() => Effect.promise(() => Instance.disposeAll()))
 
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        pending = ask({
+      const headers = {
+        "content-type": "application/json",
+        "x-opencode-directory": tmp.path,
+      }
+
+      const ctx = yield* Effect.promise(() =>
+        Instance.provide({
+          directory: tmp.path,
+          init: () => AppRuntime.runPromise(InstanceBootstrap),
+          fn: () => Instance.current,
+        }),
+      )
+
+      const svc = yield* Permission.Service
+      const pending = yield* svc
+        .ask({
           sessionID: SessionID.make("ses_test"),
           permission: "bash",
           patterns: ["ls"],
@@ -36,14 +46,19 @@ describe("experimental permission httpapi", () => {
           always: ["ls"],
           ruleset: [],
         })
-      },
-    })
+        .pipe(Effect.provideService(InstanceRef, ctx), Effect.forkScoped)
 
-    try {
-      const list = await fetch(`${server.url}/experimental/httpapi/permission`, { headers })
+      let items: Array<any> = []
+      for (let i = 0; i < 10; i++) {
+        const list = yield* HttpClient.execute(
+          HttpClientRequest.get("/experimental/httpapi/permission").pipe(HttpClientRequest.setHeaders(headers)),
+        )
+        expect(list.status).toBe(200)
+        items = (yield* list.json) as Array<any>
+        if (items.length > 0) break
+        yield* Effect.sleep("50 millis")
+      }
 
-      expect(list.status).toBe(200)
-      const items = await list.json()
       expect(items).toHaveLength(1)
       expect(items[0]).toMatchObject({
         permission: "bash",
@@ -52,26 +67,25 @@ describe("experimental permission httpapi", () => {
         always: ["ls"],
       })
 
-      const doc = await fetch(`${server.url}/experimental/httpapi/permission/doc`, { headers })
-
+      const doc = yield* HttpClient.execute(
+        HttpClientRequest.get("/experimental/httpapi/permission/doc").pipe(HttpClientRequest.setHeaders(headers)),
+      )
       expect(doc.status).toBe(200)
-      const spec = await doc.json()
+      const spec = (yield* doc.json) as any
       expect(spec.paths["/experimental/httpapi/permission"]?.get?.operationId).toBe("permission.list")
       expect(spec.paths["/experimental/httpapi/permission/{requestID}/reply"]?.post?.operationId).toBe(
         "permission.reply",
       )
 
-      const reply = await fetch(`${server.url}/experimental/httpapi/permission/${items[0].id}/reply`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ reply: "once" }),
-      })
-
+      const reply = yield* HttpClient.execute(
+        yield* HttpClientRequest.post(`/experimental/httpapi/permission/${items[0].id}/reply`).pipe(
+          HttpClientRequest.setHeaders(headers),
+          HttpClientRequest.bodyJson({ reply: "once" }),
+        ),
+      )
       expect(reply.status).toBe(200)
-      expect(await reply.json()).toBe(true)
-      expect(await pending).toBeUndefined()
-    } finally {
-      await server.stop()
-    }
-  })
+      expect(yield* reply.json).toBe(true)
+      yield* Fiber.join(pending)
+    }),
+  )
 })

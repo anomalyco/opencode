@@ -1,15 +1,16 @@
 import { NodeHttpServer } from "@effect/platform-node"
-import { Context, Effect, Exit, Layer, Redacted, Scope, Schema } from "effect"
+import { Effect, Layer, Redacted, Schema } from "effect"
 import { HttpApiBuilder, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createServer } from "node:http"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { memoMap } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
+import { Permission } from "@/permission"
+import { Question } from "@/question"
 import { PermissionApi, PermissionLive } from "./permission"
 import { QuestionApi, QuestionLive } from "./question"
 
@@ -25,13 +26,6 @@ const Headers = Schema.Struct({
 })
 
 export namespace ExperimentalHttpApiServer {
-  export type Listener = {
-    hostname: string
-    port: number
-    url: URL
-    stop: () => Promise<void>
-  }
-
   function text(input: string, status: number, headers?: Record<string, string>) {
     return HttpServerResponse.text(input, { status, headers })
   }
@@ -116,41 +110,26 @@ export namespace ExperimentalHttpApiServer {
     }),
   ).layer
 
-  export async function listen(opts: { hostname: string; port: number }): Promise<Listener> {
-    const scope = await Effect.runPromise(Scope.make())
-    const serverLayer = NodeHttpServer.layer(createServer, { port: opts.port, host: opts.hostname })
-    const QuestionSecured = QuestionApi.middleware(Authorization)
-    const PermissionSecured = PermissionApi.middleware(Authorization)
-    const routes = Layer.mergeAll(
-      HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
-        Layer.provide(QuestionLive),
-      ),
-      HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
-        Layer.provide(PermissionLive),
-      ),
-    ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
-    const live = Layer.mergeAll(
-      serverLayer,
-      HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(Layer.provide(serverLayer)),
+  const QuestionSecured = QuestionApi.middleware(Authorization)
+  const PermissionSecured = PermissionApi.middleware(Authorization)
+
+  export const routes = Layer.mergeAll(
+    HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
+      Layer.provide(QuestionLive),
+    ),
+    HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
+      Layer.provide(PermissionLive),
+    ),
+  ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
+
+  export const layer = (opts: { hostname: string; port: number }) =>
+    HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(
+      Layer.provideMerge(NodeHttpServer.layer(createServer, { port: opts.port, host: opts.hostname })),
     )
 
-    const ctx = await Effect.runPromise(Layer.buildWithMemoMap(live, memoMap, scope))
-    const server = Context.get(ctx, HttpServer.HttpServer)
-
-    if (server.address._tag !== "TcpAddress") {
-      await Effect.runPromise(Scope.close(scope, Exit.void))
-      throw new Error("Experimental HttpApi server requires a TCP address")
-    }
-
-    const url = new URL("http://localhost")
-    url.hostname = server.address.hostname
-    url.port = String(server.address.port)
-
-    return {
-      hostname: server.address.hostname,
-      port: server.address.port,
-      url,
-      stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
-    }
-  }
+  export const layerTest = HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(
+    Layer.provideMerge(NodeHttpServer.layerTest),
+    Layer.provideMerge(Question.defaultLayer),
+    Layer.provideMerge(Permission.defaultLayer),
+  )
 }
