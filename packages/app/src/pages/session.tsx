@@ -1090,6 +1090,19 @@ export default function Page() {
     ),
   )
 
+  const DEFAULT_TITLE = "OpenCode"
+  const THINKING_TITLE = DEFAULT_TITLE + "🔵 Thinking..."
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) {
+      document.title = DEFAULT_TITLE
+      return
+    }
+    const status = sync.data.session_status[id]?.type ?? "idle"
+    document.title = status === "idle" ? DEFAULT_TITLE : THINKING_TITLE
+  })
+
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
 
