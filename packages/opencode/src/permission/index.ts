@@ -19,7 +19,7 @@ import { PermissionID } from "./schema"
 export namespace Permission {
   const log = Log.create({ service: "permission" })
 
-  export const Action = Schema.Union([Schema.Literal("allow"), Schema.Literal("deny"), Schema.Literal("ask")])
+  export const Action = Schema.Literals(["allow", "deny", "ask"])
     .annotate({ identifier: "PermissionAction" })
     .pipe(withStatics((s) => ({ zod: zod(s) })))
   export type Action = Schema.Schema.Type<typeof Action>
@@ -56,9 +56,7 @@ export namespace Permission {
     static readonly zod = zod(this)
   }
 
-  export const Reply = Schema.Union([Schema.Literal("once"), Schema.Literal("always"), Schema.Literal("reject")]).pipe(
-    withStatics((s) => ({ zod: zod(s) })),
-  )
+  export const Reply = Schema.Literals(["once", "always", "reject"]).pipe(withStatics((s) => ({ zod: zod(s) })))
   export type Reply = Schema.Schema.Type<typeof Reply>
 
   const reply = {
