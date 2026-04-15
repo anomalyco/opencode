@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
-import { Glob } from "./glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -15,6 +15,7 @@ export namespace Log {
     WARN: 2,
     ERROR: 3,
   }
+  const keep = 10
 
   let level: Level = "INFO"
 
@@ -78,15 +79,19 @@ export namespace Log {
   }
 
   async function cleanup(dir: string) {
-    const files = await Glob.scan("????-??-??T??????.log", {
-      cwd: dir,
-      absolute: true,
-      include: "file",
-    })
-    if (files.length <= 5) return
+    const files = (
+      await Glob.scan("????-??-??T??????.log", {
+        cwd: dir,
+        absolute: false,
+        include: "file",
+      }).catch(() => [])
+    )
+      .filter((file) => path.basename(file) === file)
+      .sort()
+    if (files.length <= keep) return
 
-    const filesToDelete = files.slice(0, -10)
-    await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
+    const doomed = files.slice(0, -keep)
+    await Promise.all(doomed.map((file) => fs.unlink(path.join(dir, file)).catch(() => {})))
   }
 
   function formatError(error: Error, depth = 0): string {

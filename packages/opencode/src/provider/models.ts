@@ -6,8 +6,8 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util/filesystem"
-import { Flock } from "@/util/flock"
-import { Hash } from "@/util/hash"
+import { Flock } from "@opencode-ai/shared/util/flock"
+import { Hash } from "@opencode-ai/shared/util/hash"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -21,6 +21,27 @@ export namespace ModelsDev {
     source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
   )
   const ttl = 5 * 60 * 1000
+
+  type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[]
+
+  const JsonValue: z.ZodType<JsonValue> = z.lazy(() =>
+    z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(JsonValue), z.record(z.string(), JsonValue)]),
+  )
+
+  const Cost = z.object({
+    input: z.number(),
+    output: z.number(),
+    cache_read: z.number().optional(),
+    cache_write: z.number().optional(),
+    context_over_200k: z
+      .object({
+        input: z.number(),
+        output: z.number(),
+        cache_read: z.number().optional(),
+        cache_write: z.number().optional(),
+      })
+      .optional(),
+  })
 
   export const Model = z.object({
     id: z.string(),
@@ -41,22 +62,7 @@ export namespace ModelsDev {
           .strict(),
       ])
       .optional(),
-    cost: z
-      .object({
-        input: z.number(),
-        output: z.number(),
-        cache_read: z.number().optional(),
-        cache_write: z.number().optional(),
-        context_over_200k: z
-          .object({
-            input: z.number(),
-            output: z.number(),
-            cache_read: z.number().optional(),
-            cache_write: z.number().optional(),
-          })
-          .optional(),
-      })
-      .optional(),
+    cost: Cost.optional(),
     limit: z.object({
       context: z.number(),
       input: z.number().optional(),
@@ -68,12 +74,26 @@ export namespace ModelsDev {
         output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
       })
       .optional(),
-    experimental: z.boolean().optional(),
+    experimental: z
+      .object({
+        modes: z
+          .record(
+            z.string(),
+            z.object({
+              cost: Cost.optional(),
+              provider: z
+                .object({
+                  body: z.record(z.string(), JsonValue).optional(),
+                  headers: z.record(z.string(), z.string()).optional(),
+                })
+                .optional(),
+            }),
+          )
+          .optional(),
+      })
+      .optional(),
     status: z.enum(["alpha", "beta", "deprecated"]).optional(),
-    options: z.record(z.string(), z.any()),
-    headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
-    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   })
   export type Model = z.infer<typeof Model>
 

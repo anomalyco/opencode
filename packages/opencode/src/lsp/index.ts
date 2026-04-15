@@ -11,9 +11,8 @@ import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Process } from "../util/process"
 import { spawn as lspspawn } from "./launch"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -156,7 +155,7 @@ export namespace LSP {
     readonly outgoingCalls: (input: LocInput) => Effect.Effect<any[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LSP") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/LSP") {}
 
   export const layer = Layer.effect(
     Service,
@@ -245,7 +244,7 @@ export namespace LSP {
               })
 
             if (!handle) return undefined
-            log.info("spawned lsp server", { serverID: server.id })
+            log.info("spawned lsp server", { serverID: server.id, root })
 
             const client = await LSPClient.create({
               serverID: server.id,
@@ -508,38 +507,9 @@ export namespace LSP {
 
   export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const init = async () => runPromise((svc) => svc.init())
-
-  export const status = async () => runPromise((svc) => svc.status())
-
-  export const hasClients = async (file: string) => runPromise((svc) => svc.hasClients(file))
-
-  export const touchFile = async (input: string, waitForDiagnostics?: boolean) =>
-    runPromise((svc) => svc.touchFile(input, waitForDiagnostics))
-
-  export const diagnostics = async () => runPromise((svc) => svc.diagnostics())
-
-  export const hover = async (input: LocInput) => runPromise((svc) => svc.hover(input))
-
-  export const definition = async (input: LocInput) => runPromise((svc) => svc.definition(input))
-
-  export const references = async (input: LocInput) => runPromise((svc) => svc.references(input))
-
-  export const implementation = async (input: LocInput) => runPromise((svc) => svc.implementation(input))
-
-  export const documentSymbol = async (uri: string) => runPromise((svc) => svc.documentSymbol(uri))
-
-  export const workspaceSymbol = async (query: string) => runPromise((svc) => svc.workspaceSymbol(query))
-
-  export const prepareCallHierarchy = async (input: LocInput) => runPromise((svc) => svc.prepareCallHierarchy(input))
-
-  export const incomingCalls = async (input: LocInput) => runPromise((svc) => svc.incomingCalls(input))
-
-  export const outgoingCalls = async (input: LocInput) => runPromise((svc) => svc.outgoingCalls(input))
-
   export namespace Diagnostic {
+    const MAX_PER_FILE = 20
+
     export function pretty(diagnostic: LSPClient.Diagnostic) {
       const severityMap = {
         1: "ERROR",
@@ -553,6 +523,15 @@ export namespace LSP {
       const col = diagnostic.range.start.character + 1
 
       return `${severity} [${line}:${col}] ${diagnostic.message}`
+    }
+
+    export function report(file: string, issues: LSPClient.Diagnostic[]) {
+      const errors = issues.filter((item) => item.severity === 1)
+      if (errors.length === 0) return ""
+      const limited = errors.slice(0, MAX_PER_FILE)
+      const more = errors.length - MAX_PER_FILE
+      const suffix = more > 0 ? `\n... and ${more} more` : ""
+      return `<diagnostics file="${file}">\n${limited.map(pretty).join("\n")}${suffix}\n</diagnostics>`
     }
   }
 }

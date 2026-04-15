@@ -1,7 +1,7 @@
 import z from "zod"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 
 export namespace Message {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
