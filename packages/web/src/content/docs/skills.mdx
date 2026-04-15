@@ -4,7 +4,7 @@ description: "Define reusable behavior via SKILL.md definitions"
 ---
 
 Agent skills let OpenCode discover reusable instructions from your repo or home directory.
-Skills are loaded on-demand via the native `skill` tool—agents see available skills and can load the full content when needed.
+Skills are loaded on-demand via the native `skill` tool, and are also available as [slash commands](#use-as-slash-commands) for direct invocation.
 
 ---
 
@@ -122,6 +122,76 @@ skill({ name: "git-release" })
 
 ---
 
+## Use as slash commands
+
+Every discovered skill is also registered as a slash command.
+A skill named `git-release` becomes `/git-release` in the TUI and Web UI, appearing alongside regular commands in the slash command popover.
+
+```bash frame="none"
+/git-release
+```
+
+This lets you invoke a skill directly without waiting for the agent to decide to load it via the `skill` tool.
+
+---
+
+## Pass arguments
+
+When invoked as a slash command, skills support the same argument placeholders as [commands](/docs/commands/#arguments).
+
+Use `$ARGUMENTS` for the full argument string, or `$1`, `$2`, etc. for positional parameters:
+
+```markdown
+---
+name: analyze-logs
+description: Analyze application logs for issues
+---
+
+Analyze the $1 logs and focus on:
+$2
+```
+
+Invoke it with:
+
+```bash frame="none"
+/analyze-logs production "errors in the auth module"
+```
+
+`$1` gets `production` and `$2` gets everything after. See [Commands — Arguments](/docs/commands/#arguments) for full placeholder syntax.
+
+---
+
+## Understand invocation paths
+
+Skills have two invocation paths with different behaviors:
+
+1. **Agent-initiated** — The agent calls `skill({ name: "..." })` during a conversation. The `SKILL.md` content is returned as tool output. No argument substitution occurs.
+
+2. **User-initiated** — You type `/skill-name args` in the prompt. The `SKILL.md` content goes through template expansion (`$1`, `$ARGUMENTS`, shell commands, `@file` references) and is sent as a user message.
+
+If you design a skill for both paths, avoid required `$N` parameters. They work as `/my-skill args` but appear as literal `$1` when loaded via the skill tool. Use `$ARGUMENTS` or `$N` only for skills designed primarily as slash commands.
+
+---
+
+## Configure paths and URLs
+
+Add extra skill directories or remote skill sources in `opencode.json`:
+
+```json title="opencode.json"
+{
+  "skills": {
+    "paths": ["./custom-skills", "~/shared-skills"],
+    "urls": ["https://example.com/skills"]
+  }
+}
+```
+
+`paths` are resolved relative to the config file location. `~` expands to your home directory.
+
+Remote `urls` must serve an `index.json` listing available skills and their files. OpenCode fetches the index and downloads matching skills to a local cache.
+
+---
+
 ## Configure permissions
 
 Control which skills agents can access using pattern-based permissions in `opencode.json`:
@@ -218,5 +288,5 @@ If a skill does not show up:
 
 1. Verify `SKILL.md` is spelled in all caps
 2. Check that frontmatter includes `name` and `description`
-3. Ensure skill names are unique across all locations
+3. Check for duplicate names — if two skills share the same name, the last one loaded takes precedence. Load order: global home → project (walking up to the worktree) → configured `paths` → configured `urls`
 4. Check permissions—skills with `deny` are hidden from agents

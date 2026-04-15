@@ -494,7 +494,9 @@ export namespace Config {
       hidden: z
         .boolean()
         .optional()
-        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
+        .describe(
+          "Hide this agent from the UI — excludes primary agents from the agent switcher and subagents from the @ autocomplete menu (default: false)",
+        ),
       options: z.record(z.string(), z.any()).optional(),
       color: z
         .union([
