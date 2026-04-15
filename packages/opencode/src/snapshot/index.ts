@@ -3,6 +3,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
+import ignore from "ignore"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@/filesystem"
@@ -148,6 +149,17 @@ export namespace Snapshot {
             yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
           })
 
+          const parseIgnore = Effect.fnUntraced(function* () {
+            const ig = ignore()
+            const gitignorePath = path.join(state.worktree, ".gitignore")
+            const gitignoreText = yield* read(gitignorePath)
+            if (gitignoreText) ig.add(gitignoreText)
+            const ignorePath = path.join(state.worktree, ".ignore")
+            const ignoreText = yield* read(ignorePath)
+            if (ignoreText) ig.add(ignoreText)
+            return ig.ignores.bind(ig)
+          })
+
           const add = Effect.fnUntraced(function* () {
             yield* sync()
             const [diff, other] = yield* Effect.all(
@@ -179,21 +191,12 @@ export namespace Snapshot {
             // Filter out files that are now gitignored even if previously tracked
             // Files may have been tracked before being gitignored, so we need to check
             // against the source project's current gitignore rules
-            // Use --no-index to check purely against patterns (ignoring whether file is tracked)
-            const checkArgs = [
-              ...quote,
-              "--git-dir",
-              path.join(state.worktree, ".git"),
-              "--work-tree",
-              state.worktree,
-              "check-ignore",
-              "--no-index",
-              "--",
-              ...all,
-            ]
-            const check = yield* git(checkArgs, { cwd: state.directory })
-            const ignored =
-              check.code === 0 ? new Set(check.text.trim().split("\n").filter(Boolean)) : new Set<string>()
+            // Use local ignore library to avoid command line length limits
+            const ignored = new Set<string>()
+            const isIgnored = yield* parseIgnore()
+            for (const item of all) {
+              if (isIgnored(item) || isIgnored(item + "/")) ignored.add(item)
+            }
             const filtered = all.filter((item) => !ignored.has(item))
 
             // Remove newly-ignored files from snapshot index to prevent re-adding
@@ -297,25 +300,11 @@ export namespace Snapshot {
 
                 // Filter out files that are now gitignored
                 if (files.length > 0) {
-                  const checkArgs = [
-                    ...quote,
-                    "--git-dir",
-                    path.join(state.worktree, ".git"),
-                    "--work-tree",
-                    state.worktree,
-                    "check-ignore",
-                    "--no-index",
-                    "--",
-                    ...files,
-                  ]
-                  const check = yield* git(checkArgs, { cwd: state.directory })
-                  if (check.code === 0) {
-                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
-                    const filtered = files.filter((item) => !ignored.has(item))
-                    return {
-                      hash,
-                      files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
-                    }
+                  const isIgnored = yield* parseIgnore()
+                  const filtered = files.filter((item) => !isIgnored(item) && !isIgnored(item + "/"))
+                  return {
+                    hash,
+                    files: filtered.map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
                   }
                 }
 
@@ -674,25 +663,10 @@ export namespace Snapshot {
 
                 // Filter out files that are now gitignored
                 if (rows.length > 0) {
-                  const files = rows.map((r) => r.file)
-                  const checkArgs = [
-                    ...quote,
-                    "--git-dir",
-                    path.join(state.worktree, ".git"),
-                    "--work-tree",
-                    state.worktree,
-                    "check-ignore",
-                    "--no-index",
-                    "--",
-                    ...files,
-                  ]
-                  const check = yield* git(checkArgs, { cwd: state.directory })
-                  if (check.code === 0) {
-                    const ignored = new Set(check.text.trim().split("\n").filter(Boolean))
-                    const filtered = rows.filter((r) => !ignored.has(r.file))
-                    rows.length = 0
-                    rows.push(...filtered)
-                  }
+                  const isIgnored = yield* parseIgnore()
+                  const filtered = rows.filter((r) => !isIgnored(r.file) && !isIgnored(r.file + "/"))
+                  rows.length = 0
+                  rows.push(...filtered)
                 }
 
                 const step = 100
