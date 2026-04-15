@@ -3,7 +3,6 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { createHash, randomBytes } from "node:crypto"
 import { Auth } from "@/auth"
 
-// OAuth client ID, matches Apollo config "openCode" client
 const CLIENT_ID = "d38bdbee-2b8c-4c74-9a9c-5875fabe6317"
 
 // grant_type for device flow (RFC 8628 standard)
