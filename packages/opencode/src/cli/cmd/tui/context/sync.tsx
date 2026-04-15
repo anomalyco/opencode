@@ -382,7 +382,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       ]
 
       await Promise.all(blockingRequests)
-        .then(() => {
+        .then(async () => {
           const providersResponse = providersPromise.then((x) => x.data!)
           const providerListResponse = providerListPromise.then((x) => x.data!)
           const consoleStateResponse = consoleStatePromise
@@ -467,7 +467,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status
       },
       get ready() {
-        return store.status !== "loading"
+        return true
       },
       get path() {
         return project.instance.path()

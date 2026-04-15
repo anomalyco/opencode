@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -599,6 +599,8 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
+    const agent = local.agent.current()
+    if (!agent) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
@@ -659,7 +661,7 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
-        agent: local.agent.current().name,
+        agent: agent.name,
         model: {
           providerID: selectedModel.providerID,
           modelID: selectedModel.modelID,
@@ -686,7 +688,7 @@ export function Prompt(props: PromptProps) {
         sessionID,
         command: command.slice(1),
         arguments: args,
-        agent: local.agent.current().name,
+        agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
@@ -703,7 +705,7 @@ export function Prompt(props: PromptProps) {
           sessionID,
           ...selectedModel,
           messageID,
-          agent: local.agent.current().name,
+          agent: agent.name,
           model: selectedModel,
           variant,
           parts: [
@@ -826,7 +828,9 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
-    return local.agent.color(local.agent.current().name)
+    const agent = local.agent.current()
+    if (!agent) return theme.border
+    return local.agent.color(agent.name)
   })
 
   const showVariant = createMemo(() => {
@@ -848,7 +852,8 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const color = local.agent.color(local.agent.current().name)
+    const agent = local.agent.current()
+    const color = agent ? local.agent.color(agent.name) : theme.border
     return {
       frames: createFrames({
         color,
@@ -1104,22 +1109,26 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <text fg={highlight()}>
-                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-                </text>
-                <Show when={store.mode === "normal"}>
-                  <box flexDirection="row" gap={1}>
-                    <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                      {local.model.parsed().model}
-                    </text>
-                    <text fg={theme.textMuted}>{currentProviderLabel()}</text>
-                    <Show when={showVariant()}>
-                      <text fg={theme.textMuted}>·</text>
-                      <text>
-                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
-                      </text>
-                    </Show>
-                  </box>
+                <Show when={local.agent.current()} fallback={<box height={1} />}>
+                  {(agent) => (
+                    <>
+                      <text fg={highlight()}>{store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)} </text>
+                      <Show when={store.mode === "normal"}>
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                            {local.model.parsed().model}
+                          </text>
+                          <text fg={theme.textMuted}>{currentProviderLabel()}</text>
+                          <Show when={showVariant()}>
+                            <text fg={theme.textMuted}>·</text>
+                            <text>
+                              <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                            </text>
+                          </Show>
+                        </box>
+                      </Show>
+                    </>
+                  )}
                 </Show>
               </box>
               <Show when={hasRightContent()}>

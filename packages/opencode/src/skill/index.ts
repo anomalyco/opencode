@@ -142,46 +142,79 @@ export namespace Skill {
     directory: string,
     worktree: string,
   ) {
+    const cfg = yield* config.get()
+
+    const tasks: Effect.Effect<void>[] = []
+
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-      for (const dir of EXTERNAL_DIRS) {
-        const root = path.join(Global.Path.home, dir)
-        if (!(yield* fsys.isDir(root))) continue
-        yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
-      }
+      const externalScans = Effect.forEach(
+        EXTERNAL_DIRS,
+        (dir) =>
+          Effect.gen(function* () {
+            const root = path.join(Global.Path.home, dir)
+            if (yield* fsys.isDir(root)) {
+              yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+            }
+          }),
+        { concurrency: "unbounded", discard: true },
+      )
+      tasks.push(externalScans)
 
       const upDirs = yield* fsys
         .up({ targets: EXTERNAL_DIRS, start: directory, stop: worktree })
         .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
-      for (const root of upDirs) {
-        yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
-      }
+      const upScans = Effect.forEach(
+        upDirs,
+        (root) => scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" }),
+        { concurrency: "unbounded", discard: true },
+      )
+      tasks.push(upScans)
     }
 
     const configDirs = yield* config.directories()
-    for (const dir of configDirs) {
-      yield* scan(state, bus, dir, OPENCODE_SKILL_PATTERN)
-    }
+    const configScans = Effect.forEach(configDirs, (dir) => scan(state, bus, dir, OPENCODE_SKILL_PATTERN), {
+      concurrency: "unbounded",
+      discard: true,
+    })
+    tasks.push(configScans)
 
-    const cfg = yield* config.get()
-    for (const item of cfg.skills?.paths ?? []) {
-      const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
-      const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
-      if (!(yield* fsys.isDir(dir))) {
-        log.warn("skill path not found", { path: dir })
-        continue
-      }
+    const pathChecks = Effect.forEach(
+      cfg.skills?.paths ?? [],
+      (item) =>
+        Effect.gen(function* () {
+          const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+          const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+          if (yield* fsys.isDir(dir)) {
+            yield* scan(state, bus, dir, SKILL_PATTERN)
+          } else {
+            log.warn("skill path not found", { path: dir })
+          }
+        }),
+      { concurrency: "unbounded", discard: true },
+    )
+    tasks.push(pathChecks)
 
-      yield* scan(state, bus, dir, SKILL_PATTERN)
-    }
+    const urlScans = Effect.forEach(
+      cfg.skills?.urls ?? [],
+      (url) =>
+        Effect.gen(function* () {
+          const pulledDirs = yield* discovery.pull(url)
+          yield* Effect.forEach(
+            pulledDirs,
+            (dir) =>
+              Effect.gen(function* () {
+                state.dirs.add(dir)
+                yield* scan(state, bus, dir, SKILL_PATTERN)
+              }),
+            { concurrency: "unbounded", discard: true },
+          )
+        }),
+      { concurrency: "unbounded", discard: true },
+    )
+    tasks.push(urlScans)
 
-    for (const url of cfg.skills?.urls ?? []) {
-      const pulledDirs = yield* discovery.pull(url)
-      for (const dir of pulledDirs) {
-        state.dirs.add(dir)
-        yield* scan(state, bus, dir, SKILL_PATTERN)
-      }
-    }
+    yield* Effect.all(tasks, { concurrency: "unbounded", discard: true })
 
     log.info("init", { count: Object.keys(state.skills).length })
   })
