@@ -12,7 +12,10 @@ import { withStatics } from "@/util/schema"
 import { Wildcard } from "@/util"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
+import path from "path"
 import { evaluate as evalRule } from "./evaluate"
+import { evaluatePathPermission } from "./evaluate-path-permission"
+import { Instance } from "@/project/instance"
 import { PermissionID } from "./schema"
 
 const log = Log.create({ service: "permission" })
@@ -178,11 +181,17 @@ export const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+      const GLOB_TOOLS = ["read", "edit", "external_directory"]
+      const isGlobTool = GLOB_TOOLS.includes(request.permission)
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
-        log.info("evaluated", { permission: request.permission, pattern, action: rule })
+        const absolutePath = path.isAbsolute(pattern) ? path.normalize(pattern) : path.resolve(Instance.worktree, pattern)
+        const relativePath = path.relative(Instance.worktree, absolutePath).replaceAll("\\", "/")
+        const rule = isGlobTool
+          ? evaluatePathPermission(request.permission, { absolutePath, relativePath }, ruleset, approved)
+          : evaluate(request.permission, pattern, ruleset, approved)
+        log.info("evaluated", { absolutePath, relativePath, isGlobTool, permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
