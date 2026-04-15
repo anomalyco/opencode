@@ -1,12 +1,7 @@
-import { AppLayer } from "@/effect/app-runtime"
-import { memoMap } from "@/effect/run-service"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
-import { lazy } from "@/util/lazy"
 import { Effect, Layer, Schema } from "effect"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/permission"
 
@@ -75,21 +70,3 @@ export const PermissionLive = Layer.unwrap(
     )
   }),
 ).pipe(Layer.provide(Permission.defaultLayer))
-
-const web = lazy(() =>
-  HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      AppLayer,
-      HttpApiBuilder.layer(PermissionApi, { openapiPath: `${root}/doc` }).pipe(
-        Layer.provide(PermissionLive),
-        Layer.provide(HttpServer.layerServices),
-      ),
-    ),
-    {
-      disableLogger: true,
-      memoMap,
-    },
-  ),
-)
-
-export const PermissionHttpApiHandler: Handler = (c, _next) => web().handler(c.req.raw)

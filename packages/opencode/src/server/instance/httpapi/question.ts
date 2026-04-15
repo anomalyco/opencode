@@ -1,12 +1,7 @@
-import { AppLayer } from "@/effect/app-runtime"
-import { memoMap } from "@/effect/run-service"
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
-import { lazy } from "@/util/lazy"
 import { Effect, Layer, Schema } from "effect"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/question"
 
@@ -74,21 +69,3 @@ export const QuestionLive = Layer.unwrap(
     )
   }),
 ).pipe(Layer.provide(Question.defaultLayer))
-
-const web = lazy(() =>
-  HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      AppLayer,
-      HttpApiBuilder.layer(QuestionApi, { openapiPath: `${root}/doc` }).pipe(
-        Layer.provide(QuestionLive),
-        Layer.provide(HttpServer.layerServices),
-      ),
-    ),
-    {
-      disableLogger: true,
-      memoMap,
-    },
-  ),
-)
-
-export const QuestionHttpApiHandler: Handler = (c, _next) => web().handler(c.req.raw)
