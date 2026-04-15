@@ -2,7 +2,7 @@ import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import npa from "npm-package-arg"
 import semver from "semver"
-import { Npm } from "@/npm"
+import { Npm } from "../npm"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "version": "1.4.6",
+  "name": "@opencode-ai/shared",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {},
+  "bin": {
+    "opencode": "./bin/opencode"
+  },
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "imports": {},
+  "devDependencies": {
+    "@types/semver": "catalog:"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@npmcli/arborist": "catalog:",
+    "effect": "catalog:",
+    "minimatch": "10.2.5",
+    "semver": "catalog:",
+    "zod": "catalog:"
+  },
+  "overrides": {
+    "drizzle-orm": "catalog:"
+  }
+}

@@ -1,6 +1,6 @@
 import semver from "semver"
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
