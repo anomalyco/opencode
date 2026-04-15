@@ -4,6 +4,7 @@ import z from "zod"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Filesystem } from "@/util/filesystem"
+import { Env } from "@/env"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
@@ -74,10 +75,20 @@ export namespace ConfigPaths {
     return typeof input === "string" ? path.dirname(input) : input.dir
   }
 
-  /** Apply {env:VAR} and {file:path} substitutions to config text. */
+  /** Apply {env:VAR} and {file:path} substitutions to config text. {env:VAR} resolves from shell environment first, then .env in the config directory. */
   async function substitute(text: string, input: ParseSource, missing: "error" | "empty" = "error") {
+    const localEnv: Record<string, string> = {}
+    const dotenvContent = await Filesystem.readText(path.join(dir(input), ".env")).catch(() => "")
+    for (const line of dotenvContent.split("\n")) {
+      const match = line.match(/^([^#=\s][^=]*)=(.*)$/)
+      if (match) {
+        const [, key, val] = match
+        localEnv[key.trim()] = val.trim().replace(/^["']|["']$/g, "")
+      }
+    }
+
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-      return process.env[varName] || ""
+      return Env.get(varName) ?? localEnv[varName] ?? ""
     })
 
     const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
