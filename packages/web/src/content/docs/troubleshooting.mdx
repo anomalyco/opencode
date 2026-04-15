@@ -259,7 +259,7 @@ To resolve provider package issues:
 1. Clear the provider package cache:
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ${OPENCODE_CACHE_DIR:-${HOME}/.cache/opencode}
    ```
 
    On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
