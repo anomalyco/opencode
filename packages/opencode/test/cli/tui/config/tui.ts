@@ -11,9 +11,10 @@ import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Npm } from "@opencode-ai/shared/npm"
+import { Installation } from "@/installation"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -41,9 +42,9 @@ export namespace TuiConfig {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/TuiConfig") {}
 
-  function pluginScope(file: string, ctx: { directory: string; worktree: string }): Config.PluginScope {
+  function pluginScope(file: string, ctx: { directory: string }): Config.PluginScope {
     if (Filesystem.contains(ctx.directory, file)) return "local"
-    if (ctx.worktree !== "/" && Filesystem.contains(ctx.worktree, file)) return "local"
+    // if (ctx.worktree !== "/" && Filesystem.contains(ctx.worktree, file)) return "local"
     return "global"
   }
 
@@ -67,7 +68,7 @@ export namespace TuiConfig {
     }
   }
 
-  async function mergeFile(acc: Acc, file: string, ctx: { directory: string; worktree: string }) {
+  async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
     const data = await loadFile(file)
     acc.result = mergeDeep(acc.result, data)
     if (!data.plugin?.length) return
@@ -81,18 +82,14 @@ export namespace TuiConfig {
     acc.result.plugin_origins = plugins
   }
 
-  async function loadState(ctx: { directory: string; worktree: string }) {
-    let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-      ? []
-      : await ConfigPaths.projectFiles("tui", ctx.directory, ctx.worktree)
-    const directories = await ConfigPaths.directories(ctx.directory, ctx.worktree)
+  async function loadState(ctx: { directory: string }) {
+    let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
+    const directories = await ConfigPaths.directories(ctx.directory)
     const custom = customPath()
     const managed = Config.managedConfigDir()
     await migrateTuiConfig({ directories, custom, managed })
     // Re-compute after migration since migrateTuiConfig may have created new tui.json files
-    projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-      ? []
-      : await ConfigPaths.projectFiles("tui", ctx.directory, ctx.worktree)
+    projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
 
     const acc: Acc = {
       result: {},
@@ -145,30 +142,37 @@ export namespace TuiConfig {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const cfg = yield* Config.Service
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("TuiConfig.state")(function* (ctx) {
-          const data = yield* Effect.promise(() => loadState(ctx))
-          const deps = yield* Effect.forEach(data.dirs, (dir) => cfg.installDependencies(dir).pipe(Effect.forkScoped), {
-            concurrency: "unbounded",
-          })
-          return { config: data.config, deps }
-        }),
+      const data = yield* Effect.promise(() => loadState({ directory: process.cwd() }))
+      const service = {
+        npm: yield* Npm.Service,
+      }
+
+      const deps = yield* Effect.forEach(
+        data.dirs,
+        (dir) =>
+          service.npm
+            .install(dir, {
+              add: ["@opencode-ai/plugin" + (Installation.isLocal() ? "" : "@" + Installation.VERSION)],
+            })
+            .pipe(Effect.forkScoped),
+        {
+          concurrency: "unbounded",
+        },
       )
 
-      const get = Effect.fn("TuiConfig.get")(() => InstanceState.use(state, (s) => s.config))
+      const get = Effect.fn("TuiConfig.get")(function* () {
+        return data.config
+      })
 
       const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
-        InstanceState.useEffect(state, (s) =>
-          Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
-        ),
+        Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
       )
 
       return Service.of({ get, waitForDependencies })
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Npm.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

@@ -34,10 +34,9 @@ import type { ConsoleState } from "@test/cli/tui/config/console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
-import { Flock } from "@opencode-ai/shared/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
-import { Npm } from "../npm"
 import { InstanceRef } from "@/effect/instance-ref"
+import { Npm } from "@opencode-ai/shared/npm"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -138,10 +137,6 @@ export namespace Config {
 
   export type InstallInput = {
     waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
-  }
-
-  type Package = {
-    dependencies?: Record<string, string>
   }
 
   function rel(item: string, patterns: string[]) {
@@ -1074,7 +1069,6 @@ export namespace Config {
     readonly get: () => Effect.Effect<Info>
     readonly getGlobal: () => Effect.Effect<Info>
     readonly getConsoleState: () => Effect.Effect<ConsoleState>
-    readonly installDependencies: (dir: string, input?: InstallInput) => Effect.Effect<void, AppFileSystem.Error>
     readonly update: (config: Info) => Effect.Effect<void>
     readonly updateGlobal: (config: Info) => Effect.Effect<Info>
     readonly invalidate: (wait?: boolean) => Effect.Effect<void>
@@ -1164,13 +1158,14 @@ export namespace Config {
   export const layer: Layer.Layer<
     Service,
     never,
-    AppFileSystem.Service | Auth.Service | Account.Service | Env.Service
+    AppFileSystem.Service | Auth.Service | Account.Service | Env.Service | Npm.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const authSvc = yield* Auth.Service
       const accountSvc = yield* Account.Service
+      const npmSvc = yield* Npm.Service
       const env = yield* Env.Service
 
       const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
@@ -1277,73 +1272,31 @@ export namespace Config {
         return yield* cachedGlobal
       })
 
-      const install = Effect.fnUntraced(function* (dir: string) {
-        const pkg = path.join(dir, "package.json")
+      const REQUIRED_GITIGNORE_PATTERNS = [
+        "node_modules",
+        "package.json",
+        "package-lock.json",
+        "bun.lock",
+        ".gitignore",
+      ]
+
+      const ensureGitignore = Effect.fnUntraced(function* (dir: string) {
         const gitignore = path.join(dir, ".gitignore")
-        const plugin = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
-        const target = Installation.isLocal() ? "*" : Installation.VERSION
-        const json = yield* fs.readJson(pkg).pipe(
-          Effect.catch(() => Effect.succeed({} satisfies Package)),
-          Effect.map((x): Package => (isRecord(x) ? (x as Package) : {})),
+        const existing = yield* fs.readFileString(gitignore).pipe(Effect.catch(() => Effect.succeed("")))
+        const missing = REQUIRED_GITIGNORE_PATTERNS.filter(
+          (p) => !existing.split("\n").some((line) => line.trim() === p),
         )
-        const hasDep = json.dependencies?.["@opencode-ai/plugin"] === target
-        const hasIgnore = yield* fs.existsSafe(gitignore)
-        const hasPkg = yield* fs.existsSafe(plugin)
-
-        if (!hasDep) {
-          yield* fs.writeJson(pkg, {
-            ...json,
-            dependencies: {
-              ...json.dependencies,
-              "@opencode-ai/plugin": target,
-            },
-          })
-        }
-
-        if (!hasIgnore) {
-          yield* fs.writeFileString(
-            gitignore,
-            ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
-          )
-        }
-
-        if (hasDep && hasIgnore && hasPkg) return
-
-        yield* Effect.promise(() => Npm.install(dir))
+        if (!missing.length) return
+        const content = existing ? existing + "\n" + missing.join("\n") : missing.join("\n")
+        yield* fs.writeFileString(gitignore, content)
       })
 
-      const installDependencies = Effect.fn("Config.installDependencies")(function* (
-        dir: string,
-        input?: InstallInput,
-      ) {
-        if (
-          !(yield* fs.access(dir, { writable: true }).pipe(
-            Effect.as(true),
-            Effect.orElseSucceed(() => false),
-          ))
-        )
-          return
-
-        const key =
-          process.platform === "win32" ? "config-install:win32" : `config-install:${AppFileSystem.resolve(dir)}`
-
-        yield* Effect.acquireUseRelease(
-          Effect.promise((signal) =>
-            Flock.acquire(key, {
-              signal,
-              onWait: (tick) =>
-                input?.waitTick?.({
-                  dir,
-                  attempt: tick.attempt,
-                  delay: tick.delay,
-                  waited: tick.waited,
-                }),
-            }),
-          ),
-          () => install(dir),
-          (lease) => Effect.promise(() => lease.release()),
-        )
-      })
+      const installDependencies = Effect.fn("Config.installDependencies")(function* (dir: string) {
+        const target = Installation.isLocal() ? "" : "@" + Installation.VERSION
+        yield* npmSvc.install(dir, {
+          add: ["@opencode-ai/plugin" + target],
+        })
+      }, Effect.scoped)
 
       const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
         const auth = yield* authSvc.all().pipe(Effect.orDie)
@@ -1437,6 +1390,7 @@ export namespace Config {
             }
           }
 
+          yield* ensureGitignore(dir).pipe(Effect.ignore, Effect.forkScoped)
           const dep = yield* installDependencies(dir).pipe(
             Effect.exit,
             Effect.tap((exit) =>
@@ -1642,7 +1596,6 @@ export namespace Config {
         get,
         getGlobal,
         getConsoleState,
-        installDependencies,
         update,
         updateGlobal,
         invalidate,
@@ -1657,5 +1610,6 @@ export namespace Config {
     Layer.provide(Env.defaultLayer),
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Account.defaultLayer),
+    Layer.provide(Npm.defaultLayer),
   )
 }

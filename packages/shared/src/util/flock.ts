@@ -345,9 +345,9 @@ export namespace Flock {
     return await fn()
   }
 
-  export const effect = Effect.fn("Flock.effect")(function* (key: string) {
+  export const effect = Effect.fn("Flock.effect")(function* (key: string, input: Options = {}) {
     return yield* Effect.acquireRelease(
-      Effect.promise((signal) => Flock.acquire(key, { signal })),
+      Effect.promise((signal) => Flock.acquire(key, { ...input, signal })),
       (foo) => Effect.promise(() => foo.release()),
     ).pipe(Effect.asVoid)
   })

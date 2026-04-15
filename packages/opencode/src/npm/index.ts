@@ -8,6 +8,7 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Arborist } from "@npmcli/arborist"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
@@ -63,7 +64,10 @@ export namespace Npm {
 
   export async function add(pkg: string) {
     const dir = directory(pkg)
-    await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
+    await using _ = await Flock.acquire(
+      process.platform === "win32" ? "config-install:win32" : `config-install:${AppFileSystem.resolve(dir)}`,
+    )
+
     log.info("installing package", {
       pkg,
     })
@@ -104,7 +108,9 @@ export namespace Npm {
   }
 
   export async function install(dir: string) {
-    await using _ = await Flock.acquire(`npm-install:${dir}`)
+    await using _ = await Flock.acquire(
+      process.platform === "win32" ? "config-install:win32" : `config-install:${AppFileSystem.resolve(dir)}`,
+    )
     log.info("checking dependencies", { dir })
 
     const reify = async () => {
@@ -115,7 +121,12 @@ export namespace Npm {
         savePrefix: "",
         ignoreScripts: true,
       })
-      await arb.reify().catch(() => {})
+      await arb
+        .reify({
+          add: [],
+          save: true,
+        })
+        .catch(() => {})
     }
 
     if (!(await Filesystem.exists(path.join(dir, "node_modules")))) {

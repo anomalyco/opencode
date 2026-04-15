@@ -20,7 +20,7 @@ export namespace Npm {
 
   export interface Interface {
     readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError>
-    readonly install: (dir: string) => Effect.Effect<void>
+    readonly install: (dir: string, input?: { add: string[] }) => Effect.Effect<void>
     readonly outdated: (pkg: string, cachedVersion: string) => Effect.Effect<boolean>
     readonly which: (pkg: string) => Effect.Effect<Option.Option<string>>
   }
@@ -132,7 +132,13 @@ export namespace Npm {
         return resolveEntryPoint(first.name, first.path)
       }, Effect.scoped)
 
-      const install = Effect.fn("Npm.install")(function* (dir: string) {
+      const install = Effect.fn("Npm.install")(function* (dir: string, input?: { add: string[] }) {
+        const canWrite = yield* afs.access(dir, { writable: true }).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        )
+        if (!canWrite) return
+
         yield* Flock.effect(`npm-install:${dir}`)
 
         const reify = Effect.fnUntraced(function* () {
@@ -144,7 +150,14 @@ export namespace Npm {
             ignoreScripts: true,
           })
           yield* Effect.tryPromise({
-            try: () => arb.reify().catch(() => {}),
+            try: () =>
+              arb
+                .reify({
+                  add: input?.add || [],
+                  save: true,
+                  saveType: "prod",
+                })
+                .catch(() => {}),
             catch: () => {},
           }).pipe(Effect.orElseSucceed(() => {}))
         })
@@ -166,6 +179,7 @@ export namespace Npm {
           ...Object.keys(pkgAny?.devDependencies || {}),
           ...Object.keys(pkgAny?.peerDependencies || {}),
           ...Object.keys(pkgAny?.optionalDependencies || {}),
+          ...(input?.add || []),
         ])
 
         const root = lockAny?.packages?.[""] || {}

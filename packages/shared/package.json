@@ -17,7 +17,8 @@
   "imports": {},
   "devDependencies": {
     "@types/semver": "catalog:",
-    "@types/bun": "catalog:"
+    "@types/bun": "catalog:",
+    "@types/npmcli__arborist": "6.3.3"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

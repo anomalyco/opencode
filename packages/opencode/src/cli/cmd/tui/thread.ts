@@ -177,10 +177,7 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await Instance.provide({
-        directory: cwd,
-        fn: () => TuiConfig.get(),
-      })
+      const config = await TuiConfig.get()
 
       const network = await resolveNetworkOptions(args)
       const external =

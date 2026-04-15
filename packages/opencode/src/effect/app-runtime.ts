@@ -47,8 +47,10 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
+import { Npm } from "@opencode-ai/shared/npm"
 
 export const AppLayer = Layer.mergeAll(
+  Npm.defaultLayer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
