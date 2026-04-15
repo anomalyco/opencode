@@ -1,5 +1,9 @@
 # SecureCode
 
+<p align="center">
+  <img src="logo.png" alt="SecureCode" />
+</p>
+
 **SecureCode** is a fork of [OpenCode](https://github.com/anomalyco/opencode) (currently tracking base `v1.4.6`) focusing on execution-level sandboxing. I built this as a personal experiment to learn about sandboxing AI coding agents.
 
 This project modifies the backend execution tools to restrict state and access by running them in a confined environment powered by Anthropic's Simple Run Time (SRT) project. It provides granular sandboxing layers that can securely isolate both raw `bash` executions and local Model Context Protocol (MCP) servers. 
