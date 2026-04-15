@@ -26,6 +26,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/shared/util/error"
+import { jsonRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
 
@@ -94,10 +95,10 @@ export const SessionRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      async (c) => {
-        const result = await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.list()))
-        return c.json(Object.fromEntries(result))
-      },
+      jsonRequest("SessionRoutes.status", function* () {
+        const svc = yield* SessionStatus.Service
+        return Object.fromEntries(yield* svc.list())
+      }),
     )
     .get(
       "/:sessionID",
@@ -124,11 +125,11 @@ export const SessionRoutes = lazy(() =>
           sessionID: Session.GetInput,
         }),
       ),
-      async (c) => {
+      jsonRequest("SessionRoutes.get", function* (c) {
         const sessionID = c.req.valid("param").sessionID
-        const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID)))
-        return c.json(session)
-      },
+        const session = yield* Session.Service
+        return yield* session.get(sessionID)
+      }),
     )
     .get(
       "/:sessionID/children",
@@ -155,11 +156,11 @@ export const SessionRoutes = lazy(() =>
           sessionID: Session.ChildrenInput,
         }),
       ),
-      async (c) => {
+      jsonRequest("SessionRoutes.children", function* (c) {
         const sessionID = c.req.valid("param").sessionID
-        const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.children(sessionID)))
-        return c.json(session)
-      },
+        const session = yield* Session.Service
+        return yield* session.children(sessionID)
+      }),
     )
     .get(
       "/:sessionID/todo",
@@ -185,11 +186,11 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      async (c) => {
+      jsonRequest("SessionRoutes.todo", function* (c) {
         const sessionID = c.req.valid("param").sessionID
-        const todos = await AppRuntime.runPromise(Todo.Service.use((svc) => svc.get(sessionID)))
-        return c.json(todos)
-      },
+        const todo = yield* Todo.Service
+        return yield* todo.get(sessionID)
+      }),
     )
     .post(
       "/",
