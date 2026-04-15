@@ -51,19 +51,20 @@ import * as Effect from "effect/Effect"
 
 // Adjusts the default Config layer to ensure that plugins are always initialised before
 // any other layers read the current config
-const ConfigWithPluginPriority = Layer.unwrap(
+const ConfigWithPluginPriority = Layer.effect(
+  Config.Service,
   Effect.gen(function* () {
-    const configSvc = yield* Config.Service
-    const pluginSvc = yield* Plugin.Service
+    const config = yield* Config.Service
+    const plugin = yield* Plugin.Service
 
-    return Layer.succeed(Config.Service, {
-      ...configSvc,
-      get: () => Effect.andThen(pluginSvc.init(), configSvc.get),
-      getGlobal: () => Effect.andThen(pluginSvc.init(), configSvc.getGlobal),
-      getConsoleState: () => Effect.andThen(pluginSvc.init(), configSvc.getConsoleState),
-    })
+    return {
+      ...config,
+      get: () => Effect.andThen(plugin.init(), config.get),
+      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
+      getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
+    }
   }),
-).pipe(Layer.provideMerge(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
+).pipe(Layer.provide(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
 
 export const AppLayer = Layer.mergeAll(
   Observability.layer,
