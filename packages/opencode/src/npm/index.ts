@@ -6,7 +6,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@/util/flock"
+import { Flock } from "@opencode-ai/shared/util/flock"
 import { Arborist } from "@npmcli/arborist"
 
 export namespace Npm {

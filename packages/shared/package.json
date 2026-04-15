@@ -5,7 +5,9 @@
   "type": "module",
   "license": "MIT",
   "private": true,
-  "scripts": {},
+  "scripts": {
+    "test": "bun test"
+  },
   "bin": {
     "opencode": "./bin/opencode"
   },
@@ -14,7 +16,8 @@
   },
   "imports": {},
   "devDependencies": {
-    "@types/semver": "catalog:"
+    "@types/semver": "catalog:",
+    "@types/bun": "catalog:"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -23,6 +26,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "semver": "catalog:",
+    "xdg-basedir": "5.1.0",
     "zod": "catalog:"
   },
   "overrides": {
