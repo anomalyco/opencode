@@ -5,11 +5,6 @@ import { useI18n } from "../context/i18n"
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
   orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
-  /**
-   * When true, uses CSS flex-direction: column-reverse for native stick-to-bottom.
-   * scrollTop=0 becomes the visual bottom, scrollTop goes negative scrolling up.
-   */
-  columnReverse?: boolean
 }
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
@@ -36,7 +31,7 @@ export function ScrollView(props: ScrollViewProps) {
   const merged = mergeProps({ orientation: "vertical" }, props)
   const [local, events, rest] = splitProps(
     merged,
-    ["class", "children", "viewportRef", "orientation", "style", "columnReverse"],
+    ["class", "children", "viewportRef", "orientation", "style"],
     [
       "onScroll",
       "onWheel",
@@ -69,8 +64,6 @@ export function ScrollView(props: ScrollViewProps) {
 
   let rafId: number | null = null
 
-  const reverse = () => local.columnReverse ?? false
-
   const updateThumb = () => {
     if (!viewportRef) return
     const { scrollTop, scrollHeight, clientHeight } = viewportRef
@@ -93,18 +86,7 @@ export function ScrollView(props: ScrollViewProps) {
     const maxScrollTop = scrollHeight - clientHeight
     const maxThumbTop = trackHeight - height
 
-    let top: number
-    if (reverse()) {
-      // column-reverse: scrollTop ranges from -maxScrollTop to 0
-      // Visual position = 1 - (|scrollTop| / maxScrollTop)
-      // Thumb position = (1 - visualPosition) * maxThumbTop
-      const absScrollTop = Math.abs(scrollTop)
-      const visualPosition = maxScrollTop > 0 ? absScrollTop / maxScrollTop : 0
-      top = (1 - visualPosition) * maxThumbTop
-    } else {
-      // Normal: scrollTop ranges from 0 to maxScrollTop
-      top = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * maxThumbTop : 0
-    }
+    const top = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * maxThumbTop : 0
 
     // Ensure thumb stays within bounds (shouldn't be necessary due to math above, but good for safety)
     const boundedTop = trackPadding + Math.max(0, Math.min(top, maxThumbTop))
@@ -178,14 +160,7 @@ export function ScrollView(props: ScrollViewProps) {
       const maxThumbTop = clientHeight - thumbHeight()
 
       if (maxThumbTop > 0) {
-        let scrollDelta: number
-        if (reverse()) {
-          // column-reverse: dragging down should make scrollTop less negative (toward 0 = bottom)
-          // So we negate the delta
-          scrollDelta = -deltaY * (maxScrollTop / maxThumbTop)
-        } else {
-          scrollDelta = deltaY * (maxScrollTop / maxThumbTop)
-        }
+        const scrollDelta = deltaY * (maxScrollTop / maxThumbTop)
         viewportRef.scrollTop = startScrollTop + scrollDelta
       }
     }
@@ -217,62 +192,31 @@ export function ScrollView(props: ScrollViewProps) {
     const scrollAmount = viewportRef.clientHeight * 0.8
     const lineAmount = 40
 
-    if (reverse()) {
-      // column-reverse: Home=bottom(0), End=top(negative), directions inverted
-      switch (next) {
-        case "page-down":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: -scrollAmount, behavior: "smooth" })
-          break
-        case "page-up":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: scrollAmount, behavior: "smooth" })
-          break
-        case "home":
-          e.preventDefault()
-          viewportRef.scrollTo({ top: 0, behavior: "smooth" })
-          break
-        case "end":
-          e.preventDefault()
-          viewportRef.scrollTo({ top: -(viewportRef.scrollHeight - viewportRef.clientHeight), behavior: "smooth" })
-          break
-        case "up":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: lineAmount, behavior: "smooth" })
-          break
-        case "down":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: -lineAmount, behavior: "smooth" })
-          break
-      }
-    } else {
-      // Normal mode
-      switch (next) {
-        case "page-down":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: scrollAmount, behavior: "smooth" })
-          break
-        case "page-up":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: -scrollAmount, behavior: "smooth" })
-          break
-        case "home":
-          e.preventDefault()
-          viewportRef.scrollTo({ top: 0, behavior: "smooth" })
-          break
-        case "end":
-          e.preventDefault()
-          viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
-          break
-        case "up":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: -lineAmount, behavior: "smooth" })
-          break
-        case "down":
-          e.preventDefault()
-          viewportRef.scrollBy({ top: lineAmount, behavior: "smooth" })
-          break
-      }
+    switch (next) {
+      case "page-down":
+        e.preventDefault()
+        viewportRef.scrollBy({ top: scrollAmount, behavior: "smooth" })
+        break
+      case "page-up":
+        e.preventDefault()
+        viewportRef.scrollBy({ top: -scrollAmount, behavior: "smooth" })
+        break
+      case "home":
+        e.preventDefault()
+        viewportRef.scrollTo({ top: 0, behavior: "smooth" })
+        break
+      case "end":
+        e.preventDefault()
+        viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
+        break
+      case "up":
+        e.preventDefault()
+        viewportRef.scrollBy({ top: -lineAmount, behavior: "smooth" })
+        break
+      case "down":
+        e.preventDefault()
+        viewportRef.scrollBy({ top: lineAmount, behavior: "smooth" })
+        break
     }
   }
 
@@ -288,10 +232,7 @@ export function ScrollView(props: ScrollViewProps) {
       {/* Viewport */}
       <div
         ref={viewportRef}
-        classList={{
-          "scroll-view__viewport": true,
-          "flex flex-col-reverse": reverse(),
-        }}
+        class="scroll-view__viewport"
         onScroll={(e) => {
           scheduleUpdateThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)

@@ -326,17 +326,8 @@ export function MessageTimeline(props: {
 
     if (props.live) return tailWindow(ids, root)
 
-    // column-reverse: scrollTop is negative, convert to content position
-    // viewport bottom (in content coords) = scrollHeight + scrollTop
-    // viewport top (in content coords) = scrollHeight + scrollTop - clientHeight
-    const scrollHeight = root.scrollHeight
-    const clientHeight = root.clientHeight
-    const scrollTop = root.scrollTop
-    const viewportTop = scrollHeight + scrollTop - clientHeight
-    const viewportBottom = scrollHeight + scrollTop
-
-    const min = Math.max(0, viewportTop - windowOverscan)
-    const max = viewportBottom + windowOverscan
+    const min = Math.max(0, root.scrollTop - windowOverscan)
+    const max = root.scrollTop + root.clientHeight + windowOverscan
     let offset = 0
     let start = 0
     while (start < ids.length) {
@@ -399,7 +390,7 @@ export function MessageTimeline(props: {
       requestAnimationFrame(() => {
         const root = viewport
         if (!root) return
-        root.scrollTop = 0
+        root.scrollTop = root.scrollHeight
         props.onScheduleScrollState(root)
       })
       return
@@ -438,17 +429,11 @@ export function MessageTimeline(props: {
     const ids = rendered()
     if (!canWindow() || !root || ids.length <= windowThreshold) return false
     if (windowed.end === Infinity) return true
-
-    // column-reverse: convert scrollTop to content position
-    const scrollHeight = root.scrollHeight
-    const clientHeight = root.clientHeight
-    const scrollTop = root.scrollTop
-    const viewportTop = scrollHeight + scrollTop - clientHeight
-    const viewportBottom = scrollHeight + scrollTop
-
+    const top = root.scrollTop
+    const bottom = top + root.clientHeight
     const start = Math.max(0, windowed.top + windowOverscan / 2)
     const end = totalHeight() - Math.max(0, windowed.bottom + windowOverscan / 2)
-    return viewportTop < start || viewportBottom > end
+    return top < start || bottom > end
   }
 
   const visibleRendered = createMemo(() => {
@@ -493,7 +478,7 @@ export function MessageTimeline(props: {
       if (!root) return
       if (!isWorking()) return
       if (!props.live && !props.scroll.bottom) return
-      root.scrollTop = 0
+      root.scrollTop = root.scrollHeight
       props.onScheduleScrollState(root)
       bottomFrame = requestAnimationFrame(step)
     }
@@ -909,7 +894,6 @@ export function MessageTimeline(props: {
           </button>
         </div>
         <ScrollView
-          columnReverse={true}
           viewportRef={(el) => {
             viewport = el
             props.setScrollRef(el)
@@ -1320,31 +1304,12 @@ export function MessageTimeline(props: {
 
   function TimelineItem(item: { messageID: string; index: number }) {
     const active = createMemo(() => activeMessageID() === item.messageID)
-    const isRecentTail = createMemo(() => item.index >= rendered().length - 3)
-
-    // Initialize signals and refs first
-    let rootRef: HTMLDivElement | undefined
-    let stop: (() => void) | undefined
-    let raf: number | undefined
-    const [nearViewport, setNearViewport] = createSignal(true)
-
-    // Turn priority tiers for render optimization
-    const tier = createMemo<"active" | "recent" | "near" | "far">(() => {
-      if (active()) return "active"
-      if (isRecentTail()) return "recent"
-      if (nearViewport()) return "near"
-      return "far"
-    })
-
-    // Map tiers to markdown/highlight/math props
-    const eager = createMemo(() => tier() === "active")
-    const highlight = createMemo<"full" | "defer">(() => (tier() === "active" ? "full" : "defer"))
+    const eager = createMemo(() => active() || item.index >= rendered().length - 3)
+    const highlight = createMemo<"full" | "defer">(() => (active() ? "full" : "defer"))
     const math = createMemo<"full" | "defer">(() => {
       if (mathMode() !== "turn") return "full"
-      // Only active tail gets full math immediately
-      return tier() === "active" ? "full" : "defer"
+      return eager() ? "full" : "defer"
     })
-
     const messages = createMemo<MessageType[]>(
       (prev?: MessageType[]) => {
         if (active()) return turnMessages(sessionMessages(), item.messageID)
@@ -1357,6 +1322,9 @@ export function MessageTimeline(props: {
       equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     })
     const commentCount = createMemo(() => comments().length)
+    let rootRef: HTMLDivElement | undefined
+    let stop: (() => void) | undefined
+    let raf: number | undefined
 
     const measure = () => {
       const next = rootRef?.offsetHeight
@@ -1389,36 +1357,6 @@ export function MessageTimeline(props: {
       })
     })
 
-    // Near-viewport detection for turn-level suspension
-    createEffect(() => {
-      if (!rootRef || !viewport) return
-      // Always keep active turn and recent tail turns mounted
-      if (active() || isRecentTail()) {
-        setNearViewport(true)
-        return
-      }
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            setNearViewport(entry.isIntersecting)
-          }
-        },
-        {
-          root: viewport,
-          rootMargin: "1200px 0px",
-        },
-      )
-      observer.observe(rootRef)
-      onCleanup(() => observer.disconnect())
-    })
-
-    const shouldRenderTurn = createMemo(() => {
-      // Always render active turn and recent tail
-      if (active() || isRecentTail()) return true
-      // Render if near viewport
-      return nearViewport()
-    })
-
     onCleanup(() => stop?.())
 
     return (
@@ -1440,80 +1378,66 @@ export function MessageTimeline(props: {
         }}
         style={itemStyle(props.centered)}
       >
-        <Show
-          when={shouldRenderTurn()}
-          fallback={
-            <div
-              class="w-full"
-              style={{
-                height: `${estimateTurnHeight(item.messageID)}px`,
-                "min-height": `${estimateTurnHeight(item.messageID)}px`,
-              }}
-              aria-hidden="true"
-            />
-          }
-        >
-          <Show when={commentCount() > 0}>
-            <div class="w-full px-4 md:px-5 pb-2">
-              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                <div class="flex w-max min-w-full justify-end gap-2">
-                  <Index each={comments()}>
-                    {(commentAccessor: () => MessageComment) => {
-                      const comment = createMemo(() => commentAccessor())
-                      return (
-                        <Show when={comment()}>
-                          {(c) => (
-                            <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                              <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                <FileIcon node={{ path: c().path, type: "file" }} class="size-3.5 shrink-0" />
-                                <span class="truncate">{getFilename(c().path)}</span>
-                                <Show when={c().selection}>
-                                  {(selection) => (
-                                    <span class="shrink-0 text-text-weak">
-                                      {selection().startLine === selection().endLine
-                                        ? `:${selection().startLine}`
-                                        : `:${selection().startLine}-${selection().endLine}`}
-                                    </span>
-                                  )}
-                                </Show>
-                              </div>
-                              <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                {c().comment}
-                              </div>
+        <Show when={commentCount() > 0}>
+          <div class="w-full px-4 md:px-5 pb-2">
+            <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+              <div class="flex w-max min-w-full justify-end gap-2">
+                <Index each={comments()}>
+                  {(commentAccessor: () => MessageComment) => {
+                    const comment = createMemo(() => commentAccessor())
+                    return (
+                      <Show when={comment()}>
+                        {(c) => (
+                          <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                            <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                              <FileIcon node={{ path: c().path, type: "file" }} class="size-3.5 shrink-0" />
+                              <span class="truncate">{getFilename(c().path)}</span>
+                              <Show when={c().selection}>
+                                {(selection) => (
+                                  <span class="shrink-0 text-text-weak">
+                                    {selection().startLine === selection().endLine
+                                      ? `:${selection().startLine}`
+                                      : `:${selection().startLine}-${selection().endLine}`}
+                                  </span>
+                                )}
+                              </Show>
                             </div>
-                          )}
-                        </Show>
-                      )
-                    }}
-                  </Index>
-                </div>
+                            <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                              {c().comment}
+                            </div>
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
+                </Index>
               </div>
             </div>
-          </Show>
-          <SessionTurn
-            sessionID={sessionID() ?? ""}
-            messageID={item.messageID}
-            messages={messages()}
-            actions={props.actions}
-            autoScroll={false}
-            fill={false}
-            active={active()}
-            status={active() ? sessionStatus() : undefined}
-            showReasoningSummaries={settings.general.showReasoningSummaries()}
-            showCustomHookParts={settings.general.showCustomHookParts()}
-            shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-            editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-            markdownEager={eager()}
-            markdownViewport={viewport}
-            markdownHighlight={highlight()}
-            markdownMath={math()}
-            classes={{
-              root: "min-w-0 w-full relative",
-              content: "flex flex-col justify-between !overflow-visible",
-              container: "w-full px-4 md:px-5",
-            }}
-          />
+          </div>
         </Show>
+        <SessionTurn
+          sessionID={sessionID() ?? ""}
+          messageID={item.messageID}
+          messages={messages()}
+          actions={props.actions}
+          autoScroll={false}
+          fill={false}
+          active={active()}
+          status={active() ? sessionStatus() : undefined}
+          showReasoningSummaries={settings.general.showReasoningSummaries()}
+          showCustomHookParts={settings.general.showCustomHookParts()}
+          shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+          editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+          markdownEager={eager()}
+          markdownViewport={viewport}
+          markdownHighlight={highlight()}
+          markdownMath={math()}
+          classes={{
+            root: "min-w-0 w-full relative",
+            content: "flex flex-col justify-between !overflow-visible",
+            container: "w-full px-4 md:px-5",
+          }}
+        />
       </div>
     )
   }
