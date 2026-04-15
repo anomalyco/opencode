@@ -25,6 +25,8 @@ import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type S
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
+const HIDE_SESSION_CONTEXT_UI = true
+
 export function SessionSidePanel(props: {
   canReview: () => boolean
   diffs: () => (SnapshotFileDiff | VcsFileDiff)[]
@@ -238,7 +240,7 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
-                      <Show when={contextOpen()}>
+                      <Show when={!HIDE_SESSION_CONTEXT_UI && contextOpen()}>
                         <Tabs.Trigger
                           value="context"
                           closeButton={
@@ -311,7 +313,7 @@ export function SessionSidePanel(props: {
                     </Show>
                   </Tabs.Content>
 
-                  <Show when={contextOpen()}>
+                  <Show when={!HIDE_SESSION_CONTEXT_UI && contextOpen()}>
                     <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                       <Show when={activeTab() === "context"}>
                         <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">

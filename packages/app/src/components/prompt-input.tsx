@@ -97,6 +97,8 @@ const EXAMPLES = [
 ] as const
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
+const HIDE_CONTEXT_ITEMS = true
+const HIDE_PROMPT_INPUT_TRAY = true
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -1279,19 +1281,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           type={store.draggingType}
           label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
         />
-        <PromptContextItems
-          items={contextItems()}
-          active={(item) => {
-            const active = comments.active()
-            return !!item.commentID && item.commentID === active?.id && item.path === active?.file
-          }}
-          openComment={openComment}
-          remove={(item) => {
-            if (item.commentID) comments.remove(item.path, item.commentID)
-            prompt.context.remove(item.key)
-          }}
-          t={(key) => language.t(key as Parameters<typeof language.t>[0])}
-        />
+        <Show when={!HIDE_CONTEXT_ITEMS}>
+          <PromptContextItems
+            items={contextItems()}
+            active={(item) => {
+              const active = comments.active()
+              return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+            }}
+            openComment={openComment}
+            remove={(item) => {
+              if (item.commentID) comments.remove(item.path, item.commentID)
+              prompt.context.remove(item.key)
+            }}
+            t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+          />
+        </Show>
         <PromptImageAttachments
           attachments={imageAttachments()}
           onOpen={(attachment) =>
@@ -1430,7 +1434,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
         </div>
       </DockShellForm>
-      <Show when={store.mode === "normal" || store.mode === "shell"}>
+      <Show when={!HIDE_PROMPT_INPUT_TRAY && (store.mode === "normal" || store.mode === "shell")}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">

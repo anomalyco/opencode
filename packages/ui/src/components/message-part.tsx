@@ -161,6 +161,7 @@ export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
 const TEXT_RENDER_PACE_MS = 24
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/
+const HIDE_MESSAGE_CONTROLS = true
 
 function step(size: number) {
   if (size <= 12) return 2
@@ -1111,60 +1112,62 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             </div>
           </div>
-          <div data-slot="user-message-copy-wrapper">
-            <Show when={metaHead() || metaTail()}>
-              <span data-slot="user-message-meta-wrap">
-                <Show when={metaHead()}>
-                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                    {metaHead()}
-                  </span>
-                </Show>
-                <Show when={metaHead() && metaTail()}>
-                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                    {"\u00A0\u00B7\u00A0"}
-                  </span>
-                </Show>
-                <Show when={metaTail()}>
-                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                    {metaTail()}
-                  </span>
-                </Show>
-              </span>
-            </Show>
-            <Show when={props.actions?.revert}>
-              <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+          <Show when={!HIDE_MESSAGE_CONTROLS}>
+            <div data-slot="user-message-copy-wrapper">
+              <Show when={metaHead() || metaTail()}>
+                <span data-slot="user-message-meta-wrap">
+                  <Show when={metaHead()}>
+                    <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                      {metaHead()}
+                    </span>
+                  </Show>
+                  <Show when={metaHead() && metaTail()}>
+                    <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                      {"\u00A0\u00B7\u00A0"}
+                    </span>
+                  </Show>
+                  <Show when={metaTail()}>
+                    <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                      {metaTail()}
+                    </span>
+                  </Show>
+                </span>
+              </Show>
+              <Show when={props.actions?.revert}>
+                <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="reset"
+                    size="normal"
+                    variant="ghost"
+                    disabled={!!busy()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      revert()
+                    }}
+                    aria-label={i18n.t("ui.message.revertMessage")}
+                  />
+                </Tooltip>
+              </Show>
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                placement="top"
+                gutter={4}
+              >
                 <IconButton
-                  icon="reset"
+                  icon={copied() ? "check" : "copy"}
                   size="normal"
                   variant="ghost"
-                  disabled={!!busy()}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(event) => {
                     event.stopPropagation()
-                    revert()
+                    handleCopy()
                   }}
-                  aria-label={i18n.t("ui.message.revertMessage")}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
                 />
               </Tooltip>
-            </Show>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleCopy()
-                }}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-              />
-            </Tooltip>
-          </div>
+            </div>
+          </Show>
         </>
       </Show>
     </div>
@@ -1459,6 +1462,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return last?.id === part().id
   })
   const showCopy = createMemo(() => {
+    if (HIDE_MESSAGE_CONTROLS) return false
     if (props.message.role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
     if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id

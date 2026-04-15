@@ -17,6 +17,8 @@ interface SessionContextUsageProps {
   placement?: TooltipProps["placement"]
 }
 
+const HIDE_SESSION_CONTEXT_UI = true
+
 function openSessionContext(args: {
   view: ReturnType<ReturnType<typeof useLayout>["view"]>
   layout: ReturnType<typeof useLayout>
@@ -29,6 +31,8 @@ function openSessionContext(args: {
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
+  if (HIDE_SESSION_CONTEXT_UI) return null
+
   const sync = useSync()
   const file = useFile()
   const layout = useLayout()

@@ -26,6 +26,8 @@ const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
   other: "var(--syntax-comment)",
 }
 
+const HIDE_SESSION_CONTEXT_UI = true
+
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
     <div class="flex flex-col gap-1">
@@ -91,6 +93,8 @@ const emptyMessages: Message[] = []
 const emptyUserMessages: UserMessage[] = []
 
 export function SessionContextTab() {
+  if (HIDE_SESSION_CONTEXT_UI) return null
+
   const sync = useSync()
   const language = useLanguage()
   const providers = useProviders()
