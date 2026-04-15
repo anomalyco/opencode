@@ -142,30 +142,34 @@ export namespace TuiConfig {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const data = yield* Effect.promise(() => loadState({ directory: process.cwd() }))
-      const service = {
-        npm: yield* Npm.Service,
-      }
+      const { InstanceState } = yield* Effect.promise(() => import("@/effect/instance-state"))
+      const npm = yield* Npm.Service
 
-      const deps = yield* Effect.forEach(
-        data.dirs,
-        (dir) =>
-          service.npm
-            .install(dir, {
-              add: ["@opencode-ai/plugin" + (Installation.isLocal() ? "" : "@" + Installation.VERSION)],
-            })
-            .pipe(Effect.forkScoped),
-        {
-          concurrency: "unbounded",
-        },
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("TuiConfig.state")(function* (ctx) {
+          const data = yield* Effect.promise(() => loadState({ directory: ctx.directory }))
+          const deps = yield* Effect.forEach(
+            data.dirs,
+            (dir) =>
+              npm
+                .install(dir, {
+                  add: ["@opencode-ai/plugin" + (Installation.isLocal() ? "" : "@" + Installation.VERSION)],
+                })
+                .pipe(Effect.forkScoped),
+            {
+              concurrency: "unbounded",
+            },
+          )
+          return { config: data.config, deps }
+        }),
       )
 
-      const get = Effect.fn("TuiConfig.get")(function* () {
-        return data.config
-      })
+      const get = Effect.fn("TuiConfig.get")(() => InstanceState.use(state, (s) => s.config))
 
       const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
-        Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
+        InstanceState.useEffect(state, (s) =>
+          Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
+        ),
       )
 
       return Service.of({ get, waitForDependencies })
