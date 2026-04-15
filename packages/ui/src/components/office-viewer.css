@@ -1,0 +1,94 @@
+.office-preview {
+  & h1,
+  & h2,
+  & h3,
+  & h4,
+  & h5,
+  & h6 {
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  & h1 {
+    font-size: var(--text-20);
+  }
+
+  & h2 {
+    font-size: var(--text-18);
+  }
+
+  & h3 {
+    font-size: var(--text-16);
+  }
+
+  & h4,
+  & h5,
+  & h6 {
+    font-size: var(--text-14);
+  }
+
+  & p {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+  }
+
+  & ul,
+  & ol {
+    margin-bottom: 0.5rem;
+    padding-left: 1.5rem;
+  }
+
+  & ul {
+    list-style-type: disc;
+  }
+
+  & ol {
+    list-style-type: decimal;
+  }
+
+  & li {
+    margin-bottom: 0.25rem;
+  }
+
+  & table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: var(--text-13);
+  }
+
+  & th,
+  & td {
+    border: 1px solid var(--border-weak-base);
+    padding: 0.375rem 0.5rem;
+    text-align: left;
+  }
+
+  & th {
+    background-color: var(--background-stronger);
+    font-weight: 600;
+  }
+
+  & tr:nth-child(even) {
+    background-color: var(--background-stronger);
+  }
+
+  & strong {
+    font-weight: 600;
+  }
+
+  & em {
+    font-style: italic;
+  }
+
+  & a {
+    color: var(--accent-base);
+    text-decoration: underline;
+  }
+
+  & img {
+    max-width: 100%;
+    height: auto;
+  }
+}

@@ -127,12 +127,6 @@ export namespace File {
     "lz",
     "z",
     "pdf",
-    "doc",
-    "docx",
-    "ppt",
-    "pptx",
-    "xls",
-    "xlsx",
     "dmg",
     "iso",
     "img",
@@ -282,7 +276,12 @@ export namespace File {
     jxl: "image/jxl",
     heic: "image/heic",
     heif: "image/heif",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   }
+
+  const office = new Set(["docx", "xlsx", "pptx"])
 
   type Entry = { files: string[]; dirs: string[] }
 
@@ -292,6 +291,7 @@ export namespace File {
   const isTextByExtension = (file: string) => text.has(ext(file))
   const isTextByName = (file: string) => textName.has(name(file))
   const isBinaryByExtension = (file: string) => binary.has(ext(file))
+  const isOfficeByExtension = (file: string) => office.has(ext(file))
   const isImage = (mimeType: string) => mimeType.startsWith("image/")
   const getImageMimeType = (file: string) => mime[ext(file)] || "image/" + ext(file)
 
@@ -513,6 +513,20 @@ export namespace File {
         if (!Instance.containsPath(full)) throw new Error("Access denied: path escapes project directory")
 
         if (isImageByExtension(file)) {
+          const exists = yield* appFs.existsSafe(full)
+          if (exists) {
+            const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+            return {
+              type: "text" as const,
+              content: Buffer.from(bytes).toString("base64"),
+              mimeType: getImageMimeType(file),
+              encoding: "base64" as const,
+            }
+          }
+          return { type: "text" as const, content: "" }
+        }
+
+        if (isOfficeByExtension(file)) {
           const exists = yield* appFs.existsSafe(full)
           if (exists) {
             const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))

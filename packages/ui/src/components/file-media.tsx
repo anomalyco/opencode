@@ -9,6 +9,7 @@ import {
   normalizeMimeType,
   svgTextFromValue,
 } from "../pierre/media"
+import { OfficeViewer } from "./office-viewer"
 
 export type FileMediaOptions = {
   mode?: "auto" | "off"
@@ -19,7 +20,7 @@ export type FileMediaOptions = {
   deleted?: boolean
   readFile?: (path: string) => Promise<FileContent | undefined>
   onLoad?: () => void
-  onError?: (ctx: { kind: "image" | "audio" | "svg" }) => void
+  onError?: (ctx: { kind: "image" | "audio" | "svg" | "office" }) => void
 }
 
 function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
@@ -246,6 +247,18 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
             </div>
           )
         })()}
+      </Match>
+      <Match when={kind() === "office"}>
+        <OfficeViewer
+          options={{
+            path: cfg()?.path,
+            current: cfg()?.current,
+            readFile: cfg()?.readFile,
+            onLoad,
+            onError: () => props.media?.onError?.({ kind: "office" }),
+          }}
+          fallback={props.fallback}
+        />
       </Match>
       <Match when={isBinary()}>
         <div class="flex min-h-56 flex-col items-center justify-center gap-2 px-6 py-10 text-center">

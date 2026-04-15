@@ -434,8 +434,8 @@ export function FileTabContent(props: { tab: string }) {
           path: path(),
           current: state()?.content,
           onLoad: scrollSync.queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
+          onError: (args: { kind: "image" | "audio" | "svg" | "office" }) => {
+            if (args.kind !== "svg" && args.kind !== "office") return
             showToast({
               variant: "error",
               title: language.t("toast.file.loadFailed.title"),
