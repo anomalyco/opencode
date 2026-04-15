@@ -3571,6 +3571,23 @@
         "open_weights": true,
         "cost": { "input": 0.5, "output": 2.85 },
         "limit": { "context": 262144, "output": 262144 }
+      },
+      "kimi-k2.6-code-preview": {
+        "id": "kimi-k2.6-code-preview",
+        "name": "Kimi K2.6 Code Preview",
+        "family": "kimi",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": { "field": "reasoning_content" },
+        "temperature": true,
+        "knowledge": "2024-10",
+        "release_date": "2026-04",
+        "last_updated": "2026-04",
+        "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.6, "output": 3, "cache_read": 0.08 },
+        "limit": { "context": 262144, "output": 65536 }
       }
     }
   },
@@ -17840,6 +17857,23 @@
         "open_weights": true,
         "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
         "limit": { "context": 262144, "output": 32768 }
+      },
+      "kimi-k2.6-code-preview": {
+        "id": "kimi-k2.6-code-preview",
+        "name": "Kimi K2.6 Code Preview",
+        "family": "kimi-thinking",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-04",
+        "last_updated": "2026-04",
+        "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
+        "limit": { "context": 262144, "output": 65536 }
       }
     }
   },

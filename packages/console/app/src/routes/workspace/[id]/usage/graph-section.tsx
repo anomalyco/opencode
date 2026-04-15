@@ -112,6 +112,7 @@ const MODEL_COLORS: Record<string, string> = {
   "grok-code": "#8B5CF6",
   "big-pickle": "#10B981",
   "kimi-k2": "#F59E0B",
+  "kimi-k2.6-code-preview": "#D97706",
   "qwen3-coder": "#EC4899",
   "glm-4.6": "#14B8A6",
 }
