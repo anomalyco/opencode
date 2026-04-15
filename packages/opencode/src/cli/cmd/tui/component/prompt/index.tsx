@@ -74,6 +74,8 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
+let stashed: { prompt: PromptInfo; cursor: number } | undefined
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -430,7 +432,22 @@ export function Prompt(props: PromptProps) {
     },
   }
 
+  onMount(() => {
+    const saved = stashed
+    stashed = undefined
+    if (store.prompt.input) return
+    if (saved && saved.prompt.input) {
+      input.setText(saved.prompt.input)
+      setStore("prompt", saved.prompt)
+      restoreExtmarksFromParts(saved.prompt.parts)
+      input.cursorOffset = saved.cursor
+    }
+  })
+
   onCleanup(() => {
+    if (store.prompt.input) {
+      stashed = { prompt: structuredClone(store.prompt), cursor: input.cursorOffset }
+    }
     props.ref?.(undefined)
   })
 
