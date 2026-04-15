@@ -55,7 +55,7 @@ export const AppLayer = Layer.mergeAll(
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
-  Config.defaultLayer,
+  PluginPriorityConfigLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
   File.defaultLayer,
