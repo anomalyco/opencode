@@ -95,8 +95,10 @@ export namespace Permission {
 
   export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
     ruleset: Schema.Any,
+    reason: Schema.optional(Schema.String),
   }) {
     override get message() {
+      if (this.reason) return this.reason
       return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
     }
   }
