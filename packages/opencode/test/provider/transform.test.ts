@@ -1822,6 +1822,11 @@ describe("ProviderTransform.message - cache control on gateway", () => {
           type: "ephemeral",
         },
       },
+      google: {
+        cachePoint: {
+          type: "default",
+        },
+      },
       openrouter: {
         cacheControl: {
           type: "ephemeral",
