@@ -931,7 +931,10 @@ export function Prompt(props: PromptProps) {
                 // Check clipboard for images before terminal-handled paste runs.
                 // This helps terminals that forward Ctrl+V to the app; Windows
                 // Terminal 1.25+ usually handles Ctrl+V before this path.
-                if (keybind.match("input_paste", e)) {
+                // Also handle Mac Command+V which may arrive as different key event
+                const isPasteEvent =
+                  keybind.match("input_paste", e) || (e.name === "v" && (e.meta || e.ctrl)) || e.name === "paste"
+                if (isPasteEvent) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
                     e.preventDefault()
