@@ -26,7 +26,7 @@ export const InstanceBootstrap = Effect.gen(function* () {
       Vcs.Service,
       Snapshot.Service,
     ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
-  )
+  ).pipe(Effect.withSpan("InstanceBootstrap.init"))
 
   yield* Bus.Service.use((svc) =>
     svc.subscribeCallback(Command.Event.Executed, async (payload) => {
