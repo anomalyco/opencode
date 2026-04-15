@@ -437,7 +437,11 @@ export const BashTool = Tool.define(
       ).pipe(Effect.orDie)
 
       const meta: string[] = []
-      if (expired) meta.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
+      if (expired) {
+        meta.push(
+          `bash tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
+        )
+      }
       if (aborted) meta.push("User aborted the command")
       if (meta.length > 0) {
         output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"

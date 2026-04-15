@@ -33,6 +33,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
+import { Effect } from "effect"
 
 type GitHubAuthor = {
   login: string
@@ -551,20 +552,24 @@ export const GithubRunCommand = cmd({
 
         // Setup opencode session
         const repoData = await fetchRepo()
-        session = await Session.create({
-          permission: [
-            {
-              permission: "question",
-              action: "deny",
-              pattern: "*",
-            },
-          ],
-        })
+        session = await AppRuntime.runPromise(
+          Session.Service.use((svc) =>
+            svc.create({
+              permission: [
+                {
+                  permission: "question",
+                  action: "deny",
+                  pattern: "*",
+                },
+              ],
+            }),
+          ),
+        )
         subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
-          await SessionShare.share(session.id)
+          await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.share(session.id)))
           return session.id.slice(-8)
         })()
         console.log("opencode session", session.id)
@@ -937,96 +942,86 @@ export const GithubRunCommand = cmd({
       async function chat(message: string, files: PromptFiles = []) {
         console.log("Sending message to opencode...")
 
-        const result = await SessionPrompt.prompt({
-          sessionID: session.id,
-          messageID: MessageID.ascending(),
-          variant,
-          model: {
-            providerID,
-            modelID,
-          },
-          // agent is omitted - server will use default_agent from config or fall back to "build"
-          parts: [
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: message,
-            },
-            ...files.flatMap((f) => [
-              {
-                id: PartID.ascending(),
-                type: "file" as const,
-                mime: f.mime,
-                url: `data:${f.mime};base64,${f.content}`,
-                filename: f.filename,
-                source: {
-                  type: "file" as const,
-                  text: {
-                    value: f.replacement,
-                    start: f.start,
-                    end: f.end,
-                  },
-                  path: f.filename,
-                },
+        return AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const result = yield* prompt.prompt({
+              sessionID: session.id,
+              messageID: MessageID.ascending(),
+              variant,
+              model: {
+                providerID,
+                modelID,
               },
-            ]),
-          ],
-        })
+              // agent is omitted - server will use default_agent from config or fall back to "build"
+              parts: [
+                {
+                  id: PartID.ascending(),
+                  type: "text",
+                  text: message,
+                },
+                ...files.flatMap((f) => [
+                  {
+                    id: PartID.ascending(),
+                    type: "file" as const,
+                    mime: f.mime,
+                    url: `data:${f.mime};base64,${f.content}`,
+                    filename: f.filename,
+                    source: {
+                      type: "file" as const,
+                      text: {
+                        value: f.replacement,
+                        start: f.start,
+                        end: f.end,
+                      },
+                      path: f.filename,
+                    },
+                  },
+                ]),
+              ],
+            })
 
-        // result should always be assistant just satisfying type checker
-        if (result.info.role === "assistant" && result.info.error) {
-          const err = result.info.error
-          console.error("Agent error:", err)
+            if (result.info.role === "assistant" && result.info.error) {
+              const err = result.info.error
+              console.error("Agent error:", err)
+              if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
+              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+            }
 
-          if (err.name === "ContextOverflowError") {
-            throw new Error(formatPromptTooLargeError(files))
-          }
+            const text = extractResponseText(result.parts)
+            if (text) return text
 
-          const errorMsg = err.data?.message || ""
-          throw new Error(`${err.name}: ${errorMsg}`)
-        }
+            console.log("Requesting summary from agent...")
+            const summary = yield* prompt.prompt({
+              sessionID: session.id,
+              messageID: MessageID.ascending(),
+              variant,
+              model: {
+                providerID,
+                modelID,
+              },
+              tools: { "*": false },
+              parts: [
+                {
+                  id: PartID.ascending(),
+                  type: "text",
+                  text: "Summarize the actions (tool calls & reasoning) you did for the user in 1-2 sentences.",
+                },
+              ],
+            })
 
-        const text = extractResponseText(result.parts)
-        if (text) return text
+            if (summary.info.role === "assistant" && summary.info.error) {
+              const err = summary.info.error
+              console.error("Summary agent error:", err)
+              if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
+              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+            }
 
-        // No text part (tool-only or reasoning-only) - ask agent to summarize
-        console.log("Requesting summary from agent...")
-        const summary = await SessionPrompt.prompt({
-          sessionID: session.id,
-          messageID: MessageID.ascending(),
-          variant,
-          model: {
-            providerID,
-            modelID,
-          },
-          tools: { "*": false }, // Disable all tools to force text response
-          parts: [
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: "Summarize the actions (tool calls & reasoning) you did for the user in 1-2 sentences.",
-            },
-          ],
-        })
-
-        if (summary.info.role === "assistant" && summary.info.error) {
-          const err = summary.info.error
-          console.error("Summary agent error:", err)
-
-          if (err.name === "ContextOverflowError") {
-            throw new Error(formatPromptTooLargeError(files))
-          }
-
-          const errorMsg = err.data?.message || ""
-          throw new Error(`${err.name}: ${errorMsg}`)
-        }
-
-        const summaryText = extractResponseText(summary.parts)
-        if (!summaryText) {
-          throw new Error("Failed to get summary from agent")
-        }
-
-        return summaryText
+            const summaryText = extractResponseText(summary.parts)
+            if (!summaryText) throw new Error("Failed to get summary from agent")
+            return summaryText
+          }),
+        )
       }
 
       async function getOidcToken() {

@@ -158,13 +158,13 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   }
 
   if (method.type === "api") {
-    const key = await prompts.password({
-      message: "Enter your API key",
-      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-    })
-    if (prompts.isCancel(key)) throw new UI.CancelledError()
-
     if (method.authorize) {
+      const key = await prompts.password({
+        message: "Enter your API key",
+        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+      })
+      if (prompts.isCancel(key)) throw new UI.CancelledError()
+
       const result = await method.authorize(inputs)
       if (result.type === "failed") {
         prompts.log.error("Failed to authorize")

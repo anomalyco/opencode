@@ -205,7 +205,11 @@ export namespace LLM {
           // calls but no tools param is present. When there are no active tools (e.g.
           // during compaction), inject a stub tool to satisfy the validation requirement.
           // The stub description explicitly tells the model not to call it.
-          if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+          if (
+            (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
+            Object.keys(tools).length === 0 &&
+            hasToolCalls(input.messages)
+          ) {
             tools["_noop"] = tool({
               description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
               inputSchema: jsonSchema({
