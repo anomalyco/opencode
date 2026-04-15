@@ -9,20 +9,6 @@ import { lazy } from "../../util/lazy"
 import { Log } from "@/util/log"
 import { errorData } from "@/util/error"
 
-const SessionRestoreBody = Workspace.sessionRestore.schema.omit({
-  workspaceID: true,
-})
-
-const SessionRestoreResult = z.object({
-  total: z.number().int().min(0),
-})
-
-const WorkspaceAdaptor = z.object({
-  type: z.string(),
-  name: z.string(),
-  description: z.string(),
-})
-
 const log = Log.create({ service: "server.workspace" })
 
 export const WorkspaceRoutes = lazy(() =>
@@ -38,7 +24,15 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspace adaptors",
             content: {
               "application/json": {
-                schema: resolver(z.array(WorkspaceAdaptor)),
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      type: z.string(),
+                      name: z.string(),
+                      description: z.string(),
+                    }),
+                  ),
+                ),
               },
             },
           },
@@ -164,20 +158,19 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Session replay started",
             content: {
               "application/json": {
-                schema: resolver(SessionRestoreResult),
+                schema: resolver(
+                  z.object({
+                    total: z.number().int().min(0),
+                  }),
+                ),
               },
             },
           },
           ...errors(400),
         },
       }),
-      validator(
-        "param",
-        z.object({
-          id: Workspace.Info.shape.id,
-        }),
-      ),
-      validator("json", SessionRestoreBody),
+      validator("param", z.object({ id: Workspace.Info.shape.id })),
+      validator("json", Workspace.sessionRestore.schema.omit({ workspaceID: true })),
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
