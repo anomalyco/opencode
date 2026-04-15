@@ -234,7 +234,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     renderer,
   })
   const [ready, setReady] = createSignal(false)
-  TuiPluginRuntime.init(api)
+  TuiPluginRuntime.init({
+    api,
+    config: tuiConfig,
+  })
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
     })

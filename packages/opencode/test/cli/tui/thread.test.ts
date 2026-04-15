@@ -8,7 +8,6 @@ import { UI } from "../../../src/cli/ui"
 import * as Timeout from "../../../src/util/timeout"
 import * as Network from "../../../src/cli/network"
 import * as Win32 from "../../../src/cli/cmd/tui/win32"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 import { Instance } from "../../../src/project/instance"
 
 const stop = new Error("stop")
@@ -42,7 +41,6 @@ function setup() {
   })
   spyOn(Win32, "win32DisableProcessedInput").mockImplementation(() => {})
   spyOn(Win32, "win32InstallCtrlCGuard").mockReturnValue(undefined)
-  spyOn(TuiConfig, "get").mockResolvedValue({})
   spyOn(Instance, "provide").mockImplementation(async (input) => {
     seen.inst.push(input.directory)
     return input.fn()

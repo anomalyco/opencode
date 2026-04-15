@@ -5,6 +5,8 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { Effect } from "effect"
+import { TuiLayer } from "./layer"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -66,10 +68,12 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
-      const config = await Instance.provide({
-        directory: directory && existsSync(directory) ? directory : process.cwd(),
-        fn: () => TuiConfig.get(),
-      })
+      const config = await Effect.runPromise(
+        Effect.gen(function* () {
+          const cfg = yield* TuiConfig.Service
+          return yield* cfg.get()
+        }).pipe(Effect.provide(TuiLayer)),
+      )
       await tui({
         url: args.url,
         config,

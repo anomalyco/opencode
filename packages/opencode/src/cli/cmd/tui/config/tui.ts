@@ -173,10 +173,6 @@ export namespace TuiConfig {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function get() {
-    return runPromise((svc) => svc.get())
-  }
-
   export async function waitForDependencies() {
     await runPromise((svc) => svc.waitForDependencies())
   }

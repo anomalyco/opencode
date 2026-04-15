@@ -16,6 +16,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
+import { Effect, Layer } from "effect"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -177,8 +178,12 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
-
+      const config = await Effect.runPromise(
+        Effect.gen(function* () {
+          const cfg = yield* TuiConfig.Service
+          return yield* cfg.get()
+        }).pipe(Effect.provide(TuiConfig.defaultLayer)),
+      )
       const network = await resolveNetworkOptions(args)
       const external =
         process.argv.includes("--port") ||
