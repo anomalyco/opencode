@@ -316,7 +316,8 @@
 
   /* Download Hero Section */
   [data-component="download-hero"] {
-    display: grid;
+    /* display: grid; */
+    display: none;
     grid-template-columns: 260px 1fr;
     gap: 4rem;
     padding-bottom: 2rem;

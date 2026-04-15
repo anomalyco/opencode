@@ -1,8 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
+import { EffectBridge } from "@/effect/bridge"
+import type { InstanceContext } from "@/project/instance"
 import { SessionID, MessageID } from "@/session/schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import z from "zod"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
@@ -70,7 +71,7 @@ export namespace Command {
     readonly list: () => Effect.Effect<Info[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Command") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
   export const layer = Layer.effect(
     Service,
@@ -79,8 +80,9 @@ export namespace Command {
       const mcp = yield* MCP.Service
       const skill = yield* Skill.Service
 
-      const init = Effect.fn("Command.state")(function* (ctx) {
+      const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
         const cfg = yield* config.get()
+        const bridge = yield* EffectBridge.make()
         const commands: Record<string, Info> = {}
 
         commands[Default.INIT] = {
@@ -124,7 +126,7 @@ export namespace Command {
             source: "mcp",
             description: prompt.description,
             get template() {
-              return Effect.runPromise(
+              return bridge.promise(
                 mcp
                   .getPrompt(
                     prompt.client,
@@ -186,10 +188,4 @@ export namespace Command {
     Layer.provide(MCP.defaultLayer),
     Layer.provide(Skill.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
 }

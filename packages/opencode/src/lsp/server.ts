@@ -11,9 +11,9 @@ import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
 import { Process } from "../util/process"
 import { which } from "../util/which"
-import { Module } from "@opencode-ai/util/module"
+import { Module } from "@opencode-ai/shared/util/module"
 import { spawn } from "./launch"
-import { Npm } from "@/npm"
+import { Npm } from "../npm"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -857,7 +857,7 @@ export namespace LSPServer {
 
   export const Clangd: Info = {
     id: "clangd",
-    root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
+    root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd"]),
     extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
     async spawn(root) {
       const args = ["--background-index", "--clang-tidy"]

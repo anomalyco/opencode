@@ -1,10 +1,14 @@
-import type { NamedError } from "@opencode-ai/util/error"
+import type { NamedError } from "@opencode-ai/shared/util/error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
 
 export namespace SessionRetry {
   export type Err = ReturnType<NamedError["toObject"]>
+
+  // This exported message is shared with the TUI upsell detector. Matching on a
+  // literal error string kind of sucks, but it is the simplest for now.
+  export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go https://opencode.ai/go"
 
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
@@ -53,9 +57,21 @@ export namespace SessionRetry {
     if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
-      if (error.data.responseBody?.includes("FreeUsageLimitError"))
-        return `Free usage exceeded, subscribe to Go https://opencode.ai/go`
+      if (error.data.responseBody?.includes("FreeUsageLimitError")) return GO_UPSELL_MESSAGE
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
+    }
+
+    // Check for rate limit patterns in plain text error messages
+    const msg = error.data?.message
+    if (typeof msg === "string") {
+      const lower = msg.toLowerCase()
+      if (
+        lower.includes("rate increased too quickly") ||
+        lower.includes("rate limit") ||
+        lower.includes("too many requests")
+      ) {
+        return msg
+      }
     }
 
     const json = iife(() => {

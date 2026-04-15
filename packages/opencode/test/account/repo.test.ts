@@ -56,6 +56,32 @@ it.live("persistAccount inserts and getRow retrieves", () =>
   }),
 )
 
+it.live("persistAccount normalizes trailing slashes in stored server URLs", () =>
+  Effect.gen(function* () {
+    const id = AccountID.make("user-1")
+
+    yield* AccountRepo.use((r) =>
+      r.persistAccount({
+        id,
+        email: "test@example.com",
+        url: "https://control.example.com/",
+        accessToken: AccessToken.make("at_123"),
+        refreshToken: RefreshToken.make("rt_456"),
+        expiry: Date.now() + 3600_000,
+        orgID: Option.none(),
+      }),
+    )
+
+    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const active = yield* AccountRepo.use((r) => r.active())
+    const list = yield* AccountRepo.use((r) => r.list())
+
+    expect(Option.getOrThrow(row).url).toBe("https://control.example.com")
+    expect(Option.getOrThrow(active).url).toBe("https://control.example.com")
+    expect(list[0]?.url).toBe("https://control.example.com")
+  }),
+)
+
 it.live("persistAccount sets the active account and org", () =>
   Effect.gen(function* () {
     const id1 = AccountID.make("user-1")

@@ -51,13 +51,13 @@ export namespace Shell {
       if (shell.startsWith("/") && name(shell) === "bash") return gitbash() || shell
       return shell
     }
-    return Bun.which(shell) || shell
+    return which(shell) || shell
   }
 
   function pick() {
-    const pwsh = Bun.which("pwsh")
+    const pwsh = which("pwsh.exe")
     if (pwsh) return pwsh
-    const powershell = Bun.which("powershell")
+    const powershell = which("powershell.exe")
     if (powershell) return powershell
   }
 

@@ -1,9 +1,10 @@
 import z from "zod"
-import { Effect, Exit, Layer, PubSub, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Exit, Layer, PubSub, Scope, Context, Stream } from "effect"
+import { EffectBridge } from "@/effect/bridge"
 import { Log } from "../util/log"
-import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -41,7 +42,7 @@ export namespace Bus {
     readonly subscribeAllCallback: (callback: (event: any) => unknown) => Effect.Effect<() => void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Bus") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Bus") {}
 
   export const layer = Layer.effect(
     Service,
@@ -91,8 +92,13 @@ export namespace Bus {
           yield* PubSub.publish(s.wildcard, payload)
 
           const dir = yield* InstanceState.directory
+          const context = yield* InstanceState.context
+          const workspace = yield* InstanceState.workspaceID
+
           GlobalBus.emit("event", {
             directory: dir,
+            project: context.project.id,
+            workspace,
             payload,
           })
         })
@@ -122,6 +128,7 @@ export namespace Bus {
       function on<T>(pubsub: PubSub.PubSub<T>, type: string, callback: (event: T) => unknown) {
         return Effect.gen(function* () {
           log.info("subscribing", { type })
+          const bridge = yield* EffectBridge.make()
           const scope = yield* Scope.make()
           const subscription = yield* Scope.provide(scope)(PubSub.subscribe(pubsub))
 
@@ -141,7 +148,7 @@ export namespace Bus {
 
           return () => {
             log.info("unsubscribing", { type })
-            Effect.runFork(Scope.close(scope, Exit.void))
+            bridge.fork(Scope.close(scope, Exit.void))
           }
         })
       }
@@ -163,6 +170,8 @@ export namespace Bus {
       return Service.of({ publish, subscribe, subscribeAll, subscribeCallback, subscribeAllCallback })
     }),
   )
+
+  export const defaultLayer = layer
 
   const { runPromise, runSync } = makeRuntime(Service, layer)
 
