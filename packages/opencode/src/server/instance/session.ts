@@ -25,7 +25,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 
 const log = Log.create({ service: "server" })
 
@@ -274,7 +274,7 @@ export const SessionRoutes = lazy(() =>
         "json",
         z.object({
           title: z.string().optional(),
-          permission: Permission.Ruleset.zod.optional(),
+          permission: Permission.Ruleset.optional(),
           time: z
             .object({
               archived: z.number().optional(),
@@ -1093,7 +1093,7 @@ export const SessionRoutes = lazy(() =>
           permissionID: PermissionID.zod,
         }),
       ),
-      validator("json", z.object({ response: Permission.Reply.zod })),
+      validator("json", z.object({ response: Permission.Reply })),
       async (c) => {
         const params = c.req.valid("param")
         await AppRuntime.runPromise(
