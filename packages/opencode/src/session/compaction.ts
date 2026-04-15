@@ -345,6 +345,10 @@ When constructing the summary, try to stick to this template:
                 messageID: continueMsg.id,
                 sessionID: input.sessionID,
                 type: "text",
+                // Internal marker for auto-compaction followups so provider plugins
+                // can distinguish them from manual post-compaction user prompts.
+                // This is not a stable plugin contract and may change or disappear.
+                metadata: { compaction_continue: true },
                 synthetic: true,
                 text,
                 time: {

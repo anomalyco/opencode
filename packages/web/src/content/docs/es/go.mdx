@@ -89,11 +89,17 @@ Los límites se definen en valor en dólares. Esto significa que tu cantidad rea
 
 La siguiente tabla proporciona una cantidad estimada de peticiones basada en los patrones típicos de uso de Go:
 
-|                        | GLM-5.1 | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 | Qwen3.6 Plus | Qwen3.5 Plus |
-| ---------------------- | ------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ | ------------ | ------------ |
-| peticiones por 5 horas | 880     | 1,150 | 1,850     | 1,290       | 2,150        | 14,000       | 20,000       | 3,300        | 10,200       |
-| peticiones por semana  | 2,150   | 2,880 | 4,630     | 3,225       | 5,450        | 35,000       | 50,000       | 8,200        | 25,200       |
-| peticiones por mes     | 4,300   | 5,750 | 9,250     | 6,450       | 10,900       | 70,000       | 100,000      | 20,500       | 50,500       |
+| Model        | peticiones por 5 horas | peticiones por semana | peticiones por mes |
+| ------------ | ---------------------- | --------------------- | ------------------ |
+| GLM-5.1      | 880                    | 2,150                 | 4,300              |
+| GLM-5        | 1,150                  | 2,880                 | 5,750              |
+| Kimi K2.5    | 1,850                  | 4,630                 | 9,250              |
+| MiMo-V2-Pro  | 1,290                  | 3,225                 | 6,450              |
+| MiMo-V2-Omni | 2,150                  | 5,450                 | 10,900             |
+| Qwen3.6 Plus | 3,300                  | 8,200                 | 16,300             |
+| MiniMax M2.7 | 3,400                  | 8,500                 | 17,000             |
+| MiniMax M2.5 | 6,300                  | 15,900                | 31,800             |
+| Qwen3.5 Plus | 10,200                 | 25,200                | 50,500             |
 
 Las estimaciones se basan en los patrones de peticiones promedio observados:
 

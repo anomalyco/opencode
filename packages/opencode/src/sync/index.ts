@@ -199,6 +199,25 @@ export namespace SyncEvent {
     process(def, event, { publish: !!options?.publish })
   }
 
+  export function replayAll(events: SerializedEvent[], options?: { publish: boolean }) {
+    const source = events[0]?.aggregateID
+    if (!source) return
+    if (events.some((item) => item.aggregateID !== source)) {
+      throw new Error("Replay events must belong to the same session")
+    }
+    const start = events[0].seq
+    for (const [i, item] of events.entries()) {
+      const seq = start + i
+      if (item.seq !== seq) {
+        throw new Error(`Replay sequence mismatch at index ${i}: expected ${seq}, got ${item.seq}`)
+      }
+    }
+    for (const item of events) {
+      replay(item, options)
+    }
+    return source
+  }
+
   export function run<Def extends Definition>(def: Def, data: Event<Def>["data"], options?: { publish?: boolean }) {
     const agg = (data as Record<string, string>)[def.aggregate]
     // This should never happen: we've enforced it via typescript in

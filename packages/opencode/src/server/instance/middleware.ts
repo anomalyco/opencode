@@ -11,8 +11,11 @@ import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Log } from "@/util/log"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
+
+const OPENCODE_WORKSPACE = process.env.OPENCODE_WORKSPACE
 
 const RULES: Array<Rule> = [
   { path: "/session/status", action: "forward" },
@@ -46,6 +49,8 @@ async function getSessionWorkspace(url: URL) {
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
+  const log = Log.create({ service: "workspace-router" })
+
   return async (c, next) => {
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
     const directory = Filesystem.resolve(
@@ -63,8 +68,22 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const sessionWorkspaceID = await getSessionWorkspace(url)
     const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
 
-    // If no workspace is provided we use the project
-    if (!workspaceID) {
+    if (!workspaceID || url.pathname.startsWith("/console") || OPENCODE_WORKSPACE) {
+      if (OPENCODE_WORKSPACE) {
+        return WorkspaceContext.provide({
+          workspaceID: WorkspaceID.make(OPENCODE_WORKSPACE),
+          async fn() {
+            return Instance.provide({
+              directory,
+              init: () => AppRuntime.runPromise(InstanceBootstrap),
+              async fn() {
+                return next()
+              },
+            })
+          },
+        })
+      }
+
       return Instance.provide({
         directory,
         init: () => AppRuntime.runPromise(InstanceBootstrap),
@@ -77,22 +96,18 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
 
     if (!workspace) {
-      // Special-case deleting a session in case user's data in a
-      // weird state. Allow them to forcefully delete a synced session
-      // even if the remote workspace is not in their data.
-      //
-      // The lets the `DELETE /session/:id` endpoint through and we've
-      // made sure that it will run without an instance
-      if (url.pathname.match(/\/session\/[^/]+$/) && c.req.method === "DELETE") {
-        return next()
-      }
-
       return new Response(`Workspace not found: ${workspaceID}`, {
         status: 500,
         headers: {
           "content-type": "text/plain; charset=utf-8",
         },
       })
+    }
+
+    if (local(c.req.method, url.pathname)) {
+      // No instance provided because we are serving cached data; there
+      // is no instance to work with
+      return next()
     }
 
     const adaptor = await getAdaptor(workspace.projectID, workspace.type)
@@ -112,24 +127,27 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    if (local(c.req.method, url.pathname)) {
-      // No instance provided because we are serving cached data; there
-      // is no instance to work with
-      return next()
-    }
+    const proxyURL = new URL(target.url)
+    proxyURL.pathname = `${proxyURL.pathname.replace(/\/$/, "")}${url.pathname}`
+    proxyURL.search = url.search
+    proxyURL.hash = url.hash
+    proxyURL.searchParams.delete("workspace")
+
+    log.info("workspace proxy forwarding", {
+      workspaceID,
+      request: url.toString(),
+      target: String(target.url),
+      proxy: proxyURL.toString(),
+    })
 
     if (c.req.header("upgrade")?.toLowerCase() === "websocket") {
-      return ServerProxy.websocket(upgrade, target, c.req.raw, c.env)
+      return ServerProxy.websocket(upgrade, proxyURL, target.headers, c.req.raw, c.env)
     }
 
     const headers = new Headers(c.req.raw.headers)
     headers.delete("x-opencode-workspace")
 
-    return ServerProxy.http(
-      target,
-      new Request(c.req.raw, {
-        headers,
-      }),
-    )
+    const req = new Request(c.req.raw, { headers })
+    return ServerProxy.http(proxyURL, target.headers, req)
   }
 }
