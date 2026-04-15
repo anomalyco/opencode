@@ -26,12 +26,12 @@ jobs:
 
       - name: Prepare linux-x64 release assets
         run: |
-          cp packages/opencode/dist/opencode-linux-x64/bin/opencode ./opencode-linux-x64
-          sha256sum ./opencode-linux-x64 | tee ./opencode-linux-x64.sha256
+          cp packages/opencode/dist/opencode-linux-x64.tar.gz ./opencode-linux-x64.tar.gz
+          sha256sum ./opencode-linux-x64.tar.gz | tee ./opencode-linux-x64.tar.gz.sha256
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            opencode-linux-x64
-            opencode-linux-x64.sha256
+            opencode-linux-x64.tar.gz
+            opencode-linux-x64.tar.gz.sha256
