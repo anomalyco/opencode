@@ -1,6 +1,6 @@
 import { spyOn } from "bun:test"
 import path from "path"
-import { TuiConfig } from "../cli/tui/config/tui"
+import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 
 type PluginSpec = string | [string, Record<string, unknown>]
 

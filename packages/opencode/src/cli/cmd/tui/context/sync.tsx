@@ -33,7 +33,7 @@ import {
   ConsoleState,
   emptyConsoleState,
   type ConsoleState as ConsoleStateType,
-} from "@test/cli/tui/config/console-state"
+} from "@/cli/cmd/tui/config/console-state"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
