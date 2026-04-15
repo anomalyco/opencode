@@ -50,14 +50,14 @@ jobs:
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" \
-              --title "Acompany SecreCode ${TAG}" \
+              --title "Acompany SecureCode ${TAG}" \
               --repo "$GITHUB_REPOSITORY"
             exit 0
           fi
 
           gh release create "$TAG" \
-            --title "Acompany SecreCode ${TAG}" \
-            --notes "Acompany SecreCode CLI release." \
+            --title "Acompany SecureCode ${TAG}" \
+            --notes "Acompany SecureCode CLI release." \
             --repo "$GITHUB_REPOSITORY"
 
       - name: Build CLI binaries
