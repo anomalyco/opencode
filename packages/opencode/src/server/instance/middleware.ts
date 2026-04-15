@@ -4,7 +4,6 @@ import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
 import { ServerProxy } from "../proxy"
-import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Session } from "@/session"
@@ -12,6 +11,7 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Log } from "@/util/log"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -53,7 +53,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
 
   return async (c, next) => {
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-    const directory = Filesystem.resolve(
+    const directory = AppFileSystem.resolve(
       (() => {
         try {
           return decodeURIComponent(raw)
