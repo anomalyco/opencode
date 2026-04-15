@@ -929,6 +929,7 @@ export function Prompt(props: PromptProps) {
                   return
                 }
                 // Check for paste events BEFORE app_exit check to prevent exiting on paste attempts
+                // Also prevent exit for any V key with meta/ctrl (Mac Command+V workaround)
                 const isPasteEvent =
                   keybind.match("input_paste", e) || (e.name === "v" && (e.meta || e.ctrl)) || e.name === "paste"
                 if (isPasteEvent) {
@@ -943,15 +944,13 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                   // For text paste, let the onPaste handler deal with it
+                  // Also prevent default to avoid triggering exit
+                  e.preventDefault()
+                  return
                 }
-                if (keybind.match("input_clear", e) && store.prompt.input !== "") {
-                  input.clear()
-                  input.extmarks.clear()
-                  setStore("prompt", {
-                    input: "",
-                    parts: [],
-                  })
-                  setStore("extmarkToPartIndex", new Map())
+                // Additional prevention: if name is v with meta/ctrl, prevent exit even if it gets here
+                if (keybind.match("app_exit", e) && (e.meta || e.ctrl)) {
+                  e.preventDefault()
                   return
                 }
                 if (keybind.match("app_exit", e)) {
