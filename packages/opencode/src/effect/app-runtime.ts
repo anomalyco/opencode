@@ -1,6 +1,6 @@
 import { Layer, ManagedRuntime } from "effect"
 import { attach, memoMap } from "./run-service"
-import { Observability } from "./oltp"
+import { Observability } from "./observability"
 
 import { AppFileSystem } from "@/filesystem"
 import { Bus } from "@/bus"

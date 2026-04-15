@@ -1,3 +1,6 @@
 export { openapi } from "./openapi.js"
+export { makeQuestionHandler } from "./api/question.js"
 export { api } from "./definition/api.js"
+export { questionApi, QuestionReply, QuestionRequest } from "./definition/question.js"
 export type { OpenApiSpec, ServerApi } from "./types.js"
+export type { QuestionOps } from "./api/question.js"
