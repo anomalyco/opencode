@@ -165,4 +165,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Select all answers that apply",
   "ui.question.singleHint": "Select one answer",
   "ui.question.custom.placeholder": "Type your answer...",
+
+  "ui.message.codeBlock.showMore": "Show {{count}} more lines",
+  "ui.message.codeBlock.showLess": "Show less",
 }

@@ -163,4 +163,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Hatayı kopyala",
   "ui.message.duration.seconds": "{{count}}sn",
   "ui.message.duration.minutesSeconds": "{{minutes}}dk {{seconds}}sn",
+
+  "ui.message.codeBlock.showMore": "{{count}} satır daha göster",
+  "ui.message.codeBlock.showLess": "Daha az göster",
 } satisfies Partial<Record<Keys, string>>

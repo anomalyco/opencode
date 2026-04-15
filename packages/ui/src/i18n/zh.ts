@@ -161,4 +161,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "复制错误",
   "ui.message.duration.seconds": "{{count}}秒",
   "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
+
+  "ui.message.codeBlock.showMore": "显示更多 {{count}} 行",
+  "ui.message.codeBlock.showLess": "收起",
 } satisfies Partial<Record<Keys, string>>
