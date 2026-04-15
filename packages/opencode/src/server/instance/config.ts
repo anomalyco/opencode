@@ -29,10 +29,11 @@ export const ConfigRoutes = lazy(() =>
           },
         },
       }),
-      jsonRequest("ConfigRoutes.get", function* () {
-        const cfg = yield* Config.Service
-        return yield* cfg.get()
-      }),
+      async (c) =>
+        jsonRequest("ConfigRoutes.get", c, function* () {
+          const cfg = yield* Config.Service
+          return yield* cfg.get()
+        }),
     )
     .patch(
       "/",
@@ -81,13 +82,14 @@ export const ConfigRoutes = lazy(() =>
           },
         },
       }),
-      jsonRequest("ConfigRoutes.providers", function* () {
-        const svc = yield* Provider.Service
-        const providers = mapValues(yield* svc.list(), (item) => item)
-        return {
-          providers: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-        }
-      }),
+      async (c) =>
+        jsonRequest("ConfigRoutes.providers", c, function* () {
+          const svc = yield* Provider.Service
+          const providers = mapValues(yield* svc.list(), (item) => item)
+          return {
+            providers: Object.values(providers),
+            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          }
+        }),
     ),
 )

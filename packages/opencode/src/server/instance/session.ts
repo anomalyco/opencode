@@ -95,10 +95,11 @@ export const SessionRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      jsonRequest("SessionRoutes.status", function* () {
-        const svc = yield* SessionStatus.Service
-        return Object.fromEntries(yield* svc.list())
-      }),
+      async (c) =>
+        jsonRequest("SessionRoutes.status", c, function* () {
+          const svc = yield* SessionStatus.Service
+          return Object.fromEntries(yield* svc.list())
+        }),
     )
     .get(
       "/:sessionID",
@@ -125,11 +126,13 @@ export const SessionRoutes = lazy(() =>
           sessionID: Session.GetInput,
         }),
       ),
-      jsonRequest("SessionRoutes.get", function* (c) {
+      async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = yield* Session.Service
-        return yield* session.get(sessionID)
-      }),
+        return jsonRequest("SessionRoutes.get", c, function* () {
+          const session = yield* Session.Service
+          return yield* session.get(sessionID)
+        })
+      },
     )
     .get(
       "/:sessionID/children",
@@ -156,11 +159,13 @@ export const SessionRoutes = lazy(() =>
           sessionID: Session.ChildrenInput,
         }),
       ),
-      jsonRequest("SessionRoutes.children", function* (c) {
+      async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = yield* Session.Service
-        return yield* session.children(sessionID)
-      }),
+        return jsonRequest("SessionRoutes.children", c, function* () {
+          const session = yield* Session.Service
+          return yield* session.children(sessionID)
+        })
+      },
     )
     .get(
       "/:sessionID/todo",
@@ -186,11 +191,13 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      jsonRequest("SessionRoutes.todo", function* (c) {
+      async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const todo = yield* Todo.Service
-        return yield* todo.get(sessionID)
-      }),
+        return jsonRequest("SessionRoutes.todo", c, function* () {
+          const todo = yield* Todo.Service
+          return yield* todo.get(sessionID)
+        })
+      },
     )
     .post(
       "/",
