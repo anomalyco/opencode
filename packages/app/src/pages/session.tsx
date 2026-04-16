@@ -1082,8 +1082,16 @@ export default function Page() {
   createEffect(
     on(
       () => sync.data.session_status[params.id ?? ""]?.type,
-      (next, prev) => {
+      (next) => {
         document.title = next === "busy" ? THINKING_TITLE : DEFAULT_TITLE
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => sync.data.session_status[params.id ?? ""]?.type,
+      (next, prev) => {
         const mode = vcsMode()
         if (!mode) return
         if (!wantsReview()) return
