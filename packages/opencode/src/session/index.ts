@@ -407,6 +407,7 @@ export namespace Session {
             const b = yield* git.branch(dir)
             if (b) return b
           }
+          // "llm" titling is handled separately after the first message; fall back to default here
           return createDefaultTitle(child)
         })
 
