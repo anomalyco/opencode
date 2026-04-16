@@ -24,6 +24,15 @@ interface FetchDecompressionError extends Error {
   path: string
 }
 
+/** Common shapes for non-APICallError provider errors carrying HTTP status */
+interface ErrorWithStatus {
+  status?: number
+  statusCode?: number
+  code?: number
+  response?: { status?: number; statusCode?: number }
+  message?: string
+}
+
 export namespace MessageV2 {
   export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
 
@@ -1024,8 +1033,33 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case e instanceof Error:
+      case e instanceof Error: {
+        // Non-APICallError with HTTP status - treat 5xx as retryable.
+        const typed = e as Error & ErrorWithStatus
+        const code =
+          typed.status ?? typed.statusCode ?? typed.code ??
+          typed.response?.status ?? typed.response?.statusCode
+        if (typeof code === "number" && code >= 500)
+          return new MessageV2.APIError(
+            { message: e.message, statusCode: code, isRetryable: true },
+            { cause: e },
+          ).toObject()
+        // Fallback: status may be embedded in a JSON error message.
+        try {
+          const obj = JSON.parse(e.message) as ErrorWithStatus
+          const status =
+            obj?.status ?? obj?.statusCode ?? obj?.code ??
+            obj?.response?.status ?? obj?.response?.statusCode
+          if (typeof status === "number" && status >= 500) {
+            const msg = typeof obj?.message === "string" ? obj.message : e.message
+            return new MessageV2.APIError(
+              { message: msg, statusCode: status, isRetryable: true },
+              { cause: e },
+            ).toObject()
+          }
+        } catch {}
         return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+      }
       default:
         try {
           const parsed = ProviderError.parseStreamError(e)
@@ -1051,6 +1085,20 @@ export namespace MessageV2 {
             ).toObject()
           }
         } catch {}
+        // Plain-object 5xx - treat as retryable.
+        if (typeof e === "object" && e !== null) {
+          const typed = e as ErrorWithStatus
+          const code = typed.status ?? typed.statusCode ?? typed.code ?? typed.response?.status ?? typed.response?.statusCode
+          if (typeof code === "number" && code >= 500)
+            return new MessageV2.APIError(
+              {
+                message: typeof typed.message === "string" ? typed.message : JSON.stringify(e),
+                statusCode: code,
+                isRetryable: true,
+              },
+              { cause: e },
+            ).toObject()
+        }
         return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
     }
   }

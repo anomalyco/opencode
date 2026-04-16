@@ -1003,6 +1003,189 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("retries 5xx Error with statusCode property", () => {
+    const err = Object.assign(new Error("Internal Server Error"), { statusCode: 502 })
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("retries 5xx Error with status property", () => {
+    const err = Object.assign(new Error("Bad Gateway"), { status: 503 })
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(503)
+  })
+
+  test("retries 5xx Error with response.status", () => {
+    const err = Object.assign(new Error("Gateway Timeout"), { response: { status: 504 } })
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(504)
+  })
+
+  test("retries 5xx Error with response.statusCode", () => {
+    const err = Object.assign(new Error("Bad Gateway"), { response: { statusCode: 502 } })
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("retries 5xx from JSON-encoded Error message with status property", () => {
+    const err = new Error(JSON.stringify({ status: 500, message: "server error" }))
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(500)
+  })
+
+  test("retries 5xx from JSON-encoded Error message and extracts inner message", () => {
+    const err = new Error(JSON.stringify({ statusCode: 500, message: "server error" }))
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(500)
+    expect((result as MessageV2.APIError).data.message).toBe("server error")
+  })
+
+  test("retries 5xx from JSON-encoded Error message with nested response.statusCode", () => {
+    const err = new Error(JSON.stringify({ response: { statusCode: 503 }, message: "upstream" }))
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(503)
+    expect((result as MessageV2.APIError).data.message).toBe("upstream")
+  })
+
+  test("retries 5xx from JSON-encoded Error message with nested response.status", () => {
+    const err = new Error(JSON.stringify({ response: { status: 502 }, message: "bad gw" }))
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("does not retry 4xx from JSON-encoded Error message", () => {
+    const err = new Error(JSON.stringify({ statusCode: 422, message: "invalid request" }))
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test("retries 5xx from plain object with status property", () => {
+    const err = { status: 500, message: "Internal Server Error" }
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(500)
+  })
+
+  test("retries 5xx from plain object with statusCode", () => {
+    const err = { statusCode: 502, message: "Bad Gateway" }
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("retries 5xx from plain object with response.status", () => {
+    const err = { response: { status: 500 }, message: "fail" }
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+  })
+
+  test("retries 5xx from plain object with response.statusCode", () => {
+    const err = { response: { statusCode: 503 }, message: "unavailable" }
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(503)
+  })
+
+  test("retries 5xx Error with code property (OpenRouter format)", () => {
+    const err = Object.assign(new Error("Network connection lost."), { code: 502 })
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("retries 5xx from plain object with code property (OpenRouter format)", () => {
+    const err = { code: 502, message: "Network connection lost.", metadata: { error_type: "provider_unavailable" } }
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("retries 5xx from JSON-encoded message with code property (OpenRouter format)", () => {
+    const err = new Error(JSON.stringify({ code: 502, message: "Network connection lost." }))
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.statusCode).toBe(502)
+  })
+
+  test("does not retry 4xx from plain object", () => {
+    const err = { statusCode: 404, message: "Not Found" }
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test("does not retry 4xx Error", () => {
+    const err = Object.assign(new Error("Not Found"), { statusCode: 404 })
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(result.name).toBe("UnknownError")
+  })
+
+  test("does not retry Error without statusCode", () => {
+    const err = new Error("something went wrong")
+
+    const result = MessageV2.fromError(err, { providerID })
+
+    expect(result.name).toBe("UnknownError")
+  })
+
   test("classifies ZlibError from fetch as retryable APIError", () => {
     const zlibError = new Error(
       'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
