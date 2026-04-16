@@ -3,7 +3,7 @@
 const repo = "anomalyco/opencode"
 const days = 60
 const msg =
-  "To stay organized issues are automatically closed after 90 days of no activity. If the issue is still relevant please open a new one."
+  "To stay organized issues are automatically closed after 60 days of no activity. If the issue is still relevant please open a new one."
 
 const token = process.env.GITHUB_TOKEN
 if (!token) {
