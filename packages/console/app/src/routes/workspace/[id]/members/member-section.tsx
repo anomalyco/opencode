@@ -24,13 +24,13 @@ const listMembers = query(async (workspaceID: string) => {
 
 const inviteMember = action(async (form: FormData) => {
   "use server"
-  const email = form.get("email")?.toString().trim()
+  const email = (form.get("email") as string | null)?.trim()
   if (!email) return { error: formError.emailRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const role = form.get("role")?.toString() as (typeof UserRole)[number]
+  const role = form.get("role") as (typeof UserRole)[number] | null
   if (!role) return { error: formError.roleRequired }
-  const limit = form.get("limit")?.toString()
+  const limit = form.get("limit") as string | null
   const monthlyLimit = limit && limit.trim() !== "" ? parseInt(limit) : null
   if (monthlyLimit !== null && monthlyLimit < 0) return { error: formError.monthlyLimitInvalid }
   return json(
@@ -38,7 +38,7 @@ const inviteMember = action(async (form: FormData) => {
       () =>
         User.invite({ email, role, monthlyLimit })
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listMembers.key },
@@ -47,16 +47,16 @@ const inviteMember = action(async (form: FormData) => {
 
 const removeMember = action(async (form: FormData) => {
   "use server"
-  const id = form.get("id")?.toString()
+  const id = form.get("id") as string | null
   if (!id) return { error: formError.idRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(
     await withActor(
       () =>
         User.remove(id)
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listMembers.key },
@@ -66,13 +66,13 @@ const removeMember = action(async (form: FormData) => {
 const updateMember = action(async (form: FormData) => {
   "use server"
 
-  const id = form.get("id")?.toString()
+  const id = form.get("id") as string | null
   if (!id) return { error: formError.idRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const role = form.get("role")?.toString() as (typeof UserRole)[number]
+  const role = form.get("role") as (typeof UserRole)[number] | null
   if (!role) return { error: formError.roleRequired }
-  const limit = form.get("limit")?.toString()
+  const limit = form.get("limit") as string | null
   const monthlyLimit = limit && limit.trim() !== "" ? parseInt(limit) : null
   if (monthlyLimit !== null && monthlyLimit < 0) return { error: formError.monthlyLimitInvalid }
 
@@ -81,7 +81,7 @@ const updateMember = action(async (form: FormData) => {
       () =>
         User.update({ id, role, monthlyLimit })
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listMembers.key },
@@ -118,7 +118,7 @@ function MemberRow(props: {
     }
     setStore("editing", true)
     setStore("selectedRole", props.member.role)
-    setStore("limit", props.member.monthlyLimit?.toString() ?? "")
+    setStore("limit", props.member.monthlyLimit != null ? String(props.member.monthlyLimit) : "")
   }
 
   function hide() {

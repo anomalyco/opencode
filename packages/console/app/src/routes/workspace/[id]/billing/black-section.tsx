@@ -81,7 +81,7 @@ const cancelWaitlist = action(async (workspaceID: string) => {
           .where(eq(BillingTable.workspaceID, workspaceID)),
       )
       return { error: undefined }
-    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    }, workspaceID).catch((e) => ({ error: String(e?.message ?? e) })),
     { revalidate: [queryBillingInfo.key, querySubscription.key] },
   )
 }, "cancelWaitlist")
@@ -92,7 +92,7 @@ const enroll = action(async (workspaceID: string) => {
     await withActor(async () => {
       await Billing.subscribeBlack({ seats: 1 })
       return { error: undefined }
-    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    }, workspaceID).catch((e) => ({ error: String(e?.message ?? e) })),
     { revalidate: [queryBillingInfo.key, querySubscription.key] },
   )
 }, "enroll")
@@ -105,7 +105,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
         Billing.generateSessionUrl({ returnUrl })
           .then((data) => ({ error: undefined, data }))
           .catch((e) => ({
-            error: e.message as string,
+            error: String(e?.message ?? e),
             data: undefined,
           })),
       workspaceID,
@@ -116,9 +116,9 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 
 const setUseBalance = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const useBalance = form.get("useBalance")?.toString() === "true"
+  const useBalance = (form.get("useBalance") as string | null) === "true"
 
   return json(
     await withActor(async () => {
@@ -133,7 +133,7 @@ const setUseBalance = action(async (form: FormData) => {
           .where(eq(BillingTable.workspaceID, workspaceID)),
       )
       return { error: undefined }
-    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    }, workspaceID).catch((e) => ({ error: String(e?.message ?? e) })),
     { revalidate: [queryBillingInfo.key, querySubscription.key] },
   )
 }, "setUseBalance")

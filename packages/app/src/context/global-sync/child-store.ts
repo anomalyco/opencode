@@ -160,6 +160,7 @@ export function createChildStoreManager(input: {
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
+            provider_ready: false,
             provider: { all: [], connected: [], default: {} },
             config: {},
             path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -173,12 +174,15 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
+            mcp_ready: false,
             mcp: {},
+            lsp_ready: false,
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
             message: {},
             part: {},
+            bootstrapPromise: Promise.resolve(),
           })
           children[directory] = child
           disposers.set(directory, dispose)
@@ -240,8 +244,8 @@ export function createChildStoreManager(input: {
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,

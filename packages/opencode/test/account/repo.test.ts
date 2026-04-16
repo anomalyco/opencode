@@ -3,7 +3,7 @@ import { Effect, Layer, Option } from "effect"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(
@@ -16,21 +16,21 @@ const truncate = Layer.effectDiscard(
 
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
-it.effect("list returns empty when no accounts exist", () =>
+it.live("list returns empty when no accounts exist", () =>
   Effect.gen(function* () {
     const accounts = yield* AccountRepo.use((r) => r.list())
     expect(accounts).toEqual([])
   }),
 )
 
-it.effect("active returns none when no accounts exist", () =>
+it.live("active returns none when no accounts exist", () =>
   Effect.gen(function* () {
     const active = yield* AccountRepo.use((r) => r.active())
     expect(Option.isNone(active)).toBe(true)
   }),
 )
 
-it.effect("persistAccount inserts and getRow retrieves", () =>
+it.live("persistAccount inserts and getRow retrieves", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
     yield* AccountRepo.use((r) =>
@@ -56,7 +56,33 @@ it.effect("persistAccount inserts and getRow retrieves", () =>
   }),
 )
 
-it.effect("persistAccount sets the active account and org", () =>
+it.live("persistAccount normalizes trailing slashes in stored server URLs", () =>
+  Effect.gen(function* () {
+    const id = AccountID.make("user-1")
+
+    yield* AccountRepo.use((r) =>
+      r.persistAccount({
+        id,
+        email: "test@example.com",
+        url: "https://control.example.com/",
+        accessToken: AccessToken.make("at_123"),
+        refreshToken: RefreshToken.make("rt_456"),
+        expiry: Date.now() + 3600_000,
+        orgID: Option.none(),
+      }),
+    )
+
+    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const active = yield* AccountRepo.use((r) => r.active())
+    const list = yield* AccountRepo.use((r) => r.list())
+
+    expect(Option.getOrThrow(row).url).toBe("https://control.example.com")
+    expect(Option.getOrThrow(active).url).toBe("https://control.example.com")
+    expect(list[0]?.url).toBe("https://control.example.com")
+  }),
+)
+
+it.live("persistAccount sets the active account and org", () =>
   Effect.gen(function* () {
     const id1 = AccountID.make("user-1")
     const id2 = AccountID.make("user-2")
@@ -93,7 +119,7 @@ it.effect("persistAccount sets the active account and org", () =>
   }),
 )
 
-it.effect("list returns all accounts", () =>
+it.live("list returns all accounts", () =>
   Effect.gen(function* () {
     const id1 = AccountID.make("user-1")
     const id2 = AccountID.make("user-2")
@@ -128,7 +154,7 @@ it.effect("list returns all accounts", () =>
   }),
 )
 
-it.effect("remove deletes an account", () =>
+it.live("remove deletes an account", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -151,7 +177,7 @@ it.effect("remove deletes an account", () =>
   }),
 )
 
-it.effect("use stores the selected org and marks the account active", () =>
+it.live("use stores the selected org and marks the account active", () =>
   Effect.gen(function* () {
     const id1 = AccountID.make("user-1")
     const id2 = AccountID.make("user-2")
@@ -191,7 +217,7 @@ it.effect("use stores the selected org and marks the account active", () =>
   }),
 )
 
-it.effect("persistToken updates token fields", () =>
+it.live("persistToken updates token fields", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -225,7 +251,7 @@ it.effect("persistToken updates token fields", () =>
   }),
 )
 
-it.effect("persistToken with no expiry sets token_expiry to null", () =>
+it.live("persistToken with no expiry sets token_expiry to null", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -255,7 +281,7 @@ it.effect("persistToken with no expiry sets token_expiry to null", () =>
   }),
 )
 
-it.effect("persistAccount upserts on conflict", () =>
+it.live("persistAccount upserts on conflict", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -295,7 +321,7 @@ it.effect("persistAccount upserts on conflict", () =>
   }),
 )
 
-it.effect("remove clears active state when deleting the active account", () =>
+it.live("remove clears active state when deleting the active account", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -318,7 +344,7 @@ it.effect("remove clears active state when deleting the active account", () =>
   }),
 )
 
-it.effect("getRow returns none for nonexistent account", () =>
+it.live("getRow returns none for nonexistent account", () =>
   Effect.gen(function* () {
     const row = yield* AccountRepo.use((r) => r.getRow(AccountID.make("nope")))
     expect(Option.isNone(row)).toBe(true)

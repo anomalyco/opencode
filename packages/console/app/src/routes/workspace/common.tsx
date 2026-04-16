@@ -80,7 +80,7 @@ export const createCheckoutUrl = action(
           Billing.generateCheckoutUrl({ amount, successUrl, cancelUrl })
             .then((data) => ({ error: undefined, data }))
             .catch((e) => ({
-              error: e.message as string,
+              error: String(e?.message ?? e),
               data: undefined,
             })),
         workspaceID,

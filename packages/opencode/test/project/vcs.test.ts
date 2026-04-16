@@ -1,14 +1,14 @@
 import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, ManagedRuntime } from "effect"
 import { tmpdir } from "../fixture/fixture"
-import { watcherConfigLayer, withServices } from "../fixture/instance"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
-import { Vcs } from "../../src/project/vcs"
+import { Vcs } from "../../src/project"
 
 // Skip in CI — native @parcel/watcher binding needed
 const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -17,24 +17,41 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 // Helpers
 // ---------------------------------------------------------------------------
 
-function withVcs(
-  directory: string,
-  body: (rt: ManagedRuntime.ManagedRuntime<FileWatcher.Service | Vcs.Service, never>) => Promise<void>,
-) {
-  return withServices(
+async function withVcs(directory: string, body: () => Promise<void>) {
+  return Instance.provide({
     directory,
-    Layer.merge(FileWatcher.layer, Vcs.layer),
-    async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
-      await rt.runPromise(Vcs.Service.use((s) => s.init()))
+    fn: async () => {
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const watcher = yield* FileWatcher.Service
+          const vcs = yield* Vcs.Service
+          yield* watcher.init()
+          yield* vcs.init()
+        }),
+      )
       await Bun.sleep(500)
-      await body(rt)
+      await body()
     },
-    { provide: [watcherConfigLayer] },
-  )
+  })
+}
+
+function withVcsOnly(directory: string, body: () => Promise<void>) {
+  return Instance.provide({
+    directory,
+    fn: async () => {
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          yield* vcs.init()
+        }),
+      )
+      await body()
+    },
+  })
 }
 
 type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
+const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
 /** Wait for a Vcs.Event.BranchUpdated event on GlobalBus, with retry polling as fallback */
 function nextBranchUpdate(directory: string, timeout = 10_000) {
@@ -74,8 +91,13 @@ describeVcs("Vcs", () => {
   test("branch() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
+    await withVcs(tmp.path, async () => {
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.branch()
+        }),
+      )
       expect(branch).toBeDefined()
       expect(typeof branch).toBe("string")
     })
@@ -84,8 +106,13 @@ describeVcs("Vcs", () => {
   test("branch() returns undefined for non-git directories", async () => {
     await using tmp = await tmpdir()
 
-    await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
+    await withVcs(tmp.path, async () => {
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.branch()
+        }),
+      )
       expect(branch).toBeUndefined()
     })
   })
@@ -111,15 +138,149 @@ describeVcs("Vcs", () => {
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
 
-    await withVcs(tmp.path, async (rt) => {
+    await withVcs(tmp.path, async () => {
       const pending = nextBranchUpdate(tmp.path)
 
       const head = path.join(tmp.path, ".git", "HEAD")
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
       await pending
-      const current = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
+      const current = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.branch()
+        }),
+      )
       expect(current).toBe(branch)
+    })
+  })
+})
+
+describe("Vcs diff", () => {
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
+
+  test("defaultBranch() falls back to main", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await $`git branch -M main`.cwd(tmp.path).quiet()
+
+    await withVcsOnly(tmp.path, async () => {
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.defaultBranch()
+        }),
+      )
+      expect(branch).toBe("main")
+    })
+  })
+
+  test("defaultBranch() uses init.defaultBranch when available", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await $`git branch -M trunk`.cwd(tmp.path).quiet()
+    await $`git config init.defaultBranch trunk`.cwd(tmp.path).quiet()
+
+    await withVcsOnly(tmp.path, async () => {
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.defaultBranch()
+        }),
+      )
+      expect(branch).toBe("trunk")
+    })
+  })
+
+  test("detects current branch from the active worktree", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await using wt = await tmpdir()
+    await $`git branch -M main`.cwd(tmp.path).quiet()
+    const dir = path.join(wt.path, "feature")
+    await $`git worktree add -b feature/test ${dir} HEAD`.cwd(tmp.path).quiet()
+
+    await withVcsOnly(dir, async () => {
+      const [branch, base] = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
+        }),
+      )
+      expect(branch).toBe("feature/test")
+      expect(base).toBe("main")
+    })
+  })
+
+  test("diff('git') returns uncommitted changes", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "file.txt"), "original\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+    await fs.writeFile(path.join(tmp.path, "file.txt"), "changed\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: "file.txt",
+            status: "modified",
+          }),
+        ]),
+      )
+    })
+  })
+
+  test("diff('git') handles special filenames", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, weird), "hello\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: weird,
+            status: "added",
+          }),
+        ]),
+      )
+    })
+  })
+
+  test("diff('branch') returns changes against default branch", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await $`git branch -M main`.cwd(tmp.path).quiet()
+    await $`git checkout -b feature/test`.cwd(tmp.path).quiet()
+    await fs.writeFile(path.join(tmp.path, "branch.txt"), "hello\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "branch file"`.cwd(tmp.path).quiet()
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("branch")
+        }),
+      )
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: "branch.txt",
+            status: "added",
+          }),
+        ]),
+      )
     })
   })
 })

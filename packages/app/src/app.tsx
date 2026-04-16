@@ -10,7 +10,7 @@ import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Duration, Effect } from "effect"
+import { Effect } from "effect"
 import {
   type Component,
   createMemo,
@@ -37,7 +37,6 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -48,8 +47,13 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
-const Session = lazy(() => import("@/pages/session"))
+const loadSession = () => import("@/pages/session")
+const Session = lazy(loadSession)
 const Loading = () => <div class="size-full" />
+
+if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
+  void loadSession()
+}
 
 const SessionRoute = () => (
   <SessionProviders>
@@ -75,11 +79,6 @@ declare global {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
     }
   }
-}
-
-function MarkedProviderWithNativeParser(props: ParentProps) {
-  const platform = usePlatform()
-  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
 }
 
 function QueryProvider(props: ParentProps) {
@@ -122,10 +121,10 @@ function SessionProviders(props: ParentProps) {
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
-      <Suspense fallback={<Loading />}>
-        {props.appChildren}
-        {props.children}
-      </Suspense>
+      {/*<Suspense fallback={<Loading />}>*/}
+      {props.appChildren}
+      {props.children}
+      {/*</Suspense>*/}
     </AppShellProviders>
   )
 }
@@ -144,9 +143,9 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <QueryProvider>
                 <DialogProvider>
-                  <MarkedProviderWithNativeParser>
+                  <MarkedProvider>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProviderWithNativeParser>
+                  </MarkedProvider>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
@@ -156,11 +155,6 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
     </MetaProvider>
   )
 }
-
-const effectMinDuration =
-  (duration: Duration.Input) =>
-  <A, E, R>(e: Effect.Effect<A, E, R>) =>
-    Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
 
 function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const server = useServer()
@@ -183,40 +177,48 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
             if (checkMode() === "background" || type === "http") return false
           }
         }).pipe(
-          effectMinDuration(checkMode() === "blocking" ? "1.2 seconds" : 0),
-          Effect.timeoutOrElse({ duration: "10 seconds", onTimeout: () => Effect.succeed(false) }),
+          Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.succeed(false) }),
           Effect.ensuring(Effect.sync(() => setCheckMode("background"))),
           Effect.runPromise,
         ),
   )
 
   return (
-    <Show
-      when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
+    <Suspense
       fallback={
         <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >
+      {/*<Show
+        when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
+        fallback={
+          <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          </div>
+        }
+      >*/}
+      {checkMode() === "blocking" ? startupHealthCheck() : startupHealthCheck.latest}
       <Show
         when={startupHealthCheck()}
         fallback={
           <ConnectionError
             onRetry={() => {
-              if (checkMode() === "background") healthCheckActions.refetch()
+              if (checkMode() === "background") void healthCheckActions.refetch()
             }}
             onServerSelected={(key) => {
               setCheckMode("blocking")
               server.setActive(key)
-              healthCheckActions.refetch()
+              void healthCheckActions.refetch()
             }}
           />
         }
       >
         {props.children}
       </Show>
-    </Show>
+      {/*</Show>*/}
+    </Suspense>
   )
 }
 
@@ -284,7 +286,11 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+    <ServerProvider
+      defaultServer={props.defaultServer}
+      disableHealthCheck={props.disableHealthCheck}
+      servers={props.servers}
+    >
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <GlobalSDKProvider>

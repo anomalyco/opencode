@@ -1,7 +1,6 @@
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@opencode-ai/shared/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
@@ -9,11 +8,13 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
+import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -161,8 +162,8 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.diff": {
-      const props = event.properties as { sessionID: string; diff: FileDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
+      const props = event.properties as { sessionID: string; diff: SnapshotFileDiff[] }
+      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
       break
     }
     case "todo.updated": {
@@ -177,7 +178,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "message.updated": {
-      const info = (event.properties as { info: Message }).info
+      const info = clean((event.properties as { info: Message }).info)
       const messages = input.store.message[info.sessionID]
       if (!messages) {
         input.setStore("message", info.sessionID, [info])
@@ -271,9 +272,9 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "vcs.branch.updated": {
-      const props = event.properties as { branch: string }
+      const props = event.properties as { branch?: string }
       if (input.store.vcs?.branch === props.branch) break
-      const next = { branch: props.branch }
+      const next = { ...input.store.vcs, branch: props.branch }
       input.setStore("vcs", next)
       if (input.vcsCache) input.vcsCache.setStore("value", next)
       break

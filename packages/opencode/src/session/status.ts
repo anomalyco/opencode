@@ -1,9 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { InstanceState } from "@/effect"
 import { SessionID } from "./schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -50,11 +49,13 @@ export namespace SessionStatus {
     readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionStatus") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStatus") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
+
       const state = yield* InstanceState.make(
         Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
       )
@@ -70,9 +71,9 @@ export namespace SessionStatus {
 
       const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
         const data = yield* InstanceState.get(state)
-        yield* Effect.promise(() => Bus.publish(Event.Status, { sessionID, status }))
+        yield* bus.publish(Event.Status, { sessionID, status })
         if (status.type === "idle") {
-          yield* Effect.promise(() => Bus.publish(Event.Idle, { sessionID }))
+          yield* bus.publish(Event.Idle, { sessionID })
           data.delete(sessionID)
           return
         }
@@ -83,17 +84,5 @@ export namespace SessionStatus {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
-
-  export async function get(sessionID: SessionID) {
-    return runPromise((svc) => svc.get(sessionID))
-  }
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function set(sessionID: SessionID, status: Info) {
-    return runPromise((svc) => svc.set(sessionID, status))
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
 }

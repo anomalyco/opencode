@@ -1,6 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
-import { SessionID } from "@/session/schema"
 import z from "zod"
 
 export const TuiEvent = {
@@ -43,7 +41,7 @@ export const TuiEvent = {
   SessionSelect: BusEvent.define(
     "tui.session.select",
     z.object({
-      sessionID: SessionID.zod.describe("Session ID to navigate to"),
+      sessionID: z.string().describe("Session ID to navigate to"),
     }),
   ),
 }
