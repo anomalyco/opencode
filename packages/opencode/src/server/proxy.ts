@@ -110,12 +110,6 @@ export namespace ServerProxy {
     req: Request,
     workspaceID: WorkspaceID,
   ) {
-    console.log("proxy http request", {
-      method: req.method,
-      request: req.url,
-      url: String(url),
-    })
-
     if (!Workspace.isSyncing(workspaceID)) {
       return new Response(`broken sync connection for workspace: ${workspaceID}`, {
         status: 503,
