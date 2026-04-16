@@ -27,6 +27,8 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
+import { Config } from "../config"
+import { Git } from "@/git"
 import { Effect, Layer, Option, Context } from "effect"
 
 const log = Log.create({ service: "session" })
@@ -384,320 +386,338 @@ type Patch = z.infer<typeof Event.Updated.schema>["info"]
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))
 
-export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const storage = yield* Storage.Service
+export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | Config.Service | Git.Service> =
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const storage = yield* Storage.Service
+      const config = yield* Config.Service
+      const git = yield* Git.Service
 
-    const createNext = Effect.fn("Session.createNext")(function* (input: {
-      id?: SessionID
-      title?: string
-      parentID?: SessionID
-      workspaceID?: WorkspaceID
-      directory: string
-      permission?: Permission.Ruleset
-    }) {
-      const ctx = yield* InstanceState.context
-      const result: Info = {
-        id: SessionID.descending(input.id),
-        slug: Slug.create(),
-        version: InstallationVersion,
-        projectID: ctx.project.id,
-        directory: input.directory,
-        workspaceID: input.workspaceID,
-        parentID: input.parentID,
-        title: input.title ?? createDefaultTitle(!!input.parentID),
-        permission: input.permission,
-        time: {
-          created: Date.now(),
-          updated: Date.now(),
-        },
-      }
-      log.info("created", result)
-
-      yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
-
-      if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-        // This only exist for backwards compatibility. We should not be
-        // manually publishing this event; it is a sync event now
-        yield* bus.publish(Event.Updated, {
-          sessionID: result.id,
-          info: result,
-        })
-      }
-
-      return result
-    })
-
-    const get = Effect.fn("Session.get")(function* (id: SessionID) {
-      const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
-      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
-      return fromRow(row)
-    })
-
-    const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-      const rows = yield* db((d) =>
-        d
-          .select()
-          .from(SessionTable)
-          .where(and(eq(SessionTable.parent_id, parentID)))
-          .all(),
-      )
-      return rows.map(fromRow)
-    })
-
-    const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
-      try {
-        const session = yield* get(sessionID)
-        const kids = yield* children(sessionID)
-        for (const child of kids) {
-          yield* remove(child.id)
+      const resolveTitle = Effect.fn("Session.resolveTitle")(function* (dir: string, child: boolean) {
+        const cfg = yield* config.get()
+        if (cfg.autotitle === "branch") {
+          const b = yield* git.branch(dir)
+          if (b) return b
+          log.info("autotitle branch: no branch detected, falling back to default title", { dir })
         }
-
-        // `remove` needs to work in all cases, such as a broken
-        // sessions that run cleanup. In certain cases these will
-        // run without any instance state, so we need to turn off
-        // publishing of events in that case
-        const hasInstance = yield* InstanceState.directory.pipe(
-          Effect.as(true),
-          Effect.catchCause(() => Effect.succeed(false)),
-        )
-
-        yield* Effect.sync(() => {
-          SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
-          SyncEvent.remove(sessionID)
-        })
-      } catch (e) {
-        log.error(e)
-      }
-    })
-
-    const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
-      Effect.gen(function* () {
-        yield* Effect.sync(() => SyncEvent.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg }))
-        return msg
-      }).pipe(Effect.withSpan("Session.updateMessage"))
-
-    const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
-      Effect.gen(function* () {
-        yield* Effect.sync(() =>
-          SyncEvent.run(MessageV2.Event.PartUpdated, {
-            sessionID: part.sessionID,
-            part: structuredClone(part),
-            time: Date.now(),
-          }),
-        )
-        return part
-      }).pipe(Effect.withSpan("Session.updatePart"))
-
-    const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
-      const row = Database.use((db) =>
-        db
-          .select()
-          .from(PartTable)
-          .where(
-            and(
-              eq(PartTable.session_id, input.sessionID),
-              eq(PartTable.message_id, input.messageID),
-              eq(PartTable.id, input.partID),
-            ),
-          )
-          .get(),
-      )
-      if (!row) return
-      return {
-        ...row.data,
-        id: row.id,
-        sessionID: row.session_id,
-        messageID: row.message_id,
-      } as MessageV2.Part
-    })
-
-    const create = Effect.fn("Session.create")(function* (input?: {
-      parentID?: SessionID
-      title?: string
-      permission?: Permission.Ruleset
-      workspaceID?: WorkspaceID
-    }) {
-      const directory = yield* InstanceState.directory
-      const workspace = yield* InstanceState.workspaceID
-      return yield* createNext({
-        parentID: input?.parentID,
-        directory,
-        title: input?.title,
-        permission: input?.permission,
-        workspaceID: workspace,
+        // "llm" titling is handled separately after the first message; fall back to default here
+        return createDefaultTitle(child)
       })
-    })
 
-    const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-      const directory = yield* InstanceState.directory
-      const original = yield* get(input.sessionID)
-      const title = getForkedTitle(original.title)
-      const session = yield* createNext({
-        directory,
-        workspaceID: original.workspaceID,
-        title,
-      })
-      const msgs = yield* messages({ sessionID: input.sessionID })
-      const idMap = new Map<string, MessageID>()
+      const createNext = Effect.fn("Session.createNext")(function* (input: {
+        id?: SessionID
+        title?: string
+        parentID?: SessionID
+        workspaceID?: WorkspaceID
+        directory: string
+        permission?: Permission.Ruleset
+      }) {
+        const ctx = yield* InstanceState.context
+        const result: Info = {
+          id: SessionID.descending(input.id),
+          slug: Slug.create(),
+          version: InstallationVersion,
+          projectID: ctx.project.id,
+          directory: input.directory,
+          workspaceID: input.workspaceID,
+          parentID: input.parentID,
+          title: input.title ?? (yield* resolveTitle(input.directory, !!input.parentID)),
+          permission: input.permission,
+          time: {
+            created: Date.now(),
+            updated: Date.now(),
+          },
+        }
+        log.info("created", result)
 
-      for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
-        const newID = MessageID.ascending()
-        idMap.set(msg.info.id, newID)
+        yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
-        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
-        const cloned = yield* updateMessage({
-          ...msg.info,
-          sessionID: session.id,
-          id: newID,
-          ...(parentID && { parentID }),
-        })
-
-        for (const part of msg.parts) {
-          yield* updatePart({
-            ...part,
-            id: PartID.ascending(),
-            messageID: cloned.id,
-            sessionID: session.id,
+        if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+          // This only exist for backwards compatibility. We should not be
+          // manually publishing this event; it is a sync event now
+          yield* bus.publish(Event.Updated, {
+            sessionID: result.id,
+            info: result,
           })
         }
-      }
-      return session
-    })
 
-    const patch = (sessionID: SessionID, info: Patch) =>
-      Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID, info }))
+        return result
+      })
 
-    const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
-      yield* patch(sessionID, { time: { updated: Date.now() } })
-    })
+      const get = Effect.fn("Session.get")(function* (id: SessionID) {
+        const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+        if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+        return fromRow(row)
+      })
 
-    const setTitle = Effect.fn("Session.setTitle")(function* (input: { sessionID: SessionID; title: string }) {
-      yield* patch(input.sessionID, { title: input.title })
-    })
+      const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
+        const rows = yield* db((d) =>
+          d
+            .select()
+            .from(SessionTable)
+            .where(and(eq(SessionTable.parent_id, parentID)))
+            .all(),
+        )
+        return rows.map(fromRow)
+      })
 
-    const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
-      yield* patch(input.sessionID, { time: { archived: input.time } })
-    })
+      const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+        try {
+          const session = yield* get(sessionID)
+          const kids = yield* children(sessionID)
+          for (const child of kids) {
+            yield* remove(child.id)
+          }
 
-    const setPermission = Effect.fn("Session.setPermission")(function* (input: {
-      sessionID: SessionID
-      permission: Permission.Ruleset
-    }) {
-      yield* patch(input.sessionID, { permission: input.permission, time: { updated: Date.now() } })
-    })
+          // `remove` needs to work in all cases, such as a broken
+          // sessions that run cleanup. In certain cases these will
+          // run without any instance state, so we need to turn off
+          // publishing of events in that case
+          const hasInstance = yield* InstanceState.directory.pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          )
 
-    const setRevert = Effect.fn("Session.setRevert")(function* (input: {
-      sessionID: SessionID
-      revert: Info["revert"]
-      summary: Info["summary"]
-    }) {
-      yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert })
-    })
+          yield* Effect.sync(() => {
+            SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
+            SyncEvent.remove(sessionID)
+          })
+        } catch (e) {
+          log.error(e)
+        }
+      })
 
-    const clearRevert = Effect.fn("Session.clearRevert")(function* (sessionID: SessionID) {
-      yield* patch(sessionID, { time: { updated: Date.now() }, revert: null })
-    })
+      const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => SyncEvent.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg }))
+          return msg
+        }).pipe(Effect.withSpan("Session.updateMessage"))
 
-    const setSummary = Effect.fn("Session.setSummary")(function* (input: {
-      sessionID: SessionID
-      summary: Info["summary"]
-    }) {
-      yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
-    })
+      const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() =>
+            SyncEvent.run(MessageV2.Event.PartUpdated, {
+              sessionID: part.sessionID,
+              part: structuredClone(part),
+              time: Date.now(),
+            }),
+          )
+          return part
+        }).pipe(Effect.withSpan("Session.updatePart"))
 
-    const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-      return yield* storage
-        .read<Snapshot.FileDiff[]>(["session_diff", sessionID])
-        .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => []))
-    })
+      const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
+        const row = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(
+              and(
+                eq(PartTable.session_id, input.sessionID),
+                eq(PartTable.message_id, input.messageID),
+                eq(PartTable.id, input.partID),
+              ),
+            )
+            .get(),
+        )
+        if (!row) return
+        return {
+          ...row.data,
+          id: row.id,
+          sessionID: row.session_id,
+          messageID: row.message_id,
+        } as MessageV2.Part
+      })
 
-    const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
-      if (input.limit) {
-        return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
-      }
-      return Array.from(MessageV2.stream(input.sessionID)).reverse()
-    })
+      const create = Effect.fn("Session.create")(function* (input?: {
+        parentID?: SessionID
+        title?: string
+        permission?: Permission.Ruleset
+        workspaceID?: WorkspaceID
+      }) {
+        const directory = yield* InstanceState.directory
+        return yield* createNext({
+          parentID: input?.parentID,
+          directory,
+          title: input?.title,
+          permission: input?.permission,
+          workspaceID: input?.workspaceID,
+        })
+      })
 
-    const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
-      sessionID: SessionID
-      messageID: MessageID
-    }) {
-      yield* Effect.sync(() =>
-        SyncEvent.run(MessageV2.Event.Removed, {
-          sessionID: input.sessionID,
-          messageID: input.messageID,
-        }),
-      )
-      return input.messageID
-    })
+      const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+        const directory = yield* InstanceState.directory
+        const original = yield* get(input.sessionID)
+        const title = getForkedTitle(original.title)
+        const session = yield* createNext({
+          directory,
+          workspaceID: original.workspaceID,
+          title,
+        })
+        const msgs = yield* messages({ sessionID: input.sessionID })
+        const idMap = new Map<string, MessageID>()
 
-    const removePart = Effect.fn("Session.removePart")(function* (input: {
-      sessionID: SessionID
-      messageID: MessageID
-      partID: PartID
-    }) {
-      yield* Effect.sync(() =>
-        SyncEvent.run(MessageV2.Event.PartRemoved, {
-          sessionID: input.sessionID,
-          messageID: input.messageID,
-          partID: input.partID,
-        }),
-      )
-      return input.partID
-    })
+        for (const msg of msgs) {
+          if (input.messageID && msg.info.id >= input.messageID) break
+          const newID = MessageID.ascending()
+          idMap.set(msg.info.id, newID)
 
-    const updatePartDelta = Effect.fnUntraced(function* (input: {
-      sessionID: SessionID
-      messageID: MessageID
-      partID: PartID
-      field: string
-      delta: string
-    }) {
-      yield* bus.publish(MessageV2.Event.PartDelta, input)
-    })
+          const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
+          const cloned = yield* updateMessage({
+            ...msg.info,
+            sessionID: session.id,
+            id: newID,
+            ...(parentID && { parentID }),
+          })
 
-    /** Finds the first message matching the predicate, searching newest-first. */
-    const findMessage = Effect.fn("Session.findMessage")(function* (
-      sessionID: SessionID,
-      predicate: (msg: MessageV2.WithParts) => boolean,
-    ) {
-      for (const item of MessageV2.stream(sessionID)) {
-        if (predicate(item)) return Option.some(item)
-      }
-      return Option.none<MessageV2.WithParts>()
-    })
+          for (const part of msg.parts) {
+            yield* updatePart({
+              ...part,
+              id: PartID.ascending(),
+              messageID: cloned.id,
+              sessionID: session.id,
+            })
+          }
+        }
+        return session
+      })
 
-    return Service.of({
-      create,
-      fork,
-      touch,
-      get,
-      setTitle,
-      setArchived,
-      setPermission,
-      setRevert,
-      clearRevert,
-      setSummary,
-      diff,
-      messages,
-      children,
-      remove,
-      updateMessage,
-      removeMessage,
-      removePart,
-      updatePart,
-      getPart,
-      updatePartDelta,
-      findMessage,
-    })
-  }),
+      const patch = (sessionID: SessionID, info: Patch) =>
+        Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID, info }))
+
+      const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
+        yield* patch(sessionID, { time: { updated: Date.now() } })
+      })
+
+      const setTitle = Effect.fn("Session.setTitle")(function* (input: { sessionID: SessionID; title: string }) {
+        yield* patch(input.sessionID, { title: input.title })
+      })
+
+      const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
+        yield* patch(input.sessionID, { time: { archived: input.time } })
+      })
+
+      const setPermission = Effect.fn("Session.setPermission")(function* (input: {
+        sessionID: SessionID
+        permission: Permission.Ruleset
+      }) {
+        yield* patch(input.sessionID, { permission: input.permission, time: { updated: Date.now() } })
+      })
+
+      const setRevert = Effect.fn("Session.setRevert")(function* (input: {
+        sessionID: SessionID
+        revert: Info["revert"]
+        summary: Info["summary"]
+      }) {
+        yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert })
+      })
+
+      const clearRevert = Effect.fn("Session.clearRevert")(function* (sessionID: SessionID) {
+        yield* patch(sessionID, { time: { updated: Date.now() }, revert: null })
+      })
+
+      const setSummary = Effect.fn("Session.setSummary")(function* (input: {
+        sessionID: SessionID
+        summary: Info["summary"]
+      }) {
+        yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
+      })
+
+      const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
+        return yield* storage
+          .read<Snapshot.FileDiff[]>(["session_diff", sessionID])
+          .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => []))
+      })
+
+      const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
+        if (input.limit) {
+          return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
+        }
+        return Array.from(MessageV2.stream(input.sessionID)).reverse()
+      })
+
+      const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+      }) {
+        yield* Effect.sync(() =>
+          SyncEvent.run(MessageV2.Event.Removed, {
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+          }),
+        )
+        return input.messageID
+      })
+
+      const removePart = Effect.fn("Session.removePart")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+        partID: PartID
+      }) {
+        yield* Effect.sync(() =>
+          SyncEvent.run(MessageV2.Event.PartRemoved, {
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            partID: input.partID,
+          }),
+        )
+        return input.partID
+      })
+
+      const updatePartDelta = Effect.fn("Session.updatePartDelta")(function* (input: {
+        sessionID: SessionID
+        messageID: MessageID
+        partID: PartID
+        field: string
+        delta: string
+      }) {
+        yield* bus.publish(MessageV2.Event.PartDelta, input)
+      })
+
+      /** Finds the first message matching the predicate, searching newest-first. */
+      const findMessage = Effect.fn("Session.findMessage")(function* (
+        sessionID: SessionID,
+        predicate: (msg: MessageV2.WithParts) => boolean,
+      ) {
+        for (const item of MessageV2.stream(sessionID)) {
+          if (predicate(item)) return Option.some(item)
+        }
+        return Option.none<MessageV2.WithParts>()
+      })
+
+      return Service.of({
+        create,
+        fork,
+        touch,
+        get,
+        setTitle,
+        setArchived,
+        setPermission,
+        setRevert,
+        clearRevert,
+        setSummary,
+        diff,
+        messages,
+        children,
+        remove,
+        updateMessage,
+        removeMessage,
+        removePart,
+        updatePart,
+        getPart,
+        updatePartDelta,
+        findMessage,
+      })
+    }),
+  )
+
+export const defaultLayer = layer.pipe(
+  Layer.provide(Bus.layer),
+  Layer.provide(Storage.defaultLayer),
+  Layer.provide(Config.defaultLayer),
+  Layer.provide(Git.defaultLayer),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
 
 export function* list(input?: {
   directory?: string
