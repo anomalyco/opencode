@@ -25,6 +25,7 @@ import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
@@ -801,7 +802,8 @@ function* listByProject(
     }
   } else if (input.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      const normalized = AppFileSystem.resolve(input.directory)
+      conditions.push(eq(SessionTable.directory, normalized))
     }
   }
   if (input.roots) {
@@ -842,7 +844,8 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    const normalized = AppFileSystem.resolve(input.directory)
+    conditions.push(eq(SessionTable.directory, normalized))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
