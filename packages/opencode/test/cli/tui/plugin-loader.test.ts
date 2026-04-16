@@ -296,6 +296,7 @@ export default {
 
       return {
         localThemeFile,
+        localThemePath,
         invalidThemeFile,
         globalThemeFile,
         preloadedThemeFile,
