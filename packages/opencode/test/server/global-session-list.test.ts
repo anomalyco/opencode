@@ -4,7 +4,7 @@ import z from "zod"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project/project"
 import { Session as SessionNs } from "../../src/session"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })

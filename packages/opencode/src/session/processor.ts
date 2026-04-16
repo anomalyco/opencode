@@ -18,7 +18,7 @@ import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { isRecord } from "@/util/record"
 
 export namespace SessionProcessor {

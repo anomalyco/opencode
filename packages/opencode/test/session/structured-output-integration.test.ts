@@ -3,7 +3,7 @@ import path from "path"
 import { Effect, Layer } from "effect"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 

@@ -14,7 +14,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Config } from "../config"
 import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "@opencode-ai/shared/util/glob"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { Discovery } from "./discovery"
 
 const log = Log.create({ service: "skill" })

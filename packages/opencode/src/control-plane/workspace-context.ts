@@ -1,4 +1,4 @@
-import { LocalContext } from "../util/local-context"
+import { LocalContext } from "../util"
 import type { WorkspaceID } from "../control-plane/schema"
 
 export interface WorkspaceContext {

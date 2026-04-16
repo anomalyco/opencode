@@ -5,7 +5,7 @@ import type { Agent } from "../agent/agent"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { evaluate } from "@/permission/evaluate"
 import { Identifier } from "../id/id"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { ToolID } from "./schema"
 import { TRUNCATION_DIR } from "./truncation-dir"
 

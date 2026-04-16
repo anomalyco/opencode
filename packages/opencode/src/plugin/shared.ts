@@ -3,7 +3,7 @@ import { fileURLToPath, pathToFileURL } from "url"
 import npa from "npm-package-arg"
 import semver from "semver"
 import { Npm } from "../npm"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { isRecord } from "@/util/record"
 
 // Old npm package names for plugins that are now built-in

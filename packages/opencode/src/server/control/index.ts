@@ -1,6 +1,6 @@
 import { Auth } from "@/auth"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { Effect } from "effect"
 import { ProviderID } from "@/provider/schema"
 import { Hono } from "hono"

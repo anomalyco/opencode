@@ -1,4 +1,4 @@
-import { Log } from "../util/log"
+import { Log } from "../util"
 import path from "path"
 import { Global } from "../global"
 import { NamedError } from "@opencode-ai/shared/util/error"

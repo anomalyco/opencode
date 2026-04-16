@@ -7,7 +7,7 @@ import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware,
 import { FenceMiddleware } from "./fence"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { Flag } from "@/flag/flag"
 import { ControlPlaneRoutes } from "./control"
 import { UIRoutes } from "./ui"

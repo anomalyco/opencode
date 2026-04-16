@@ -1,5 +1,5 @@
 import { Cause, Effect, Logger, References } from "effect"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 
 export namespace EffectLogger {
   type Fields = Record<string, unknown>

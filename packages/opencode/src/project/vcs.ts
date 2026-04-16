@@ -7,7 +7,7 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { Instance } from "./instance"
 import z from "zod"
 

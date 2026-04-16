@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Project } from "../../src/project/project"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"

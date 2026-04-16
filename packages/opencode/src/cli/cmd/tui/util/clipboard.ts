@@ -4,8 +4,8 @@ import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../../../util/filesystem"
-import { Process } from "../../../../util/process"
+import { Filesystem } from "../../../../util"
+import { Process } from "../../../../util"
 import { which } from "../../../../util/which"
 
 /**

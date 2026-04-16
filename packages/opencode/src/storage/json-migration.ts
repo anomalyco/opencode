@@ -1,13 +1,13 @@
 import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
 import { Global } from "../global"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { ProjectTable } from "../project/project.sql"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../session/session.sql"
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace JsonMigration {

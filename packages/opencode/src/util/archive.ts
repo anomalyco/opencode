@@ -1,5 +1,5 @@
 import path from "path"
-import { Process } from "./process"
+import { Process } from "."
 
 export async function extractZip(zipPath: string, destDir: string) {
   if (process.platform === "win32") {

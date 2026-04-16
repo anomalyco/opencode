@@ -1,7 +1,7 @@
 import { Effect, Fiber } from "effect"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Instance, type InstanceContext } from "@/project/instance"
-import { LocalContext } from "@/util/local-context"
+import { LocalContext } from "@/util"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { attachWith } from "./run-service"
 

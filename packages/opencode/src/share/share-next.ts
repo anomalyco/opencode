@@ -11,7 +11,7 @@ import { MessageV2 } from "@/session/message-v2"
 import type { SessionID } from "@/session/schema"
 import { Database, eq } from "@/storage/db"
 import { Config } from "@/config"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { SessionShareTable } from "./share.sql"
 
 export namespace ShareNext {

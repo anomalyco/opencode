@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { Keybind } from "@/util/keybind"
+import { Keybind } from "@/util"
 import { pipe, mapValues } from "remeda"
 import type { TuiConfig } from "@/config/tui"
 import type { ParsedKey, Renderable } from "@opentui/core"

@@ -3,7 +3,7 @@ import { Database, inArray } from "@/storage/db"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { Workspace } from "@/control-plane/workspace"
 import type { WorkspaceID } from "@/control-plane/schema"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 
 const HEADER = "x-opencode-sync"
 type State = Record<string, number>

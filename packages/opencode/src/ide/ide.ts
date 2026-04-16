@@ -1,8 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { NamedError } from "@opencode-ai/shared/util/error"
-import { Log } from "../util/log"
-import { Process } from "@/util/process"
+import { Log } from "../util"
+import { Process } from "@/util"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },

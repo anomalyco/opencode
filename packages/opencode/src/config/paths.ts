@@ -3,7 +3,7 @@ import os from "os"
 import z from "zod"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { NamedError } from "@opencode-ai/shared/util/error"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 

@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 import { Flock } from "@opencode-ai/shared/util/flock"
 
 const app = "opencode"

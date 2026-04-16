@@ -6,7 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config"
 import { TuiConfig } from "../../src/config/tui"
 import { Global } from "../../src/global"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!

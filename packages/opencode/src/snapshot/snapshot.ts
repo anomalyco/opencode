@@ -9,7 +9,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Hash } from "@opencode-ai/shared/util/hash"
 import { Config } from "../config"
 import { Global } from "../global"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 export const Patch = z.object({
   hash: z.string(),
