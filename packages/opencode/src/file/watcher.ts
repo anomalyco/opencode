@@ -159,5 +159,23 @@ export namespace FileWatcher {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
+  const localDefaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
+
+  // Parcel's native binding can't run inside a Vercel sandbox. On
+  // vercel mode the agent is the only writer to the tenant fs, so
+  // external fs-change events carry no information — dispatch to a
+  // no-op layer. Dynamic import defers the workspace module graph
+  // (which transitively pulls in @/global's top-level await) until
+  // first use.
+  export const defaultLayer: Layer.Layer<Service, never, never> = Layer.unwrap(
+    Effect.suspend(() => {
+      if ((globalThis.process?.env?.OPENCODE_WORKSPACE_BACKEND ?? "").toLowerCase() !== "vercel") {
+        return Effect.succeed(localDefaultLayer)
+      }
+      return Effect.promise(async () => {
+        const mod = await import("@/workspace/vercel-filewatcher")
+        return mod.layer as Layer.Layer<Service, never, never>
+      })
+    }),
+  )
 }

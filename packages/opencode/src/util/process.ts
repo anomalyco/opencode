@@ -58,6 +58,16 @@ export namespace Process {
 
   export function spawn(cmd: string[], opts: Options = {}): Child {
     if (cmd.length === 0) throw new Error("Command is required")
+    // When OPENCODE_WORKSPACE_BACKEND=vercel, route through the
+    // in-sandbox exec gateway so LSP servers and other spawn consumers
+    // run in the tenant substrate. Require is dynamic because
+    // workspace/* transitively pulls in @/global (top-level await),
+    // which must not be loaded during util/process's eval phase.
+    if ((globalThis.process?.env?.OPENCODE_WORKSPACE_BACKEND ?? "").toLowerCase() === "vercel") {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require("@/workspace/vercel-process") as typeof import("@/workspace/vercel-process")
+      return mod.spawnViaVercel(cmd, opts)
+    }
     opts.abort?.throwIfAborted()
 
     const proc = launch(cmd[0], cmd.slice(1), {

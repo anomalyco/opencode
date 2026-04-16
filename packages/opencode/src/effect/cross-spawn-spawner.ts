@@ -500,7 +500,31 @@ export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSyste
   make,
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+const crossSpawnDefault = layer.pipe(
+  Layer.provide(NodeFileSystem.layer),
+  Layer.provide(NodePath.layer),
+)
+
+// When OPENCODE_WORKSPACE_BACKEND=vercel, route spawn() calls through
+// the in-sandbox exec gateway so consumers (bash tool, Git, Format,
+// Snapshot, Ripgrep) transparently run in the tenant's substrate.
+// Local mode keeps the existing cross-spawn implementation.
+//
+// Dynamic `import()` keeps workspace/* out of the static module graph;
+// @/global has a top-level await that collides with cross-spawn-spawner
+// being loaded by low-level services, so the vercel branch must be
+// deferred until the runtime actually needs a spawner.
+export const defaultLayer: Layer.Layer<ChildProcessSpawner, never, never> = Layer.unwrap(
+  Effect.suspend(() => {
+    if ((globalThis.process?.env?.OPENCODE_WORKSPACE_BACKEND ?? "").toLowerCase() !== "vercel") {
+      return Effect.succeed(crossSpawnDefault)
+    }
+    return Effect.promise(async () => {
+      const mod = await import("@/workspace/vercel-spawner")
+      return mod.VercelChildProcessSpawner.defaultLayer
+    })
+  }),
+)
 
 import { lazy } from "@/util/lazy"
 

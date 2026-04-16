@@ -21,7 +21,14 @@ import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
-import { AppRuntime } from "@/effect/app-runtime"
+// Note: AppRuntime is loaded lazily inside the one function that uses it
+// (see `stream` below). A top-level `import { AppRuntime } from
+// "@/effect/app-runtime"` introduces a runtime cycle:
+//   llm.ts → app-runtime.ts → (line 83) read LLM.defaultLayer while
+//   llm.ts is still mid-load → undefined → TypeError.
+// Lazy import via `await import(...)` defers the load until after the
+// initial module-eval pass has finished, breaking the cycle without
+// touching app-runtime.ts.
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -306,6 +313,7 @@ export namespace LLM {
             }
           })
           const uniquePatterns = [...new Set(toolPatterns)] as string[]
+          const { AppRuntime } = await import("@/effect/app-runtime")
           await AppRuntime.runPromise(
             Permission.Service.use((svc) =>
               svc.ask({
