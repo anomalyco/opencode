@@ -5,7 +5,7 @@ import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
-import { Flock } from "./util/flock"
+import { EffectFlock } from "./util/effect-flock"
 
 export namespace Npm {
   export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
@@ -62,6 +62,7 @@ export namespace Npm {
       const afs = yield* AppFileSystem.Service
       const global = yield* Global.Service
       const fs = yield* FileSystem.FileSystem
+      const flock = yield* EffectFlock.Service
       const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
 
       const outdated = Effect.fn("Npm.outdated")(function* (pkg: string, cachedVersion: string) {
@@ -92,7 +93,7 @@ export namespace Npm {
 
       const add = Effect.fn("Npm.add")(function* (pkg: string) {
         const dir = directory(pkg)
-        yield* Flock.effect(`npm-install:${dir}`)
+        yield* flock.acquire(`npm-install:${dir}`)
 
         const arborist = new Arborist({
           path: dir,
@@ -133,7 +134,7 @@ export namespace Npm {
       }, Effect.scoped)
 
       const install = Effect.fn("Npm.install")(function* (dir: string) {
-        yield* Flock.effect(`npm-install:${dir}`)
+        yield* flock.acquire(`npm-install:${dir}`)
 
         const reify = Effect.fnUntraced(function* () {
           const arb = new Arborist({
@@ -240,6 +241,7 @@ export namespace Npm {
   )
 
   export const defaultLayer = layer.pipe(
+    Layer.provide(EffectFlock.layer),
     Layer.provide(AppFileSystem.layer),
     Layer.provide(Global.layer),
     Layer.provide(NodeFileSystem.layer),

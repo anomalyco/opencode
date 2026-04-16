@@ -274,5 +274,5 @@ export namespace EffectFlock {
     }),
   )
 
-  export const live = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Global.layer))
 }

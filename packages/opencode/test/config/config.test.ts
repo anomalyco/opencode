@@ -2,6 +2,8 @@ import { test, expect, describe, mock, afterEach, beforeEach, spyOn } from "bun:
 import { Deferred, Effect, Fiber, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "../../src/config"
+import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
@@ -34,7 +36,10 @@ const emptyAuth = Layer.mock(Auth.Service)({
   all: () => Effect.succeed({}),
 })
 
+const testFlock = EffectFlock.defaultLayer
+
 const layer = Config.layer.pipe(
+  Layer.provide(testFlock),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(emptyAuth),
@@ -333,6 +338,7 @@ test("resolves env templates in account config with account token", async () => 
   })
 
   const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(emptyAuth),
@@ -879,11 +885,7 @@ it.live("dedupes concurrent config dependency installs for the same dir", () =>
     yield* Deferred.await(ready)
 
     let done = false
-    const second = yield* installDeps(dir, {
-      waitTick: () => {
-        Deferred.doneUnsafe(blocked, Effect.void)
-      },
-    }).pipe(
+    const second = yield* installDeps(dir).pipe(
       Effect.tap(() =>
         Effect.sync(() => {
           done = true
@@ -892,7 +894,8 @@ it.live("dedupes concurrent config dependency installs for the same dir", () =>
       Effect.forkScoped,
     )
 
-    yield* Deferred.await(blocked)
+    // Give the second fiber time to hit the lock retry loop
+    yield* Effect.sleep(500)
     expect(done).toBe(false)
 
     yield* Deferred.succeed(hold, void 0)
@@ -955,12 +958,9 @@ it.live("serializes config dependency installs across dirs", () =>
     const first = yield* installDeps(a).pipe(Effect.forkScoped)
     yield* Deferred.await(ready)
 
-    const second = yield* installDeps(b, {
-      waitTick: () => {
-        Deferred.doneUnsafe(blocked, Effect.void)
-      },
-    }).pipe(Effect.forkScoped)
-    yield* Deferred.await(blocked)
+    const second = yield* installDeps(b).pipe(Effect.forkScoped)
+    // Give the second fiber time to hit the lock retry loop
+    yield* Effect.sleep(500)
     expect(peak).toBe(1)
 
     yield* Deferred.succeed(hold, void 0)
@@ -1826,6 +1826,7 @@ test("project config overrides remote well-known config", async () => {
   })
 
   const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(fakeAuth),
@@ -1882,6 +1883,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
   })
 
   const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(fakeAuth),
