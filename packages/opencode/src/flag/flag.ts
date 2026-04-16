@@ -45,6 +45,7 @@ export namespace Flag {
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export declare const OPENCODE_CLIENT: string
+  export declare const OPENCODE_WORKSPACE_BACKEND: string | undefined
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
@@ -153,6 +154,17 @@ Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_WORKSPACE_BACKEND — evaluated at access
+// time, not module load, because the conformance test runner mutates
+// this env var at runtime to force the router into a specific backend.
+Object.defineProperty(Flag, "OPENCODE_WORKSPACE_BACKEND", {
+  get() {
+    return process.env["OPENCODE_WORKSPACE_BACKEND"]
   },
   enumerable: true,
   configurable: false,

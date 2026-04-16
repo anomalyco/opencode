@@ -1032,6 +1032,30 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      workspace: z
+        .discriminatedUnion("backend", [
+          z.object({ backend: z.literal("local") }).strict(),
+          z
+            .object({
+              backend: z.literal("vercel"),
+              vercel: z
+                .object({
+                  token: z.string().optional(),
+                  teamId: z.string().optional(),
+                  projectId: z.string().optional(),
+                  snapshotId: z.string().optional(),
+                  timeoutMs: z.number().int().positive().optional(),
+                  worktree: z.string().optional(),
+                })
+                .strict()
+                .optional(),
+            })
+            .strict(),
+        ])
+        .optional()
+        .describe(
+          "Workspace backend selection. When present, picks which substrate tools operate on. 'local' (default) runs on the host; 'vercel' routes tool operations into an isolated Vercel sandbox keyed by Instance.directory.",
+        ),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
