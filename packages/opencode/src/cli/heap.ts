@@ -2,7 +2,7 @@ import path from "path"
 import { writeHeapSnapshot } from "node:v8"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 
 const log = Log.create({ service: "heap" })
 const MINUTE = 60_000

@@ -1,10 +1,10 @@
 import { describe, test, expect } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer } from "effect"
-import { Truncate } from "../../src/tool/truncate"
+import { Truncate } from "../../src/tool"
 import { Identifier } from "../../src/id/id"
-import { Process } from "../../src/util/process"
-import { Filesystem } from "../../src/util/filesystem"
+import { Process } from "../../src/util"
+import { Filesystem } from "../../src/util"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
@@ -181,8 +181,8 @@ describe("Truncate", () => {
 
         yield* fs.makeDirectory(Truncate.DIR, { recursive: true })
 
-        const old = path.join(Truncate.DIR, Identifier.create("tool", false, Date.now() - 10 * DAY_MS))
-        const recent = path.join(Truncate.DIR, Identifier.create("tool", false, Date.now() - 3 * DAY_MS))
+        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 10 * DAY_MS))
+        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 3 * DAY_MS))
 
         yield* writeFileStringScoped(old, "old content")
         yield* writeFileStringScoped(recent, "recent content")

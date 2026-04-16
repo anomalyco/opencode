@@ -48,7 +48,7 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
         let json
         try {
           json = JSON.parse(chunk.slice(6)) as { usageMetadata?: Usage }
-        } catch (e) {
+        } catch {
           return
         }
 

@@ -6,7 +6,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { FileTime } from "../../src/file/time"
 import { Instance } from "../../src/project/instance"
 import { SessionID } from "../../src/session/schema"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 

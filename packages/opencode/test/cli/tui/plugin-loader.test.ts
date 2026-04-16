@@ -5,9 +5,8 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { Global } from "../../../src/global"
-import { TuiConfig } from "../../../src/config/tui"
-import { Config } from "../../../src/config/config"
-import { Filesystem } from "../../../src/util/filesystem"
+import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
+import { Filesystem } from "../../../src/util/"
 
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
@@ -325,13 +324,59 @@ export default {
   })
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const install = spyOn(Config, "installDependencies").mockResolvedValue()
 
   try {
     expect(addTheme(tmp.extra.preloadedThemeName, { theme: { primary: "#303030" } })).toBe(true)
 
-    await TuiPluginRuntime.init(
-      createTuiPluginApi({
+    const localOpts = {
+      fn_marker: tmp.extra.fnMarker,
+      marker: tmp.extra.localMarker,
+      source: tmp.extra.localDest.replace(".opencode/themes/", ""),
+      dest: tmp.extra.localDest,
+      theme_path: `./${tmp.extra.localThemeFile}`,
+      theme_name: tmp.extra.localThemeName,
+      kv_key: "plugin_state_key",
+      session_id: "ses_test",
+      keybinds: { modal: "ctrl+alt+m", close: "q" },
+    }
+    const invalidOpts = {
+      marker: tmp.extra.invalidMarker,
+      theme_path: `./${tmp.extra.invalidThemeFile}`,
+      theme_name: tmp.extra.invalidThemeName,
+    }
+    const preloadedOpts = {
+      marker: tmp.extra.preloadedMarker,
+      dest: tmp.extra.preloadedDest,
+      theme_path: `./${tmp.extra.preloadedThemeFile}`,
+      theme_name: tmp.extra.preloadedThemeName,
+    }
+    const globalOpts = {
+      marker: tmp.extra.globalMarker,
+      theme_path: `./${tmp.extra.globalThemeFile}`,
+      theme_name: tmp.extra.globalThemeName,
+    }
+
+    const config: TuiConfig.Info = {
+      plugin: [
+        [tmp.extra.localSpec, localOpts],
+        [tmp.extra.invalidSpec, invalidOpts],
+        [tmp.extra.preloadedSpec, preloadedOpts],
+        [tmp.extra.globalSpec, globalOpts],
+      ],
+      plugin_origins: [
+        { spec: [tmp.extra.localSpec, localOpts], scope: "local", source: path.join(tmp.path, "tui.json") },
+        { spec: [tmp.extra.invalidSpec, invalidOpts], scope: "local", source: path.join(tmp.path, "tui.json") },
+        { spec: [tmp.extra.preloadedSpec, preloadedOpts], scope: "local", source: path.join(tmp.path, "tui.json") },
+        {
+          spec: [tmp.extra.globalSpec, globalOpts],
+          scope: "global",
+          source: path.join(Global.Path.config, "tui.json"),
+        },
+      ],
+    }
+
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({
         tuiConfig: {
           theme: "smoke",
           diff_style: "stacked",
@@ -368,7 +413,8 @@ export default {
           },
         },
       }),
-    )
+      config,
+    })
     const local = await row(tmp.extra.localMarker)
     const global = await row(tmp.extra.globalMarker)
     const invalid = await row(tmp.extra.invalidMarker)
@@ -407,7 +453,6 @@ export default {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    install.mockRestore()
     if (backup === undefined) {
       await fs.rm(globalConfigPath, { force: true })
     } else {
@@ -462,7 +507,7 @@ test("continues loading when a plugin is missing config metadata", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const config: TuiConfig.Info = {
     plugin: [
       [tmp.extra.badSpec, { marker: path.join(tmp.path, "bad.txt") }],
       [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
@@ -480,12 +525,12 @@ test("continues loading when a plugin is missing config metadata", async () => {
         source: path.join(tmp.path, "tui.json"),
       },
     ],
-  })
+  }
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
     // bad plugin was skipped (no metadata entry)
     await expect(fs.readFile(path.join(tmp.path, "bad.txt"), "utf8")).rejects.toThrow()
     // good plugin loaded fine
@@ -495,7 +540,6 @@ test("continues loading when a plugin is missing config metadata", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
@@ -558,7 +602,18 @@ export default {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    const a = path.join(tmp.path, "order-a.ts")
+    const b = path.join(tmp.path, "order-b.ts")
+    const aSpec = pathToFileURL(a).href
+    const bSpec = pathToFileURL(b).href
+    const config: TuiConfig.Info = {
+      plugin: [aSpec, bSpec],
+      plugin_origins: [
+        { spec: aSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
+        { spec: bSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
+      ],
+    }
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
     const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
     expect(lines).toEqual(["a-start", "a-end", "b"])
   } finally {
@@ -701,9 +756,8 @@ test("updates installed theme when plugin metadata changes", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const install = spyOn(Config, "installDependencies").mockResolvedValue()
 
-  const api = () =>
+  const mkApi = () =>
     createTuiPluginApi({
       theme: {
         has(name) {
@@ -712,8 +766,19 @@ test("updates installed theme when plugin metadata changes", async () => {
       },
     })
 
+  const mkConfig = (): TuiConfig.Info => ({
+    plugin: [[tmp.extra.spec, { theme_path: `./theme-update.json` }]],
+    plugin_origins: [
+      {
+        spec: [tmp.extra.spec, { theme_path: `./theme-update.json` }],
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+    ],
+  })
+
   try {
-    await TuiPluginRuntime.init(api())
+    await TuiPluginRuntime.init({ api: mkApi(), config: mkConfig() })
     await TuiPluginRuntime.dispose()
     await expect(fs.readFile(tmp.extra.dest, "utf8")).resolves.toContain("#111111")
 
@@ -734,7 +799,7 @@ test("updates installed theme when plugin metadata changes", async () => {
     await fs.utimes(tmp.extra.pluginPath, stamp, stamp)
     await fs.utimes(tmp.extra.themePath, stamp, stamp)
 
-    await TuiPluginRuntime.init(api())
+    await TuiPluginRuntime.init({ api: mkApi(), config: mkConfig() })
     const text = await fs.readFile(tmp.extra.dest, "utf8")
     expect(text).toContain("#222222")
     expect(text).not.toContain("#111111")
@@ -746,7 +811,6 @@ test("updates installed theme when plugin metadata changes", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    install.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
