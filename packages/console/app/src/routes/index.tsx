@@ -31,8 +31,6 @@ export default function Home() {
   const i18n = useI18n()
   const language = useLanguage()
   const githubData = createAsync(() => github())
-  const release = createMemo(() => githubData()?.release)
-
   const handleCopyClick = (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     const text = button.textContent

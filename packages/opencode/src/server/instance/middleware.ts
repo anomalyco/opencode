@@ -16,8 +16,6 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
-const OPENCODE_WORKSPACE = process.env.OPENCODE_WORKSPACE
-
 const RULES: Array<Rule> = [
   { path: "/session/status", action: "forward" },
   { method: "GET", path: "/session", action: "local" },

@@ -328,7 +328,7 @@ export namespace Workspace {
       try {
         const adaptor = await getAdaptor(info.projectID, row.type)
         await adaptor.remove(info)
-      } catch (err) {
+      } catch {
         log.error("adaptor not available when removing workspace", { type: row.type })
       }
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
@@ -404,7 +404,7 @@ export namespace Workspace {
           return synced(state)
         },
       })
-    } catch (error) {
+    } catch {
       if (signal?.aborted) throw signal.reason ?? new Error("Request aborted")
       throw new Error(`Timed out waiting for sync fence: ${JSON.stringify(state)}`)
     }

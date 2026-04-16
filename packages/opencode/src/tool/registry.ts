@@ -176,7 +176,7 @@ export namespace ToolRegistry {
             }
           }
 
-          const cfg = yield* config.get()
+          yield* config.get()
           const questionEnabled =
             ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 

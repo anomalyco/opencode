@@ -1095,7 +1095,7 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
 }
 
 function writable(info: Info) {
-  const { plugin_origins, ...next } = info
+  const { plugin_origins: _plugin_origins, ...next } = info
   return next
 }
 

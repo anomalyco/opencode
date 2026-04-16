@@ -40,7 +40,7 @@ export function parse(headers: Headers) {
 
   try {
     data = JSON.parse(raw)
-  } catch (err) {
+  } catch {
     return
   }
 

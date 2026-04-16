@@ -1825,7 +1825,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     onSuccess: (output: unknown) => void
   }): AITool {
     // Remove $schema property if present (not needed for tool input)
-    const { $schema, ...toolSchema } = input.schema
+    const { $schema: _, ...toolSchema } = input.schema
 
     return tool({
       id: "StructuredOutput" as any,
