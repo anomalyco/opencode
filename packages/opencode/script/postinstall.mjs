@@ -64,7 +64,7 @@ function findBinary() {
 
     return { binaryPath, binaryName }
   } catch (error) {
-    throw new Error(`Could not find package ${packageName}: ${error.message}`)
+    throw new Error(`Could not find package ${packageName}: ${error.message}`, { cause: error })
   }
 }
 

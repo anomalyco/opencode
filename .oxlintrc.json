@@ -1,5 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
+  "categories": {
+    "suspicious": "warn"
+  },
   "rules": {
     // Effect uses `function*` with Effect.gen/Effect.fnUntraced that don't always yield
     "require-yield": "off",
@@ -10,7 +13,24 @@
     // Intentional control char matching (ANSI escapes, null byte sanitization)
     "no-control-regex": "off",
     // SST and plugin tools require triple-slash references
-    "triple-slash-reference": "off"
+    "triple-slash-reference": "off",
+
+    // Suspicious category: suppress noisy rules
+    // Effect's nested function* closures inherently shadow outer scope
+    "no-shadow": "off",
+    // Namespace-heavy codebase makes this too noisy
+    "unicorn/consistent-function-scoping": "off",
+    // Opinionated — .sort()/.reverse() mutation is fine in this codebase
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    // Not relevant — this isn't a DOM event handler codebase
+    "unicorn/prefer-add-event-listener": "off",
+    // Bundler handles module resolution
+    "unicorn/require-module-specifiers": "off",
+    // postMessage target origin not relevant for this codebase
+    "unicorn/require-post-message-target-origin": "off",
+    // Side-effectful constructors are intentional in some places
+    "no-new": "off"
   },
   "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts"]
 }

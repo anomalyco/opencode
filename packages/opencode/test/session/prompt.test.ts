@@ -60,12 +60,11 @@ function chat(text: string) {
 function hanging(ready: () => void) {
   const encoder = new TextEncoder()
   let timer: ReturnType<typeof setTimeout> | undefined
-  const first =
-    `data: ${JSON.stringify({
-      id: "chatcmpl-1",
-      object: "chat.completion.chunk",
-      choices: [{ delta: { role: "assistant" } }],
-    })}` + "\n\n"
+  const first = `data: ${JSON.stringify({
+    id: "chatcmpl-1",
+    object: "chat.completion.chunk",
+    choices: [{ delta: { role: "assistant" } }],
+  })}\n\n`
   const rest =
     [
       `data: ${JSON.stringify({

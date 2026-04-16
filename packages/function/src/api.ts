@@ -13,6 +13,7 @@ type Env = {
 }
 
 export class SyncServer extends DurableObject<Env> {
+  // oxlint-disable-next-line no-useless-constructor
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
   }

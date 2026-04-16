@@ -273,7 +273,7 @@ export function payloads() {
           data: def.schema,
         })
         .meta({
-          ref: "SyncEvent" + "." + def.type,
+          ref: `SyncEvent.${def.type}`,
         })
     })
     .toArray()

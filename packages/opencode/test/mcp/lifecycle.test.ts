@@ -53,6 +53,7 @@ function getOrCreateClientState(name?: string): MockClientState {
 class MockStdioTransport {
   stderr: null = null
   pid = 12345
+  // oxlint-disable-next-line no-useless-constructor
   constructor(_opts: any) {}
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
@@ -64,6 +65,7 @@ class MockStdioTransport {
 }
 
 class MockStreamableHTTP {
+  // oxlint-disable-next-line no-useless-constructor
   constructor(_url: URL, _opts?: any) {}
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
@@ -76,6 +78,7 @@ class MockStreamableHTTP {
 }
 
 class MockSSE {
+  // oxlint-disable-next-line no-useless-constructor
   constructor(_url: URL, _opts?: any) {}
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
