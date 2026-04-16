@@ -1,22 +1,22 @@
 import { Layer, ManagedRuntime } from "effect"
 import { attach, memoMap } from "./run-service"
-import { Observability } from "./observability"
+import * as Observability from "./observability"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
 import { Account } from "@/account"
-import { Config } from "@/config/config"
+import { Config } from "@/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@/file/ripgrep"
 import { FileTime } from "@/file/time"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
-import { Storage } from "@/storage/storage"
+import { Storage } from "@/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
-import { Provider } from "@/provider/provider"
-import { ProviderAuth } from "@/provider/auth"
+import { Provider } from "@/provider"
+import { ProviderAuth } from "@/provider"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Discovery } from "@/skill/discovery"
@@ -37,41 +37,25 @@ import { LSP } from "@/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
-import { Truncate } from "@/tool/truncate"
-import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool"
+import { ToolRegistry } from "@/tool"
 import { Format } from "@/format"
-import { Project } from "@/project/project"
-import { Vcs } from "@/project/vcs"
+import { Project } from "@/project"
+import { Vcs } from "@/project"
 import { Worktree } from "@/worktree"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
-import { ShareNext } from "@/share/share-next"
-import { SessionShare } from "@/share/session"
-import * as Effect from "effect/Effect"
-
-// Adjusts the default Config layer to ensure that plugins are always initialised before
-// any other layers read the current config
-const ConfigWithPluginPriority = Layer.effect(
-  Config.Service,
-  Effect.gen(function* () {
-    const config = yield* Config.Service
-    const plugin = yield* Plugin.Service
-
-    return {
-      ...config,
-      get: () => Effect.andThen(plugin.init(), config.get),
-      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
-      getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
-    }
-  }),
-).pipe(Layer.provide(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
+import { ShareNext } from "@/share"
+import { SessionShare } from "@/share"
+import { Npm } from "@opencode-ai/shared/npm"
 
 export const AppLayer = Layer.mergeAll(
+  Npm.defaultLayer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
-  ConfigWithPluginPriority,
+  Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
   FileTime.defaultLayer,

@@ -1,6 +1,9 @@
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
+import * as Fence from "./fence"
+import type { WorkspaceID } from "@/control-plane/schema"
+import { Workspace } from "@/control-plane/workspace"
 
 const hop = new Set([
   "connection",
@@ -73,7 +76,7 @@ const app = (upgrade: UpgradeWebSocket) =>
             queue.length = 0
           }
           remote.onmessage = (event) => {
-            send(ws, event.data)
+            void send(ws, event.data)
           }
           remote.onerror = () => {
             ws.close(1011, "proxy error")
@@ -101,12 +104,27 @@ const app = (upgrade: UpgradeWebSocket) =>
 export namespace ServerProxy {
   const log = Log.Default.clone().tag("service", "server-proxy")
 
-  export function http(url: string | URL, extra: HeadersInit | undefined, req: Request) {
+  export async function http(
+    url: string | URL,
+    extra: HeadersInit | undefined,
+    req: Request,
+    workspaceID: WorkspaceID,
+  ) {
     console.log("proxy http request", {
       method: req.method,
       request: req.url,
       url: String(url),
     })
+
+    if (!Workspace.isSyncing(workspaceID)) {
+      return new Response(`broken sync connection for workspace: ${workspaceID}`, {
+        status: 503,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+        },
+      })
+    }
+
     return fetch(
       new Request(url, {
         method: req.method,
@@ -116,21 +134,26 @@ export namespace ServerProxy {
         signal: req.signal,
       }),
     ).then((res) => {
+      const sync = Fence.parse(res.headers)
       const next = new Headers(res.headers)
       next.delete("content-encoding")
       next.delete("content-length")
 
-      console.log("proxy http response", {
-        method: req.method,
-        request: req.url,
-        url: String(url),
-        status: res.status,
-        statusText: res.statusText,
-      })
-      return new Response(res.body, {
-        status: res.status,
-        statusText: res.statusText,
-        headers: next,
+      const done = sync ? Fence.wait(workspaceID, sync, req.signal) : Promise.resolve()
+
+      return done.then(async () => {
+        console.log("proxy http response", {
+          method: req.method,
+          request: req.url,
+          url: String(url),
+          status: res.status,
+          statusText: res.statusText,
+        })
+        return new Response(res.body, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: next,
+        })
       })
     })
   }

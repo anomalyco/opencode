@@ -2,12 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Session as SessionNs } from "../../src/session"
 import type { SessionID } from "../../src/session/schema"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
   return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))

@@ -40,7 +40,7 @@ import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -329,7 +329,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function init() {
-      Promise.allSettled([
+      void Promise.allSettled([
         resolveSystemTheme(store.mode),
         getCustomThemes()
           .then((custom) => {
@@ -377,7 +377,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (store.mode === mode) return
       setStore("mode", mode)
       renderer.clearPaletteCache()
-      resolveSystemTheme(mode)
+      void resolveSystemTheme(mode)
     }
 
     function pin(mode: "dark" | "light" = store.mode) {

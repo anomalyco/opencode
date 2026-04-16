@@ -1,15 +1,15 @@
 import z from "zod"
 import { setTimeout as sleep } from "node:timers/promises"
 import { fn } from "@/util/fn"
-import { Database, asc, eq } from "@/storage/db"
-import { Project } from "@/project/project"
+import { Database, asc, eq, inArray } from "@/storage"
+import { Project } from "@/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { SyncEvent } from "@/sync"
 import { EventTable } from "@/sync/event.sql"
 import { Flag } from "@/flag/flag"
-import { Log } from "@/util/log"
-import { Filesystem } from "@/util/filesystem"
+import { Log } from "@/util"
+import { Filesystem } from "@/util"
 import { ProjectID } from "@/project/schema"
 import { Slug } from "@opencode-ai/shared/util/slug"
 import { WorkspaceTable } from "./workspace.sql"
@@ -22,6 +22,8 @@ import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { errorData } from "@/util/error"
 import { AppRuntime } from "@/effect/app-runtime"
+import { EventSequenceTable } from "@/sync/event.sql"
+import { waitEvent } from "./util"
 
 export namespace Workspace {
   export const Info = WorkspaceInfo.meta({
@@ -113,6 +115,17 @@ export namespace Workspace {
     await adaptor.create(config)
 
     startSync(info)
+
+    await waitEvent({
+      timeout: TIMEOUT,
+      fn(event) {
+        if (event.workspace === info.id && event.payload.type === Event.Status.type) {
+          const { status } = event.payload.properties
+          return status === "error" || status === "connected"
+        }
+        return false
+      },
+    })
 
     return info
   })
@@ -285,10 +298,15 @@ export namespace Workspace {
     return spaces
   }
 
-  export const get = fn(WorkspaceID.zod, async (id) => {
+  function lookup(id: WorkspaceID) {
     const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
     if (!row) return
-    const space = fromRow(row)
+    return fromRow(row)
+  }
+
+  export const get = fn(WorkspaceID.zod, async (id) => {
+    const space = lookup(id)
+    if (!space) return
     startSync(space)
     return space
   })
@@ -310,7 +328,7 @@ export namespace Workspace {
       try {
         const adaptor = await getAdaptor(info.projectID, row.type)
         await adaptor.remove(info)
-      } catch (err) {
+      } catch {
         log.error("adaptor not available when removing workspace", { type: row.type })
       }
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
@@ -320,12 +338,18 @@ export namespace Workspace {
 
   const connections = new Map<WorkspaceID, ConnectionStatus>()
   const aborts = new Map<WorkspaceID, AbortController>()
+  const TIMEOUT = 5000
 
   function setStatus(id: WorkspaceID, status: ConnectionStatus["status"], error?: string) {
     const prev = connections.get(id)
     if (prev?.status === status && prev?.error === error) return
     const next = { workspaceID: id, status, error }
     connections.set(id, next)
+
+    if (status === "error") {
+      aborts.delete(id)
+    }
+
     GlobalBus.emit("event", {
       directory: "global",
       workspace: id,
@@ -338,6 +362,52 @@ export namespace Workspace {
 
   export function status(): ConnectionStatus[] {
     return [...connections.values()]
+  }
+
+  function synced(state: Record<string, number>) {
+    const ids = Object.keys(state)
+    if (ids.length === 0) return true
+
+    const done = Object.fromEntries(
+      Database.use((db) =>
+        db
+          .select({
+            id: EventSequenceTable.aggregate_id,
+            seq: EventSequenceTable.seq,
+          })
+          .from(EventSequenceTable)
+          .where(inArray(EventSequenceTable.aggregate_id, ids))
+          .all(),
+      ).map((row) => [row.id, row.seq]),
+    ) as Record<string, number>
+
+    return ids.every((id) => {
+      return (done[id] ?? -1) >= state[id]
+    })
+  }
+
+  export async function isSyncing(workspaceID: WorkspaceID) {
+    return aborts.has(workspaceID)
+  }
+
+  export async function waitForSync(workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) {
+    if (synced(state)) return
+
+    try {
+      await waitEvent({
+        timeout: TIMEOUT,
+        signal,
+        fn(event) {
+          if (event.workspace !== workspaceID && event.payload.type !== "sync") {
+            return false
+          }
+          return synced(state)
+        },
+      })
+    } catch {
+      if (signal?.aborted) throw signal.reason ?? new Error("Request aborted")
+      throw new Error(`Timed out waiting for sync fence: ${JSON.stringify(state)}`)
+    }
   }
 
   const log = Log.create({ service: "workspace-sync" })
@@ -353,6 +423,7 @@ export namespace Workspace {
   async function syncWorkspace(space: Info, signal: AbortSignal) {
     while (!signal.aborted) {
       log.info("connecting to global sync", { workspace: space.name })
+      setStatus(space.id, "connecting")
 
       const adaptor = await getAdaptor(space.projectID, space.type)
       const target = await adaptor.target(space)
@@ -364,7 +435,7 @@ export namespace Workspace {
         headers: target.headers,
         signal,
       }).catch((err: unknown) => {
-        setStatus(space.id, "error")
+        setStatus(space.id, "error", err instanceof Error ? err.message : String(err))
 
         log.info("failed to connect to global sync", {
           workspace: space.name,
@@ -374,8 +445,9 @@ export namespace Workspace {
       })
 
       if (!res || !res.ok || !res.body) {
-        log.info("failed to connect to global sync", { workspace: space.name })
-        setStatus(space.id, "error")
+        const error = !res ? "No response from global sync" : `Global sync HTTP ${res.status}`
+        log.info("failed to connect to global sync", { workspace: space.name, error })
+        setStatus(space.id, "error", error)
         await sleep(1000)
         continue
       }
@@ -414,22 +486,29 @@ export namespace Workspace {
     }
   }
 
-  function startSync(space: Info) {
+  async function startSync(space: Info) {
     if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
 
-    if (space.type === "worktree") {
-      void Filesystem.exists(space.directory!).then((exists) => {
+    const adaptor = await getAdaptor(space.projectID, space.type)
+    const target = await adaptor.target(space)
+
+    if (target.type === "local") {
+      void Filesystem.exists(target.directory).then((exists) => {
         setStatus(space.id, exists ? "connected" : "error", exists ? undefined : "directory does not exist")
       })
       return
     }
 
-    if (aborts.has(space.id)) return
-    const abort = new AbortController()
-    aborts.set(space.id, abort)
+    if (aborts.has(space.id)) return true
+
     setStatus(space.id, "disconnected")
 
+    const abort = new AbortController()
+    aborts.set(space.id, abort)
+
     void syncWorkspace(space, abort.signal).catch((error) => {
+      aborts.delete(space.id)
+
       setStatus(space.id, "error", String(error))
       log.warn("workspace listener failed", {
         workspaceID: space.id,

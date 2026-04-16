@@ -3,7 +3,7 @@ import { Effect, Layer, Option } from "effect"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(

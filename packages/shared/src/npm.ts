@@ -1,11 +1,10 @@
 import path from "path"
 import semver from "semver"
-import { Arborist } from "@npmcli/arborist"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
-import { Flock } from "./util/flock"
+import { EffectFlock } from "./util/effect-flock"
 
 export namespace Npm {
   export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
@@ -19,8 +18,8 @@ export namespace Npm {
   }
 
   export interface Interface {
-    readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError>
-    readonly install: (dir: string) => Effect.Effect<void>
+    readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+    readonly install: (dir: string, input?: { add: string[] }) => Effect.Effect<void, EffectFlock.LockError>
     readonly outdated: (pkg: string, cachedVersion: string) => Effect.Effect<boolean>
     readonly which: (pkg: string) => Effect.Effect<Option.Option<string>>
   }
@@ -62,6 +61,7 @@ export namespace Npm {
       const afs = yield* AppFileSystem.Service
       const global = yield* Global.Service
       const fs = yield* FileSystem.FileSystem
+      const flock = yield* EffectFlock.Service
       const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
 
       const outdated = Effect.fn("Npm.outdated")(function* (pkg: string, cachedVersion: string) {
@@ -91,8 +91,9 @@ export namespace Npm {
       })
 
       const add = Effect.fn("Npm.add")(function* (pkg: string) {
+        const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const dir = directory(pkg)
-        yield* Flock.effect(`npm-install:${dir}`)
+        yield* flock.acquire(`npm-install:${dir}`)
 
         const arborist = new Arborist({
           path: dir,
@@ -132,10 +133,17 @@ export namespace Npm {
         return resolveEntryPoint(first.name, first.path)
       }, Effect.scoped)
 
-      const install = Effect.fn("Npm.install")(function* (dir: string) {
-        yield* Flock.effect(`npm-install:${dir}`)
+      const install = Effect.fn("Npm.install")(function* (dir: string, input?: { add: string[] }) {
+        const canWrite = yield* afs.access(dir, { writable: true }).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        )
+        if (!canWrite) return
+
+        yield* flock.acquire(`npm-install:${dir}`)
 
         const reify = Effect.fnUntraced(function* () {
+          const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
           const arb = new Arborist({
             path: dir,
             binLinks: true,
@@ -144,7 +152,14 @@ export namespace Npm {
             ignoreScripts: true,
           })
           yield* Effect.tryPromise({
-            try: () => arb.reify().catch(() => {}),
+            try: () =>
+              arb
+                .reify({
+                  add: input?.add || [],
+                  save: true,
+                  saveType: "prod",
+                })
+                .catch(() => {}),
             catch: () => {},
           }).pipe(Effect.orElseSucceed(() => {}))
         })
@@ -166,6 +181,7 @@ export namespace Npm {
           ...Object.keys(pkgAny?.devDependencies || {}),
           ...Object.keys(pkgAny?.peerDependencies || {}),
           ...Object.keys(pkgAny?.optionalDependencies || {}),
+          ...(input?.add || []),
         ])
 
         const root = lockAny?.packages?.[""] || {}
@@ -240,6 +256,7 @@ export namespace Npm {
   )
 
   export const defaultLayer = layer.pipe(
+    Layer.provide(EffectFlock.layer),
     Layer.provide(AppFileSystem.layer),
     Layer.provide(Global.layer),
     Layer.provide(NodeFileSystem.layer),

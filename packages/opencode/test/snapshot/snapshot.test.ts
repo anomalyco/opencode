@@ -5,7 +5,7 @@ import path from "path"
 import { Effect } from "effect"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them

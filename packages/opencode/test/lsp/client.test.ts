@@ -1,9 +1,9 @@
 import { describe, expect, test, beforeEach } from "bun:test"
 import path from "path"
-import { LSPClient } from "../../src/lsp/client"
-import { LSPServer } from "../../src/lsp/server"
+import { LSPClient } from "../../src/lsp"
+import { LSPServer } from "../../src/lsp"
 import { Instance } from "../../src/project/instance"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 
 // Minimal fake LSP server that speaks JSON-RPC over stdio
 function spawnFakeServer() {

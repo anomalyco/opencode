@@ -6,7 +6,8 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "tsgo --noEmit"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -16,8 +17,10 @@
   },
   "imports": {},
   "devDependencies": {
+    "@tsconfig/bun": "catalog:",
     "@types/semver": "catalog:",
-    "@types/bun": "catalog:"
+    "@types/bun": "catalog:",
+    "@types/npmcli__arborist": "6.3.3"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
