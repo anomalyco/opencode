@@ -1,7 +1,7 @@
 import { InstanceState } from "@/effect"
 import { Runner } from "@/effect"
 import { Effect, Layer, Scope, Context } from "effect"
-import { Session } from "."
+import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"

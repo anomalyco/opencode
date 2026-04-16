@@ -1,7 +1,7 @@
 import { Effect, Layer, Logger } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
-import { EffectLogger } from "@/effect"
+import * as EffectLogger from "./logger"
 import { Flag } from "@/flag/flag"
 import { CHANNEL, VERSION } from "@/installation/meta"
 

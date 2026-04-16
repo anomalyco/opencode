@@ -1,6 +1,6 @@
 import { Layer, ManagedRuntime } from "effect"
 import { attach, memoMap } from "./run-service"
-import { Observability } from "."
+import * as Observability from "./observability"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
