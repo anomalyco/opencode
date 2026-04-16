@@ -362,8 +362,22 @@ export function MessageTimeline(props: {
   const syncWindow = (next: { start: number; end: number; top: number; bottom: number }, id?: string) => {
     if (!id) return next
     const ids = rendered()
-    const index = renderedIndex().get(id)
-    if (index === undefined) return next
+    let index = renderedIndex().get(id)
+
+    // Robustness: if anchor not found in renderedIndex, try direct lookup
+    // This handles the race condition where activeMessageID updates before renderedIndex
+    if (index === undefined) {
+      index = props.renderedUserMessages.findIndex((m) => m.id === id)
+      if (index === -1) {
+        // Anchor not found at all - this shouldn't happen with _virtualizationSync,
+        // but handle gracefully by returning the unchanged window
+        if (import.meta.env.DEV) {
+          console.warn("[syncWindow] Anchor not found:", id)
+        }
+        return next
+      }
+    }
+
     if (index >= next.start && index < next.end) return next
 
     const start = Math.min(next.start, index)
@@ -515,7 +529,34 @@ export function MessageTimeline(props: {
 
     return undefined
   })
-  const currentMessage = createMemo(() => props.renderedUserMessages.find((item) => item.id === activeMessageID()))
+
+  /**
+   * Virtualization synchronization anchor.
+   *
+   * This memo creates a reactive bridge between props.renderedUserMessages
+   * and activeMessageID() to prevent a race condition in the virtualization
+   * logic. When both values update simultaneously (e.g., during scrolling
+   * with new messages arriving), this memo ensures SolidJS coordinates the
+   * updates, preventing the virtualization window from being calculated with
+   * inconsistent data.
+   *
+   * Technical details:
+   * - Without this memo, rendered() and activeMessageID() update independently
+   * - This can cause syncWindow() to look up an activeMessageID that's not
+   *   yet in renderedIndex(), returning an incorrect window and causing blanks
+   * - By depending on both values, this memo forces them to update in sync
+   *
+   * DO NOT REMOVE: Critical for scroll stability in long conversations.
+   * This is intentionally separate from UI concerns (currentMessage).
+   */
+  const _virtualizationSync = createMemo(() => {
+    const id = activeMessageID()
+    const messages = props.renderedUserMessages
+    return messages.find((item) => item.id === id)
+  })
+
+  // UI-specific memo: reuses the sync computation for the message list
+  const currentMessage = _virtualizationSync
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
