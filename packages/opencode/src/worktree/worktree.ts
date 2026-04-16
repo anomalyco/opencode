@@ -54,10 +54,7 @@ export type Info = z.infer<typeof Info>
 export const CreateInput = z
   .object({
     name: z.string().optional(),
-    startCommand: z
-      .string()
-      .optional()
-      .describe("Additional startup script to run after the project's start command"),
+    startCommand: z.string().optional().describe("Additional startup script to run after the project's start command"),
   })
   .meta({
     ref: "WorktreeCreateInput",

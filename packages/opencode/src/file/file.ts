@@ -631,8 +631,7 @@ export const layer = Layer.effect(
         return sortHiddenLast(cache.dirs.toSorted(), preferHidden).slice(0, limit)
       }
 
-      const items =
-        kind === "file" ? cache.files : kind === "directory" ? cache.dirs : [...cache.files, ...cache.dirs]
+      const items = kind === "file" ? cache.files : kind === "directory" ? cache.dirs : [...cache.files, ...cache.dirs]
 
       const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
       const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)

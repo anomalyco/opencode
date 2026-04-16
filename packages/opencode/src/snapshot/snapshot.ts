@@ -531,9 +531,7 @@ export const layer: Layer.Layer<
                 if (row.status === "added") {
                   return [
                     "",
-                    yield* git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(
-                      Effect.map((item) => item.text),
-                    ),
+                    yield* git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
                   ]
                 }
                 if (row.status === "deleted") {
