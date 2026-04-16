@@ -2,7 +2,7 @@ import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/config/tui"
+import { TuiConfig } from "@/config"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
 

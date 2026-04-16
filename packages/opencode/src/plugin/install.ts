@@ -7,7 +7,7 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 
-import { ConfigPaths } from "@/config/paths"
+import { ConfigPaths } from "@/config"
 import { Global } from "@/global"
 import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/shared/util/flock"

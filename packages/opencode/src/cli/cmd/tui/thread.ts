@@ -13,7 +13,7 @@ import { Filesystem } from "@/util"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/config/tui"
+import { TuiConfig } from "@/config"
 import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
 

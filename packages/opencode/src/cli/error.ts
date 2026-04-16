@@ -1,5 +1,5 @@
 import { AccountServiceError, AccountTransportError } from "@/account"
-import { ConfigMarkdown } from "@/config/markdown"
+import { ConfigMarkdown } from "@/config"
 import { errorFormat } from "@/util/error"
 import { Config } from "../config"
 import { MCP } from "../mcp"
