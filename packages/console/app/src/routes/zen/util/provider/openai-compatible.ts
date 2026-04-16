@@ -30,7 +30,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
     headers.set("authorization", `Bearer ${apiKey}`)
     headers.set("x-session-affinity", headers.get("x-opencode-session") ?? "")
   },
-  modifyBody: (body: Record<string, any>, workspaceID?: string) => {
+  modifyBody: (body: Record<string, any>, _workspaceID?: string) => {
     return {
       ...body,
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),

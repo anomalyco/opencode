@@ -49,9 +49,9 @@ export class SyncServer extends DurableObject<Env> {
     })
   }
 
-  async webSocketMessage(ws, message) {}
+  async webSocketMessage(_ws, _message) {}
 
-  async webSocketClose(ws, code, reason, wasClean) {
+  async webSocketClose(ws, code, _reason, _wasClean) {
     ws.close(code, "Durable Object is closing WebSocket")
   }
 

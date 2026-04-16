@@ -786,7 +786,7 @@ it.live(
           const { task } = yield* registry.named()
           const original = task.execute
           task.execute = (_args, ctx) =>
-            Effect.callback<never>((resume) => {
+            Effect.callback<never>((_resume) => {
               ready.resolve()
               ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
               return Effect.sync(() => aborted.resolve())
@@ -856,7 +856,7 @@ it.live(
 
 it.live("concurrent loop callers get same result", () =>
   provideTmpdirInstance(
-    (dir) =>
+    (_dir) =>
       Effect.gen(function* () {
         const { prompt, run, chat } = yield* boot()
         yield* seed(chat.id, { finish: "stop" })
@@ -997,7 +997,7 @@ it.live(
 
 it.live("assertNotBusy succeeds when idle", () =>
   provideTmpdirInstance(
-    (dir) =>
+    (_dir) =>
       Effect.gen(function* () {
         const run = yield* SessionRunState.Service
         const sessions = yield* Session.Service
@@ -1042,7 +1042,7 @@ it.live(
 
 unix("shell captures stdout and stderr in completed tool output", () =>
   provideTmpdirInstance(
-    (dir) =>
+    (_dir) =>
       Effect.gen(function* () {
         const { prompt, run, chat } = yield* boot()
         const result = yield* prompt.shell({
@@ -1117,7 +1117,7 @@ unix("shell lists files from the project directory", () =>
 
 unix("shell captures stderr from a failing command", () =>
   provideTmpdirInstance(
-    (dir) =>
+    (_dir) =>
       Effect.gen(function* () {
         const { prompt, run, chat } = yield* boot()
         const result = yield* prompt.shell({
@@ -1143,7 +1143,7 @@ unix(
   () =>
     withSh(() =>
       provideTmpdirInstance(
-        (dir) =>
+        (_dir) =>
           Effect.gen(function* () {
             const { prompt, chat } = yield* boot()
 
@@ -1255,7 +1255,7 @@ unix(
   () =>
     withSh(() =>
       provideTmpdirInstance(
-        (dir) =>
+        (_dir) =>
           Effect.gen(function* () {
             const { prompt, run, chat } = yield* boot()
 
@@ -1292,7 +1292,7 @@ unix(
   () =>
     withSh(() =>
       provideTmpdirInstance(
-        (dir) =>
+        (_dir) =>
           Effect.gen(function* () {
             const { prompt, chat } = yield* boot()
 
@@ -1374,7 +1374,7 @@ unix(
   "cancel interrupts loop queued behind shell",
   () =>
     provideTmpdirInstance(
-      (dir) =>
+      (_dir) =>
         Effect.gen(function* () {
           const { prompt, chat } = yield* boot()
 
@@ -1403,7 +1403,7 @@ unix(
   () =>
     withSh(() =>
       provideTmpdirInstance(
-        (dir) =>
+        (_dir) =>
           Effect.gen(function* () {
             const { prompt, chat } = yield* boot()
 

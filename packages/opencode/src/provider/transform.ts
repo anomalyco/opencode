@@ -49,7 +49,7 @@ export namespace ProviderTransform {
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
-    options: Record<string, unknown>,
+    _options: Record<string, unknown>,
   ): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content

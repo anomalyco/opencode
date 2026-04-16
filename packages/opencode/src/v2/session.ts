@@ -40,11 +40,11 @@ export namespace SessionV2 {
     Effect.gen(function* () {
       const session = yield* Session.Service
 
-      const create: Interface["create"] = Effect.fn("Session.create")(function* (input) {
+      const create: Interface["create"] = Effect.fn("Session.create")(function* (_input) {
         throw new Error("Not implemented")
       })
 
-      const prompt: Interface["prompt"] = Effect.fn("Session.prompt")(function* (input) {
+      const prompt: Interface["prompt"] = Effect.fn("Session.prompt")(function* (_input) {
         throw new Error("Not implemented")
       })
 
