@@ -83,4 +83,20 @@ export namespace Identifier {
     const encoded = BigInt("0x" + hex)
     return Number(encoded / BigInt(0x1000))
   }
+
+  export function ascendingAfter(prefix: keyof typeof prefixes, afterID: string): string {
+    const pre = prefixes[prefix]
+    const afterHex = afterID.slice(pre.length + 1, pre.length + 13)
+    const afterEncoded = BigInt("0x" + afterHex)
+    const nowFull = BigInt(Date.now()) * BigInt(0x1000)
+    const nowEncoded = nowFull & ((BigInt(1) << BigInt(48)) - BigInt(1))
+    const encoded = nowEncoded > afterEncoded ? nowEncoded + BigInt(1) : afterEncoded + BigInt(1)
+
+    const timeBytes = Buffer.alloc(6)
+    for (let i = 0; i < 6; i++) {
+      timeBytes[i] = Number((encoded >> BigInt(40 - 8 * i)) & BigInt(0xff))
+    }
+
+    return pre + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
+  }
 }
