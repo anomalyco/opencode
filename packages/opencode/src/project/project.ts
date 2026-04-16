@@ -1,5 +1,5 @@
 import z from "zod"
-import { and, Database, eq } from "../storage/db"
+import { and, Database, eq } from "../storage"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util"

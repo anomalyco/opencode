@@ -1,4 +1,4 @@
-import { NotFoundError, eq, and } from "../storage/db"
+import { NotFoundError, eq, and } from "../storage"
 import { SyncEvent } from "@/sync"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"

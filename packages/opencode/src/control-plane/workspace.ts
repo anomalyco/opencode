@@ -1,7 +1,7 @@
 import z from "zod"
 import { setTimeout as sleep } from "node:timers/promises"
 import { fn } from "@/util/fn"
-import { Database, asc, eq, inArray } from "@/storage/db"
+import { Database, asc, eq, inArray } from "@/storage"
 import { Project } from "@/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -114,7 +114,7 @@ export namespace Workspace {
 
     await adaptor.create(config)
 
-    void startSync(info)
+    startSync(info)
 
     await waitEvent({
       timeout: TIMEOUT,
@@ -294,7 +294,7 @@ export namespace Workspace {
     )
     const spaces = rows.map(fromRow).sort((a, b) => a.id.localeCompare(b.id))
 
-    for (const space of spaces) void startSync(space)
+    for (const space of spaces) startSync(space)
     return spaces
   }
 
@@ -307,7 +307,7 @@ export namespace Workspace {
   export const get = fn(WorkspaceID.zod, async (id) => {
     const space = lookup(id)
     if (!space) return
-    void startSync(space)
+    startSync(space)
     return space
   })
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Project } from "../../src/project"
-import { Database, eq } from "../../src/storage/db"
+import { Database, eq } from "../../src/storage"
 import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
@@ -10,7 +10,7 @@ import { $ } from "bun"
 import { tmpdir } from "../fixture/fixture"
 import { Effect } from "effect"
 
-void Log.init({ print: false })
+Log.init({ print: false })
 
 function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
   return Effect.runPromise(
