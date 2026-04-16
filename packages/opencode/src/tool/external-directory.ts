@@ -1,6 +1,6 @@
 import path from "path"
 import { Effect } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectLogger } from "@/effect"
 import { InstanceState } from "@/effect"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"

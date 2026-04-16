@@ -3,7 +3,7 @@ import { HttpApiBuilder, HttpApiMiddleware, HttpApiSecurity } from "effect/unsta
 import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { Observability } from "@/effect/observability"
+import { Observability } from "@/effect"
 import { memoMap } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
