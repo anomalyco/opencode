@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect, Layer } from "effect"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 
 const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
 
 // Skip tests if no API key is available
 const hasApiKey = !!process.env.ANTHROPIC_API_KEY
@@ -20,51 +21,63 @@ async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
   })
 }
 
+function run<A, E>(fx: Effect.Effect<A, E, SessionPrompt.Service | Session.Service>) {
+  return Effect.runPromise(
+    fx.pipe(Effect.scoped, Effect.provide(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer))),
+  )
+}
+
 describe("StructuredOutput Integration", () => {
   test.skipIf(!hasApiKey)(
     "produces structured output with simple schema",
     async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "Structured Output Test" })
+      await withInstance(() =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({ title: "Structured Output Test" })
 
-        const result = await SessionPrompt.prompt({
-          sessionID: session.id,
-          parts: [
-            {
-              type: "text",
-              text: "What is 2 + 2? Provide a simple answer.",
-            },
-          ],
-          format: {
-            type: "json_schema",
-            schema: {
-              type: "object",
-              properties: {
-                answer: { type: "number", description: "The numerical answer" },
-                explanation: { type: "string", description: "Brief explanation" },
+            const result = yield* prompt.prompt({
+              sessionID: session.id,
+              parts: [
+                {
+                  type: "text",
+                  text: "What is 2 + 2? Provide a simple answer.",
+                },
+              ],
+              format: {
+                type: "json_schema",
+                schema: {
+                  type: "object",
+                  properties: {
+                    answer: { type: "number", description: "The numerical answer" },
+                    explanation: { type: "string", description: "Brief explanation" },
+                  },
+                  required: ["answer"],
+                },
+                retryCount: 0,
               },
-              required: ["answer"],
-            },
-            retryCount: 0,
-          },
-        })
+            })
 
-        // Verify structured output was captured (only on assistant messages)
-        expect(result.info.role).toBe("assistant")
-        if (result.info.role === "assistant") {
-          expect(result.info.structured).toBeDefined()
-          expect(typeof result.info.structured).toBe("object")
+            // Verify structured output was captured (only on assistant messages)
+            expect(result.info.role).toBe("assistant")
+            if (result.info.role === "assistant") {
+              expect(result.info.structured).toBeDefined()
+              expect(typeof result.info.structured).toBe("object")
 
-          const output = result.info.structured as any
-          expect(output.answer).toBe(4)
+              const output = result.info.structured as any
+              expect(output.answer).toBe(4)
 
-          // Verify no error was set
-          expect(result.info.error).toBeUndefined()
-        }
+              // Verify no error was set
+              expect(result.info.error).toBeUndefined()
+            }
 
-        // Clean up
-        // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
+            // Clean up
+            // Note: Not removing session to avoid race with background SessionSummary.summarize
+          }),
+        ),
+      )
     },
     60000,
   )
@@ -72,62 +85,68 @@ describe("StructuredOutput Integration", () => {
   test.skipIf(!hasApiKey)(
     "produces structured output with nested objects",
     async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "Nested Schema Test" })
+      await withInstance(() =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({ title: "Nested Schema Test" })
 
-        const result = await SessionPrompt.prompt({
-          sessionID: session.id,
-          parts: [
-            {
-              type: "text",
-              text: "Tell me about Anthropic company in a structured format.",
-            },
-          ],
-          format: {
-            type: "json_schema",
-            schema: {
-              type: "object",
-              properties: {
-                company: {
+            const result = yield* prompt.prompt({
+              sessionID: session.id,
+              parts: [
+                {
+                  type: "text",
+                  text: "Tell me about Anthropic company in a structured format.",
+                },
+              ],
+              format: {
+                type: "json_schema",
+                schema: {
                   type: "object",
                   properties: {
-                    name: { type: "string" },
-                    founded: { type: "number" },
+                    company: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        founded: { type: "number" },
+                      },
+                      required: ["name", "founded"],
+                    },
+                    products: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
                   },
-                  required: ["name", "founded"],
+                  required: ["company"],
                 },
-                products: {
-                  type: "array",
-                  items: { type: "string" },
-                },
+                retryCount: 0,
               },
-              required: ["company"],
-            },
-            retryCount: 0,
-          },
-        })
+            })
 
-        // Verify structured output was captured (only on assistant messages)
-        expect(result.info.role).toBe("assistant")
-        if (result.info.role === "assistant") {
-          expect(result.info.structured).toBeDefined()
-          const output = result.info.structured as any
+            // Verify structured output was captured (only on assistant messages)
+            expect(result.info.role).toBe("assistant")
+            if (result.info.role === "assistant") {
+              expect(result.info.structured).toBeDefined()
+              const output = result.info.structured as any
 
-          expect(output.company).toBeDefined()
-          expect(output.company.name).toBe("Anthropic")
-          expect(typeof output.company.founded).toBe("number")
+              expect(output.company).toBeDefined()
+              expect(output.company.name).toBe("Anthropic")
+              expect(typeof output.company.founded).toBe("number")
 
-          if (output.products) {
-            expect(Array.isArray(output.products)).toBe(true)
-          }
+              if (output.products) {
+                expect(Array.isArray(output.products)).toBe(true)
+              }
 
-          // Verify no error was set
-          expect(result.info.error).toBeUndefined()
-        }
+              // Verify no error was set
+              expect(result.info.error).toBeUndefined()
+            }
 
-        // Clean up
-        // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
+            // Clean up
+            // Note: Not removing session to avoid race with background SessionSummary.summarize
+          }),
+        ),
+      )
     },
     60000,
   )
@@ -135,35 +154,41 @@ describe("StructuredOutput Integration", () => {
   test.skipIf(!hasApiKey)(
     "works with text outputFormat (default)",
     async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "Text Output Test" })
+      await withInstance(() =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({ title: "Text Output Test" })
 
-        const result = await SessionPrompt.prompt({
-          sessionID: session.id,
-          parts: [
-            {
-              type: "text",
-              text: "Say hello.",
-            },
-          ],
-          format: {
-            type: "text",
-          },
-        })
+            const result = yield* prompt.prompt({
+              sessionID: session.id,
+              parts: [
+                {
+                  type: "text",
+                  text: "Say hello.",
+                },
+              ],
+              format: {
+                type: "text",
+              },
+            })
 
-        // Verify no structured output (text mode) and no error
-        expect(result.info.role).toBe("assistant")
-        if (result.info.role === "assistant") {
-          expect(result.info.structured).toBeUndefined()
-          expect(result.info.error).toBeUndefined()
-        }
+            // Verify no structured output (text mode) and no error
+            expect(result.info.role).toBe("assistant")
+            if (result.info.role === "assistant") {
+              expect(result.info.structured).toBeUndefined()
+              expect(result.info.error).toBeUndefined()
+            }
 
-        // Verify we got a response with parts
-        expect(result.parts.length).toBeGreaterThan(0)
+            // Verify we got a response with parts
+            expect(result.parts.length).toBeGreaterThan(0)
 
-        // Clean up
-        // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
+            // Clean up
+            // Note: Not removing session to avoid race with background SessionSummary.summarize
+          }),
+        ),
+      )
     },
     60000,
   )
@@ -171,47 +196,53 @@ describe("StructuredOutput Integration", () => {
   test.skipIf(!hasApiKey)(
     "stores outputFormat on user message",
     async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "OutputFormat Storage Test" })
+      await withInstance(() =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({ title: "OutputFormat Storage Test" })
 
-        await SessionPrompt.prompt({
-          sessionID: session.id,
-          parts: [
-            {
-              type: "text",
-              text: "What is 1 + 1?",
-            },
-          ],
-          format: {
-            type: "json_schema",
-            schema: {
-              type: "object",
-              properties: {
-                result: { type: "number" },
+            yield* prompt.prompt({
+              sessionID: session.id,
+              parts: [
+                {
+                  type: "text",
+                  text: "What is 1 + 1?",
+                },
+              ],
+              format: {
+                type: "json_schema",
+                schema: {
+                  type: "object",
+                  properties: {
+                    result: { type: "number" },
+                  },
+                  required: ["result"],
+                },
+                retryCount: 3,
               },
-              required: ["result"],
-            },
-            retryCount: 3,
-          },
-        })
+            })
 
-        // Get all messages from session
-        const messages = await Session.messages({ sessionID: session.id })
-        const userMessage = messages.find((m) => m.info.role === "user")
+            // Get all messages from session
+            const messages = yield* sessions.messages({ sessionID: session.id })
+            const userMessage = messages.find((m) => m.info.role === "user")
 
-        // Verify outputFormat was stored on user message
-        expect(userMessage).toBeDefined()
-        if (userMessage?.info.role === "user") {
-          expect(userMessage.info.format).toBeDefined()
-          expect(userMessage.info.format?.type).toBe("json_schema")
-          if (userMessage.info.format?.type === "json_schema") {
-            expect(userMessage.info.format.retryCount).toBe(3)
-          }
-        }
+            // Verify outputFormat was stored on user message
+            expect(userMessage).toBeDefined()
+            if (userMessage?.info.role === "user") {
+              expect(userMessage.info.format).toBeDefined()
+              expect(userMessage.info.format?.type).toBe("json_schema")
+              if (userMessage.info.format?.type === "json_schema") {
+                expect(userMessage.info.format.retryCount).toBe(3)
+              }
+            }
 
-        // Clean up
-        // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
+            // Clean up
+            // Note: Not removing session to avoid race with background SessionSummary.summarize
+          }),
+        ),
+      )
     },
     60000,
   )

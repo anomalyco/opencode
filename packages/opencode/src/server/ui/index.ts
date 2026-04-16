@@ -37,9 +37,9 @@ export const UIRoutes = (): Hono =>
       }
     } else {
       const response = await proxy(`https://app.opencode.ai${path}`, {
-        ...c.req,
+        raw: c.req.raw,
         headers: {
-          ...c.req.raw.headers,
+          ...Object.fromEntries(c.req.raw.headers.entries()),
           host: "app.opencode.ai",
         },
       })

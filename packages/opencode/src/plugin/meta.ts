@@ -3,8 +3,8 @@ import { fileURLToPath } from "url"
 
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@/util/flock"
+import { Filesystem } from "@/util"
+import { Flock } from "@opencode-ai/shared/util/flock"
 
 import { parsePluginSpecifier, pluginSource } from "./shared"
 
@@ -174,7 +174,7 @@ export namespace PluginMeta {
       const entry = store[id]
       if (!entry) return
       entry.themes = {
-        ...(entry.themes ?? {}),
+        ...entry.themes,
         [name]: theme,
       }
       await Filesystem.writeJson(file, store)
