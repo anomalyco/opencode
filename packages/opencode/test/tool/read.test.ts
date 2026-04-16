@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { FileTime } from "../../src/file/time"
 import { LSP } from "../../src/lsp"
 import { Permission } from "../../src/permission"
@@ -11,10 +11,12 @@ import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Tool } from "../../src/tool/tool"
-import { Filesystem } from "../../src/util/filesystem"
+import { Truncate } from "../../src/tool"
+import { Tool } from "../../src/tool"
+import { Filesystem } from "../../src/util"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Npm } from "@opencode-ai/shared/npm"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -41,12 +43,13 @@ const it = testEffect(
     FileTime.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
+    Truncate.defaultLayer,
   ),
 )
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
-  return yield* Effect.promise(() => info.init())
+  return yield* info.init()
 })
 
 const run = Effect.fn("ReadToolTest.run")(function* (

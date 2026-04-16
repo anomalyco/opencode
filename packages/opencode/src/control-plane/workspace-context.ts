@@ -1,4 +1,4 @@
-import { LocalContext } from "../util/local-context"
+import { LocalContext } from "../util"
 import type { WorkspaceID } from "../control-plane/schema"
 
 export interface WorkspaceContext {
@@ -12,10 +12,14 @@ export const WorkspaceContext = {
     return context.provide({ workspaceID: input.workspaceID as string }, () => input.fn())
   },
 
+  restore<R>(workspaceID: string, fn: () => R): R {
+    return context.provide({ workspaceID }, fn)
+  },
+
   get workspaceID() {
     try {
       return context.use().workspaceID
-    } catch (err) {
+    } catch {
       return undefined
     }
   },

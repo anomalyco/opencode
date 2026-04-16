@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer } from "effect"
-import { Tool } from "../../src/tool/tool"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Truncate } from "../../src/tool"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -19,7 +20,9 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
+)
 
 const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
   for (;;) {
@@ -36,7 +39,7 @@ describe("tool.question", () => {
       Effect.gen(function* () {
         const question = yield* Question.Service
         const toolInfo = yield* QuestionTool
-        const tool = yield* Effect.promise(() => toolInfo.init())
+        const tool = yield* toolInfo.init()
         const questions = [
           {
             question: "What is your favorite color?",
@@ -64,7 +67,7 @@ describe("tool.question", () => {
       Effect.gen(function* () {
         const question = yield* Question.Service
         const toolInfo = yield* QuestionTool
-        const tool = yield* Effect.promise(() => toolInfo.init())
+        const tool = yield* toolInfo.init()
         const questions = [
           {
             question: "What is your favorite animal?",

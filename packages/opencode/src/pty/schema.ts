@@ -2,9 +2,10 @@ import { Schema } from "effect"
 import z from "zod"
 
 import { Identifier } from "@/id/id"
+import { ZodOverride } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
-const ptyIdSchema = Schema.String.pipe(Schema.brand("PtyID"))
+const ptyIdSchema = Schema.String.annotate({ [ZodOverride]: Identifier.schema("pty") }).pipe(Schema.brand("PtyID"))
 
 export type PtyID = typeof ptyIdSchema.Type
 

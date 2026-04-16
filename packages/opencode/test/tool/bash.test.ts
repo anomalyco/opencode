@@ -5,21 +5,28 @@ import path from "path"
 import { Shell } from "../../src/shell/shell"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
-import { Truncate } from "../../src/tool/truncate"
+import { Agent } from "../../src/agent/agent"
+import { Truncate } from "../../src/tool"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Plugin } from "../../src/plugin"
 
 const runtime = ManagedRuntime.make(
-  Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer, Plugin.defaultLayer),
+  Layer.mergeAll(
+    CrossSpawnSpawner.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Plugin.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
 )
 
 function initBash() {
-  return runtime.runPromise(BashTool.pipe(Effect.flatMap((info) => Effect.promise(() => info.init()))))
+  return runtime.runPromise(BashTool.pipe(Effect.flatMap((info) => info.init())))
 }
 
 const ctx = {
@@ -1017,6 +1024,7 @@ describe("tool.bash abort", () => {
         )
         expect(result.output).toContain("started")
         expect(result.output).toContain("bash tool terminated command after exceeding timeout")
+        expect(result.output).toContain("retry with a larger timeout value in milliseconds")
       },
     })
   }, 15_000)
@@ -1108,8 +1116,8 @@ describe("tool.bash truncation", () => {
           ),
         )
         mustTruncate(result)
-        expect(result.output).toContain("truncated")
-        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+        expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
+        expect(result.output).toMatch(/Full output saved to:\s+\S+/)
       },
     })
   })
@@ -1130,8 +1138,8 @@ describe("tool.bash truncation", () => {
           ),
         )
         mustTruncate(result)
-        expect(result.output).toContain("truncated")
-        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+        expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
+        expect(result.output).toMatch(/Full output saved to:\s+\S+/)
       },
     })
   })

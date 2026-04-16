@@ -2,15 +2,14 @@ import os from "os"
 import path from "path"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { Config } from "@/config/config"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
+import { Config } from "@/config"
+import { InstanceState } from "@/effect"
 import { Flag } from "@/flag/flag"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -238,21 +237,7 @@ export namespace Instruction {
     Layer.provide(FetchHttpClient.layer),
   )
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export function clear(messageID: MessageID) {
-    return runPromise((svc) => svc.clear(messageID))
-  }
-
-  export async function systemPaths() {
-    return runPromise((svc) => svc.systemPaths())
-  }
-
   export function loaded(messages: MessageV2.WithParts[]) {
     return extract(messages)
-  }
-
-  export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: MessageID) {
-    return runPromise((svc) => svc.resolve(messages, filepath, messageID))
   }
 }
