@@ -10,7 +10,7 @@ import { Hash } from "@opencode-ai/shared/util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
-import { ModelsDev } from "./models"
+import * as ModelsDev from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
@@ -25,8 +25,7 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 
-import { ProviderTransform } from "./transform"
-import { Installation } from "../installation"
+import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })

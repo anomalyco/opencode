@@ -1,4 +1,4 @@
-import { ProviderAuth } from "@/provider/auth"
+import { ProviderAuth } from "@/provider"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
