@@ -1,6 +1,6 @@
 import { Config } from "../config"
 import z from "zod"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { Instance } from "../project/instance"

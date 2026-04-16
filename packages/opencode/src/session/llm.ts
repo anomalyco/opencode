@@ -1,4 +1,4 @@
-import { Provider } from "@/provider/provider"
+import { Provider } from "@/provider"
 import { Log } from "@/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"

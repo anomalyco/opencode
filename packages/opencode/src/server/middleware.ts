@@ -1,4 +1,4 @@
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { NotFoundError } from "../storage/db"
 import { Session } from "../session"

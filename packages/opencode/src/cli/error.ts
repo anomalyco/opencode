@@ -3,7 +3,7 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { errorFormat } from "@/util/error"
 import { Config } from "../config"
 import { MCP } from "../mcp"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { UI } from "./ui"
 
 export function FormatError(input: unknown) {

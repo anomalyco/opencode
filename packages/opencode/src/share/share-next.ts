@@ -4,7 +4,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { Account } from "@/account"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { Provider } from "@/provider/provider"
+import { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"

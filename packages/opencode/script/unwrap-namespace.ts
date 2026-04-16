@@ -10,11 +10,11 @@
  *   1. Reads the file and finds the `export namespace Foo { ... }` block
  *      (uses ast-grep for accurate AST-based boundary detection)
  *   2. Removes the namespace wrapper and dedents the body
- *   3. If the file is index.ts, renames it to <lowercase-name>.ts
- *   4. Creates/updates index.ts with `export * as Foo from "./<file>"`
- *   5. Prints the import rewrite commands to run across the codebase
- *
- * Does NOT auto-rewrite imports — prints the commands so you can review them.
+ *   3. Fixes self-references (e.g. Config.PermissionAction → PermissionAction)
+ *   4. If the file is index.ts, renames it to <lowercase-name>.ts
+ *   5. Creates/updates index.ts with `export * as Foo from "./<file>"`
+ *   6. Rewrites import paths across src/, test/, and script/
+ *   7. Fixes sibling imports within the same directory
  *
  * Requires: ast-grep (`brew install ast-grep` or `cargo install ast-grep`)
  */
@@ -90,22 +90,107 @@ const after = lines.slice(closeLine + 1)
 const dedented = body.map((line) => {
   if (line === "") return ""
   if (line.startsWith("  ")) return line.slice(2)
-  return line // don't touch lines that aren't indented (shouldn't happen)
+  return line
 })
 
-const newContent = [...before, ...dedented, ...after].join("\n")
+let newContent = [...before, ...dedented, ...after].join("\n")
+
+// --- Fix self-references ---
+// After unwrapping, references like `Config.PermissionAction` inside the same file
+// need to become just `PermissionAction`. Only fix code positions, not strings.
+const exportedNames = new Set<string>()
+const exportRegex = /export\s+(?:const|function|class|interface|type|enum|abstract\s+class)\s+(\w+)/g
+for (const line of dedented) {
+  for (const m of line.matchAll(exportRegex)) exportedNames.add(m[1])
+}
+const reExportRegex = /export\s*\{\s*([^}]+)\}/g
+for (const line of dedented) {
+  for (const m of line.matchAll(reExportRegex)) {
+    for (const name of m[1].split(",")) {
+      const trimmed = name
+        .trim()
+        .split(/\s+as\s+/)
+        .pop()!
+        .trim()
+      if (trimmed) exportedNames.add(trimmed)
+    }
+  }
+}
+
+let selfRefCount = 0
+if (exportedNames.size > 0) {
+  const fixedLines = newContent.split("\n").map((line) => {
+    // Split line into string-literal and code segments to avoid replacing inside strings
+    const segments: Array<{ text: string; isString: boolean }> = []
+    let i = 0
+    let current = ""
+    let inString: string | null = null
+
+    while (i < line.length) {
+      const ch = line[i]
+      if (inString) {
+        current += ch
+        if (ch === "\\" && i + 1 < line.length) {
+          current += line[i + 1]
+          i += 2
+          continue
+        }
+        if (ch === inString) {
+          segments.push({ text: current, isString: true })
+          current = ""
+          inString = null
+        }
+        i++
+        continue
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        if (current) segments.push({ text: current, isString: false })
+        current = ch
+        inString = ch
+        i++
+        continue
+      }
+      if (ch === "/" && i + 1 < line.length && line[i + 1] === "/") {
+        current += line.slice(i)
+        segments.push({ text: current, isString: true })
+        current = ""
+        i = line.length
+        continue
+      }
+      current += ch
+      i++
+    }
+    if (current) segments.push({ text: current, isString: !!inString })
+
+    return segments
+      .map((seg) => {
+        if (seg.isString) return seg.text
+        let result = seg.text
+        for (const name of exportedNames) {
+          const pattern = `${nsName}.${name}`
+          while (result.includes(pattern)) {
+            const idx = result.indexOf(pattern)
+            const charBefore = idx > 0 ? result[idx - 1] : " "
+            const charAfter = idx + pattern.length < result.length ? result[idx + pattern.length] : " "
+            if (/\w/.test(charBefore) || /\w/.test(charAfter)) break
+            result = result.slice(0, idx) + name + result.slice(idx + pattern.length)
+            selfRefCount++
+          }
+        }
+        return result
+      })
+      .join("")
+  })
+  newContent = fixedLines.join("\n")
+}
 
 // Figure out file naming
 const dir = path.dirname(absPath)
 const basename = path.basename(absPath, ".ts")
 const isIndex = basename === "index"
-
-// The implementation file name (lowercase namespace name if currently index.ts)
 const implName = isIndex ? nsName.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : basename
 const implFile = path.join(dir, `${implName}.ts`)
 const indexFile = path.join(dir, "index.ts")
-
-// The barrel line
 const barrelLine = `export * as ${nsName} from "./${implName}"\n`
 
 console.log("")
@@ -114,6 +199,7 @@ if (isIndex) {
 } else {
   console.log(`Plan: rewrite ${basename}.ts in place, create index.ts barrel`)
 }
+if (selfRefCount > 0) console.log(`Fixed ${selfRefCount} self-reference(s) (${nsName}.X → X)`)
 console.log("")
 
 if (dryRun) {
@@ -128,19 +214,23 @@ if (dryRun) {
   console.log("")
   console.log(`=== index.ts ===`)
   console.log(`  ${barrelLine.trim()}`)
+  console.log("")
+  if (!isIndex) {
+    const relDir = path.relative(path.resolve("src"), dir)
+    console.log(`=== Import rewrites (would apply) ===`)
+    console.log(`  ${relDir}/${basename}" → ${relDir}" across src/, test/, script/`)
+  } else {
+    console.log("No import rewrites needed (was index.ts)")
+  }
 } else {
-  // Write the implementation file
   if (isIndex) {
-    // Rename: write new content to implFile, then overwrite index.ts with barrel
     fs.writeFileSync(implFile, newContent)
     fs.writeFileSync(indexFile, barrelLine)
     console.log(`Wrote ${implName}.ts (${newContent.split("\n").length} lines)`)
     console.log(`Wrote index.ts (barrel)`)
   } else {
-    // Rewrite in place, create index.ts
     fs.writeFileSync(absPath, newContent)
     if (fs.existsSync(indexFile)) {
-      // Append to existing barrel
       const existing = fs.readFileSync(indexFile, "utf-8")
       if (!existing.includes(`export * as ${nsName}`)) {
         fs.appendFileSync(indexFile, barrelLine)
@@ -154,37 +244,60 @@ if (dryRun) {
     }
     console.log(`Rewrote ${basename}.ts (${newContent.split("\n").length} lines)`)
   }
-}
 
-// Print the import rewrite guidance
-const relDir = path.relative(path.resolve("src"), dir)
+  // --- Rewrite import paths across src/, test/, script/ ---
+  const relDir = path.relative(path.resolve("src"), dir)
+  if (!isIndex) {
+    const oldTail = `${relDir}/${basename}`
+    const searchDirs = ["src", "test", "script"].filter((d) => fs.existsSync(d))
+    const rgResult = Bun.spawnSync(["rg", "-l", `from.*${oldTail}"`, ...searchDirs], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const filesToRewrite = rgResult.stdout
+      .toString()
+      .trim()
+      .split("\n")
+      .filter((f) => f.length > 0)
 
-console.log("")
-console.log("=== Import rewrites ===")
-console.log("")
+    if (filesToRewrite.length > 0) {
+      console.log(`\nRewriting imports in ${filesToRewrite.length} file(s)...`)
+      for (const file of filesToRewrite) {
+        const content = fs.readFileSync(file, "utf-8")
+        fs.writeFileSync(file, content.replaceAll(`${oldTail}"`, `${relDir}"`))
+      }
+      console.log(`  Done: ${oldTail}" → ${relDir}"`)
+    } else {
+      console.log("\nNo import rewrites needed")
+    }
+  } else {
+    console.log("\nNo import rewrites needed (was index.ts)")
+  }
 
-if (!isIndex) {
-  // Non-index files: imports like "../provider/provider" need to become "../provider"
-  const oldTail = `${relDir}/${basename}`
+  // --- Fix sibling imports within the same directory ---
+  const siblingFiles = fs.readdirSync(dir).filter((f) => {
+    if (!f.endsWith(".ts")) return false
+    if (f === "index.ts" || f === `${implName}.ts`) return false
+    return true
+  })
 
-  console.log(`# Find all imports to rewrite:`)
-  console.log(`rg 'from.*${oldTail}' src/ --files-with-matches`)
-  console.log("")
-
-  // Auto-rewrite with sed (safe: only rewrites the import path, not other occurrences)
-  console.log("# Auto-rewrite (review diff afterward):")
-  console.log(`rg -l 'from.*${oldTail}' src/ | xargs sed -i '' 's|${oldTail}"|${relDir}"|g'`)
-  console.log("")
-  console.log("# What changes:")
-  console.log(`#   import { ${nsName} } from ".../${oldTail}"`)
-  console.log(`#   import { ${nsName} } from ".../${relDir}"`)
-} else {
-  console.log("# File was index.ts — import paths already resolve correctly.")
-  console.log("# No import rewrites needed!")
+  let siblingFixCount = 0
+  for (const sibFile of siblingFiles) {
+    const sibPath = path.join(dir, sibFile)
+    const content = fs.readFileSync(sibPath, "utf-8")
+    const pattern = new RegExp(`from\\s+["']\\./${basename}["']`, "g")
+    if (pattern.test(content)) {
+      fs.writeFileSync(sibPath, content.replace(pattern, `from "."`))
+      siblingFixCount++
+    }
+  }
+  if (siblingFixCount > 0) {
+    console.log(`Fixed ${siblingFixCount} sibling import(s) in ${path.basename(dir)}/ (./${basename} → .)`)
+  }
 }
 
 console.log("")
 console.log("=== Verify ===")
 console.log("")
-console.log("bun typecheck     # from packages/opencode")
-console.log("bun run test      # run tests")
+console.log("bunx --bun tsgo --noEmit   # typecheck")
+console.log("bun run test               # run tests")
