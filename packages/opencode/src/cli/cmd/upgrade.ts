@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
+import { InstallationVersion } from "../../installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -47,13 +48,13 @@ export const UpgradeCommand = {
       ? args.target.replace(/^v/, "")
       : await AppRuntime.runPromise(Installation.Service.use((svc) => svc.latest()))
 
-    if (Installation.VERSION === target) {
+    if (InstallationVersion === target) {
       prompts.log.warn(`opencode upgrade skipped: ${target} is already installed`)
       prompts.outro("Done")
       return
     }
 
-    prompts.log.info(`From ${Installation.VERSION} → ${target}`)
+    prompts.log.info(`From ${InstallationVersion} → ${target}`)
     const spinner = prompts.spinner()
     spinner.start("Upgrading...")
     const err = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.upgrade(method, target))).catch(

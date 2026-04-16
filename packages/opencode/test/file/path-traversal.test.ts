@@ -1,10 +1,16 @@
 import { test, expect, describe } from "bun:test"
+import { Effect } from "effect"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
+
+const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
+  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
+const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
+const list = (dir?: string) => run(File.Service.use((svc) => svc.list(dir)))
 
 describe("Filesystem.contains", () => {
   test("allows paths within project", () => {
@@ -32,10 +38,10 @@ describe("Filesystem.contains", () => {
 })
 
 /*
- * Integration tests for File.read() and File.list() path traversal protection.
+ * Integration tests for read() and list() path traversal protection.
  *
  * These tests verify the HTTP API code path is protected. The HTTP endpoints
- * in server.ts (GET /file/content, GET /file) call File.read()/File.list()
+ * in server.ts (GET /file/content, GET /file) call read()/list()
  * directly - they do NOT go through ReadTool or the agent permission layer.
  *
  * This is a SEPARATE code path from ReadTool, which has its own checks.
@@ -51,7 +57,7 @@ describe("File.read path traversal protection", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await expect(File.read("../../../etc/passwd")).rejects.toThrow("Access denied: path escapes project directory")
+        await expect(read("../../../etc/passwd")).rejects.toThrow("Access denied: path escapes project directory")
       },
     })
   })
@@ -62,7 +68,7 @@ describe("File.read path traversal protection", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await expect(File.read("src/nested/../../../../../../../etc/passwd")).rejects.toThrow(
+        await expect(read("src/nested/../../../../../../../etc/passwd")).rejects.toThrow(
           "Access denied: path escapes project directory",
         )
       },
@@ -79,7 +85,7 @@ describe("File.read path traversal protection", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const result = await File.read("valid.txt")
+        const result = await read("valid.txt")
         expect(result.content).toBe("valid content")
       },
     })
@@ -93,7 +99,7 @@ describe("File.list path traversal protection", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await expect(File.list("../../../etc")).rejects.toThrow("Access denied: path escapes project directory")
+        await expect(list("../../../etc")).rejects.toThrow("Access denied: path escapes project directory")
       },
     })
   })
@@ -108,7 +114,7 @@ describe("File.list path traversal protection", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const result = await File.list("subdir")
+        const result = await list("subdir")
         expect(Array.isArray(result)).toBe(true)
       },
     })
