@@ -1,7 +1,7 @@
 import { BoxRenderable, MouseButton, MouseEvent, RGBA, TextAttributes } from "@opentui/core"
 import { For, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import { Sound } from "@tui/util/sound"
+import * as Sound from "@tui/util/sound"
 import { logo } from "@/cli/logo"
 
 // Shadow markers (rendered chars in parens):

@@ -1,7 +1,7 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { Clipboard } from "@tui/util/clipboard"
-import { Selection } from "@tui/util/selection"
-import { Terminal } from "@tui/util/terminal"
+import * as Clipboard from "@tui/util/clipboard"
+import * as Selection from "@tui/util/selection"
+import * as Terminal from "@tui/util/terminal"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
