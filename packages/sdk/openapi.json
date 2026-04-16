@@ -11759,7 +11759,7 @@
             "anyOf": [
               {
                 "type": "boolean",
-                "const": true
+                "const": false
               },
               {
                 "type": "object",
