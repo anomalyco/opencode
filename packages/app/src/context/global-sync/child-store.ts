@@ -182,6 +182,7 @@ export function createChildStoreManager(input: {
             limit: 5,
             message: {},
             part: {},
+            bootstrapPromise: Promise.resolve(),
           })
           children[directory] = child
           disposers.set(directory, dispose)

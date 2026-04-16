@@ -14,10 +14,11 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
-import { useGlobalSync } from "@/context/global-sync"
+import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { sortedRootSessions, workspaceKey } from "./helpers"
+import { useQuery } from "@tanstack/solid-query"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -454,7 +455,8 @@ export const LocalWorkspace = (props: {
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
-  const loading = createMemo(() => !booted() && count() === 0)
+  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
+  const loading = createMemo(() => query.isPending && count() === 0)
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
@@ -471,7 +473,7 @@ export const LocalWorkspace = (props: {
         mobile={props.mobile}
         ctx={props.ctx}
         showNew={() => false}
-        loading={loading}
+        loading={() => query.isLoading}
         sessions={sessions}
         hasMore={hasMore}
         loadMore={loadMore}

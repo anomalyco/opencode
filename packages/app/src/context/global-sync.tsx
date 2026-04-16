@@ -26,6 +26,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
+import { queryOptions, skipToken, useQueryClient } from "@tanstack/solid-query"
 
 type GlobalStore = {
   ready: boolean
@@ -40,6 +41,9 @@ type GlobalStore = {
   config: Config
   reload: undefined | "pending" | "complete"
 }
+
+export const loadSessionsQuery = (directory: string) =>
+  queryOptions<null>({ queryKey: [directory, "loadSessions"], queryFn: skipToken })
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
@@ -67,6 +71,7 @@ function createGlobalSync() {
     config: {},
     reload: undefined,
   })
+  const queryClient = useQueryClient()
 
   let active = true
   let projectWritten = false
@@ -198,43 +203,50 @@ function createGlobalSync() {
     }
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
-    const promise = loadRootSessionsWithFallback({
-      directory,
-      limit,
-      list: (query) => globalSDK.client.session.list(query),
-    })
-      .then((x) => {
-        const nonArchived = (x.data ?? [])
-          .filter((s) => !!s?.id)
-          .filter((s) => !s.time?.archived)
-          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        const limit = store.limit
-        const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], {
-          limit,
-          permission: store.permission,
-        })
-        setStore(
-          "sessionTotal",
-          estimateRootSessionTotal({
-            count: nonArchived.length,
-            limit: x.limit,
-            limited: x.limited,
-          }),
-        )
-        setStore("session", reconcile(sessions, { key: "id" }))
-        cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
-        sessionMeta.set(directory, { limit })
+    const promise = queryClient
+      .ensureQueryData({
+        ...loadSessionsQuery(directory),
+        queryFn: () =>
+          loadRootSessionsWithFallback({
+            directory,
+            limit,
+            list: (query) => globalSDK.client.session.list(query),
+          })
+            .then((x) => {
+              const nonArchived = (x.data ?? [])
+                .filter((s) => !!s?.id)
+                .filter((s) => !s.time?.archived)
+                .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+              const limit = store.limit
+              const childSessions = store.session.filter((s) => !!s.parentID)
+              const sessions = trimSessions([...nonArchived, ...childSessions], {
+                limit,
+                permission: store.permission,
+              })
+              setStore(
+                "sessionTotal",
+                estimateRootSessionTotal({
+                  count: nonArchived.length,
+                  limit: x.limit,
+                  limited: x.limited,
+                }),
+              )
+              setStore("session", reconcile(sessions, { key: "id" }))
+              cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
+              sessionMeta.set(directory, { limit })
+            })
+            .catch((err) => {
+              console.error("Failed to load sessions", err)
+              const project = getFilename(directory)
+              showToast({
+                variant: "error",
+                title: language.t("toast.session.listFailed.title", { project }),
+                description: formatServerError(err, language.t),
+              })
+            })
+            .then(() => null),
       })
-      .catch((err) => {
-        console.error("Failed to load sessions", err)
-        const project = getFilename(directory)
-        showToast({
-          variant: "error",
-          title: language.t("toast.session.listFailed.title", { project }),
-          description: formatServerError(err, language.t),
-        })
-      })
+      .then(() => {})
 
     sessionLoads.set(directory, promise)
     void promise.finally(() => {
@@ -250,8 +262,9 @@ function createGlobalSync() {
     if (pending) return pending
 
     children.pin(directory)
-    const promise = (async () => {
+    const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
+      child[1]("bootstrapPromise", promise!)
       const cache = children.vcsCache.get(directory)
       if (!cache) return
       const sdk = sdkFor(directory)
@@ -269,8 +282,9 @@ function createGlobalSync() {
         vcsCache: cache,
         loadSessions,
         translate: language.t,
+        queryClient,
       })
-    })()
+    })
 
     booting.set(directory, promise)
     void promise.finally(() => {
@@ -346,6 +360,7 @@ function createGlobalSync() {
         translate: language.t,
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
         setGlobalStore: setBootStore,
+        queryClient,
       })
       bootedAt = Date.now()
     } finally {
