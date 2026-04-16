@@ -333,8 +333,7 @@ Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
 
 ## Interna
 
-Intern verwenden Tools wie `grep` und `glob` [ripgrep](https://github.com/BurntSushi/ripgrep).
-Standardmaessig beachtet ripgrep `.gitignore`, daher werden dort aufgefuehrte Dateien und Ordner nicht durchsucht.
+Tools wie `grep` und `glob` beachten standardmaessig `.gitignore`, daher werden dort aufgefuehrte Dateien und Ordner nicht durchsucht.
 
 ---
 
@@ -349,4 +348,4 @@ Dort kannst du Pfade explizit erlauben.
 !build/
 ```
 
-Dieses Beispiel erlaubt ripgrep, in `node_modules/`, `dist/` und `build/` zu suchen, auch wenn sie in `.gitignore` stehen.
+Dieses Beispiel erlaubt Suchvorgaenge in `node_modules/`, `dist/` und `build/`, auch wenn sie in `.gitignore` stehen.

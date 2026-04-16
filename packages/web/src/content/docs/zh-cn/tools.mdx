@@ -324,7 +324,7 @@ MCP（Model Context Protocol）服务器允许您集成外部工具和服务，�
 
 ## 内部机制
 
-在内部，`grep` 和 `glob` 等工具底层使用 [ripgrep](https://github.com/BurntSushi/ripgrep)。默认情况下，ripgrep 遵循 `.gitignore` 中的模式，这意味着 `.gitignore` 中列出的文件和目录将被排除在搜索和列表结果之外。
+默认情况下，`grep` 和 `glob` 等工具会遵循 `.gitignore` 中的模式，这意味着 `.gitignore` 中列出的文件和目录将被排除在搜索和列表结果之外。
 
 ---
 
@@ -338,4 +338,4 @@ MCP（Model Context Protocol）服务器允许您集成外部工具和服务，�
 !build/
 ```
 
-例如，这个 `.ignore` 文件允许 ripgrep 在 `node_modules/`、`dist/` 和 `build/` 目录中进行搜索，即使它们已在 `.gitignore` 中列出。
+例如，这个 `.ignore` 文件允许在 `node_modules/`、`dist/` 和 `build/` 目录中进行搜索，即使它们已在 `.gitignore` 中列出。

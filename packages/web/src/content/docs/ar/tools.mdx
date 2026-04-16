@@ -324,7 +324,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ## التفاصيل الداخلية
 
-داخليا، تستخدم أدوات مثل `grep` و`glob` [ripgrep](https://github.com/BurntSushi/ripgrep) في الخلفية. افتراضيا، يحترم ripgrep أنماط `.gitignore`، ما يعني أن الملفات والمجلدات المدرجة في `.gitignore` ستُستبعد من عمليات البحث وعرض القوائم.
+افتراضيا، تحترم أدوات مثل `grep` و`glob` أنماط `.gitignore`، ما يعني أن الملفات والمجلدات المدرجة في `.gitignore` ستُستبعد من عمليات البحث وعرض القوائم.
 
 ---
 
@@ -338,4 +338,4 @@ OPENCODE_ENABLE_EXA=1 opencode
 !build/
 ```
 
-على سبيل المثال، يسمح ملف `.ignore` هذا لـ ripgrep بالبحث داخل مجلدات `node_modules/` و`dist/` و`build/` حتى لو كانت مدرجة في `.gitignore`.
+على سبيل المثال، يسمح ملف `.ignore` هذا بالبحث داخل مجلدات `node_modules/` و`dist/` و`build/` حتى لو كانت مدرجة في `.gitignore`.

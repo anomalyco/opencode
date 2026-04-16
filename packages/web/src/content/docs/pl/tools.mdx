@@ -324,7 +324,7 @@ Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych nar
 
 ## Szczegóły techniczne
 
-Wewnętrznie narzędzia takie jak `grep` i `glob` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
+Domyślnie narzędzia takie jak `grep` i `glob` respektują wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
 
 ---
 
@@ -338,4 +338,4 @@ Aby uwzględnić pliki, które normalnie byłyby ignorowane, utwórz plik `.igno
 !build/
 ```
 
-Na przykład ten plik `.ignore` pozwala ripgrepowi przeszukiwać katalogi `node_modules/`, `dist/` i `build/`, nawet jeśli są one wymienione w `.gitignore`.
+Na przykład ten plik `.ignore` pozwala przeszukiwać katalogi `node_modules/`, `dist/` i `build/`, nawet jeśli są one wymienione w `.gitignore`.

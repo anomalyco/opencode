@@ -324,7 +324,7 @@ MCP (Model Context Protocol) サーバーを使用すると、外部ツールと
 
 ## 内部動作
 
-内部的には、`grep`、`glob` などのツールは内部で [ripgrep](https://github.com/BurntSushi/ripgrep) を使用します。デフォルトでは、ripgrep は `.gitignore` パターンを尊重します。つまり、`.gitignore` にリストされているファイルとディレクトリは検索とリストから除外されます。
+デフォルトでは、`grep`、`glob` などのツールは `.gitignore` パターンを尊重します。つまり、`.gitignore` にリストされているファイルとディレクトリは検索とリストから除外されます。
 
 ---
 
@@ -338,4 +338,4 @@ MCP (Model Context Protocol) サーバーを使用すると、外部ツールと
 !build/
 ```
 
-たとえば、この `.ignore` ファイルを使用すると、ripgrep は、`node_modules/` にリストされている場合でも、`dist/`、`build/`、および `.gitignore` ディレクトリ内を検索できます。
+たとえば、この `.ignore` ファイルを使用すると、`node_modules/`、`dist/`、および `build/` ディレクトリが `.gitignore` にリストされている場合でも検索できます。

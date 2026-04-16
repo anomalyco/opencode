@@ -324,7 +324,7 @@ MCP 서버 구성에 대한 [Learn more](/docs/mcp-servers).
 
 ## 내부
 
-내부, 도구 `grep` 그리고 `glob` 사용 [ripgrep](https://github.com/BurntSushi/ripgrep) 후드 아래에. 기본적으로 ripgrep은 `.gitignore` 패턴을 존중하며 `.gitignore`에 나열된 파일 및 디렉토리를 검색 및 목록에서 제외됩니다.
+기본적으로 `grep` 및 `glob` 같은 도구는 `.gitignore` 패턴을 존중하며 `.gitignore`에 나열된 파일 및 디렉토리를 검색 및 목록에서 제외합니다.
 
 ---
 
@@ -338,4 +338,4 @@ MCP 서버 구성에 대한 [Learn more](/docs/mcp-servers).
 !build/
 ```
 
-예를 들어,이 `.ignore` 파일은 `node_modules/`, `dist/` 및 `build/` 디렉토리 내에서 검색 할 수 있습니다. `.gitignore`.
+예를 들어, 이 `.ignore` 파일은 `node_modules/`, `dist/`, `build/` 디렉토리가 `.gitignore`에 있어도 검색할 수 있게 해줍니다.

@@ -324,7 +324,7 @@ MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjen
 
 ## Interne
 
-Internt bruger verktøy som `grep` og `glob` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og lister.
+Som standard respekterer verktøy som `grep` og `glob` `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og lister.
 
 ---
 
@@ -338,4 +338,4 @@ For at inkludere filer som normalt vil bli ignorert, lag en `.ignore`-fil i pros
 !build/
 ```
 
-For eksempel lar denne `.ignore` filen ripgrep søke i `node_modules/`, `dist/` og `build/` kataloger selv om de er oppført i `.gitignore`.
+For eksempel lar denne `.ignore` filen søk inkludere `node_modules/`, `dist/` og `build/` kataloger selv om de er oppført i `.gitignore`.

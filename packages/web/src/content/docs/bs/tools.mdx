@@ -324,7 +324,7 @@ MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i s
 
 ## Interno
 
-Interno, alati kao `grep` i `glob` koriste [ripgrep](https://github.com/BurntSushi/ripgrep). Po defaultu, ripgrep postuje `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
+Po defaultu, alati kao `grep` i `glob` postuju `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
 
 ---
 
@@ -338,4 +338,4 @@ Da ukljucite fajlove koji bi inace bili ignorisani, kreirajte `.ignore` datoteku
 !build/
 ```
 
-Na primjer, ova `.ignore` datoteka dozvoljava ripgrep-u da pretrazuje `node_modules/`, `dist/` i `build/` direktorije i kada su navedeni u `.gitignore`.
+Na primjer, ova `.ignore` datoteka dozvoljava pretragu unutar `node_modules/`, `dist/` i `build/` direktorija i kada su navedeni u `.gitignore`.

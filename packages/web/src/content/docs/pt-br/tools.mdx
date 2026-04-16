@@ -324,7 +324,7 @@ Servidores MCP (Model Context Protocol) permitem que você integre ferramentas e
 
 ## Internos
 
-Internamente, ferramentas como `grep` e `glob` usam [ripgrep](https://github.com/BurntSushi/ripgrep) por trás dos panos. Por padrão, o ripgrep respeita padrões `.gitignore`, o que significa que arquivos e diretórios listados em seu `.gitignore` serão excluídos de buscas e listagens.
+Por padrão, ferramentas como `grep` e `glob` respeitam padrões `.gitignore`, o que significa que arquivos e diretórios listados em seu `.gitignore` serão excluídos de buscas e listagens.
 
 ---
 
@@ -338,4 +338,4 @@ Para incluir arquivos que normalmente seriam ignorados, crie um arquivo `.ignore
 !build/
 ```
 
-Por exemplo, este arquivo `.ignore` permite que o ripgrep busque dentro dos diretórios `node_modules/`, `dist/` e `build/`, mesmo que estejam listados em `.gitignore`.
+Por exemplo, este arquivo `.ignore` permite buscas dentro dos diretórios `node_modules/`, `dist/` e `build/`, mesmo que estejam listados em `.gitignore`.
