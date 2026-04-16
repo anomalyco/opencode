@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Instance } from "../../src/project/instance"
-import { Server } from "../../src/server/server"
+import { ExperimentalHttpApiServer } from "../../src/server/instance/httpapi/server"
 import { tmpdir } from "../fixture/fixture"
 import { Log } from "../../src/util/log"
 
@@ -13,27 +15,32 @@ afterEach(async () => {
 describe("experimental project httpapi", () => {
   test("lists projects, returns current project, and serves docs", async () => {
     await using tmp = await tmpdir({ git: true })
-    const app = Server.Default().app
-    const headers = {
-      "content-type": "application/json",
-      "x-opencode-directory": tmp.path,
-    }
 
-    const list = await app.request("/experimental/httpapi/project", { headers })
-    expect(list.status).toBe(200)
-    const items = await list.json()
-    expect(items.length).toBeGreaterThan(0)
-    expect(items[0].worktree).toBeDefined()
+    await Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient
 
-    const current = await app.request("/experimental/httpapi/project/current", { headers })
-    expect(current.status).toBe(200)
-    const project = await current.json()
-    expect(project.worktree).toBe(tmp.path)
+      const listRes = yield* HttpClientRequest.get("/experimental/httpapi/project").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", tmp.path),
+        client.execute,
+      )
+      const list: any[] = JSON.parse(yield* listRes.text)
+      expect(list.length).toBeGreaterThan(0)
+      expect(list[0].worktree).toBeDefined()
 
-    const doc = await app.request("/experimental/httpapi/project/doc", { headers })
-    expect(doc.status).toBe(200)
-    const spec = await doc.json()
-    expect(spec.paths["/experimental/httpapi/project"]?.get?.operationId).toBe("project.list")
-    expect(spec.paths["/experimental/httpapi/project/current"]?.get?.operationId).toBe("project.current")
+      const currentRes = yield* HttpClientRequest.get("/experimental/httpapi/project/current").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", tmp.path),
+        client.execute,
+      )
+      const project: any = JSON.parse(yield* currentRes.text)
+      expect(project.worktree).toBe(tmp.path)
+
+      const docRes = yield* HttpClientRequest.get("/experimental/httpapi/project/doc").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", tmp.path),
+        client.execute,
+      )
+      const spec: any = JSON.parse(yield* docRes.text)
+      expect(spec.paths["/experimental/httpapi/project"]?.get?.operationId).toBe("project.list")
+      expect(spec.paths["/experimental/httpapi/project/current"]?.get?.operationId).toBe("project.current")
+    }).pipe(Effect.scoped, Effect.provide(ExperimentalHttpApiServer.layerTest), Effect.runPromise)
   })
 })

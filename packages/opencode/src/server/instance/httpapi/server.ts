@@ -12,6 +12,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PermissionApi, PermissionLive } from "./permission"
+import { ProjectApi, ProjectLive } from "./project"
 import { QuestionApi, QuestionLive } from "./question"
 
 const Query = Schema.Struct({
@@ -112,6 +113,7 @@ export namespace ExperimentalHttpApiServer {
 
   const QuestionSecured = QuestionApi.middleware(Authorization)
   const PermissionSecured = PermissionApi.middleware(Authorization)
+  const ProjectSecured = ProjectApi.middleware(Authorization)
 
   export const routes = Layer.mergeAll(
     HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
@@ -119,6 +121,9 @@ export namespace ExperimentalHttpApiServer {
     ),
     HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
       Layer.provide(PermissionLive),
+    ),
+    HttpApiBuilder.layer(ProjectSecured, { openapiPath: "/experimental/httpapi/project/doc" }).pipe(
+      Layer.provide(ProjectLive),
     ),
   ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
 
