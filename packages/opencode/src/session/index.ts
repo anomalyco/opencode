@@ -406,6 +406,7 @@ export namespace Session {
           if (cfg.autotitle === "branch") {
             const b = yield* git.branch(dir)
             if (b) return b
+            log.info("autotitle branch: no branch detected, falling back to default title", { dir })
           }
           // "llm" titling is handled separately after the first message; fall back to default here
           return createDefaultTitle(child)
