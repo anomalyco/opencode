@@ -1,5 +1,6 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { AWS } from "@opencode-ai/console-core/aws.js"
+import { Resource } from "@opencode-ai/console-resource"
 import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createLead } from "~/lib/salesforce"
@@ -12,6 +13,55 @@ interface EnterpriseFormData {
   phone?: string
   alias?: string
   message: string
+}
+
+const list = "1b381e5e-39bd-11f1-ba4a-cdd4791f0c43"
+
+function splitFullName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter((p) => p.length > 0)
+  if (parts.length === 0) return { firstName: "", lastName: "" }
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" }
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") }
+}
+
+function getEmailOctopusApiKey() {
+  if (process.env.EMAILOCTOPUS_API_KEY) return process.env.EMAILOCTOPUS_API_KEY
+  try {
+    return Resource.EMAILOCTOPUS_API_KEY.value
+  } catch {
+    return
+  }
+}
+
+function subscribe(email: string, fullName: string) {
+  const apiKey = getEmailOctopusApiKey()
+  if (!apiKey) {
+    console.warn("Skipping EmailOctopus subscribe: missing API key")
+    return Promise.resolve(false)
+  }
+
+  const { firstName, lastName } = splitFullName(fullName)
+  const fields: Record<string, string> = {}
+  if (firstName) fields.FirstName = firstName
+  if (lastName) fields.LastName = lastName
+
+  const payload: { email_address: string; fields?: Record<string, string> } = { email_address: email }
+  if (Object.keys(fields).length) payload.fields = fields
+
+  return fetch(`https://api.emailoctopus.com/lists/${list}/contacts`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  }).then(
+    () => true,
+    (err) => {
+      console.error("Failed to subscribe enterprise email:", err)
+      return false
+    },
+  )
 }
 
 export async function POST(event: APIEvent) {
@@ -41,30 +91,51 @@ ${body.role}<br>
 ${body.company ? `${body.company}<br>` : ""}${body.email}<br>
 ${body.phone ? `${body.phone}<br>` : ""}`.trim()
 
-    const [lead, mail] = await Promise.all([
-      createLead({
-        name: body.name,
-        role: body.role,
-        company: body.company,
-        email: body.email,
-        phone: body.phone,
-        message: body.message,
-      }),
-      AWS.sendEmail({
-        to: "contact@anoma.ly",
-        subject: `Enterprise Inquiry from ${body.name}`,
-        body: emailContent,
-        replyTo: body.email,
-      }).then(
-        () => true,
-        (err) => {
-          console.error("Failed to send enterprise email:", err)
+    const [lead, mail, octopus] = await Promise.all([
+      Promise.resolve()
+        .then(() =>
+          createLead({
+            name: body.name,
+            role: body.role,
+            company: body.company,
+            email: body.email,
+            phone: body.phone,
+            message: body.message,
+          }),
+        )
+        .catch((err) => {
+          console.error("Failed to create Salesforce lead:", err)
           return false
-        },
-      ),
+        }),
+      Promise.resolve()
+        .then(() =>
+          AWS.sendEmail({
+            to: "contact@anoma.ly",
+            subject: `Enterprise Inquiry from ${body.name}`,
+            body: emailContent,
+            replyTo: body.email,
+          }),
+        )
+        .then(
+          () => true,
+          (err) => {
+            console.error("Failed to send enterprise email:", err)
+            return false
+          },
+        ),
+      Promise.resolve()
+        .then(() => subscribe(body.email, body.name))
+        .catch((err) => {
+          console.error("Failed to subscribe enterprise email:", err)
+          return false
+        }),
     ])
 
-    if (!lead && !mail) {
+    if (!lead && !mail && !octopus) {
+      if (import.meta.env.DEV) {
+        console.warn("Enterprise inquiry accepted in dev mode without integrations", { email: body.email })
+        return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
+      }
       console.error("Enterprise inquiry delivery failed", { email: body.email })
       return Response.json({ error: dict["enterprise.form.error.internalServer"] }, { status: 500 })
     }
