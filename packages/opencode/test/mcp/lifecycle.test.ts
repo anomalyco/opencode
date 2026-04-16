@@ -652,9 +652,8 @@ test("McpOAuthCallback.cancelPending is keyed by mcpName but pendingAuths uses o
 
   // The callback should still be pending because cancelPending looked up
   // "my-mcp-server" in a map keyed by "abc123hexstate"
-  let resolved = false
   let rejected = false
-  callbackPromise.then(() => (resolved = true)).catch(() => (rejected = true))
+  callbackPromise.then(() => {}).catch(() => (rejected = true))
 
   // Give it a tick
   await new Promise((r) => setTimeout(r, 50))

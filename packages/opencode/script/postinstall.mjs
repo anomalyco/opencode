@@ -68,23 +68,6 @@ function findBinary() {
   }
 }
 
-function prepareBinDirectory(binaryName) {
-  const binDir = path.join(__dirname, "bin")
-  const targetPath = path.join(binDir, binaryName)
-
-  // Ensure bin directory exists
-  if (!fs.existsSync(binDir)) {
-    fs.mkdirSync(binDir, { recursive: true })
-  }
-
-  // Remove existing binary/symlink if it exists
-  if (fs.existsSync(targetPath)) {
-    fs.unlinkSync(targetPath)
-  }
-
-  return { binDir, targetPath }
-}
-
 async function main() {
   try {
     if (os.platform() === "win32") {

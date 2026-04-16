@@ -858,7 +858,6 @@ it.live("dedupes concurrent config dependency installs for the same dir", () =>
     let calls = 0
     const online = spyOn(Network, "online").mockReturnValue(false)
     const ready = Deferred.makeUnsafe<void>()
-    const blocked = Deferred.makeUnsafe<void>()
     const hold = Deferred.makeUnsafe<void>()
     const target = path.normalize(dir)
     const run = spyOn(Npm, "install").mockImplementation(async (d: string) => {
@@ -921,7 +920,6 @@ it.live("serializes config dependency installs across dirs", () =>
     let open = 0
     let peak = 0
     const ready = Deferred.makeUnsafe<void>()
-    const blocked = Deferred.makeUnsafe<void>()
     const hold = Deferred.makeUnsafe<void>()
 
     const online = spyOn(Network, "online").mockReturnValue(false)

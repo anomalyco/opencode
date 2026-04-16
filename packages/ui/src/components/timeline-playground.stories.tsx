@@ -9,7 +9,6 @@ import type {
   TextPart,
   ReasoningPart,
   ToolPart,
-  CompactionPart,
   FilePart,
   AgentPart,
 } from "@opencode-ai/sdk/v2"

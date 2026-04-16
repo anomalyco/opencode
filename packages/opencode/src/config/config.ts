@@ -1297,7 +1297,7 @@ export const layer: Layer.Layer<
       yield* Effect.promise(() => Npm.install(dir))
     })
 
-    const installDependencies = Effect.fn("Config.installDependencies")(function* (dir: string, input?: InstallInput) {
+    const installDependencies = Effect.fn("Config.installDependencies")(function* (dir: string, _input?: InstallInput) {
       if (
         !(yield* fs.access(dir, { writable: true }).pipe(
           Effect.as(true),

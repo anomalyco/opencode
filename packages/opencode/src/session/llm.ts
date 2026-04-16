@@ -277,11 +277,10 @@ export namespace LLM {
             }
 
             const id = PermissionID.ascending()
-            let reply: Permission.Reply | undefined
             let unsub: (() => void) | undefined
             try {
               unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
-                if (evt.properties.requestID === id) reply = evt.properties.reply
+                if (evt.properties.requestID === id) void evt.properties.reply
               })
               const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
                 try {

@@ -395,7 +395,6 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
-      const gate = yield* Deferred.make<void>()
 
       const sh = yield* runner.startShell(Effect.never.pipe(Effect.as("aborted"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")

@@ -1,5 +1,3 @@
-import { dict as en } from "./en"
-
 export const dict = {
   "command.category.suggested": "추천",
   "command.category.view": "보기",
