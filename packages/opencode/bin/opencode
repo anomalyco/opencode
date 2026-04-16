@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import childProcess from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import os from "node:os"
+import { fileURLToPath } from "node:url"
+
+const __filename = fileURLToPath(import.meta.url)
 
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
