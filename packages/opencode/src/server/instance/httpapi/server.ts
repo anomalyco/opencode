@@ -10,8 +10,10 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { Permission } from "@/permission"
+import { ProviderAuth } from "@/provider/auth"
 import { Question } from "@/question"
 import { PermissionApi, PermissionLive } from "./permission"
+import { ProviderApi, ProviderLive } from "./provider"
 import { QuestionApi, QuestionLive } from "./question"
 
 const Query = Schema.Struct({
@@ -112,6 +114,7 @@ export namespace ExperimentalHttpApiServer {
 
   const QuestionSecured = QuestionApi.middleware(Authorization)
   const PermissionSecured = PermissionApi.middleware(Authorization)
+  const ProviderSecured = ProviderApi.middleware(Authorization)
 
   export const routes = Layer.mergeAll(
     HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
@@ -119,6 +122,9 @@ export namespace ExperimentalHttpApiServer {
     ),
     HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
       Layer.provide(PermissionLive),
+    ),
+    HttpApiBuilder.layer(ProviderSecured, { openapiPath: "/experimental/httpapi/provider/doc" }).pipe(
+      Layer.provide(ProviderLive),
     ),
   ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
 
@@ -131,5 +137,6 @@ export namespace ExperimentalHttpApiServer {
     Layer.provideMerge(NodeHttpServer.layerTest),
     Layer.provideMerge(Question.defaultLayer),
     Layer.provideMerge(Permission.defaultLayer),
+    Layer.provideMerge(ProviderAuth.defaultLayer),
   )
 }

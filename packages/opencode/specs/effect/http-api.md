@@ -156,6 +156,14 @@ Ordering for a route-group migration:
 3. move tagged route-facing errors to `Schema.TaggedErrorClass` where needed
 4. switch existing Zod boundary validators to derived `.zod`
 5. define the `HttpApi` contract from the canonical Effect schemas
+6. regenerate the SDK (`./packages/sdk/js/script/build.ts`) and verify zero diff against `dev`
+
+SDK shape rule:
+
+- every schema migration must preserve the generated SDK output byte-for-byte
+- `Schema.Class` emits a named `$ref` in OpenAPI via its identifier — use it only for types that already had `.meta({ ref })` in the old Zod schema
+- inner / nested types that were anonymous in the old Zod schema should stay as `Schema.Struct` (not `Schema.Class`) to avoid introducing new named components in the OpenAPI spec
+- if a diff appears in `packages/sdk/js/src/v2/gen/types.gen.ts`, the migration introduced an unintended API surface change — fix it before merging
 
 Temporary exception:
 
@@ -195,8 +203,9 @@ Use the same sequence for each route group.
 4. Define the `HttpApi` contract separately from the handlers.
 5. Implement handlers by yielding the existing service from context.
 6. Mount the new surface in parallel under an experimental prefix.
-7. Add one end-to-end test and one OpenAPI-focused test.
-8. Compare ergonomics before migrating the next endpoint.
+7. Regenerate the SDK and verify zero diff against `dev` (see SDK shape rule above).
+8. Add one end-to-end test and one OpenAPI-focused test.
+9. Compare ergonomics before migrating the next endpoint.
 
 Rule of thumb:
 
