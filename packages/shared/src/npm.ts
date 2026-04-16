@@ -142,7 +142,7 @@ export namespace Npm {
 
         yield* flock.acquire(`npm-install:${dir}`)
 
-        const reify = Effect.fnUntraced(function* () {
+        const reify = Effect.fn("Npm.reify")(function* () {
           const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
           const arb = new Arborist({
             path: dir,
@@ -176,28 +176,31 @@ export namespace Npm {
         const pkgAny = pkg as any
         const lockAny = lock as any
 
-        const declared = new Set([
-          ...Object.keys(pkgAny?.dependencies || {}),
-          ...Object.keys(pkgAny?.devDependencies || {}),
-          ...Object.keys(pkgAny?.peerDependencies || {}),
-          ...Object.keys(pkgAny?.optionalDependencies || {}),
-          ...(input?.add || []),
-        ])
+        yield* Effect.gen(function* () {
+          const declared = new Set([
+            ...Object.keys(pkgAny?.dependencies || {}),
+            ...Object.keys(pkgAny?.devDependencies || {}),
+            ...Object.keys(pkgAny?.peerDependencies || {}),
+            ...Object.keys(pkgAny?.optionalDependencies || {}),
+            ...(input?.add || []),
+          ])
 
-        const root = lockAny?.packages?.[""] || {}
-        const locked = new Set([
-          ...Object.keys(root?.dependencies || {}),
-          ...Object.keys(root?.devDependencies || {}),
-          ...Object.keys(root?.peerDependencies || {}),
-          ...Object.keys(root?.optionalDependencies || {}),
-        ])
+          const root = lockAny?.packages?.[""] || {}
+          const locked = new Set([
+            ...Object.keys(root?.dependencies || {}),
+            ...Object.keys(root?.devDependencies || {}),
+            ...Object.keys(root?.peerDependencies || {}),
+            ...Object.keys(root?.optionalDependencies || {}),
+          ])
 
-        for (const name of declared) {
-          if (!locked.has(name)) {
-            yield* reify()
-            return
+          for (const name of declared) {
+            if (!locked.has(name)) {
+              yield* reify()
+              return
+            }
           }
-        }
+        }).pipe(Effect.withSpan("Npm.checkDirty"))
+        return
       }, Effect.scoped)
 
       const which = Effect.fn("Npm.which")(function* (pkg: string) {

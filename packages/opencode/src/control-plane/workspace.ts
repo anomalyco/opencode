@@ -460,8 +460,7 @@ export namespace Workspace {
           if (!("payload" in evt)) return
 
           if (evt.payload.type === "sync") {
-            // This name -> type is temporary
-            SyncEvent.replay({ ...evt.payload, type: evt.payload.name } as SyncEvent.SerializedEvent)
+            SyncEvent.replay(evt.payload.syncEvent as SyncEvent.SerializedEvent)
           }
 
           GlobalBus.emit("event", {

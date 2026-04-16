@@ -44,6 +44,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config"
+import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
@@ -1213,7 +1214,7 @@ export namespace ACP {
           description: "compact the session",
         })
 
-      const mcpServers: Record<string, Config.Mcp> = {}
+      const mcpServers: Record<string, ConfigMCP.Info> = {}
       for (const server of params.mcpServers) {
         if ("type" in server) {
           mcpServers[server.name] = {
