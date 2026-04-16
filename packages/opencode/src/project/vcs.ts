@@ -164,14 +164,21 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
           return { current: undefined, root: undefined }
         }
 
+        const value: State = { current: undefined, root: undefined }
+
         const get = Effect.fnUntraced(function* () {
           return yield* git.branch(ctx.directory)
         })
-        const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
-          concurrency: 2,
-        })
-        const value = { current, root }
-        log.info("initialized", { branch: value.current, default_branch: value.root?.name })
+
+        yield* Effect.gen(function* () {
+          const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
+            concurrency: 2,
+          })
+          value.current = current
+          value.root = root
+          log.info("initialized", { branch: value.current, default_branch: value.root?.name })
+          yield* bus.publish(Event.BranchUpdated, { branch: current })
+        }).pipe(Effect.forkScoped)
 
         yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
           Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
