@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 
 import { Process } from "../../src/util/process"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
 const root = path.join(import.meta.dir, "../..")

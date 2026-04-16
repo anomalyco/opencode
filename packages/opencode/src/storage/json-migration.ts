@@ -7,7 +7,7 @@ import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } fro
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 import { Glob } from "@opencode-ai/shared/util/glob"
 
 export namespace JsonMigration {

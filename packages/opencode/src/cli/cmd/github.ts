@@ -1,6 +1,6 @@
 import path from "path"
 import { exec } from "child_process"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "../../util"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"

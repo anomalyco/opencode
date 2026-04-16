@@ -1,7 +1,7 @@
 import { NamedError } from "@opencode-ai/shared/util/error"
 import matter from "gray-matter"
 import { z } from "zod"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g

@@ -1,6 +1,6 @@
 import { Npm } from "../npm"
 import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Flag } from "@/flag/flag"

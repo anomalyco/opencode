@@ -5,7 +5,7 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import { readdir, rm } from "fs/promises"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Arborist } from "@npmcli/arborist"
 

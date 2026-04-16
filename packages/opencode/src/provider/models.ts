@@ -5,7 +5,7 @@ import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Hash } from "@opencode-ai/shared/util/hash"
 

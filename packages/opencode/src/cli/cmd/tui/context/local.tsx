@@ -12,7 +12,7 @@ import { Provider } from "@/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",

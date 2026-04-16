@@ -12,7 +12,7 @@ import type { LSPServer } from "./server"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
+import { Filesystem } from "../util"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 

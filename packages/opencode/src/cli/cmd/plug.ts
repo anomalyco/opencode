@@ -7,7 +7,7 @@ import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plug
 import { resolvePluginTarget } from "../../plugin/shared"
 import { Instance } from "../../project/instance"
 import { errorMessage } from "../../util/error"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "../../util"
 import { Process } from "../../util/process"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
