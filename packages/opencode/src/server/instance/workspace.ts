@@ -6,7 +6,7 @@ import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { errorData } from "@/util/error"
 
 const log = Log.create({ service: "server.workspace" })

@@ -1,18 +1,18 @@
-import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Layer, Redacted, Schema } from "effect"
 import { HttpApiBuilder, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { createServer } from "node:http"
+import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { Observability } from "@/effect"
+import { memoMap } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
-import { Filesystem } from "@/util/filesystem"
-import { Permission } from "@/permission"
-import { Question } from "@/question"
-import { PermissionApi, PermissionLive } from "./permission"
-import { QuestionApi, QuestionLive } from "./question"
+import { lazy } from "@/util/lazy"
+import { Filesystem } from "@/util"
+import { PermissionApi, permissionHandlers } from "./permission"
+import { ProviderApi, providerHandlers } from "./provider"
+import { QuestionApi, questionHandlers } from "./question"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -26,10 +26,6 @@ const Headers = Schema.Struct({
 })
 
 export namespace ExperimentalHttpApiServer {
-  function text(input: string, status: number, headers?: Record<string, string>) {
-    return HttpServerResponse.text(input, { status, headers })
-  }
-
   function decode(input: string) {
     try {
       return decodeURIComponent(input)
@@ -112,24 +108,23 @@ export namespace ExperimentalHttpApiServer {
 
   const QuestionSecured = QuestionApi.middleware(Authorization)
   const PermissionSecured = PermissionApi.middleware(Authorization)
+  const ProviderSecured = ProviderApi.middleware(Authorization)
 
   export const routes = Layer.mergeAll(
-    HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
-      Layer.provide(QuestionLive),
-    ),
-    HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
-      Layer.provide(PermissionLive),
-    ),
-  ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
+    HttpApiBuilder.layer(QuestionSecured).pipe(Layer.provide(questionHandlers)),
+    HttpApiBuilder.layer(PermissionSecured).pipe(Layer.provide(permissionHandlers)),
+    HttpApiBuilder.layer(ProviderSecured).pipe(Layer.provide(providerHandlers)),
+  ).pipe(
+    Layer.provide(auth),
+    Layer.provide(normalize),
+    Layer.provide(instance),
+    Layer.provide(HttpServer.layerServices),
+    Layer.provideMerge(Observability.layer),
+  )
 
-  export const layer = (opts: { hostname: string; port: number }) =>
-    HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(
-      Layer.provideMerge(NodeHttpServer.layer(createServer, { port: opts.port, host: opts.hostname })),
-    )
-
-  export const layerTest = HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(
-    Layer.provideMerge(NodeHttpServer.layerTest),
-    Layer.provideMerge(Question.defaultLayer),
-    Layer.provideMerge(Permission.defaultLayer),
+  export const webHandler = lazy(() =>
+    HttpRouter.toWebHandler(routes, {
+      memoMap,
+    }),
   )
 }
