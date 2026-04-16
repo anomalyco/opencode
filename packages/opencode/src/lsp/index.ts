@@ -293,7 +293,7 @@ export namespace LSP {
             const task = schedule(server, root, root + server.id)
             s.spawning.set(root + server.id, task)
 
-            task.finally(() => {
+            void task.finally(() => {
               if (s.spawning.get(root + server.id) === task) {
                 s.spawning.delete(root + server.id)
               }
@@ -303,7 +303,7 @@ export namespace LSP {
             if (!client) continue
 
             result.push(client)
-            Bus.publish(Event.Updated, {})
+            void Bus.publish(Event.Updated, {})
           }
 
           return result

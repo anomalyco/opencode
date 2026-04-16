@@ -30,7 +30,13 @@
     // postMessage target origin not relevant for this codebase
     "unicorn/require-post-message-target-origin": "off",
     // Side-effectful constructors are intentional in some places
-    "no-new": "off"
+    "no-new": "off",
+
+    // Type-aware: catch unhandled promises
+    "typescript/no-floating-promises": "warn"
+  },
+  "options": {
+    "typeAware": true
   },
   "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts"]
 }

@@ -10,7 +10,7 @@ import { Log } from "../../src/util"
 import { resetDatabase } from "../fixture/db"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 afterEach(async () => {
   await resetDatabase()

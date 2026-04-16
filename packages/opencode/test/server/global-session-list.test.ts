@@ -7,7 +7,7 @@ import { Session as SessionNs } from "../../src/session"
 import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
   return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))

@@ -9,7 +9,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Log } from "../../src/util"
 
 const root = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
   return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))

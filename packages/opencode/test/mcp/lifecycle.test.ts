@@ -89,19 +89,19 @@ class MockSSE {
   }
 }
 
-mock.module("@modelcontextprotocol/sdk/client/stdio.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/stdio.js", () => ({
   StdioClientTransport: MockStdioTransport,
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: MockStreamableHTTP,
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: MockSSE,
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: class extends Error {
     constructor() {
       super("Unauthorized")
@@ -110,7 +110,7 @@ mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
 }))
 
 // Mock Client that delegates to per-name MockClientState
-mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
     _state!: MockClientState
     transport: any

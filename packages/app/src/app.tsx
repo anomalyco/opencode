@@ -197,12 +197,12 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
         fallback={
           <ConnectionError
             onRetry={() => {
-              if (checkMode() === "background") healthCheckActions.refetch()
+              if (checkMode() === "background") void healthCheckActions.refetch()
             }}
             onServerSelected={(key) => {
               setCheckMode("blocking")
               server.setActive(key)
-              healthCheckActions.refetch()
+              void healthCheckActions.refetch()
             }}
           />
         }

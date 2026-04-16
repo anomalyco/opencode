@@ -1158,7 +1158,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
-                  handleCopy()
+                  void handleCopy()
                 }}
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
               />

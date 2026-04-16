@@ -245,7 +245,7 @@ export const layer = Layer.effect(
           Stream.runForEach((input) =>
             Effect.sync(() => {
               for (const hook of hooks) {
-                hook["event"]?.({ event: input as any })
+                void hook["event"]?.({ event: input as any })
               }
             }),
           ),

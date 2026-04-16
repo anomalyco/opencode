@@ -44,7 +44,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       },
       set(key: string, value: any) {
         setStore(key, value)
-        Filesystem.writeJson(filePath, store)
+        void Filesystem.writeJson(filePath, store)
       },
     }
     return result

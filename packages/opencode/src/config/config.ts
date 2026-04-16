@@ -171,7 +171,7 @@ async function loadCommand(dir: string) {
         ? err.data.message
         : `Failed to parse command ${item}`
       const { Session } = await import("@/session")
-      Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load command", { command: item, err })
       return undefined
     })
@@ -210,7 +210,7 @@ async function loadAgent(dir: string) {
         ? err.data.message
         : `Failed to parse agent ${item}`
       const { Session } = await import("@/session")
-      Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load agent", { agent: item, err })
       return undefined
     })
@@ -248,7 +248,7 @@ async function loadMode(dir: string) {
         ? err.data.message
         : `Failed to parse mode ${item}`
       const { Session } = await import("@/session")
-      Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load mode", { mode: item, err })
       return undefined
     })

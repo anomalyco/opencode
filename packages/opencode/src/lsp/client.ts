@@ -59,7 +59,7 @@ export namespace LSPClient {
       const exists = diagnostics.has(filePath)
       diagnostics.set(filePath, params.diagnostics)
       if (!exists && input.serverID === "typescript") return
-      Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+      void Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
     connection.onRequest("window/workDoneProgress/create", (params) => {
       l.info("window/workDoneProgress/create", params)

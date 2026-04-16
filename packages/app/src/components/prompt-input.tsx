@@ -212,9 +212,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
     layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
-    tabs().open(tab)
+    void tabs().open(tab)
     tabs().setActive(tab)
-    Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
+    void Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
   }
 
   const recent = createMemo(() => {
@@ -1139,7 +1139,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
 
       if (working()) {
-        abort()
+        void abort()
         event.preventDefault()
         event.stopPropagation()
         return
@@ -1205,7 +1205,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
       if (working()) {
-        abort()
+        void abort()
         event.preventDefault()
       }
       return
@@ -1245,7 +1245,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ) {
         return
       }
-      handleSubmit(event)
+      void handleSubmit(event)
     }
   }
 

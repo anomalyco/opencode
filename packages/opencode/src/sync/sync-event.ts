@@ -142,11 +142,11 @@ function process<Def extends Definition>(def: Def, event: Event<Def>, options: {
       if (options?.publish) {
         const result = convertEvent(def.type, event.data)
         if (result instanceof Promise) {
-          result.then((data) => {
-            ProjectBus.publish({ type: def.type, properties: def.schema }, data)
+          void result.then((data) => {
+            void ProjectBus.publish({ type: def.type, properties: def.schema }, data)
           })
         } else {
-          ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+          void ProjectBus.publish({ type: def.type, properties: def.schema }, result)
         }
 
         GlobalBus.emit("event", {

@@ -13,7 +13,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 const env = Layer.mergeAll(
   Session.defaultLayer,

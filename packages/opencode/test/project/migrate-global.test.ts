@@ -10,7 +10,7 @@ import { $ } from "bun"
 import { tmpdir } from "../fixture/fixture"
 import { Effect } from "effect"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
   return Effect.runPromise(

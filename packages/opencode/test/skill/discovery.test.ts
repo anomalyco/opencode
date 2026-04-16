@@ -42,7 +42,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  server?.stop()
+  void server?.stop()
   await rm(cacheDir, { recursive: true, force: true })
 })
 

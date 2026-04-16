@@ -20,7 +20,7 @@ const opencode = await createOpencode({
 console.log("✅ Opencode server ready")
 
 const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string }>()
-;(async () => {
+void (async () => {
   const events = await opencode.client.event.subscribe()
   for await (const event of events.stream) {
     if (event.type === "message.part.updated") {
@@ -29,7 +29,7 @@ const sessions = new Map<string, { client: any; server: any; sessionId: string; 
         // Find the session for this tool update
         for (const [_sessionKey, session] of sessions.entries()) {
           if (session.sessionId === part.sessionID) {
-            handleToolUpdate(part, session.channel, session.thread)
+            void handleToolUpdate(part, session.channel, session.thread)
             break
           }
         }

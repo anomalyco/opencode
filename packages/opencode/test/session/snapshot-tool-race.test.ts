@@ -57,7 +57,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 const mcp = Layer.succeed(
   MCP.Service,

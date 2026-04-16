@@ -484,7 +484,7 @@ export default function Page() {
     if (!tab) return
 
     const path = file.pathFromTab(tab)
-    if (path) file.load(path)
+    if (path) void file.load(path)
   })
 
   createEffect(

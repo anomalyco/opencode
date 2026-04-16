@@ -956,7 +956,7 @@ export default function Layout(props: ParentProps) {
 
     // warm up child store to prevent flicker
     globalSync.child(target.worktree)
-    openProject(target.worktree)
+    void openProject(target.worktree)
   }
 
   function navigateSessionByUnseen(offset: number) {
@@ -1094,7 +1094,7 @@ export default function Layout(props: ParentProps) {
         disabled: !params.dir || !params.id,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
-          if (session) archiveSession(session)
+          if (session) void archiveSession(session)
         },
       },
       {
@@ -1360,11 +1360,11 @@ export default function Layout(props: ParentProps) {
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {
-      openProject(directory)
+      void openProject(directory)
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
-      openProject(link.directory, false)
+      void openProject(link.directory, false)
       const slug = base64Encode(link.directory)
       if (link.prompt) {
         setSessionHandoff(slug, { prompt: link.prompt })
@@ -1453,11 +1453,11 @@ export default function Layout(props: ParentProps) {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         for (const directory of result) {
-          openProject(directory, false)
+          void openProject(directory, false)
         }
-        navigateToProject(result[0])
+        void navigateToProject(result[0])
       } else if (result) {
-        openProject(result)
+        void openProject(result)
       }
     }
 
@@ -1825,7 +1825,7 @@ export default function Layout(props: ParentProps) {
         const next = new Set(dirs)
         for (const directory of next) {
           if (loadedSessionDirs.has(directory)) continue
-          globalSync.project.loadSessions(directory)
+          void globalSync.project.loadSessions(directory)
         }
 
         loadedSessionDirs.clear()
@@ -2110,7 +2110,7 @@ export default function Layout(props: ParentProps) {
                     onSave={(next) => {
                       const item = project()
                       if (!item) return
-                      renameProject(item, next)
+                      void renameProject(item, next)
                     }}
                     class="text-14-medium text-text-strong truncate"
                     displayClass="text-14-medium text-text-strong truncate"
@@ -2242,7 +2242,7 @@ export default function Layout(props: ParentProps) {
                       onClick={() => {
                         const item = project()
                         if (!item) return
-                        createWorkspace(item)
+                        void createWorkspace(item)
                       }}
                     >
                       {language.t("workspace.new")}

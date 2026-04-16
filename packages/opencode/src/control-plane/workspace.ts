@@ -114,7 +114,7 @@ export namespace Workspace {
 
     await adaptor.create(config)
 
-    startSync(info)
+    void startSync(info)
 
     await waitEvent({
       timeout: TIMEOUT,
@@ -294,7 +294,7 @@ export namespace Workspace {
     )
     const spaces = rows.map(fromRow).sort((a, b) => a.id.localeCompare(b.id))
 
-    for (const space of spaces) startSync(space)
+    for (const space of spaces) void startSync(space)
     return spaces
   }
 
@@ -307,7 +307,7 @@ export namespace Workspace {
   export const get = fn(WorkspaceID.zod, async (id) => {
     const space = lookup(id)
     if (!space) return
-    startSync(space)
+    void startSync(space)
     return space
   })
 

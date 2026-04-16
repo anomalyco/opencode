@@ -513,7 +513,7 @@ async function subscribeSessionEvents() {
   const decoder = new TextDecoder()
 
   let text = ""
-  ;(async () => {
+  void (async () => {
     while (true) {
       try {
         const { done, value } = await reader.read()

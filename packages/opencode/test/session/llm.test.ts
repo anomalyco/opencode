@@ -229,7 +229,7 @@ beforeEach(() => {
 })
 
 afterAll(() => {
-  state.server?.stop()
+  void state.server?.stop()
 })
 
 function createChatStream(text: string) {

@@ -11,7 +11,7 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionPrompt.Service | Session.Service>) {
   return Effect.runPromise(
@@ -316,7 +316,7 @@ describe("session.prompt regression", () => {
           ),
       })
     } finally {
-      server.stop(true)
+      void server.stop(true)
     }
   })
 
@@ -409,7 +409,7 @@ describe("session.prompt regression", () => {
           ),
       })
     } finally {
-      server.stop(true)
+      void server.stop(true)
     }
   })
 })

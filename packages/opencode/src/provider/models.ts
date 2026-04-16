@@ -172,7 +172,7 @@ export namespace ModelsDev {
 }
 
 if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
-  ModelsDev.refresh()
+  void ModelsDev.refresh()
   setInterval(
     async () => {
       await ModelsDev.refresh()

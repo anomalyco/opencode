@@ -76,7 +76,7 @@ const app = (upgrade: UpgradeWebSocket) =>
             queue.length = 0
           }
           remote.onmessage = (event) => {
-            send(ws, event.data)
+            void send(ws, event.data)
           }
           remote.onerror = () => {
             ws.close(1011, "proxy error")

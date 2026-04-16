@@ -112,7 +112,7 @@ async function main() {
 }
 
 try {
-  main()
+  void main()
 } catch (error) {
   console.error("Postinstall script error:", error.message)
   process.exit(0)

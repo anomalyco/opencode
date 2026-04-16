@@ -105,4 +105,4 @@ async function main() {
   console.log(`✓ Sitemap generated at ${outputPath}`)
 }
 
-main()
+void main()

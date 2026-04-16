@@ -24,7 +24,7 @@ import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 const summary = Layer.succeed(
   SessionSummary.Service,

@@ -329,7 +329,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function init() {
-      Promise.allSettled([
+      void Promise.allSettled([
         resolveSystemTheme(store.mode),
         getCustomThemes()
           .then((custom) => {
@@ -377,7 +377,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (store.mode === mode) return
       setStore("mode", mode)
       renderer.clearPaletteCache()
-      resolveSystemTheme(mode)
+      void resolveSystemTheme(mode)
     }
 
     function pin(mode: "dark" | "light" = store.mode) {

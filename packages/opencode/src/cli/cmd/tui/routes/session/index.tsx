@@ -241,7 +241,7 @@ export function Session() {
 
     if (kv.get(GO_UPSELL_DONT_SHOW)) return
 
-    DialogGoUpsell.show(dialog).then((dontShowAgain) => {
+    void DialogGoUpsell.show(dialog).then((dontShowAgain) => {
       if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
       kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
     })
@@ -272,7 +272,7 @@ export function Session() {
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
-      exit()
+      void exit()
     }
   })
 
@@ -483,7 +483,7 @@ export function Session() {
           })
           return
         }
-        sdk.client.session.summarize({
+        void sdk.client.session.summarize({
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
@@ -529,7 +529,7 @@ export function Session() {
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.client.session
+        void sdk.client.session
           .revert({
             sessionID: route.sessionID,
             messageID: message.id,
@@ -568,13 +568,13 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          sdk.client.session.unrevert({
+          void sdk.client.session.unrevert({
             sessionID: route.sessionID,
           })
           prompt?.set({ input: "", parts: [] })
           return
         }
-        sdk.client.session.revert({
+        void sdk.client.session.revert({
           sessionID: route.sessionID,
           messageID: message.id,
         })
@@ -1966,7 +1966,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      sync.session.sync(props.metadata.sessionId)
+      void sync.session.sync(props.metadata.sessionId)
   })
 
   const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])

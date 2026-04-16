@@ -350,7 +350,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     if (match) {
       continued = true
       if (args.fork) {
-        sdk.client.session.fork({ sessionID: match }).then((result) => {
+        void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
           } else {
@@ -370,7 +370,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
     forked = true
-    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+    void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id })
       } else {
@@ -818,7 +818,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
     )
 
-    exit()
+    void exit()
   })
 
   const plugin = createMemo(() => {

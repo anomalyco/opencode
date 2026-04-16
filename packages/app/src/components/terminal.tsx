@@ -415,7 +415,7 @@ export const Terminal = (props: TerminalProps) => {
       if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
-        document.fonts.ready.then(scheduleFit)
+        void document.fonts.ready.then(scheduleFit)
       }
 
       const onResize = t.onResize((size) => {

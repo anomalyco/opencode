@@ -242,7 +242,7 @@ export namespace ACP {
                 const newContent = getNewContent(content, diff)
 
                 if (newContent) {
-                  this.connection.writeTextFile({
+                  void this.connection.writeTextFile({
                     sessionId: session.id,
                     path: filepath,
                     content: newContent,
@@ -1253,7 +1253,7 @@ export namespace ACP {
       )
 
       setTimeout(() => {
-        this.connection.sessionUpdate({
+        void this.connection.sessionUpdate({
           sessionId,
           update: {
             sessionUpdate: "available_commands_update",

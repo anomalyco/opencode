@@ -10,7 +10,7 @@ import { AppRuntime } from "../../src/effect/app-runtime"
 import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function create(input?: SessionNs.CreateInput) {
   return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create(input)))

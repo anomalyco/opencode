@@ -87,6 +87,7 @@
     "glob": "13.0.5",
     "husky": "9.1.7",
     "oxlint": "1.60.0",
+    "oxlint-tsgolint": "0.21.0",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "3.18.10",

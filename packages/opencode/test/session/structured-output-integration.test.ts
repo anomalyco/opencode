@@ -8,7 +8,7 @@ import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 
 const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
 
 // Skip tests if no API key is available
 const hasApiKey = !!process.env.ANTHROPIC_API_KEY

@@ -145,7 +145,7 @@ export function DialogSessionList() {
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
-              sdk.client.session.delete({
+              void sdk.client.session.delete({
                 sessionID: option.value,
               })
               setToDelete(undefined)

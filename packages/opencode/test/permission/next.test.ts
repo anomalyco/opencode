@@ -954,7 +954,7 @@ it.live("pending permission rejects on instance dispose", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => Instance.dispose() }))
+    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => void Instance.dispose() }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

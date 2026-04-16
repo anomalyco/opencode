@@ -29,7 +29,7 @@ export function DialogMessage(props: {
             const msg = message()
             if (!msg) return
 
-            sdk.client.session.revert({
+            void sdk.client.session.revert({
               sessionID: props.sessionID,
               messageID: msg.id,
             })
