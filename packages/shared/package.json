@@ -17,10 +17,10 @@
   },
   "imports": {},
   "devDependencies": {
+    "@tsconfig/bun": "catalog:",
     "@types/semver": "catalog:",
     "@types/bun": "catalog:",
-    "@types/npmcli__arborist": "6.3.3",
-    "@tsconfig/bun": "catalog:"
+    "@types/npmcli__arborist": "6.3.3"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
