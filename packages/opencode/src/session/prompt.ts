@@ -48,6 +48,7 @@ import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { EffectBridge } from "@/effect/bridge"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -105,11 +106,7 @@ export namespace SessionPrompt {
       const sys = yield* SystemPrompt.Service
       const llm = yield* LLM.Service
       const runner = Effect.fn("SessionPrompt.runner")(function* () {
-        const ctx = yield* Effect.context()
-        return {
-          promise: <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(ctx)(effect),
-          fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runForkWith(ctx)(effect),
-        }
+        return yield* EffectBridge.make()
       })
       const ops = Effect.fn("SessionPrompt.ops")(function* () {
         const run = yield* runner()

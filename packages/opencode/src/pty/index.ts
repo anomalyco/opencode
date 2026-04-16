@@ -10,7 +10,7 @@ import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectBridge } from "@/effect/bridge"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -173,6 +173,7 @@ export namespace Pty {
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const s = yield* InstanceState.get(state)
+        const bridge = yield* EffectBridge.make()
         const id = PtyID.ascending()
         const command = input.command || Shell.preferred()
         const args = input.args || []
@@ -256,8 +257,8 @@ export namespace Pty {
             if (session.info.status === "exited") return
             log.info("session exited", { id, exitCode })
             session.info.status = "exited"
-            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }).pipe(Effect.provide(EffectLogger.layer)))
-            Effect.runFork(remove(id).pipe(Effect.provide(EffectLogger.layer)))
+            bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
+            bridge.fork(remove(id))
           }),
         )
         yield* bus.publish(Event.Created, { info })

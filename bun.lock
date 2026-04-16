@@ -359,6 +359,8 @@
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/server": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.5.1",
+        "@opentelemetry/api": "1.9.0",
+        "@opentelemetry/context-async-hooks": "2.6.1",
         "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
         "@opentelemetry/sdk-trace-base": "2.6.1",
         "@opentelemetry/sdk-trace-node": "2.6.1",
@@ -510,6 +512,7 @@
         "effect": "catalog:",
       },
       "devDependencies": {
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
       },
     },
@@ -526,9 +529,11 @@
         "mime-types": "3.0.2",
         "minimatch": "10.2.5",
         "semver": "catalog:",
+        "xdg-basedir": "5.1.0",
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@types/bun": "catalog:",
         "@types/semver": "catalog:",
       },
     },
