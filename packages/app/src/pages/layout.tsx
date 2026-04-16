@@ -2379,7 +2379,7 @@ export default function Layout(props: ParentProps & { isMinimal?: boolean }) {
 
   const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
 
-  if (props.isMinimal && !devMode) {
+  if (props.isMinimal && devMode) {
     return (
       <div class="h-dvh w-screen overflow-hidden bg-background-base">
         <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
