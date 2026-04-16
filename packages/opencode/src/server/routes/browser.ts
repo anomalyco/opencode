@@ -10,6 +10,92 @@ import { Effect } from "effect"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
+const Params = z.object({ sessionID: SessionID.zod })
+type ID = z.infer<typeof SessionID.zod>
+const Enable = z
+  .object({
+    port: z.number().int().positive().optional(),
+  })
+  .optional()
+const Select = z.object({
+  index: z.number().int().nonnegative(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  scale: z.number().positive().optional(),
+})
+const Viewport = z.object({
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  scale: z.number().positive().optional(),
+})
+const Open = z.object({
+  url: z.string().min(1),
+})
+const Tree = z.object({
+  sessionID: SessionID.zod,
+  tabs: z.array(
+    Browser.Tab.extend({
+      sessionID: SessionID.zod,
+    }),
+  ),
+})
+const param = validator("param", Params)
+
+const size = (body: { width?: number; height?: number; scale?: number }) => ({
+  ...(body.width ? { width: body.width } : {}),
+  ...(body.height ? { height: body.height } : {}),
+  ...(body.scale ? { scale: body.scale } : {}),
+})
+
+const socket = (value: unknown): value is Browser.Socket => {
+  if (!value || typeof value !== "object") return false
+  if (!("readyState" in value) || typeof value.readyState !== "number") return false
+  if (!("send" in value) || typeof value.send !== "function") return false
+  if (!("close" in value) || typeof value.close !== "function") return false
+  return true
+}
+
+const send = (ws: Browser.Socket, data: unknown) => {
+  if (ws.readyState !== 1) return
+  ws.send(JSON.stringify(data))
+}
+
+const tree = async (root: ID) => {
+  const seen = new Set([root])
+  const out = [root]
+
+  await AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      for (const id of out) {
+        const kids = yield* sessions.children(id)
+        for (const kid of kids) {
+          if (seen.has(kid.id)) continue
+          seen.add(kid.id)
+          out.push(kid.id)
+        }
+      }
+    }),
+  )
+
+  return out
+}
+
+const tabs = async (root: ID) => {
+  const ids = await tree(root)
+  const out = await Promise.all(
+    ids.map(async (id) => {
+      const data = await Browser.tabs(id).catch(() => ({ sessionID: id, tabs: [] }))
+      return data.tabs.map((tab) => ({ ...tab, sessionID: id }))
+    }),
+  )
+
+  return {
+    sessionID: root,
+    tabs: out.flat(),
+  }
+}
+
 export const BrowserRoutes = lazy(() =>
   new Hono()
     .get(
@@ -30,7 +116,7 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
+      param,
       async (c) => {
         return c.json(await Browser.status(c.req.valid("param").sessionID))
       },
@@ -53,15 +139,8 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
-      validator(
-        "json",
-        z
-          .object({
-            port: z.number().int().positive().optional(),
-          })
-          .optional(),
-      ),
+      param,
+      validator("json", Enable),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
@@ -86,7 +165,7 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
+      param,
       async (c) => {
         return c.json(await Browser.disable(c.req.valid("param").sessionID))
       },
@@ -109,7 +188,7 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
+      param,
       async (c) => {
         return c.json(await Browser.tabs(c.req.valid("param").sessionID))
       },
@@ -125,59 +204,17 @@ export const BrowserRoutes = lazy(() =>
             description: "Browser tabs",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    sessionID: SessionID.zod,
-                    tabs: z.array(
-                      Browser.Tab.extend({
-                        sessionID: SessionID.zod,
-                      }),
-                    ),
-                  }),
-                ),
+                schema: resolver(Tree),
               },
             },
           },
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
+      param,
       async (c) => {
         const root = c.req.valid("param").sessionID
-        const seen = new Set<string>([root])
-        const all = [root]
-        const stack = [root]
-
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const sessions = yield* Session.Service
-            while (stack.length > 0) {
-              const id = stack.shift()
-              if (!id) continue
-              const kids = yield* sessions.children(id)
-              for (const kid of kids) {
-                if (seen.has(kid.id)) continue
-                seen.add(kid.id)
-                all.push(kid.id)
-                stack.push(kid.id)
-              }
-            }
-          }),
-        )
-          }
-        }
-
-        const out = await Promise.all(
-          all.map(async (id) => {
-            const data = await Browser.tabs(id).catch(() => ({ sessionID: id, tabs: [] }))
-            return data.tabs.map((tab) => ({ ...tab, sessionID: id }))
-          }),
-        )
-
-        return c.json({
-          sessionID: root,
-          tabs: out.flat(),
-        })
+        return c.json(await tabs(root))
       },
     )
     .post(
@@ -198,16 +235,8 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
-      validator(
-        "json",
-        z.object({
-          index: z.number().int().nonnegative(),
-          width: z.number().int().positive().optional(),
-          height: z.number().int().positive().optional(),
-          scale: z.number().positive().optional(),
-        }),
-      ),
+      param,
+      validator("json", Select),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
@@ -215,9 +244,7 @@ export const BrowserRoutes = lazy(() =>
           await Browser.select({
             sessionID,
             index: body.index,
-            ...(body.width ? { width: body.width } : {}),
-            ...(body.height ? { height: body.height } : {}),
-            ...(body.scale ? { scale: body.scale } : {}),
+            ...size(body),
           }),
         )
       },
@@ -240,15 +267,8 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
-      validator(
-        "json",
-        z.object({
-          width: z.number().int().positive(),
-          height: z.number().int().positive(),
-          scale: z.number().positive().optional(),
-        }),
-      ),
+      param,
+      validator("json", Viewport),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
@@ -273,13 +293,8 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
-      validator(
-        "json",
-        z.object({
-          url: z.string().min(1),
-        }),
-      ),
+      param,
+      validator("json", Open),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
@@ -304,7 +319,7 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
+      param,
       async (c) => {
         return c.json(await Browser.close(c.req.valid("param").sessionID))
       },
@@ -327,43 +342,40 @@ export const BrowserRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ sessionID: SessionID.zod })),
+      param,
       upgradeWebSocket(async (c) => {
         const sessionID = SessionID.zod.parse(c.req.param("sessionID"))
         let handler: Awaited<ReturnType<typeof Browser.connect>> | undefined
-
-        type Socket = {
-          readyState: number
-          send: (data: string | Uint8Array | ArrayBuffer) => void
-          close: (code?: number, reason?: string) => void
-        }
-
-        const isSocket = (value: unknown): value is Socket => {
-          if (!value || typeof value !== "object") return false
-          if (!("readyState" in value) || typeof (value as { readyState?: unknown }).readyState !== "number")
-            return false
-          if (!("send" in value) || typeof (value as { send?: unknown }).send !== "function") return false
-          if (!("close" in value) || typeof (value as { close?: unknown }).close !== "function") return false
-          return true
-        }
 
         const pending: string[] = []
         let ready = false
 
         return {
           async onOpen(_event, ws) {
-            const socket = ws.raw
-            if (!isSocket(socket)) {
+            const raw = ws.raw
+            if (!socket(raw)) {
               ws.close()
               return
             }
 
-            handler = await Browser.connect(sessionID, socket)
-            ready = true
-            for (const item of pending) {
-              handler.onMessage(item)
-            }
-            pending.length = 0
+            await Browser.connect(sessionID, raw)
+              .then((next) => {
+                handler = next
+                ready = true
+                send(raw, { type: "ready" })
+                for (const item of pending) {
+                  next.onMessage(item)
+                }
+                pending.length = 0
+              })
+              .catch((error: unknown) => {
+                pending.length = 0
+                send(raw, {
+                  type: "error",
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                if (raw.readyState === 1) raw.close(1011, "browser stream startup failed")
+              })
           },
           onMessage(event) {
             if (typeof event.data !== "string") return

@@ -19,7 +19,7 @@ export namespace Browser {
   const root = path.join(Global.Path.state, "browser")
   const profiles = path.join(root, "profiles")
 
-  type Socket = {
+  export type Socket = {
     readyState: number
     send: (data: string | Uint8Array | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
@@ -84,14 +84,38 @@ export namespace Browser {
 
   export type Tabs = z.infer<typeof Tabs>
 
+  export const Update = z
+    .object({
+      sessionID: Session.zod,
+      info: Info.optional(),
+      tabs: Tabs.optional(),
+    })
+    .meta({ ref: "BrowserUpdate" })
+
+  export type Update = z.infer<typeof Update>
+
   export const Event = {
-    Updated: BusEvent.define("browser.updated", z.object({ info: Info })),
+    Updated: BusEvent.define("browser.updated", Update),
+  }
+
+  type Cell = {
+    info?: Info
+    tabs?: Tabs
+  }
+
+  type Slot = {
+    refs: number
+    poll?: ReturnType<typeof setTimeout>
+    tabs?: string
+    timer?: ReturnType<typeof setTimeout>
   }
 
   type State = {
     bin?: string
     installed?: boolean
+    cache: Map<SessionID, Cell>
     queue: Map<SessionID, Promise<void>>
+    live: Map<SessionID, Slot>
   }
 
   export interface Interface {
@@ -121,8 +145,20 @@ export namespace Browser {
 
   const ParseError = new Error("Failed to parse agent-browser JSON response")
   const Min = "0.25.3"
+  const Idle = 30_000
+  const Poll = 1_200
 
   const profile = (sessionID: SessionID) => path.join(profiles, sessionID)
+  const snap = (data: Tabs) => JSON.stringify(data.tabs)
+  const makeInfo = (sessionID: SessionID, data: z.infer<typeof Status>) =>
+    ({
+      sessionID,
+      profile: profile(sessionID),
+      enabled: data.enabled,
+      ...(data.port ? { port: data.port } : {}),
+      ...(data.connected !== undefined ? { connected: data.connected } : {}),
+      ...(data.screencasting !== undefined ? { screencasting: data.screencasting } : {}),
+    }) satisfies Info
 
   function parse(raw: string) {
     const text = raw.trim()
@@ -138,42 +174,36 @@ export namespace Browser {
     }
   }
 
+  function unwrap(raw: unknown, err: string) {
+    const env = Envelope.safeParse(raw)
+    if (!env.success) return raw
+    if (env.data.success === false) throw new Error(env.data.error || err)
+    return env.data.data
+  }
+
   function statusPayload(raw: unknown) {
-    const top = Status.safeParse(raw)
+    const data = unwrap(raw, "agent-browser status failed")
+    const top = Status.safeParse(data)
     if (top.success) return top.data
 
-    const env = Envelope.safeParse(raw)
-    if (env.success) {
-      if (env.data.success === false) {
-        throw new Error(env.data.error || "agent-browser status failed")
-      }
-
-      const nested = Status.safeParse(env.data.data)
-      if (nested.success) return nested.data
-
-      const wrapped = Stream.safeParse(env.data.data)
-      if (wrapped.success) return wrapped.data.stream
-    }
-
-    const stream = Stream.safeParse(raw)
+    const stream = Stream.safeParse(data)
     if (stream.success) return stream.data.stream
 
     throw ParseError
   }
 
   function tabPayload(raw: unknown) {
-    const top = RawTabs.safeParse(raw)
+    const data = unwrap(raw, "agent-browser tab list failed")
+    const top = RawTabs.safeParse(data)
     if (top.success) return top.data
 
-    const env = Envelope.safeParse(raw)
-    if (env.success) {
-      if (env.data.success === false) {
-        throw new Error(env.data.error || "agent-browser tab list failed")
-      }
+    throw ParseError
+  }
 
-      const nested = RawTabs.safeParse(env.data.data)
-      if (nested.success) return nested.data
-    }
+  function focusPayload(raw: unknown) {
+    const data = unwrap(raw, "agent-browser tab select failed")
+    const top = RawTab.safeParse(data)
+    if (top.success) return top.data
 
     throw ParseError
   }
@@ -191,13 +221,66 @@ export namespace Browser {
     return msg.includes("SingletonLock") || msg.includes("ProcessSingleton")
   }
 
+  const enableArgs = (port?: number) => ["stream", "enable", "--json", ...(port ? ["--port", String(port)] : [])]
+  const tabArgs = (index: number) => ["tab", String(Math.max(0, Math.floor(index))), "--json"]
+  const viewportArgs = (input: { width: number; height: number; scale?: number }) => [
+    "set",
+    "viewport",
+    String(Math.max(1, Math.floor(input.width))),
+    String(Math.max(1, Math.floor(input.height))),
+    ...(input.scale ? [String(input.scale)] : []),
+  ]
+  const pack = (sessionID: SessionID, data: z.infer<typeof RawTabs>) =>
+    ({
+      sessionID,
+      tabs: data.tabs.map((tab) => ({
+        active: tab.active === true,
+        index: tab.index,
+        title: tab.title ?? "",
+        url: tab.url ?? "",
+        ...(tab.type ? { type: tab.type } : {}),
+      })),
+    }) satisfies Tabs
+  const mark = (data: Tabs, next: z.infer<typeof RawTab>) => {
+    let seen = false
+    const tabs = data.tabs.map((tab) => {
+      if (tab.index !== next.index) {
+        if (!tab.active) return tab
+        return { ...tab, active: false }
+      }
+      seen = true
+      return {
+        active: true,
+        index: next.index,
+        title: next.title ?? tab.title,
+        url: next.url ?? tab.url,
+        ...(next.type ? { type: next.type } : tab.type ? { type: tab.type } : {}),
+      }
+    })
+    if (seen) return { sessionID: data.sessionID, tabs } satisfies Tabs
+
+    return {
+      sessionID: data.sessionID,
+      tabs: [
+        ...tabs,
+        {
+          active: true,
+          index: next.index,
+          title: next.title ?? "",
+          url: next.url ?? "",
+          ...(next.type ? { type: next.type } : {}),
+        },
+      ],
+    } satisfies Tabs
+  }
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const state = yield* InstanceState.make<State>(
         Effect.fn("Browser.state")(function* () {
           yield* Effect.promise(() => fs.mkdir(profiles, { recursive: true }))
-          return { queue: new Map() }
+          return { cache: new Map(), queue: new Map(), live: new Map() }
         }),
       )
 
@@ -251,6 +334,12 @@ export namespace Browser {
       const install = Effect.fn("Browser.install")(function* () {
         const s = yield* InstanceState.get(state)
         if (s.installed) return
+        const dir = path.join(process.env.HOME ?? "", ".agent-browser", "browsers")
+        const hit = yield* Effect.promise(() => fs.readdir(dir).then((list) => list.length > 0).catch(() => false))
+        if (hit) {
+          s.installed = true
+          return
+        }
         const cmd = yield* bin()
         const out = yield* Effect.promise(() => Process.run([cmd, "install"], { nothrow: true }))
         if (out.code !== 0) {
@@ -285,8 +374,8 @@ export namespace Browser {
         })
         const slot = prev.then(() => hold)
         s.queue.set(sessionID, slot)
-        yield* Effect.promise(() => prev)
         try {
+          yield* Effect.promise(() => prev)
           yield* install()
           const cmd = yield* bin()
           const env = {
@@ -303,29 +392,131 @@ export namespace Browser {
       })
 
       const status = Effect.fn("Browser.status")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const hit = s.cache.get(sessionID)?.info
+        if (hit) return hit
         const json = yield* call(sessionID, ["stream", "status", "--json"])
-        const data = statusPayload(parse(json))
-
-        return {
-          sessionID,
-          profile: profile(sessionID),
-          enabled: data.enabled,
-          ...(data.port ? { port: data.port } : {}),
-          ...(data.connected !== undefined ? { connected: data.connected } : {}),
-          ...(data.screencasting !== undefined ? { screencasting: data.screencasting } : {}),
-        } satisfies Info
-      })
-
-      const publish = Effect.fn("Browser.publish")(function* (sessionID: SessionID) {
-        const info = yield* status(sessionID)
-        yield* Effect.promise(() => Bus.publish(Event.Updated, { info }))
+        const info = makeInfo(sessionID, statusPayload(parse(json)))
+        const cell = s.cache.get(sessionID) ?? {}
+        cell.info = info
+        s.cache.set(sessionID, cell)
         return info
       })
 
+      const freshInfo = Effect.fn("Browser.freshInfo")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const json = yield* call(sessionID, ["stream", "status", "--json"])
+        const info = makeInfo(sessionID, statusPayload(parse(json)))
+        const cell = s.cache.get(sessionID) ?? {}
+        cell.info = info
+        s.cache.set(sessionID, cell)
+        return info
+      })
+
+      const freshTabs = Effect.fn("Browser.freshTabs")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const json = yield* call(sessionID, ["tab", "list", "--json"])
+        const data = pack(sessionID, tabPayload(parse(json)))
+        const cell = s.cache.get(sessionID) ?? {}
+        cell.tabs = data
+        s.cache.set(sessionID, cell)
+        return data
+      })
+
+      const dropInfo = Effect.fn("Browser.dropInfo")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const cell = s.cache.get(sessionID)
+        if (!cell) return
+        delete cell.info
+        if (!cell.tabs) s.cache.delete(sessionID)
+      })
+
+      const dropTabs = Effect.fn("Browser.dropTabs")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const cell = s.cache.get(sessionID)
+        if (!cell) return
+        delete cell.tabs
+        if (!cell.info) s.cache.delete(sessionID)
+      })
+
+      const emit = Effect.fn("Browser.emit")(function* (input: Update) {
+        const s = yield* InstanceState.get(state)
+        const cell = s.cache.get(input.sessionID) ?? {}
+        if (input.info) cell.info = input.info
+        if (input.tabs) cell.tabs = input.tabs
+        if (input.info || input.tabs) s.cache.set(input.sessionID, cell)
+        if (input.tabs) {
+          const slot = s.live.get(input.sessionID)
+          if (slot) slot.tabs = snap(input.tabs)
+        }
+        yield* Effect.promise(() => Bus.publish(Event.Updated, input)).pipe(Effect.orDie)
+      })
+
+      const stateInfo = Effect.fn("Browser.stateInfo")(function* (sessionID: SessionID) {
+        const info = yield* status(sessionID)
+        yield* emit({ sessionID, info })
+        return info
+      })
+
+      const clear = Effect.fn("Browser.clear")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const slot = s.live.get(sessionID)
+        if (!slot) return
+        if (slot.timer) {
+          clearTimeout(slot.timer)
+          slot.timer = undefined
+        }
+        if (slot.poll) {
+          clearTimeout(slot.poll)
+          slot.poll = undefined
+        }
+      })
+
+      const keep = Effect.fn("Browser.keep")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const slot = s.live.get(sessionID) ?? { refs: 0 }
+        if (slot.timer) {
+          clearTimeout(slot.timer)
+          slot.timer = undefined
+        }
+        slot.refs += 1
+        s.live.set(sessionID, slot)
+      })
+
+      const idle = InstanceState.bind((sessionID: SessionID, timer: ReturnType<typeof setTimeout>) => {
+        void Effect.runPromise(InstanceState.get(state))
+          .then((s) => {
+            const slot = s.live.get(sessionID)
+            if (!slot || slot.timer !== timer || slot.refs > 0) return
+            slot.timer = undefined
+            s.live.delete(sessionID)
+            return Effect.runPromise(disable(sessionID))
+          })
+          .catch((err) => {
+            log.error("browser idle disable failed", {
+              sessionID,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          })
+      })
+
+      const drop = Effect.fn("Browser.drop")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const slot = s.live.get(sessionID)
+        if (!slot) return
+        slot.refs = Math.max(0, slot.refs - 1)
+        if (slot.refs > 0) return
+        if (slot.timer) clearTimeout(slot.timer)
+        const timer = setTimeout(() => idle(sessionID, timer), Idle)
+        slot.timer = timer
+        s.live.set(sessionID, slot)
+      })
+
       const enable = Effect.fn("Browser.enable")(function* (input: { sessionID: SessionID; port?: number }) {
-        const args = ["stream", "enable", ...(input.port ? ["--port", String(input.port)] : [])]
+        const args = enableArgs(input.port)
+        let json = ""
         let fail: unknown
-        yield* call(input.sessionID, args).pipe(
+        json = yield* call(input.sessionID, args).pipe(
           Effect.catch((err) => {
             fail = err
             return Effect.succeed("")
@@ -334,48 +525,103 @@ export namespace Browser {
         if (fail) {
           if (!locked(fail)) throw fail
           log.info("browser profile lock detected, retrying", { sessionID: input.sessionID })
-          const info = yield* status(input.sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const info = yield* freshInfo(input.sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (!info?.enabled || !info.port) {
             yield* call(input.sessionID, ["close"]).pipe(Effect.catch(() => Effect.succeed("")))
-            yield* call(input.sessionID, args)
+            json = yield* call(input.sessionID, args)
+          } else {
+            yield* emit({ sessionID: input.sessionID, info })
+            return info
           }
         }
-        return yield* publish(input.sessionID)
+        try {
+          const info = makeInfo(input.sessionID, statusPayload(parse(json)))
+          yield* emit({ sessionID: input.sessionID, info })
+          return info
+        } catch {
+          const info = yield* freshInfo(input.sessionID)
+          yield* emit({ sessionID: input.sessionID, info })
+          return info
+        }
       })
 
       const disable = Effect.fn("Browser.disable")(function* (sessionID: SessionID) {
+        yield* clear(sessionID)
+        const s = yield* InstanceState.get(state)
+        const slot = s.live.get(sessionID)
+        if (slot) {
+          slot.refs = 0
+          s.live.delete(sessionID)
+        }
         yield* call(sessionID, ["stream", "disable"])
-        return yield* publish(sessionID)
+        const info = {
+          sessionID,
+          profile: profile(sessionID),
+          enabled: false,
+          connected: false,
+          screencasting: false,
+        } satisfies Info
+        yield* emit({ sessionID, info })
+        return info
       })
 
       const tabs = Effect.fn("Browser.tabs")(function* (sessionID: SessionID) {
-        const json = yield* call(sessionID, ["tab", "list", "--json"])
-        const data = tabPayload(parse(json))
-        return {
-          sessionID,
-          tabs: data.tabs.map((tab) => ({
-            active: tab.active === true,
-            index: tab.index,
-            title: tab.title ?? "",
-            url: tab.url ?? "",
-            ...(tab.type ? { type: tab.type } : {}),
-          })),
-        } satisfies Tabs
+        const s = yield* InstanceState.get(state)
+        const hit = s.cache.get(sessionID)?.tabs
+        if (hit) return hit
+        return yield* freshTabs(sessionID)
       })
 
-      const live = Effect.fn("Browser.live")(function* (sessionID: SessionID, index: number) {
-        const data = yield* tabs(sessionID)
-        return data.tabs.some((tab) => tab.index === index && tab.active)
+      const tick = InstanceState.bind((sessionID: SessionID, poll: ReturnType<typeof setTimeout>) => {
+        void Effect.runPromise(
+          Effect.gen(function* () {
+            const s = yield* InstanceState.get(state)
+            const slot = s.live.get(sessionID)
+            if (!slot || slot.poll !== poll) return
+            slot.poll = undefined
+
+            const data = yield* freshTabs(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const next = s.live.get(sessionID)
+            if (!next) return
+
+            if (data) {
+              const text = snap(data)
+              if (next.tabs !== text) yield* emit({ sessionID, tabs: data })
+            }
+
+            if (next.poll) return
+            const again = setTimeout(() => tick(sessionID, again), Poll)
+            next.poll = again
+          }),
+        ).catch((err) => {
+          log.error("browser tab watcher failed", {
+            sessionID,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
       })
 
-      const wait = Effect.fn("Browser.wait")(function* (sessionID: SessionID, index: number) {
-        const end = Date.now() + 1000
-        while (true) {
-          const on = yield* live(sessionID, index).pipe(Effect.catch(() => Effect.succeed(false)))
-          if (on) return true
-          if (Date.now() >= end) return false
-          yield* Effect.sleep("80 millis")
-        }
+      const watch = Effect.fn("Browser.watch")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        const slot = s.live.get(sessionID)
+        if (!slot || slot.poll) return
+        const poll = setTimeout(() => tick(sessionID, poll), Poll)
+        slot.poll = poll
+      })
+
+      const focus = Effect.fn("Browser.focus")(function* (sessionID: SessionID, index: number) {
+        const next = Math.max(0, Math.floor(index))
+        const json = yield* call(sessionID, tabArgs(next))
+        return focusPayload(parse(json))
+      })
+
+      const resize = Effect.fn("Browser.resize")(function* (input: {
+        sessionID: SessionID
+        width: number
+        height: number
+        scale?: number
+      }) {
+        yield* call(input.sessionID, viewportArgs(input))
       })
 
       const select = Effect.fn("Browser.select")(function* (input: {
@@ -385,30 +631,22 @@ export namespace Browser {
         height?: number
         scale?: number
       }) {
-        const index = Math.max(0, Math.floor(input.index))
-        const tab = String(index)
-        yield* call(input.sessionID, ["tab", tab, "--json"])
-        const on = yield* wait(input.sessionID, index)
-        if (!on) {
-          yield* call(input.sessionID, ["tab", tab, "--json"]).pipe(Effect.catch(() => Effect.succeed("")))
-          yield* wait(input.sessionID, index).pipe(Effect.catch(() => Effect.succeed(false)))
-        }
-        if (input.width && input.height) {
-          const args = [
-            "set",
-            "viewport",
-            String(Math.max(1, Math.floor(input.width))),
-            String(Math.max(1, Math.floor(input.height))),
-            ...(input.scale ? [String(input.scale)] : []),
-          ]
-          yield* call(input.sessionID, args)
-          const check = yield* wait(input.sessionID, index)
-          if (!check) {
-            yield* call(input.sessionID, ["tab", tab, "--json"]).pipe(Effect.catch(() => Effect.succeed("")))
-            yield* call(input.sessionID, args).pipe(Effect.catch(() => Effect.succeed("")))
+        const next = yield* focus(input.sessionID, input.index)
+        const width = input.width
+        const height = input.height
+        if (width && height) {
+          const size = {
+            sessionID: input.sessionID,
+            width,
+            height,
+            ...(input.scale ? { scale: input.scale } : {}),
           }
+          yield* resize(size)
         }
-        return yield* tabs(input.sessionID)
+        const hit = yield* tabs(input.sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const data = hit ? mark(hit, next) : yield* freshTabs(input.sessionID)
+        yield* emit({ sessionID: input.sessionID, tabs: data })
+        return data
       })
 
       const viewport = Effect.fn("Browser.viewport")(function* (input: {
@@ -417,28 +655,49 @@ export namespace Browser {
         height: number
         scale?: number
       }) {
-        const args = [
-          "set",
-          "viewport",
-          String(Math.max(1, Math.floor(input.width))),
-          String(Math.max(1, Math.floor(input.height))),
-          ...(input.scale ? [String(input.scale)] : []),
-        ]
-        yield* call(input.sessionID, args)
-        return yield* publish(input.sessionID)
+        yield* resize(input)
+        return yield* stateInfo(input.sessionID)
       })
 
       const open = Effect.fn("Browser.open")(function* (input: { sessionID: SessionID; url: string }) {
         yield* call(input.sessionID, ["open", input.url])
-        return yield* publish(input.sessionID)
+        const data = yield* freshTabs(input.sessionID)
+        const info = yield* status(input.sessionID).pipe(
+          Effect.catch(() =>
+            Effect.succeed({
+              sessionID: input.sessionID,
+              profile: profile(input.sessionID),
+              enabled: true,
+            } satisfies Info),
+          ),
+        )
+        yield* emit({ sessionID: input.sessionID, info, tabs: data })
+        return info
       })
 
       const close = Effect.fn("Browser.close")(function* (sessionID: SessionID) {
         yield* call(sessionID, ["close"])
-        return yield* publish(sessionID)
+        yield* dropTabs(sessionID)
+        yield* dropInfo(sessionID)
+        const data = yield* freshTabs(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* freshInfo(sessionID).pipe(
+          Effect.catch(() =>
+            Effect.succeed({
+              sessionID,
+              profile: profile(sessionID),
+              enabled: false,
+            } satisfies Info),
+          ),
+        )
+        yield* emit({ sessionID, info, ...(data ? { tabs: data } : {}) })
+        return info
       })
 
       const remove = Effect.fn("Browser.remove")(function* (sessionID: SessionID) {
+        yield* clear(sessionID)
+        const s = yield* InstanceState.get(state)
+        s.cache.delete(sessionID)
+        s.live.delete(sessionID)
         const cmd = yield* bin()
         const env = { ...process.env, ...raw(sessionID) }
         yield* Effect.promise(() =>
@@ -457,6 +716,9 @@ export namespace Browser {
           if (!info.port) throw new Error("agent-browser stream is enabled but no port is available")
 
           const conn = new WebSocket(`ws://127.0.0.1:${info.port}`)
+          yield* keep(sessionID)
+          yield* watch(sessionID)
+          let closed = false
 
           const send = (data: unknown) => {
             if (ws.readyState !== 1) return
@@ -481,11 +743,39 @@ export namespace Browser {
           })
 
           conn.addEventListener("error", () => {
+            void Effect.runPromise(
+              Effect.gen(function* () {
+                const hit = yield* status(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!hit) return
+                yield* emit({
+                  sessionID,
+                  info: {
+                    ...hit,
+                    connected: false,
+                    screencasting: false,
+                  },
+                })
+              }),
+            )
             if (ws.readyState === 1) ws.close(1011, "browser stream error")
             end()
           })
 
           conn.addEventListener("close", () => {
+            void Effect.runPromise(
+              Effect.gen(function* () {
+                const hit = yield* status(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!hit) return
+                yield* emit({
+                  sessionID,
+                  info: {
+                    ...hit,
+                    connected: false,
+                    screencasting: false,
+                  },
+                })
+              }),
+            )
             if (ws.readyState === 1) ws.close(1000, "browser stream ended")
           })
 
@@ -496,7 +786,10 @@ export namespace Browser {
               // v1 observer mode: do not forward input to browser runtime
             },
             onClose: () => {
+              if (closed) return
+              closed = true
               log.info("browser stream disconnected", { sessionID, port: info.port })
+              void Effect.runPromise(drop(sessionID))
               end()
             },
           }

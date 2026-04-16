@@ -26,7 +26,14 @@ type Tab = {
   url: string
 }
 
-type Tabs = {
+type Item = Omit<Tab, "sessionID">
+
+type Group = {
+  sessionID: string
+  tabs: Item[]
+}
+
+type Tree = {
   sessionID: string
   tabs: Tab[]
 }
@@ -55,14 +62,6 @@ const name = (tab: Tab) => {
   if (text) return text
   if (title) return title
   return `Tab ${tab.index + 1}`
-}
-
-const eventSession = (value: unknown) => {
-  if (!record(value)) return
-  if (text(value.type) !== "browser.updated") return
-  const props = record(value.properties) ? value.properties : undefined
-  const info = record(props?.info) ? props.info : undefined
-  return text(info?.sessionID)
 }
 
 const blank = (tab: Tab) => {
@@ -153,11 +152,7 @@ export function BrowserPanel(props: { size: Sizing }) {
     throw new Error(body || `${res.status} ${res.statusText}`)
   }
 
-  const readStatus = (sessionID: string) => request(`/browser/${sessionID}/status`).then((res) => json(res) as Promise<Status>)
-  const enable = (sessionID: string) =>
-    request(`/browser/${sessionID}/stream/enable`, { method: "POST" }).then((res) => json(res) as Promise<Status>)
-
-  const list = (sessionID: string) => request(`/browser/${sessionID}/tabs/all`).then((res) => json(res) as Promise<Tabs>)
+  const list = (sessionID: string) => request(`/browser/${sessionID}/tabs/all`).then((res) => json(res) as Promise<Tree>)
   const select = (input: { sessionID: string; index: number; width?: number; height?: number; scale?: number }) =>
     request(`/browser/${input.sessionID}/tab/select`, {
       method: "POST",
@@ -168,9 +163,8 @@ export function BrowserPanel(props: { size: Sizing }) {
         ...(input.height ? { height: input.height } : {}),
         ...(input.scale ? { scale: input.scale } : {}),
       }),
-    }).then((res) => json(res) as Promise<Tabs>)
+    }).then((res) => json(res) as Promise<Group>)
 
-  const disable = (sessionID: string) => request(`/browser/${sessionID}/stream/disable`, { method: "POST" })
   const viewport = (sessionID: string, width: number, height: number, scale: number) =>
     request(`/browser/${sessionID}/viewport`, {
       method: "POST",
@@ -182,8 +176,6 @@ export function BrowserPanel(props: { size: Sizing }) {
   let timer: number | undefined
   let hard = false
   let hold: { width: number; height: number; until: number } | undefined
-  let pull: Promise<void> | undefined
-  let ping = false
 
   const dpr = () => {
     if (typeof window === "undefined") return 1
@@ -245,32 +237,47 @@ export function BrowserPanel(props: { size: Sizing }) {
     }, 120)
   }
 
+  const pack = (data: Group) => data.tabs.map((tab) => ({ ...tab, sessionID: data.sessionID }))
+
+  const merge = (tabs: Tab[], data: Group) => {
+    const next = pack(data)
+    const out: Tab[] = []
+    let seen = false
+    for (const tab of tabs) {
+      if (tab.sessionID !== data.sessionID) {
+        out.push(tab)
+        continue
+      }
+      if (seen) continue
+      out.push(...next)
+      seen = true
+    }
+    if (!seen) out.push(...next)
+    return out
+  }
+
+  const apply = (tabs: Tab[], root: string) => {
+    setStore("tabs", tabs)
+    const next = pick(tabs.filter((tab) => !blank(tab)), store.view, root) ?? pick(tabs, store.view, root)
+    if (!next) {
+      setStore("view", { sessionID: "", index: -1 })
+      return
+    }
+    const view = { sessionID: next.sessionID, index: next.index }
+    if (same(store.view, view)) return
+    setStore("view", view)
+    aim()
+    queueViewport(true)
+  }
+
   const sync = (sessionID: string) =>
     list(sessionID)
       .then((data) => {
-        setStore("tabs", data.tabs)
-        const next = pick(data.tabs.filter((tab) => !blank(tab)), store.view, sessionID) ?? pick(data.tabs, store.view, sessionID)
-        if (!next) return
-        const view = { sessionID: next.sessionID, index: next.index }
-        if (same(store.view, view)) return
-        setStore("view", view)
-        aim()
-        queueViewport(true)
+        apply(data.tabs, sessionID)
       })
       .catch(() => {})
 
-  const refresh = (sessionID: string) => {
-    if (pull) {
-      ping = true
-      return
-    }
-    pull = sync(sessionID).finally(() => {
-      pull = undefined
-      if (!ping) return
-      ping = false
-      refresh(sessionID)
-    })
-  }
+  const patch = (root: string, data: Group) => apply(merge(store.tabs, data), root)
 
   const choose = (tab: Tab) => {
     const root = params.id
@@ -281,9 +288,9 @@ export function BrowserPanel(props: { size: Sizing }) {
     aim()
     setStore("view", { sessionID: tab.sessionID, index: tab.index })
     void select({ sessionID: tab.sessionID, index: tab.index, width, height, scale })
-      .then(() => {
+      .then((data) => {
+        patch(root, data)
         syncViewport(true)
-        void sync(root)
       })
       .catch(() => {})
   }
@@ -312,28 +319,21 @@ export function BrowserPanel(props: { size: Sizing }) {
   createEffect(() => {
     const root = params.id
     if (!root || !opened()) return
-
-    let done = false
-    const poll = () => {
-      if (done) return
-      refresh(root)
-    }
-    poll()
-    const id = window.setInterval(poll, 1200)
-    onCleanup(() => {
-      done = true
-      window.clearInterval(id)
-    })
+    void sync(root)
   })
 
   createEffect(() => {
     const root = params.id
     if (!root || !opened()) return
-    const stop = sdk.event.listen((evt) => {
-      const sessionID = eventSession(evt.details)
-      if (!sessionID) return
-      if (sessionID !== root && !store.tabs.some((tab) => tab.sessionID === sessionID)) return
-      refresh(root)
+    const stop = sdk.event.on("browser.updated", (evt) => {
+      const sessionID = evt.properties.sessionID
+      const tabs = evt.properties.tabs
+      if (!tabs) return
+      if (sessionID === root || store.tabs.some((tab) => tab.sessionID === sessionID)) {
+        patch(root, tabs)
+        return
+      }
+      void sync(root)
     })
     onCleanup(stop)
   })
@@ -343,6 +343,8 @@ export function BrowserPanel(props: { size: Sizing }) {
     if (!sessionID || !opened()) return
 
     let done = false
+    let seen = false
+    let fail = false
     let ws: WebSocket | undefined
     hold = undefined
 
@@ -356,95 +358,98 @@ export function BrowserPanel(props: { size: Sizing }) {
       height: 0,
     })
 
-    const open = async () => {
-      const status = await readStatus(sessionID).catch(() => enable(sessionID)).catch((error: unknown) => {
-        if (done) return
-        const msg = error instanceof Error ? error.message : String(error)
-        setStore({ loading: false, error: msg })
+    const url = endpoint(`/browser/${sessionID}/stream/connect`)
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+    const info = server.current?.http
+    if (info?.password) {
+      url.username = info.username ?? "opencode"
+      url.password = info.password
+    }
+
+    ws = new WebSocket(url)
+
+    ws.addEventListener("close", () => {
+      if (done) return
+      setStore({
+        loading: false,
+        connected: false,
+        screencasting: false,
+        ...(!seen && !fail ? { error: "Browser stream closed before startup" } : {}),
       })
-      if (!status || done) return
-      const next = status.enabled && int(status.port) ? status : await enable(sessionID).catch((error: unknown) => {
-        if (done) return
-        const msg = error instanceof Error ? error.message : String(error)
-        setStore({ loading: false, error: msg })
-      })
-      if (!next || done) return
-      const port = int(next.port)
-      if (!port) {
-        setStore({ loading: false, error: "No browser stream port available" })
+    })
+
+    ws.addEventListener("error", () => {
+      if (done) return
+      fail = true
+      setStore({ loading: false, error: "Browser stream connection failed" })
+    })
+
+    ws.addEventListener("message", (event) => {
+      if (done || typeof event.data !== "string") return
+      const data = parse(event.data)
+      if (!record(data)) return
+
+      if (data.type === "error") {
+        fail = true
+        setStore({
+          loading: false,
+          connected: false,
+          screencasting: false,
+          error: text(data.error) ?? "Browser stream startup failed",
+        })
         return
       }
 
-      const url = endpoint(`/browser/${sessionID}/stream/connect`)
-      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      const info = server.current?.http
-      if (info?.password) {
-        url.username = info.username ?? "opencode"
-        url.password = info.password
+      if (data.type === "ready") {
+        seen = true
+        setStore({ loading: false, error: "" })
+        return
       }
 
-      ws = new WebSocket(url)
-
-      ws.addEventListener("open", () => {
-        if (done) return
-        setStore({ loading: false, error: "" })
-      })
-
-      ws.addEventListener("close", () => {
-        if (done) return
-        setStore({ connected: false, screencasting: false })
-      })
-
-      ws.addEventListener("error", () => {
-        if (done) return
-        setStore({ loading: false, error: "Browser stream connection failed" })
-      })
-
-      ws.addEventListener("message", (event) => {
-        if (done || typeof event.data !== "string") return
-        const data = parse(event.data)
-        if (!record(data)) return
-
-        if (data.type === "frame") {
-          const frame = text(data.data)
-          if (!frame) return
-          const meta = record(data.metadata) ? data.metadata : undefined
-          const width = int(meta?.deviceWidth)
-          const height = int(meta?.deviceHeight)
-          if (!ok(width, height)) return
-          setStore({
-            frame,
-            width: width ?? store.width,
-            height: height ?? store.height,
-          })
-          return
-        }
-
-        if (data.type !== "status") return
-        const width = int(data.viewportWidth)
-        const height = int(data.viewportHeight)
-        if (!ok(width, height, false) || hold) {
-          setStore({
-            connected: bool(data.connected) ?? store.connected,
-            screencasting: bool(data.screencasting) ?? store.screencasting,
-          })
-          return
-        }
+      if (data.type === "frame") {
+        const frame = text(data.data)
+        if (!frame) return
+        const meta = record(data.metadata) ? data.metadata : undefined
+        const width = int(meta?.deviceWidth)
+        const height = int(meta?.deviceHeight)
+        if (!ok(width, height)) return
+        seen = true
         setStore({
-          connected: bool(data.connected) ?? false,
-          screencasting: bool(data.screencasting) ?? false,
+          loading: false,
+          error: "",
+          frame,
           width: width ?? store.width,
           height: height ?? store.height,
         })
-      })
-    }
+        return
+      }
 
-    void open()
+      if (data.type !== "status") return
+      const width = int(data.viewportWidth)
+      const height = int(data.viewportHeight)
+      seen = true
+      if (!ok(width, height, false) || hold) {
+        setStore({
+          loading: false,
+          error: "",
+          connected: bool(data.connected) ?? store.connected,
+          screencasting: bool(data.screencasting) ?? store.screencasting,
+        })
+        return
+      }
+      setStore({
+        loading: false,
+        error: "",
+        connected: bool(data.connected) ?? false,
+        screencasting: bool(data.screencasting) ?? false,
+        width: width ?? store.width,
+        height: height ?? store.height,
+      })
+    })
 
     onCleanup(() => {
       done = true
       if (ws && ws.readyState !== WebSocket.CLOSING && ws.readyState !== WebSocket.CLOSED) ws.close()
-      void disable(sessionID)
     })
   })
 
