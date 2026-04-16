@@ -103,12 +103,7 @@ const app = (upgrade: UpgradeWebSocket) =>
 
 const log = Log.Default.clone().tag("service", "server-proxy")
 
-export async function http(
-  url: string | URL,
-  extra: HeadersInit | undefined,
-  req: Request,
-  workspaceID: WorkspaceID,
-) {
+export async function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
   if (!Workspace.isSyncing(workspaceID)) {
     return new Response(`broken sync connection for workspace: ${workspaceID}`, {
       status: 503,
