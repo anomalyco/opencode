@@ -486,11 +486,14 @@ export namespace Workspace {
     }
   }
 
-  function startSync(space: Info) {
+  async function startSync(space: Info) {
     if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
 
-    if (space.type === "worktree") {
-      void Filesystem.exists(space.directory!).then((exists) => {
+    const adaptor = await getAdaptor(space.projectID, space.type)
+    const target = await adaptor.target(space)
+
+    if (target.type === "local") {
+      void Filesystem.exists(target.directory).then((exists) => {
         setStatus(space.id, exists ? "connected" : "error", exists ? undefined : "directory does not exist")
       })
       return
