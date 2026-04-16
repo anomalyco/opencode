@@ -331,7 +331,7 @@ export default {
     const localOpts = {
       fn_marker: tmp.extra.fnMarker,
       marker: tmp.extra.localMarker,
-      source: tmp.extra.localDest.replace(".opencode/themes/", ""),
+      source: path.join(tmp.path, tmp.extra.localThemeFile),
       dest: tmp.extra.localDest,
       theme_path: `./${tmp.extra.localThemeFile}`,
       theme_name: tmp.extra.localThemeName,

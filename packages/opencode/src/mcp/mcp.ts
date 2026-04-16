@@ -531,7 +531,7 @@ export const layer = Layer.effect(
               Object.values(s.clients),
               (client) =>
                 Effect.gen(function* () {
-                  const pid = (client.transport as any)?.pid
+                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
                   if (typeof pid === "number") {
                     const pids = yield* descendants(pid)
                     for (const dpid of pids) {

@@ -20,7 +20,6 @@ import { Event } from "../server/event"
 import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { InvalidError, JsonError } from "./error"
-import * as ConfigPaths from "./paths"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect"
@@ -38,6 +37,7 @@ import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
 import { ConfigProvider } from "./provider"
 import { ConfigSkills } from "./skills"
+import { ConfigPaths } from "./paths"
 
 const log = Log.create({ service: "config" })
 

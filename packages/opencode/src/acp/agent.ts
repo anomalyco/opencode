@@ -178,7 +178,7 @@ export namespace ACP {
         })
         for await (const event of events.stream) {
           if (this.eventAbort.signal.aborted) return
-          const payload = (event as any)?.payload
+          const payload = event?.payload
           if (!payload) continue
           await this.handleEvent(payload as Event).catch((error) => {
             log.error("failed to handle event", { error, type: payload.type })

@@ -1,7 +1,10 @@
+export * as ConfigManaged from "./managed"
+
 import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Log, Process } from "../util"
+import { warn } from "console"
 
 const log = Log.create({ service: "config" })
 
@@ -28,11 +31,11 @@ function systemManagedConfigDir(): string {
   }
 }
 
-function managedConfigDir() {
+export function managedConfigDir() {
   return process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || systemManagedConfigDir()
 }
 
-function parseManagedPlist(json: string): string {
+export function parseManagedPlist(json: string): string {
   const raw = JSON.parse(json)
   for (const key of Object.keys(raw)) {
     if (PLIST_META.has(key)) delete raw[key]
@@ -40,7 +43,7 @@ function parseManagedPlist(json: string): string {
   return JSON.stringify(raw)
 }
 
-async function readManagedPreferences() {
+export async function readManagedPreferences() {
   if (process.platform !== "darwin") return
 
   const user = os.userInfo().username
@@ -64,10 +67,4 @@ async function readManagedPreferences() {
   }
 
   return
-}
-
-export const ConfigManaged = {
-  managedConfigDir,
-  parseManagedPlist,
-  readManagedPreferences,
 }

@@ -1,3 +1,5 @@
+export * as ConfigPaths from "./paths"
+
 import path from "path"
 import { Filesystem } from "@/util"
 import { Flag } from "@/flag/flag"
