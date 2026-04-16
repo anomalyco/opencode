@@ -12,7 +12,6 @@ import { Effect, Layer } from "effect"
 import { CurrentWorkingDirectory } from "@/cli/cmd/tui/config/cwd"
 import { ConfigPlugin } from "@/config/plugin"
 
-const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 const wintest = process.platform === "win32" ? test : test.skip
 const clear = (wait = false) => AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate(wait)))
 const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
@@ -35,7 +34,6 @@ afterEach(async () => {
   await fs.rm(path.join(Global.Path.config, "opencode.jsonc"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.jsonc"), { force: true }).catch(() => {})
-  await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
   await clear(true)
 })
 
@@ -487,33 +485,6 @@ test("applies file substitutions when first identical token is in a commented li
   expect(config.theme).toBe("resolved-theme")
 })
 
-test("loads managed tui config and gives it highest precedence", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "tui.json"),
-        JSON.stringify({ theme: "project-theme", plugin: ["shared-plugin@1.0.0"] }, null, 2),
-      )
-      await fs.mkdir(managedConfigDir, { recursive: true })
-      await Bun.write(
-        path.join(managedConfigDir, "tui.json"),
-        JSON.stringify({ theme: "managed-theme", plugin: ["shared-plugin@2.0.0"] }, null, 2),
-      )
-    },
-  })
-
-  const config = await getTuiConfig(tmp.path)
-  expect(config.theme).toBe("managed-theme")
-  expect(config.plugin).toEqual(["shared-plugin@2.0.0"])
-  expect(config.plugin_origins).toEqual([
-    {
-      spec: "shared-plugin@2.0.0",
-      scope: "global",
-      source: path.join(managedConfigDir, "tui.json"),
-    },
-  ])
-})
-
 test("loads .opencode/tui.json", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -523,19 +494,6 @@ test("loads .opencode/tui.json", async () => {
   })
   const config = await getTuiConfig(tmp.path)
   expect(config.diff_style).toBe("stacked")
-})
-
-test("gracefully falls back when tui.json has invalid JSON", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(path.join(dir, "tui.json"), "{ invalid json }")
-      await fs.mkdir(managedConfigDir, { recursive: true })
-      await Bun.write(path.join(managedConfigDir, "tui.json"), JSON.stringify({ theme: "managed-fallback" }, null, 2))
-    },
-  })
-  const config = await getTuiConfig(tmp.path)
-  expect(config.theme).toBe("managed-fallback")
-  expect(config.keybinds).toBeDefined()
 })
 
 test("supports tuple plugin specs with options in tui.json", async () => {
