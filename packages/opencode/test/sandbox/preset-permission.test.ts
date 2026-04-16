@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { Permission } from "../../src/permission"
@@ -7,6 +8,10 @@ import { tmpdir } from "../fixture/fixture"
 afterEach(async () => {
   await Instance.disposeAll()
 })
+
+function getAgent(name: string) {
+  return AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(name)))
+}
 
 describe("sandbox preset permission overlay", () => {
   test("applies the preset overlay when no explicit override exists", async () => {
@@ -24,7 +29,7 @@ describe("sandbox preset permission overlay", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const build = await Agent.get("build")
+        const build = await getAgent("build")
         expect(Permission.evaluate("bash", "echo hello", build!.permission).action).toBe("ask")
       },
     })
@@ -52,7 +57,7 @@ describe("sandbox preset permission overlay", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const build = await Agent.get("build")
+        const build = await getAgent("build")
         expect(Permission.evaluate("bash", "echo hello", build!.permission).action).toBe("allow")
       },
     })
@@ -76,7 +81,7 @@ describe("sandbox preset permission overlay", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const build = await Agent.get("build")
+        const build = await getAgent("build")
         expect(Permission.evaluate("bash", "echo hello", build!.permission).action).toBe("deny")
       },
     })
@@ -97,7 +102,7 @@ describe("sandbox preset permission overlay", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const general = await Agent.get("general")
+        const general = await getAgent("general")
         expect(Permission.evaluate("bash", "ls", general!.permission).action).toBe("ask")
       },
     })
@@ -109,7 +114,7 @@ describe("sandbox preset permission overlay", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const build = await Agent.get("build")
+        const build = await getAgent("build")
         expect(Permission.evaluate("bash", "echo hello", build!.permission).action).toBe("allow")
       },
     })

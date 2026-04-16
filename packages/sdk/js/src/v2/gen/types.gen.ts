@@ -1662,6 +1662,62 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
+    sandbox?: {
+      /**
+       * Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches
+       */
+      enabled?: boolean
+      /**
+       * Named sandbox preset (default, strict, network, or a custom preset)
+       */
+      preset?: string
+      /**
+       * Sandbox mode for command execution (default: preset default, otherwise workspace-write)
+       */
+      mode?: "workspace-write" | "read-only"
+      /**
+       * Allow outbound network access inside the macOS sandbox
+       */
+      network?: boolean
+      /**
+       * Workspace-relative paths that remain write-protected inside writable roots
+       */
+      protected_roots?: Array<string>
+      /**
+       * Additional read-only roots for macOS sandboxing
+       */
+      extra_read_roots?: Array<string>
+      /**
+       * Additional writable roots for macOS sandboxing
+       */
+      extra_write_roots?: Array<string>
+      /**
+       * Additional denied paths for macOS sandboxing
+       */
+      extra_deny_paths?: Array<string>
+      /**
+       * Command prefixes that must be blocked before execution
+       */
+      excluded_commands?: Array<string>
+      /**
+       * Allow an explicit unsandboxed retry after a sandbox denial
+       */
+      allow_unsandboxed_retry?: boolean
+      /**
+       * Hard-fail when sandboxing is enabled but cannot activate
+       */
+      fail_if_unavailable?: boolean
+      presets?: {
+        [key: string]: {
+          mode?: "workspace-write" | "read-only"
+          network?: boolean
+          protected_roots?: Array<string>
+          extra_read_roots?: Array<string>
+          extra_write_roots?: Array<string>
+          permission?: PermissionConfig
+        }
+      }
+    }
     /**
      * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
      */

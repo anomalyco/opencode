@@ -43,6 +43,7 @@ import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@/npm"
 import { SandboxPreset } from "@/sandbox/preset"
+import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "config" })
 
@@ -898,3 +899,37 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
 )
+
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export async function get() {
+  return runPromise((svc) => svc.get())
+}
+
+export async function getGlobal() {
+  return runPromise((svc) => svc.getGlobal())
+}
+
+export async function getConsoleState() {
+  return runPromise((svc) => svc.getConsoleState())
+}
+
+export async function update(config: Info) {
+  return runPromise((svc) => svc.update(config))
+}
+
+export async function updateGlobal(config: Info) {
+  return runPromise((svc) => svc.updateGlobal(config))
+}
+
+export async function invalidate(wait = false) {
+  return runPromise((svc) => svc.invalidate(wait))
+}
+
+export async function directories() {
+  return runPromise((svc) => svc.directories())
+}
+
+export async function waitForDependencies() {
+  return runPromise((svc) => svc.waitForDependencies())
+}

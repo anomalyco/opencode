@@ -32,6 +32,22 @@ const pick = (log: Array<{ type: "created" | "exited" | "deleted"; id: PtyID }>,
   return log.filter((evt) => evt.id === id).map((evt) => evt.type)
 }
 
+function createPty(input: Pty.CreateInput) {
+  return AppRuntime.runPromise(Pty.Service.use((svc) => svc.create(input)))
+}
+
+function removePty(id: PtyID) {
+  return AppRuntime.runPromise(Pty.Service.use((svc) => svc.remove(id)))
+}
+
+function connectPty(id: PtyID, ws: Parameters<Pty.Interface["connect"]>[1]) {
+  return AppRuntime.runPromise(Pty.Service.use((svc) => svc.connect(id, ws)))
+}
+
+function writePty(id: PtyID, data: string) {
+  return AppRuntime.runPromise(Pty.Service.use((svc) => svc.write(id, data)))
+}
+
 describe("pty", () => {
   test("publishes created, exited, deleted in order for a short-lived process", async () => {
     if (process.platform === "win32") return
@@ -127,10 +143,10 @@ describe("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const info = await Pty.create({ command: "cat", title: "cat" })
+        const info = await createPty({ command: "cat", title: "cat" })
         try {
           const out: string[] = []
-          const ws: Parameters<typeof Pty.connect>[1] = {
+          const ws: Parameters<Pty.Interface["connect"]>[1] = {
             readyState: 1,
             data: { id: info.id },
             send: (data: unknown) => {
@@ -139,12 +155,12 @@ describe("pty", () => {
             close: () => {},
           }
 
-          await Pty.connect(info.id, ws)
+          await connectPty(info.id, ws)
           out.length = 0
-          await Pty.write(info.id, "AAA\n")
+          await writePty(info.id, "AAA\n")
           await wait(() => out.join("").includes("AAA"))
         } finally {
-          await Pty.remove(info.id)
+          await removePty(info.id)
         }
       },
     })
@@ -172,7 +188,7 @@ describe("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        const info = await Pty.create({ command: "/bin/bash", title: "bash" })
+        const info = await createPty({ command: "/bin/bash", title: "bash" })
         try {
           await sleep(150)
           const hit = await fs
@@ -181,7 +197,7 @@ describe("pty", () => {
             .catch(() => false)
           expect(hit).toBe(false)
         } finally {
-          await Pty.remove(info.id)
+          await removePty(info.id)
         }
       },
     })
@@ -202,11 +218,11 @@ describe("pty", () => {
     await Instance.provide({
       directory: dir.path,
       fn: async () => {
-        await expect(Pty.create({ command: "python", title: "py" })).rejects.toThrow("python")
+        await expect(createPty({ command: "python", title: "py" })).rejects.toThrow("python")
         await expect(
-          Pty.create({ command: "env", args: ["FOO=1", "python", "-c", "print(1)"], title: "env" }),
+          createPty({ command: "env", args: ["FOO=1", "python", "-c", "print(1)"], title: "env" }),
         ).rejects.toThrow("python")
-        await expect(Pty.create({ command: "sh", args: ["-c", "python -c 'print(1)'"], title: "sh" })).rejects.toThrow(
+        await expect(createPty({ command: "sh", args: ["-c", "python -c 'print(1)'"], title: "sh" })).rejects.toThrow(
           "python",
         )
       },

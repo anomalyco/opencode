@@ -189,7 +189,7 @@ export const layer = Layer.effect(
       const id = PtyID.ascending()
       const command = input.command || Shell.preferred()
       const cwd = input.cwd || s.dir
-      const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
+      const cfg = yield* Effect.promise(Instance.bind(() => SandboxSpawn.settings()))
       const blocked = SandboxSpawn.excluded([command, ...(input.args ?? [])], cfg.excluded_commands)
       if (blocked) {
         throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)

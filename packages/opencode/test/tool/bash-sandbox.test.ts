@@ -3,16 +3,16 @@ import fs from "fs/promises"
 import path from "path"
 import { BashTool as RawBashTool, commandFamilies } from "../../src/tool/bash"
 import { SandboxSpawn } from "../../src/sandbox/spawn"
-import { Tool } from "../../src/tool/tool"
+import { Tool } from "../../src/tool"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
 import { Agent } from "../../src/agent/agent"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { Plugin } from "../../src/plugin"
-import { Truncate } from "../../src/tool/truncate"
+import { Truncate } from "../../src/tool"
 
 const env = {
   HOME: process.env.HOME,
@@ -551,7 +551,7 @@ describe("tool.bash sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const reqs: Array<{ permission: string; patterns: string[]; always: string[] }> = []
+        const reqs: Array<{ permission: string; patterns: readonly string[]; always: readonly string[] }> = []
         const bash = await BashTool.init()
         await bash.execute(
           {
@@ -597,8 +597,8 @@ describe("tool.bash sandbox", () => {
       fn: async () => {
         const reqs: Array<{
           permission: string
-          patterns: string[]
-          always: string[]
+          patterns: readonly string[]
+          always: readonly string[]
           metadata: { command?: string }
         }> = []
         const bash = await BashTool.init()
@@ -650,7 +650,7 @@ describe("tool.bash sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const reqs: Array<{ permission: string; patterns: string[]; always: string[] }> = []
+        const reqs: Array<{ permission: string; patterns: readonly string[]; always: readonly string[] }> = []
         const bash = await BashTool.init()
         await bash.execute(
           {

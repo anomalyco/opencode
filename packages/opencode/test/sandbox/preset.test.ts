@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Config } from "../../src/config/config"
+import { Config } from "../../src/config"
 import { Instance } from "../../src/project/instance"
 import { SandboxPreset } from "../../src/sandbox/preset"
 import { tmpdir } from "../fixture/fixture"

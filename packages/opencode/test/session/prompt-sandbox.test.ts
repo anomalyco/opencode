@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { SandboxSpawn } from "../../src/sandbox/spawn"
@@ -14,13 +15,37 @@ const env = {
   SHELL: process.env.SHELL,
 }
 
+function listPermissions() {
+  return AppRuntime.runPromise(Permission.Service.use((svc) => svc.list()))
+}
+
+function replyPermission(input: Permission.ReplyInput) {
+  return AppRuntime.runPromise(Permission.Service.use((svc) => svc.reply(input)))
+}
+
+function createSession() {
+  return AppRuntime.runPromise(Session.Service.use((svc) => svc.create({})))
+}
+
+function removeSession(id: Session.Info["id"]) {
+  return AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(id)))
+}
+
+function runShell(input: SessionPrompt.ShellInput) {
+  return AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.shell(input)))
+}
+
+function cancelShell(sessionID: Session.Info["id"]) {
+  return AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.cancel(sessionID)))
+}
+
 async function waitForPending(count: number) {
   for (let i = 0; i < 100; i++) {
-    const list = await Permission.list()
+    const list = await listPermissions()
     if (list.length === count) return list
     await Bun.sleep(10)
   }
-  return Permission.list()
+  return listPermissions()
 }
 
 afterEach(() => {
@@ -62,8 +87,8 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
-        const out = await SessionPrompt.shell({
+        const session = await createSession()
+        const out = await runShell({
           sessionID: session.id,
           agent: "build",
           command: "printf '%s' \"${OPENCODE_ZSHENV_HIT:-missing}\"",
@@ -72,7 +97,7 @@ describe("session.prompt sandbox", () => {
         if (part.type !== "tool") throw new Error("expected tool part")
         if (part.state.status !== "completed") throw new Error("expected completed part")
         expect(part.state.output).toBe("missing")
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -108,8 +133,8 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
-        const denied = await SessionPrompt.shell({
+        const session = await createSession()
+        const denied = await runShell({
           sessionID: session.id,
           agent: "build",
           command: 'cat "$HOME/.ssh/secret"',
@@ -120,14 +145,14 @@ describe("session.prompt sandbox", () => {
         expect(blocked.state.output).not.toContain("secret\n")
         expect(blocked.state.output).toContain("Operation not permitted")
 
-        const next = await Session.create({})
-        const run = SessionPrompt.shell({
+        const next = await createSession()
+        const run = runShell({
           sessionID: next.id,
           agent: "build",
           command: "sleep 5",
         })
         setTimeout(() => {
-          void SessionPrompt.cancel(next.id)
+          void cancelShell(next.id)
         }, 50)
         const out = await run
         const part = out.parts[0]
@@ -135,8 +160,8 @@ describe("session.prompt sandbox", () => {
         if (part.state.status !== "completed") throw new Error("expected completed part")
         expect(part.state.output).toContain("User aborted the command")
 
-        await Session.remove(session.id)
-        await Session.remove(next.id)
+        await removeSession(session.id)
+        await removeSession(next.id)
       },
     })
   })
@@ -162,8 +187,8 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
-        const out = await SessionPrompt.shell({
+        const session = await createSession()
+        const out = await runShell({
           sessionID: session.id,
           agent: "build",
           command: "FOO=1 curl https://example.com\necho done",
@@ -172,7 +197,7 @@ describe("session.prompt sandbox", () => {
         if (part.type !== "tool") throw new Error("expected tool part")
         if (part.state.status !== "completed") throw new Error("expected completed part")
         expect(part.state.output).toContain("curl")
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -211,8 +236,8 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
-        const out = await SessionPrompt.shell({
+        const session = await createSession()
+        const out = await runShell({
           sessionID: session.id,
           agent: "build",
           command: 'cat "$HOME/.ssh/secret"',
@@ -223,7 +248,7 @@ describe("session.prompt sandbox", () => {
         expect(part.state.output).toContain("secret\n")
         expect(part.state.output).toContain("Retried command without sandbox")
         expect(part.state.output).not.toContain("1\n")
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -263,8 +288,8 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
-        const out = await SessionPrompt.shell({
+        const session = await createSession()
+        const out = await runShell({
           sessionID: session.id,
           agent: "build",
           command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
@@ -275,7 +300,7 @@ describe("session.prompt sandbox", () => {
         expect(part.state.output).toContain("secret\n")
         expect(part.state.output).not.toContain("Retried command without sandbox")
         expect(part.state.output).not.toContain("1\n")
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -314,15 +339,15 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
-        const run = SessionPrompt.shell({
+        const session = await createSession()
+        const run = runShell({
           sessionID: session.id,
           agent: "build",
           command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
         })
         const pending = await waitForPending(1)
         expect(pending).toHaveLength(1)
-        await Permission.reply({
+        await replyPermission({
           requestID: pending[0].id,
           reply: "reject",
         })
@@ -333,7 +358,7 @@ describe("session.prompt sandbox", () => {
         expect(part.state.output).not.toContain("secret\n")
         expect(part.state.output).toContain("Operation not permitted")
         expect(part.state.output).toContain("Explicit unsandboxed request was rejected; command ran in sandbox")
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -373,9 +398,9 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await createSession()
 
-        const run1 = SessionPrompt.shell({
+        const run1 = runShell({
           sessionID: session.id,
           agent: "build",
           command: '# opencode:unsandboxed read foo\ncat "$HOME/.ssh/foo"',
@@ -385,20 +410,20 @@ describe("session.prompt sandbox", () => {
         expect(pending1[0].permission).toBe("bash:unsandboxed")
         expect(pending1[0].patterns).toEqual(["cat *"])
         expect(pending1[0].always).toEqual(["cat *"])
-        await Permission.reply({ requestID: pending1[0].id, reply: "always" })
+        await replyPermission({ requestID: pending1[0].id, reply: "always" })
         const out1 = await run1
         const part1 = out1.parts[0]
         if (part1.type !== "tool") throw new Error("expected tool part")
         if (part1.state.status !== "completed") throw new Error("expected completed part")
         expect(part1.state.output).toContain("foo-content")
 
-        const run2 = SessionPrompt.shell({
+        const run2 = runShell({
           sessionID: session.id,
           agent: "build",
           command: '# opencode:unsandboxed read bar\ncat "$HOME/.ssh/bar"',
         })
         await Bun.sleep(100)
-        const pending2 = await Permission.list()
+        const pending2 = await listPermissions()
         expect(pending2).toHaveLength(0)
         const out2 = await run2
         const part2 = out2.parts[0]
@@ -406,7 +431,7 @@ describe("session.prompt sandbox", () => {
         if (part2.state.status !== "completed") throw new Error("expected completed part")
         expect(part2.state.output).toContain("bar-content")
 
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -446,9 +471,9 @@ describe("session.prompt sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await createSession()
 
-        const run1 = SessionPrompt.shell({
+        const run1 = runShell({
           sessionID: session.id,
           agent: "build",
           command: '# opencode:unsandboxed env read\nFOO=1 cat "$HOME/.ssh/a" && echo done',
@@ -457,16 +482,16 @@ describe("session.prompt sandbox", () => {
         expect(pending1).toHaveLength(1)
         expect(pending1[0].patterns).toContain("cat *")
         expect(pending1[0].patterns).toContain("echo *")
-        await Permission.reply({ requestID: pending1[0].id, reply: "always" })
+        await replyPermission({ requestID: pending1[0].id, reply: "always" })
         await run1
 
-        const run2 = SessionPrompt.shell({
+        const run2 = runShell({
           sessionID: session.id,
           agent: "build",
           command: '# opencode:unsandboxed env read\nBAR=2 cat "$HOME/.ssh/b" && echo finished',
         })
         await Bun.sleep(100)
-        const pending2 = await Permission.list()
+        const pending2 = await listPermissions()
         expect(pending2).toHaveLength(0)
         const out2 = await run2
         const part2 = out2.parts[0]
@@ -474,7 +499,7 @@ describe("session.prompt sandbox", () => {
         if (part2.state.status !== "completed") throw new Error("expected completed part")
         expect(part2.state.output).toContain("b-content")
 
-        await Session.remove(session.id)
+        await removeSession(session.id)
       },
     })
   })
@@ -510,15 +535,15 @@ describe("session.prompt sandbox", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const session = await Session.create({})
-          const run = SessionPrompt.shell({
+          const session = await createSession()
+          const run = runShell({
             sessionID: session.id,
             agent: "build",
             command: "# opencode:unsandboxed needs network\nwget google.com",
           })
           const pending = await waitForPending(1)
           expect(pending).toHaveLength(1)
-          await Permission.reply({
+          await replyPermission({
             requestID: pending[0].id,
             reply: "reject",
           })
@@ -529,7 +554,7 @@ describe("session.prompt sandbox", () => {
           expect(part.state.output).toContain(
             "Explicit unsandboxed request was rejected; sandboxed fallback failed before command start",
           )
-          await Session.remove(session.id)
+          await removeSession(session.id)
         },
       })
     } finally {
