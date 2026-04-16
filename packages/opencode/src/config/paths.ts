@@ -6,13 +6,14 @@ import { NamedError } from "@opencode-ai/shared/util/error"
 import { Filesystem } from "@/util"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
+import { unique } from "remeda"
 
 export async function projectFiles(name: string, directory: string, worktree?: string) {
   return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, worktree, { rootFirst: true })
 }
 
 export async function directories(directory: string, worktree?: string) {
-  return [
+  return unique([
     Global.Path.config,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? await Array.fromAsync(
@@ -31,7 +32,7 @@ export async function directories(directory: string, worktree?: string) {
       }),
     )),
     ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
-  ]
+  ])
 }
 
 export function fileInDirectory(dir: string, name: string) {
