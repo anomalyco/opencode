@@ -10,7 +10,7 @@ import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util"
 import { FileWatcher } from "@/file/watcher"
-import { ShareNext } from "@/share/share-next"
+import { ShareNext } from "@/share"
 import * as Effect from "effect/Effect"
 
 export const InstanceBootstrap = Effect.gen(function* () {

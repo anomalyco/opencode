@@ -45,8 +45,8 @@ import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
-import { ShareNext } from "@/share/share-next"
-import { SessionShare } from "@/share/session"
+import { ShareNext } from "@/share"
+import { SessionShare } from "@/share"
 
 export const AppLayer = Layer.mergeAll(
   AppFileSystem.defaultLayer,
