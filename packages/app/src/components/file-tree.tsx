@@ -14,7 +14,6 @@ import {
   Switch,
   untrack,
   type ComponentProps,
-  type JSXElement,
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
