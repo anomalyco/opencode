@@ -179,8 +179,8 @@ function readStoredLocale() {
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
     if (!raw) return
-    const next = JSON.parse(raw) as { locale?: string }
-    if (typeof next?.locale !== "string") return
+    const next: unknown = JSON.parse(raw)
+    if (!next || typeof next !== "object" || !("locale" in next) || typeof next.locale !== "string") return
     return normalizeLocale(next.locale)
   } catch {
     return

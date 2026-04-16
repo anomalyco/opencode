@@ -33,7 +33,7 @@ const createKey = action(async (form: FormData) => {
           name,
         })
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listKeys.key },

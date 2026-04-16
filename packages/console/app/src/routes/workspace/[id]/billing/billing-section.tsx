@@ -17,7 +17,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
         Billing.generateSessionUrl({ returnUrl })
           .then((data) => ({ error: undefined, data }))
           .catch((e) => ({
-            error: e.message as string,
+            error: String(e?.message ?? e),
             data: undefined,
           })),
       workspaceID,

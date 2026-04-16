@@ -21,7 +21,7 @@ const setMonthlyLimit = action(async (form: FormData) => {
       () =>
         Billing.setMonthlyLimit(numericLimit)
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: queryBillingInfo.key },
