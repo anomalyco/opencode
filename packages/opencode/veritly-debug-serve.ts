@@ -59,21 +59,13 @@ await writeFile(managedInstructionsPath, content, "utf8")
 
 process.env.OPENCODE_PROJECTS_ROOT = path.join(repoRoot, ".veritly", "projects")
 
-const skillDir = path.join(repoRoot, ".opencode", "skill")
-
 process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
   instructions: [managedInstructionsPath],
-  // Per-project cwd is often `.veritly/projects/...` with no `.opencode/` on the ancestor chain,
-  // and server processes may not see the developer's `~/.opencode/skill` symlink. Absolute paths work everywhere.
-  skills: {
-    paths: [skillDir],
-  },
 })
 
 log(`root=${opencodeRoot}`)
 log(`generated=${managedInstructionsPath}`)
 log(`opencode_projects_root=${process.env.OPENCODE_PROJECTS_ROOT}`)
-log(`skills.paths[0]=${skillDir}`)
 
 const relayPort = process.env.UNIVER_SDK_PORT?.trim() ? Number(process.env.UNIVER_SDK_PORT.trim()) : 18766
 const relayHealthUrl = `http://127.0.0.1:${relayPort}/health`

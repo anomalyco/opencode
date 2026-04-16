@@ -1,45 +1,84 @@
-# MDX Chart Examples
+# Veritly Univer Python SDK
 
-These examples are valid with `MarkdownMdx` and the built-in components:
-`Chart`, `LineChart`, `BarChart`, `RadarChart`, and `ChartAreaInteractive`.
+The SDK talks to a **local Bun relay** (`packages/univer-sdk/script/sdk-relay.ts`) that bridges **agent** WebSocket clients to the **browser** tab running Univer. The app must set `VITE_UNIVER_SDK_WS` so the viewer connects as `role=browser`; agents use `role=agent` (added automatically by the SDK).
 
-const TRAFFIC_140D = '[{"date":"2025-09-01","desktop":1190,"mobile":865},{"date":"2025-09-02","desktop":1198,"mobile":875},{"date":"2025-09-03","desktop":1213,"mobile":889},{"date":"2026-01-18","desktop":2856,"mobile":2470}]';
+## Prerequisites
 
-## 1) Generic line chart
+1. **Relay running** on the same machine as OpenCode (e.g. `bun run sdk-relay` from `packages/univer-sdk`, or your process manager). Default listen: `ws://127.0.0.1:18766/ws` (port from `UNIVER_SDK_PORT`, default `18766`).
+2. **Browser session** with a spreadsheet open and connected to the relay (otherwise agent requests have no peer).
+3. **Python** with `websockets` (declared in `packages/univer-sdk/python/pyproject.toml`).
 
-<Chart type="line" data='{"labels":["Jan","Feb","Mar","Apr","May"],"datasets":[{"label":"Revenue","data":[12000,15600,14100,18900,21000],"color":"#06b6d4"},{"label":"Cost","data":[9000,10400,9900,12100,14200],"color":"#f43f5e"}]}' />
+### Python import: hosted vs local
 
-## 2) Explicit line chart component
+- **Railway / hosted OpenCode:** The Docker image runs `pip install` on `packages/univer-sdk/python` at build time. `python3` can `import veritly_univer_sdk` with no extra steps.
+- **Local dev:** Run the install script once (editable install from the correct folder):
 
-<LineChart data='{"labels":["Mon","Tue","Wed","Thu","Fri"],"datasets":[{"label":"Latency (ms)","data":[240,198,210,186,172]}]}' />
+```bash
+bash packages/univer-sdk/python/install-local.sh
+```
 
-## 3) Bar chart
+The module file is `packages/univer-sdk/python/veritly_univer_sdk.py`.
 
-<BarChart data='{"labels":["Auth","Search","Ingest","Export"],"datasets":[{"label":"Desktop","data":[186,305,237,73],"color":"#3b82f6"},{"label":"Mobile","data":[80,200,120,190],"color":"#10b981"}]}' />
+## Default URL and environment
 
-## 4) Radar chart (shadcn-style)
+| Variable          | Purpose                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| `UNIVER_SDK_WS`   | Full WebSocket URL (e.g. `ws://127.0.0.1:18766/ws`). Overrides host/port defaults.                 |
+| `UNIVER_SDK_PORT` | Used only when `UNIVER_SDK_WS` is unset: builds `ws://127.0.0.1:{port}/ws` (default port `18766`). |
 
-<RadarChart data='{"labels":["Performance","Reliability","Security","DX","Docs","Testing"],"datasets":[{"label":"Current","data":[72,81,78,69,64,71],"color":"#8b5cf6"},{"label":"Target","data":[85,90,88,84,82,86],"color":"#f59e0b"}]}' />
+`UniverSDK()` with no arguments uses the above. Pass an explicit URL only when needed:
 
-## 5) Generic chart in radar mode
+```python
+UniverSDK("ws://127.0.0.1:18766/ws")
+```
 
-<Chart type="radar" data='{"labels":["API","UI","CLI","Infra","QA"],"datasets":[{"label":"Coverage","data":[68,74,59,81,65],"color":"#ec4899"}]}' />
+## Quick start
 
-## 6) Interactive area chart (explicit config)
+```python
+import asyncio
+from veritly_univer_sdk import RangeRect, UniverSDK
 
-<ChartAreaInteractive
-	title="Traffic Trends"
-	description="Desktop vs mobile over time (real 140-day dataset)"
-	defaultRange="90d"
-	data={TRAFFIC_140D}
-/>
+async def main() -> None:
+    sdk = UniverSDK()
+    await sdk.connect()
+    try:
+        doc = await sdk.get_active_document()
+        rows = await sdk.get_range(
+            RangeRect(startRow=0, endRow=10, startColumn=0, endColumn=2),
+            sheet_id=doc.sheetId,
+        )
+        print(rows)
+        await sdk.set_range(
+            RangeRect(startRow=0, endRow=0, startColumn=0, endColumn=1),
+            [["Hello"]],
+            sheet_id=doc.sheetId,
+        )
+    finally:
+        await sdk.close()
 
-## 7) Interactive area chart (thicker 90-day trend feel)
+asyncio.run(main())
+```
 
-<ChartAreaInteractive
-	title="90 Day Trend"
-	description="Focused on a full 90-day window from real traffic data"
-	defaultRange="90d"
-	data={TRAFFIC_140D}
-/>
+## Operations (relay `op` names)
 
+| Python method                 | `op`                  | Notes                            |
+| ----------------------------- | --------------------- | -------------------------------- |
+| `get_active_document()`       | `get_active_document` | `unitId`, `sheetId`, `sheetName` |
+| `list_sheets()`               | `list_sheets`         |                                  |
+| `get_range(...)`              | `get_range`           | Inclusive row/column indices     |
+| `set_range(...)`              | `set_range`           | 2D values matrix                 |
+| `add_chart(...)`              | `add_chart`           | Optional `chart_type`, `anchor`  |
+| `inspect_facade(...)`         | `sdk_introspect`      | Lists facade method names        |
+| `execute_command(id, params)` | `execute_command`     | Raw `univerAPI.executeCommand`   |
+
+Full JSON shapes: `packages/univer-sdk/python/INTERFACE.md`.
+
+## Charts and advanced mutations
+
+`add_chart` uses Univer's insert-chart path. For drawing-level commands, use `execute_command` with the command id and params your app supports (see browser / Univer docs).
+
+## Troubleshooting
+
+- **`UniverSDK is not connected`** — call `await sdk.connect()` before other methods.
+- **Relay errors / timeout** — ensure relay is up, port matches `UNIVER_SDK_WS` / `UNIVER_SDK_PORT`, and the spreadsheet tab is open with `VITE_UNIVER_SDK_WS` pointing at the relay.
+- **Railway / multi-host** — set `UNIVER_SDK_WS` to the reachable WebSocket URL for that instance; browser and agent must reach the **same** relay.

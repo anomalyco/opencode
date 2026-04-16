@@ -3,7 +3,6 @@ import path from "path"
 import { Global } from "./global"
 import { Installation } from "./installation"
 import { Server } from "./server/server"
-import { Skill } from "./skill/skill"
 import { Filesystem } from "./util/filesystem"
 import { Log } from "./util/log"
 
@@ -63,13 +62,6 @@ const port = Number(process.env.PORT ?? "3000")
 const cors = process.env.OPENCODE_SERVER_CORS?.split(",")
   .map((value) => value.trim())
   .filter(Boolean)
-
-const skills = await Skill.all()
-if (skills.length === 0) {
-  log.error("no skills loaded - server cannot start without at least one skill")
-  process.exit(1)
-}
-log.info("skills loaded", { count: skills.length, names: skills.map((s) => s.name) })
 
 const server = Server.listen({
   hostname,
