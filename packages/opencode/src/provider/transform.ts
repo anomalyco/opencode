@@ -2,7 +2,7 @@ import type { ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
-import type { Provider } from "./provider"
+import type { Provider } from "."
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
@@ -49,7 +49,7 @@ export namespace ProviderTransform {
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
-    options: Record<string, unknown>,
+    _options: Record<string, unknown>,
   ): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
@@ -75,7 +75,7 @@ export namespace ProviderTransform {
 
     if (model.api.id.includes("claude")) {
       const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
-      return msgs.map((msg) => {
+      msgs = msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           return {
             ...msg,
@@ -99,6 +99,31 @@ export namespace ProviderTransform {
           }
         }
         return msg
+      })
+    }
+    if (["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
+      // Anthropic rejects assistant turns where tool_use blocks are followed by non-tool
+      // content, e.g. [tool_use, tool_use, text], with:
+      // `tool_use` ids were found without `tool_result` blocks immediately after...
+      //
+      // Reorder that invalid shape into [text] + [tool_use, tool_use]. Consecutive
+      // assistant messages are later merged by the provider/SDK, so preserving the
+      // original [tool_use...] then [text] order still produces the invalid payload.
+      //
+      // The root cause appears to be somewhere upstream where the stream is originally
+      // processed. We were unable to locate an exact narrower reproduction elsewhere,
+      // so we keep this transform in place for the time being.
+      msgs = msgs.flatMap((msg) => {
+        if (msg.role !== "assistant" || !Array.isArray(msg.content)) return [msg]
+
+        const parts = msg.content
+        const first = parts.findIndex((part) => part.type === "tool-call")
+        if (first === -1) return [msg]
+        if (!parts.slice(first).some((part) => part.type !== "tool-call")) return [msg]
+        return [
+          { ...msg, content: parts.filter((part) => part.type !== "tool-call") },
+          { ...msg, content: parts.filter((part) => part.type === "tool-call") },
+        ]
       })
     }
     if (
@@ -209,6 +234,9 @@ export namespace ProviderTransform {
       copilot: {
         copilot_cache_control: { type: "ephemeral" },
       },
+      alibaba: {
+        cacheControl: { type: "ephemeral" },
+      },
     }
 
     for (const msg of unique([...system, ...final])) {
@@ -285,7 +313,8 @@ export namespace ProviderTransform {
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
+        model.api.npm === "@ai-sdk/anthropic" ||
+        model.api.npm === "@ai-sdk/alibaba") &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
       msgs = applyCaching(msgs, model)
@@ -828,7 +857,16 @@ export namespace ProviderTransform {
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
-        result["reasoningSummary"] = "auto"
+        // Only inject reasoningSummary for providers that support it natively.
+        // @ai-sdk/openai-compatible proxies (e.g. LiteLLM) do not understand this
+        // parameter and return "Unknown parameter: 'reasoningSummary'".
+        if (
+          input.model.api.npm === "@ai-sdk/openai" ||
+          input.model.api.npm === "@ai-sdk/azure" ||
+          input.model.api.npm === "@ai-sdk/github-copilot"
+        ) {
+          result["reasoningSummary"] = "auto"
+        }
       }
 
       // Only set textVerbosity for non-chat gpt-5.x models

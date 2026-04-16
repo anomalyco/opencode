@@ -344,7 +344,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return
         }
 
-        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
         prune(keep)
       },
     })
@@ -399,7 +399,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         local?.icon?.color !== undefined
 
       const base = {
-        ...(metadata ?? {}),
+        ...metadata,
         ...project,
         icon: {
           url: metadata?.icon?.url,

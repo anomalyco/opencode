@@ -3,18 +3,17 @@ import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect, Layer, Context } from "effect"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
-import { AppFileSystem } from "@/filesystem"
-import { Config } from "../config/config"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Config } from "../config"
 import { ConfigMarkdown } from "../config/markdown"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { Log } from "../util/log"
 import { Discovery } from "./discovery"
 
@@ -261,23 +260,5 @@ export namespace Skill {
         .toSorted((a, b) => a.name.localeCompare(b.name))
         .map((skill) => `- **${skill.name}**: ${skill.description}`),
     ].join("\n")
-  }
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(name: string) {
-    return runPromise((skill) => skill.get(name))
-  }
-
-  export async function all() {
-    return runPromise((skill) => skill.all())
-  }
-
-  export async function dirs() {
-    return runPromise((skill) => skill.dirs())
-  }
-
-  export async function available(agent?: Agent.Info) {
-    return runPromise((skill) => skill.available(agent))
   }
 }

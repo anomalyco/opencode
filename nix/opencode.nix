@@ -7,7 +7,6 @@
   sysctl,
   makeBinaryWrapper,
   models-dev,
-  ripgrep,
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
@@ -52,25 +51,25 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook postBuild
   '';
 
-  installPhase = ''
-    runHook preInstall
+  installPhase =
+    ''
+      runHook preInstall
 
-    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-    install -Dm644 schema.json $out/share/opencode/schema.json
-
-    wrapProgram $out/bin/opencode \
-      --prefix PATH : ${
-        lib.makeBinPath (
-          [
-            ripgrep
+      install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
+      install -Dm644 schema.json $out/share/opencode/schema.json
+    ''
+    # bun runs sysctl to detect if dunning on rosetta2
+    + lib.optionalString stdenvNoCC.hostPlatform.isDarwin ''
+      wrapProgram $out/bin/opencode \
+        --prefix PATH : ${
+          lib.makeBinPath [
+            sysctl
           ]
-          # bun runs sysctl to detect if dunning on rosetta2
-          ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
-        )
-      }
-
-    runHook postInstall
-  '';
+        }
+    ''
+    + ''
+      runHook postInstall
+    '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions

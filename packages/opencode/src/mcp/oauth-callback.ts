@@ -218,7 +218,7 @@ export namespace McpOAuthCallback {
       log.info("oauth callback server stopped")
     }
 
-    for (const [name, pending] of pendingAuths) {
+    for (const [_name, pending] of pendingAuths) {
       clearTimeout(pending.timeout)
       pending.reject(new Error("OAuth callback server stopped"))
     }

@@ -85,18 +85,6 @@ function prepareBinDirectory(binaryName) {
   return { binDir, targetPath }
 }
 
-function symlinkBinary(sourcePath, binaryName) {
-  const { targetPath } = prepareBinDirectory(binaryName)
-
-  fs.symlinkSync(sourcePath, targetPath)
-  console.log(`opencode binary symlinked: ${targetPath} -> ${sourcePath}`)
-
-  // Verify the file exists after operation
-  if (!fs.existsSync(targetPath)) {
-    throw new Error(`Failed to symlink binary to ${targetPath}`)
-  }
-}
-
 async function main() {
   try {
     if (os.platform() === "win32") {

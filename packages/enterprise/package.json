@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.4.3",
+  "version": "1.4.6",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
-    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/shared": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",

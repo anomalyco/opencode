@@ -630,7 +630,7 @@ export namespace Patch {
                   type: "delete",
                   content,
                 })
-              } catch (error) {
+              } catch {
                 return {
                   type: MaybeApplyPatchVerified.CorrectnessError,
                   error: new Error(`Failed to read file for deletion: ${deletePath}`),

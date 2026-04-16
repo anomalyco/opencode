@@ -27,7 +27,7 @@ const sessions = new Map<string, { client: any; server: any; sessionId: string; 
       const part = event.properties.part
       if (part.type === "tool") {
         // Find the session for this tool update
-        for (const [sessionKey, session] of sessions.entries()) {
+        for (const [_sessionKey, session] of sessions.entries()) {
           if (session.sessionId === part.sessionID) {
             handleToolUpdate(part, session.channel, session.thread)
             break
@@ -95,7 +95,7 @@ app.message(async ({ message, say }) => {
 
     const shareResult = await client.session.share({ path: { id: createResult.data.id } })
     if (!shareResult.error && shareResult.data) {
-      const sessionUrl = shareResult.data.share?.url!
+      const sessionUrl = shareResult.data.share?.url
       console.log("🔗 Session shared:", sessionUrl)
       await app.client.chat.postMessage({ channel, thread_ts: thread, text: sessionUrl })
     }

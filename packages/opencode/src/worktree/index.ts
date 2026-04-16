@@ -1,5 +1,5 @@
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
@@ -8,7 +8,7 @@ import { Database, eq } from "../storage/db"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
 import { Log } from "../util/log"
-import { Slug } from "@opencode-ai/util/slug"
+import { Slug } from "@opencode-ai/shared/util/slug"
 import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -16,8 +16,8 @@ import { Git } from "@/git"
 import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@/filesystem"
-import { makeRuntime } from "@/effect/run-service"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -266,7 +266,7 @@ export namespace Worktree {
         const booted = yield* Effect.promise(() =>
           Instance.provide({
             directory: info.directory,
-            init: InstanceBootstrap,
+            init: () => BootstrapRuntime.runPromise(InstanceBootstrap),
             fn: () => undefined,
           })
             .then(() => true)
@@ -597,25 +597,4 @@ export namespace Worktree {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function makeWorktreeInfo(name?: string) {
-    return runPromise((svc) => svc.makeWorktreeInfo(name))
-  }
-
-  export async function createFromInfo(info: Info, startCommand?: string) {
-    return runPromise((svc) => svc.createFromInfo(info, startCommand))
-  }
-
-  export async function create(input?: CreateInput) {
-    return runPromise((svc) => svc.create(input))
-  }
-
-  export async function remove(input: RemoveInput) {
-    return runPromise((svc) => svc.remove(input))
-  }
-
-  export async function reset(input: ResetInput) {
-    return runPromise((svc) => svc.reset(input))
-  }
 }

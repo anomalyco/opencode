@@ -3,7 +3,6 @@ import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "session.projector" })

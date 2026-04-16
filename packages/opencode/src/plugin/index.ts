@@ -1,23 +1,30 @@
-import type { Hooks, PluginInput, Plugin as PluginInstance, PluginModule } from "@opencode-ai/plugin"
-import { Config } from "../config/config"
+import type {
+  Hooks,
+  PluginInput,
+  Plugin as PluginInstance,
+  PluginModule,
+  WorkspaceAdaptor as PluginWorkspaceAdaptor,
+} from "@opencode-ai/plugin"
+import { Config } from "../config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { Effect, Layer, Context, Stream } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { registerAdaptor } from "@/control-plane/adaptors"
+import type { WorkspaceAdaptor } from "@/control-plane/types"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -83,14 +90,6 @@ export namespace Plugin {
     return result
   }
 
-  function publishPluginError(bus: Bus.Interface, message: string) {
-    Effect.runFork(
-      bus
-        .publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        .pipe(Effect.provide(EffectLogger.layer)),
-    )
-  }
-
   async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
     const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
     if (plugin) {
@@ -113,6 +112,11 @@ export namespace Plugin {
       const state = yield* InstanceState.make<State>(
         Effect.fn("Plugin.state")(function* (ctx) {
           const hooks: Hooks[] = []
+          const bridge = yield* EffectBridge.make()
+
+          function publishPluginError(message: string) {
+            bridge.fork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          }
 
           const { Server } = yield* Effect.promise(() => import("../server/server"))
 
@@ -132,6 +136,11 @@ export namespace Plugin {
             project: ctx.project,
             worktree: ctx.worktree,
             directory: ctx.directory,
+            experimental_workspace: {
+              register(type: string, adaptor: PluginWorkspaceAdaptor) {
+                registerAdaptor(ctx.project.id, type, adaptor as WorkspaceAdaptor)
+              },
+            },
             get serverUrl(): URL {
               return Server.url ?? new URL("http://localhost:4096")
             },
@@ -175,24 +184,24 @@ export namespace Plugin {
                   if (stage === "install") {
                     const parsed = parsePluginSpecifier(spec)
                     log.error("failed to install plugin", { pkg: parsed.pkg, version: parsed.version, error: message })
-                    publishPluginError(bus, `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
+                    publishPluginError(`Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
                     return
                   }
 
                   if (stage === "compatibility") {
                     log.warn("plugin incompatible", { path: spec, error: message })
-                    publishPluginError(bus, `Plugin ${spec} skipped: ${message}`)
+                    publishPluginError(`Plugin ${spec} skipped: ${message}`)
                     return
                   }
 
                   if (stage === "entry") {
                     log.error("failed to resolve plugin server entry", { path: spec, error: message })
-                    publishPluginError(bus, `Failed to load plugin ${spec}: ${message}`)
+                    publishPluginError(`Failed to load plugin ${spec}: ${message}`)
                     return
                   }
 
                   log.error("failed to load plugin", { path: spec, target: resolved?.entry, error: message })
-                  publishPluginError(bus, `Failed to load plugin ${spec}: ${message}`)
+                  publishPluginError(`Failed to load plugin ${spec}: ${message}`)
                 },
               },
             }),
@@ -277,21 +286,4 @@ export namespace Plugin {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function trigger<
-    Name extends TriggerName,
-    Input = Parameters<Required<Hooks>[Name]>[0],
-    Output = Parameters<Required<Hooks>[Name]>[1],
-  >(name: Name, input: Input, output: Output): Promise<Output> {
-    return runPromise((svc) => svc.trigger(name, input, output))
-  }
-
-  export async function list(): Promise<Hooks[]> {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function init() {
-    return runPromise((svc) => svc.init())
-  }
 }

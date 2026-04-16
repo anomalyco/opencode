@@ -1,17 +1,16 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
 import type { Proc } from "#pty"
 import z from "zod"
 import { Log } from "../util/log"
-import { lazy } from "@opencode-ai/util/lazy"
+import { lazy } from "@opencode-ai/shared/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectBridge } from "@/effect/bridge"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -174,6 +173,7 @@ export namespace Pty {
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const s = yield* InstanceState.get(state)
+        const bridge = yield* EffectBridge.make()
         const id = PtyID.ascending()
         const command = input.command || Shell.preferred()
         const args = input.args || []
@@ -257,8 +257,8 @@ export namespace Pty {
             if (session.info.status === "exited") return
             log.info("session exited", { id, exitCode })
             session.info.status = "exited"
-            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }).pipe(Effect.provide(EffectLogger.layer)))
-            Effect.runFork(remove(id).pipe(Effect.provide(EffectLogger.layer)))
+            bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
+            bridge.fork(remove(id))
           }),
         )
         yield* bus.publish(Event.Created, { info })
@@ -361,34 +361,4 @@ export namespace Pty {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function get(id: PtyID) {
-    return runPromise((svc) => svc.get(id))
-  }
-
-  export async function write(id: PtyID, data: string) {
-    return runPromise((svc) => svc.write(id, data))
-  }
-
-  export async function connect(id: PtyID, ws: Socket, cursor?: number) {
-    return runPromise((svc) => svc.connect(id, ws, cursor))
-  }
-
-  export async function create(input: CreateInput) {
-    return runPromise((svc) => svc.create(input))
-  }
-
-  export async function update(id: PtyID, input: UpdateInput) {
-    return runPromise((svc) => svc.update(id, input))
-  }
-
-  export async function remove(id: PtyID) {
-    return runPromise((svc) => svc.remove(id))
-  }
 }

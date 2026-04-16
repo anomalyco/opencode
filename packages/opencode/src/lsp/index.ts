@@ -6,14 +6,13 @@ import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
-import { Config } from "../config/config"
+import { Config } from "../config"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Process } from "../util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -507,37 +506,6 @@ export namespace LSP {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const init = async () => runPromise((svc) => svc.init())
-
-  export const status = async () => runPromise((svc) => svc.status())
-
-  export const hasClients = async (file: string) => runPromise((svc) => svc.hasClients(file))
-
-  export const touchFile = async (input: string, waitForDiagnostics?: boolean) =>
-    runPromise((svc) => svc.touchFile(input, waitForDiagnostics))
-
-  export const diagnostics = async () => runPromise((svc) => svc.diagnostics())
-
-  export const hover = async (input: LocInput) => runPromise((svc) => svc.hover(input))
-
-  export const definition = async (input: LocInput) => runPromise((svc) => svc.definition(input))
-
-  export const references = async (input: LocInput) => runPromise((svc) => svc.references(input))
-
-  export const implementation = async (input: LocInput) => runPromise((svc) => svc.implementation(input))
-
-  export const documentSymbol = async (uri: string) => runPromise((svc) => svc.documentSymbol(uri))
-
-  export const workspaceSymbol = async (query: string) => runPromise((svc) => svc.workspaceSymbol(query))
-
-  export const prepareCallHierarchy = async (input: LocInput) => runPromise((svc) => svc.prepareCallHierarchy(input))
-
-  export const incomingCalls = async (input: LocInput) => runPromise((svc) => svc.incomingCalls(input))
-
-  export const outgoingCalls = async (input: LocInput) => runPromise((svc) => svc.outgoingCalls(input))
 
   export namespace Diagnostic {
     const MAX_PER_FILE = 20

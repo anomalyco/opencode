@@ -281,7 +281,7 @@ async function assertOpencodeConnected() {
       })
       connected = true
       break
-    } catch (e) {}
+    } catch {}
     await sleep(300)
   } while (retry++ < 30)
 
@@ -561,7 +561,7 @@ async function subscribeSessionEvents() {
               if (evt.properties.info.id !== session.id) continue
               session = evt.properties.info
             }
-          } catch (e) {
+          } catch {
             // Ignore parse errors
           }
         }
@@ -576,7 +576,7 @@ async function subscribeSessionEvents() {
 async function summarize(response: string) {
   try {
     return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
-  } catch (e) {
+  } catch {
     if (isScheduleEvent()) {
       return "Scheduled task changes"
     }
