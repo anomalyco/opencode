@@ -47,13 +47,24 @@ import { Config } from "@/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Event,
+  OpencodeClient,
+  QuestionRequest,
+  SessionMessageResponse,
+  ToolPart,
+} from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+import { Flag } from "@/flag/flag"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
+const QuestionCap = z.union([z.literal(true), z.object({ version: z.number().int().positive().optional() })])
+const QuestionReply = z.object({ answers: z.array(z.array(z.string())) })
+const QuestionReject = z.object({ rejected: z.literal(true) })
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -142,9 +153,11 @@ export namespace ACP {
     private sessionManager: ACPSessionManager
     private eventAbort = new AbortController()
     private eventStarted = false
+    private question = false
     private bashSnapshots = new Map<string, string>()
     private toolStarts = new Set<string>()
     private permissionQueues = new Map<string, Promise<void>>()
+    private questionQueues = new Map<string, Promise<void>>()
     private permissionOptions: PermissionOption[] = [
       { optionId: "once", kind: "allow_once", name: "Allow once" },
       { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -265,6 +278,86 @@ export namespace ACP {
               }
             })
           this.permissionQueues.set(permission.sessionID, next)
+          return
+        }
+
+        case "question.asked": {
+          const question = event.properties as QuestionRequest
+          const session = this.sessionManager.tryGet(question.sessionID)
+          if (!session) return
+
+          const prev = this.questionQueues.get(question.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              const directory = session.cwd
+
+              if (!this.question) {
+                log.warn("question requested without ACP question support", {
+                  questionID: question.id,
+                  sessionID: question.sessionID,
+                })
+                await this.sdk.question.reject({
+                  requestID: question.id,
+                  directory,
+                })
+                return
+              }
+
+              const res = await this.connection
+                .extMethod("opencode/question", {
+                  requestId: question.id,
+                  sessionId: question.sessionID,
+                  questions: question.questions,
+                  tool: question.tool,
+                })
+                .catch((error) => {
+                  log.error("failed to request question response from ACP", {
+                    error,
+                    questionID: question.id,
+                    sessionID: question.sessionID,
+                  })
+                  return undefined
+                })
+
+              const reply = QuestionReply.safeParse(res)
+              if (reply.success) {
+                await this.sdk.question.reply({
+                  requestID: question.id,
+                  answers: reply.data.answers,
+                  directory,
+                })
+                return
+              }
+
+              const reject = QuestionReject.safeParse(res)
+              if (reject.success) {
+                await this.sdk.question.reject({
+                  requestID: question.id,
+                  directory,
+                })
+                return
+              }
+
+              log.error("ACP question response was invalid", {
+                questionID: question.id,
+                sessionID: question.sessionID,
+                response: res,
+              })
+              await this.sdk.question.reject({
+                requestID: question.id,
+                directory,
+              })
+            })
+            .catch((error) => {
+              log.error("failed to handle question", { error, questionID: question.id })
+            })
+            .finally(() => {
+              if (this.questionQueues.get(question.sessionID) === next) {
+                this.questionQueues.delete(question.sessionID)
+              }
+            })
+
+          this.questionQueues.set(question.sessionID, next)
           return
         }
 
@@ -531,6 +624,10 @@ export namespace ACP {
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
+      this.question =
+        Flag.OPENCODE_ENABLE_QUESTION_TOOL &&
+        QuestionCap.safeParse(params.clientCapabilities?._meta?.["opencode/question"]).success
+      process.env.OPENCODE_ENABLE_QUESTION_TOOL = this.question ? "1" : "0"
 
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",

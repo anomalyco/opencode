@@ -8,6 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type RequestPermissionParams = Parameters<AgentSideConnection["requestPermission"]>[0]
 type RequestPermissionResult = Awaited<ReturnType<AgentSideConnection["requestPermission"]>>
+type ExtMethodResult = Awaited<ReturnType<AgentSideConnection["extMethod"]>>
 
 type GlobalEventEnvelope = {
   directory?: string
@@ -145,6 +146,9 @@ function createFakeAgent() {
     async requestPermission(_params: RequestPermissionParams): Promise<RequestPermissionResult> {
       return { outcome: { outcome: "selected", optionId: "once" } } as RequestPermissionResult
     },
+    async extMethod(_method: string, _params: Record<string, unknown>): Promise<ExtMethodResult> {
+      return { rejected: true }
+    },
   } as unknown as AgentSideConnection
 
   const { controller, stream } = createEventStream()
@@ -201,6 +205,14 @@ function createFakeAgent() {
     },
     permission: {
       respond: async () => {
+        return { data: true }
+      },
+    },
+    question: {
+      reply: async () => {
+        return { data: true }
+      },
+      reject: async () => {
         return { data: true }
       },
     },
@@ -533,6 +545,176 @@ describe("acp.agent event subscription", () => {
         stop()
       },
     })
+  })
+
+  test("question.asked events use ACP extMethod replies when enabled", async () => {
+    await using tmp = await tmpdir()
+    const prev = process.env.OPENCODE_ENABLE_QUESTION_TOOL
+    process.env.OPENCODE_ENABLE_QUESTION_TOOL = "1"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const replies: any[] = []
+        const ext: any[] = []
+        const { agent, controller, stop, sdk, connection } = createFakeAgent()
+        sdk.question.reply = async (params: any) => {
+          replies.push(params)
+          return { data: true }
+        }
+        connection.extMethod = async (method: string, params: Record<string, unknown>) => {
+          ext.push({ method, params })
+          return { answers: [["Yes"]] }
+        }
+
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            _meta: {
+              "opencode/question": {
+                version: 1,
+              },
+            },
+          },
+        } as any)
+
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "que_1",
+              sessionID: sessionId,
+              questions: [
+                {
+                  header: "Build",
+                  question: "Start implementing?",
+                  options: [
+                    { label: "Yes", description: "Start implementing now" },
+                    { label: "No", description: "Keep planning" },
+                  ],
+                },
+              ],
+              tool: {
+                messageID: "msg_1",
+                callID: "call_1",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(ext).toEqual([
+          {
+            method: "opencode/question",
+            params: {
+              requestId: "que_1",
+              sessionId,
+              questions: [
+                {
+                  header: "Build",
+                  question: "Start implementing?",
+                  options: [
+                    { label: "Yes", description: "Start implementing now" },
+                    { label: "No", description: "Keep planning" },
+                  ],
+                },
+              ],
+              tool: {
+                messageID: "msg_1",
+                callID: "call_1",
+              },
+            },
+          },
+        ])
+        expect(replies).toEqual([
+          {
+            requestID: "que_1",
+            answers: [["Yes"]],
+            directory: cwd,
+          },
+        ])
+
+        stop()
+      },
+    })
+
+    if (prev === undefined) delete process.env.OPENCODE_ENABLE_QUESTION_TOOL
+    else process.env.OPENCODE_ENABLE_QUESTION_TOOL = prev
+  })
+
+  test("question.asked events reject when ACP client declines", async () => {
+    await using tmp = await tmpdir()
+    const prev = process.env.OPENCODE_ENABLE_QUESTION_TOOL
+    process.env.OPENCODE_ENABLE_QUESTION_TOOL = "1"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const rejects: any[] = []
+        const { agent, controller, stop, sdk, connection } = createFakeAgent()
+        sdk.question.reject = async (params: any) => {
+          rejects.push(params)
+          return { data: true }
+        }
+        connection.extMethod = async () => {
+          return { rejected: true }
+        }
+
+        await agent.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            _meta: {
+              "opencode/question": {
+                version: 1,
+              },
+            },
+          },
+        } as any)
+
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "que_2",
+              sessionID: sessionId,
+              questions: [
+                {
+                  header: "Build",
+                  question: "Start implementing?",
+                  options: [
+                    { label: "Yes", description: "Start implementing now" },
+                    { label: "No", description: "Keep planning" },
+                  ],
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(rejects).toEqual([
+          {
+            requestID: "que_2",
+            directory: cwd,
+          },
+        ])
+
+        stop()
+      },
+    })
+
+    if (prev === undefined) delete process.env.OPENCODE_ENABLE_QUESTION_TOOL
+    else process.env.OPENCODE_ENABLE_QUESTION_TOOL = prev
   })
 
   test("streams running bash output snapshots and de-dupes identical snapshots", async () => {

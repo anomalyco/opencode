@@ -54,6 +54,51 @@ OPENCODE_ENABLE_QUESTION_TOOL=1 opencode acp
 
 Enable this only for ACP clients that support interactive question prompts.
 
+Question support also requires the ACP client to advertise the following capability at initialize time:
+
+```json
+{
+  "clientCapabilities": {
+    "_meta": {
+      "opencode/question": {
+        "version": 1
+      }
+    }
+  }
+}
+```
+
+When enabled, opencode sends question requests over the ACP extension method `opencode/question`:
+
+```json
+{
+  "requestId": "que_123",
+  "sessionId": "ses_123",
+  "questions": [
+    {
+      "header": "Build Agent",
+      "question": "Start implementing now?",
+      "options": [
+        { "label": "Yes", "description": "Switch to build agent and start implementing" },
+        { "label": "No", "description": "Stay in the current mode" }
+      ]
+    }
+  ]
+}
+```
+
+The client should return either:
+
+```json
+{ "answers": [["Yes"]] }
+```
+
+or:
+
+```json
+{ "rejected": true }
+```
+
 ### Programmatic
 
 ```typescript
