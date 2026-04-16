@@ -1,17 +1,15 @@
-import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Layer, Redacted, Schema } from "effect"
 import { HttpApiBuilder, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { createServer } from "node:http"
+import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { Observability } from "@/effect/observability"
+import { memoMap } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
+import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util/filesystem"
-import { Permission } from "@/permission"
-import { ProviderAuth } from "@/provider/auth"
-import { Question } from "@/question"
 import { PermissionApi, PermissionLive } from "./permission"
 import { ProviderApi, ProviderLive } from "./provider"
 import { QuestionApi, QuestionLive } from "./question"
@@ -113,26 +111,24 @@ export namespace ExperimentalHttpApiServer {
   const ProviderSecured = ProviderApi.middleware(Authorization)
 
   export const routes = Layer.mergeAll(
-    HttpApiBuilder.layer(QuestionSecured, { openapiPath: "/experimental/httpapi/question/doc" }).pipe(
-      Layer.provide(QuestionLive),
-    ),
+    HttpApiBuilder.layer(QuestionSecured).pipe(Layer.provide(QuestionLive)),
     HttpApiBuilder.layer(PermissionSecured, { openapiPath: "/experimental/httpapi/permission/doc" }).pipe(
       Layer.provide(PermissionLive),
     ),
     HttpApiBuilder.layer(ProviderSecured, { openapiPath: "/experimental/httpapi/provider/doc" }).pipe(
       Layer.provide(ProviderLive),
     ),
-  ).pipe(Layer.provide(auth), Layer.provide(normalize), Layer.provide(instance))
+  ).pipe(
+    Layer.provide(auth),
+    Layer.provide(normalize),
+    Layer.provide(instance),
+    Layer.provide(HttpServer.layerServices),
+    Layer.provideMerge(Observability.layer),
+  )
 
-  export const layer = (opts: { hostname: string; port: number }) =>
-    HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(
-      Layer.provideMerge(NodeHttpServer.layer(createServer, { port: opts.port, host: opts.hostname })),
-    )
-
-  export const layerTest = HttpRouter.serve(routes, { disableListenLog: true, disableLogger: true }).pipe(
-    Layer.provideMerge(NodeHttpServer.layerTest),
-    Layer.provideMerge(Question.defaultLayer),
-    Layer.provideMerge(Permission.defaultLayer),
-    Layer.provideMerge(ProviderAuth.defaultLayer),
+  export const webHandler = lazy(() =>
+    HttpRouter.toWebHandler(routes, {
+      memoMap,
+    }),
   )
 }

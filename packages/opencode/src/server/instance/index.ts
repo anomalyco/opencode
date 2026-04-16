@@ -14,6 +14,7 @@ import { LSP } from "../../lsp"
 import { Command } from "../../command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
+import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -36,6 +37,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
     .route("/permission", PermissionRoutes())
+    .all("/question", (c) => ExperimentalHttpApiServer.webHandler().handler(c.req.raw))
+    .all("/question/*", (c) => ExperimentalHttpApiServer.webHandler().handler(c.req.raw))
+    // QuestionRoutes below is dead code — the .all() bridge above intercepts all
+    // question requests. Kept only so hono-openapi generates the OpenAPI spec
+    // entries that feed SDK codegen. Remove once SDK generates from Effect OpenAPI.
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
     .route("/sync", SyncRoutes())

@@ -3,7 +3,7 @@ import { QuestionID } from "@/question/schema"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
-const root = "/experimental/httpapi/question"
+const root = "/question"
 
 export const QuestionApi = HttpApi.make("question")
   .add(
@@ -29,19 +29,29 @@ export const QuestionApi = HttpApi.make("question")
             description: "Provide answers to a question request from the AI assistant.",
           }),
         ),
+        HttpApiEndpoint.post("reject", `${root}/:requestID/reject`, {
+          params: { requestID: QuestionID },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "question.reject",
+            summary: "Reject question request",
+            description: "Reject a question request from the AI assistant.",
+          }),
+        ),
       )
       .annotateMerge(
         OpenApi.annotations({
           title: "question",
-          description: "Experimental HttpApi question routes.",
+          description: "Question routes.",
         }),
       ),
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: "opencode HttpApi",
       version: "0.0.1",
-      description: "Experimental HttpApi surface for selected instance routes.",
+      description: "Effect HttpApi surface for instance routes.",
     }),
   )
 
@@ -64,8 +74,13 @@ export const QuestionLive = Layer.unwrap(
       return true
     })
 
+    const reject = Effect.fn("QuestionHttpApi.reject")(function* (ctx: { params: { requestID: QuestionID } }) {
+      yield* svc.reject(ctx.params.requestID)
+      return true
+    })
+
     return HttpApiBuilder.group(QuestionApi, "question", (handlers) =>
-      handlers.handle("list", list).handle("reply", reply),
+      handlers.handle("list", list).handle("reply", reply).handle("reject", reject),
     )
   }),
 ).pipe(Layer.provide(Question.defaultLayer))
