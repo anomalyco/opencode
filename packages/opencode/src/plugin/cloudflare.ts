@@ -1,8 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 
 export async function CloudflareWorkersAuthPlugin(_input: PluginInput): Promise<Hooks> {
-  const prompts = [
-    ...(!process.env.CLOUDFLARE_ACCOUNT_ID
+  const prompts = (!process.env.CLOUDFLARE_ACCOUNT_ID
       ? [
           {
             type: "text" as const,
@@ -11,8 +10,7 @@ export async function CloudflareWorkersAuthPlugin(_input: PluginInput): Promise<
             placeholder: "e.g. 1234567890abcdef1234567890abcdef",
           },
         ]
-      : []),
-  ]
+      : [])
 
   return {
     auth: {

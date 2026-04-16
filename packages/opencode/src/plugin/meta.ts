@@ -174,7 +174,7 @@ export namespace PluginMeta {
       const entry = store[id]
       if (!entry) return
       entry.themes = {
-        ...(entry.themes ?? {}),
+        ...entry.themes,
         [name]: theme,
       }
       await Filesystem.writeJson(file, store)

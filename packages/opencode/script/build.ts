@@ -211,9 +211,7 @@ for (const item of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
-    files: {
-      ...(embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {}),
-    },
+    files: (embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {}),
     entrypoints: [
       "./src/index.ts",
       parserWorker,

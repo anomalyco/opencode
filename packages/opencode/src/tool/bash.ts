@@ -176,7 +176,7 @@ function dynamic(text: string, ps: boolean) {
 }
 
 function prefix(text: string) {
-  const match = /[?*\[]/.exec(text)
+  const match = /[?*[]/.exec(text)
   if (!match) return text
   if (match.index === 0) return
   return text.slice(0, match.index)

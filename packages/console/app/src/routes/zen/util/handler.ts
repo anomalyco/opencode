@@ -144,7 +144,7 @@ export async function handler(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
           model: providerInfo.model,
-          ...(providerInfo.payloadModifier ?? {}),
+          ...providerInfo.payloadModifier,
           ...Object.fromEntries(
             Object.entries(providerInfo.payloadMappings ?? {})
               .map(([k, v]) => [k, input.request.headers.get(v)])

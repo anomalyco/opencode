@@ -126,7 +126,7 @@ export namespace TuiConfig {
       }
     }
 
-    const keybinds = { ...(acc.result.keybinds ?? {}) }
+    const keybinds = { ...acc.result.keybinds }
     if (process.platform === "win32") {
       // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
       keybinds.terminal_suspend = "none"

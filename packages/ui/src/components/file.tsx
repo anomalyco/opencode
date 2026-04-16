@@ -655,7 +655,7 @@ function ViewerShell(props: {
       style={styleVariables}
       class="relative outline-none"
       classList={{
-        ...(props.classList || {}),
+        ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
       ref={(el) => (props.viewer.wrapper = el)}
