@@ -53,6 +53,7 @@ export const SyncRoutes = lazy(() =>
         const body = c.req.valid("json")
         const events = body.events
         const source = events[0].aggregateID
+
         log.info("sync replay requested", {
           sessionID: source,
           events: events.length,
