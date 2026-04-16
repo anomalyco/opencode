@@ -124,8 +124,17 @@ export async function install(dir: string) {
     return
   }
 
-  const pkg = await Filesystem.readJson(path.join(dir, "package.json")).catch(() => ({}))
-  const lock = await Filesystem.readJson(path.join(dir, "package-lock.json")).catch(() => ({}))
+  type PackageDeps = Record<string, string>
+  type PackageJson = {
+    dependencies?: PackageDeps
+    devDependencies?: PackageDeps
+    peerDependencies?: PackageDeps
+    optionalDependencies?: PackageDeps
+  }
+  const pkg: PackageJson = await Filesystem.readJson<PackageJson>(path.join(dir, "package.json")).catch(() => ({}))
+  const lock: { packages?: Record<string, PackageJson> } = await Filesystem.readJson<{
+    packages?: Record<string, PackageJson>
+  }>(path.join(dir, "package-lock.json")).catch(() => ({}))
 
   const declared = new Set([
     ...Object.keys(pkg.dependencies || {}),
