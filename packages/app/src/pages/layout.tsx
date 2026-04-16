@@ -604,6 +604,20 @@ export default function Layout(props: ParentProps & { isMinimal?: boolean }) {
     }
   })
 
+  // autoselecting은 1회성 resource라 globalSync bootstrap이 localStorage의 projects를 뒤늦게 채우는 경우를 못 잡는다.
+  // 최초 진입 시 list가 비어있어 early-return된 뒤, merge로 list가 채워지면 이 effect가 navigate를 재시도한다.
+  createEffect(() => {
+    if (autoselecting.loading) return
+    if (!state.autoselect) return
+    const list = layout.projects.list()
+    if (list.length === 0) return
+    const last = server.projects.last()
+    const next = list.find((project) => project.worktree === last) ?? list[0]
+    if (!next) return
+    setState("autoselect", false)
+    void openProject(next.worktree, true)
+  })
+
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
     const direct = store.workspaceName[key] ?? store.workspaceName[directory]
