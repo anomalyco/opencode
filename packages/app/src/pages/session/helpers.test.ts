@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  clipMessages,
   createOpenReviewFile,
   createOpenSessionFileTab,
   createSessionTabs,
@@ -9,6 +10,13 @@ import {
   getTabReorderIndex,
   shouldFocusTerminalOnKeyDown,
 } from "./helpers"
+import type { Message } from "@opencode-ai/sdk/v2/client"
+
+const msg = (id: string, role: "user" | "assistant") =>
+  ({
+    id,
+    role,
+  }) as Message
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -177,5 +185,30 @@ describe("createSessionTabs", () => {
       expect(result.closableTab()).toBeUndefined()
       dispose()
     })
+  })
+})
+
+describe("clipMessages", () => {
+  test("keeps the latest full turn when the raw limit would start on assistant output", () => {
+    const list = [
+      msg("u1", "user"),
+      msg("a1", "assistant"),
+      msg("a2", "assistant"),
+      msg("a3", "assistant"),
+    ]
+
+    expect(clipMessages(list, 2).map((item) => item.id)).toEqual(["u1", "a1", "a2", "a3"])
+  })
+
+  test("preserves a later user boundary when present inside the clipped range", () => {
+    const list = [
+      msg("u1", "user"),
+      msg("a1", "assistant"),
+      msg("u2", "user"),
+      msg("a2", "assistant"),
+      msg("a3", "assistant"),
+    ]
+
+    expect(clipMessages(list, 2).map((item) => item.id)).toEqual(["u2", "a2", "a3"])
   })
 })

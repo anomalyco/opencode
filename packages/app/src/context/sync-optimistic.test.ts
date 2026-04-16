@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
-import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage } from "./sync"
+import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage, reveal, shown } from "./sync"
 
 type Text = Extract<Part, { type: "text" }>
 
@@ -119,5 +119,17 @@ describe("sync optimistic reducers", () => {
       { id: "prt_1", type: "text", text: "server" },
       { id: "prt_2", type: "text", text: "prt_2" },
     ])
+  })
+})
+
+describe("sync history display", () => {
+  test("defaults UI display to the initial page instead of all cached messages", () => {
+    expect(shown({ cached: 200, page: 80 })).toBe(80)
+    expect(shown({ cached: 4, page: 80 })).toBe(4)
+  })
+
+  test("reveals cached history without coupling it to prefetch count", () => {
+    expect(reveal({ cached: 200, page: 80, step: 200 })).toBe(200)
+    expect(reveal({ cached: 400, show: 200, page: 80, step: 200 })).toBe(400)
   })
 })
