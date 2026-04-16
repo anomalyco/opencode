@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
-import type { Tool } from "../../src/tool/tool"
+import type { Tool } from "../../src/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
 import { Filesystem } from "../../src/util"

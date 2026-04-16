@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer } from "effect"
-import { Truncate } from "../../src/tool/truncate"
+import { Truncate } from "../../src/tool"
 import { Identifier } from "../../src/id/id"
 import { Process } from "../../src/util"
 import { Filesystem } from "../../src/util"

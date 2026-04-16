@@ -7,7 +7,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 
 export const GlobTool = Tool.define(
   "glob",

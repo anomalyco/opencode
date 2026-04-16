@@ -6,7 +6,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 
 const MAX_LINE_LENGTH = 2000
 

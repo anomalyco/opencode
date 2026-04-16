@@ -4,7 +4,7 @@ import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { Instance } from "../project/instance"
-import { Truncate } from "../tool/truncate"
+import { Truncate } from "../tool"
 import { Auth } from "../auth"
 import { ProviderTransform } from "../provider/transform"
 

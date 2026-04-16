@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream"
 import { EffectLogger } from "@/effect"
 import { Ripgrep } from "../file/ripgrep"
 import { Skill } from "../skill"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 
 const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
