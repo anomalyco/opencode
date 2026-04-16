@@ -238,6 +238,7 @@ export const ProvidersListCommand = cmd({
     const database = await ModelsDev.get()
 
     for (const [providerID, result] of results) {
+      if (!result?.type) continue
       const name = database[providerID]?.name || providerID
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
     }
