@@ -11,30 +11,35 @@ type SkillItem = {
   description?: string
 }
 
-// Module-level cache to avoid re-fetching on every dialog open
-let cachedSkills: SkillItem[] | undefined = undefined
-let cachedSkillsPromise: Promise<SkillItem[]> | undefined = undefined
+// Cache by directory so project-local skills don't get replaced by another workspace's list.
+const cachedSkills = new Map<string, SkillItem[]>()
+const cachedSkillsPromise = new Map<string, Promise<SkillItem[]>>()
 
 const loadSkills = async (sdk: ReturnType<typeof useSDK>): Promise<SkillItem[]> => {
+  const dir = sdk.directory
+
   // Return cached data immediately if available
-  if (cachedSkills) return cachedSkills
+  const cached = cachedSkills.get(dir)
+  if (cached) return cached
 
   // Return in-flight promise if already loading
-  if (cachedSkillsPromise) return cachedSkillsPromise
+  const pending = cachedSkillsPromise.get(dir)
+  if (pending) return pending
 
   // Start loading and cache the promise
-  cachedSkillsPromise = (async () => {
+  const task = (async () => {
     const result = await sdk.client.app.skills({}, { throwOnError: true })
     const skills = (result.data ?? []).map((item) => ({
       name: item.name,
       description: item.description,
     }))
-    cachedSkills = skills
-    cachedSkillsPromise = undefined // Clear promise cache after completion
+    cachedSkills.set(dir, skills)
+    cachedSkillsPromise.delete(dir)
     return skills
   })()
 
-  return cachedSkillsPromise
+  cachedSkillsPromise.set(dir, task)
+  return task
 }
 
 export const DialogSelectSkill: Component = () => {
@@ -48,7 +53,7 @@ export const DialogSelectSkill: Component = () => {
   const [skills] = createResource(
     () => sdk.client,
     () => loadSkills(sdk),
-    { initialValue: cachedSkills },
+    { initialValue: cachedSkills.get(sdk.directory) },
   )
 
   const items = createMemo(() => (skills() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
