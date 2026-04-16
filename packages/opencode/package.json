@@ -115,7 +115,6 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.5.1",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",

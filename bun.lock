@@ -358,7 +358,6 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
-        "@opencode-ai/server": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.5.1",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/context-async-hooks": "2.6.1",
@@ -502,17 +501,6 @@
         "@tsconfig/node22": "catalog:",
         "@types/cross-spawn": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/server": {
-      "name": "@opencode-ai/server",
-      "version": "1.4.6",
-      "dependencies": {
-        "effect": "catalog:",
-      },
-      "devDependencies": {
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
       },
@@ -1567,8 +1555,6 @@
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
-
-    "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
 
     "@opencode-ai/shared": ["@opencode-ai/shared@workspace:packages/shared"],
 
