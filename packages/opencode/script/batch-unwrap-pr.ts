@@ -129,13 +129,19 @@ for (const rel of targets) {
   }
   run(repoRoot, ["git", "worktree", "add", "-b", branch, wt, "origin/dev"])
 
-  // Symlink node_modules so bun/tsgo work.
-  const wtNodeModules = path.join(wt, "node_modules")
-  if (!fs.existsSync(wtNodeModules)) {
-    fs.symlinkSync(path.join(repoRoot, "node_modules"), wtNodeModules)
+  // Symlink node_modules so bun/tsgo work without a full install.
+  // We link both the repo root and packages/opencode, since the opencode
+  // package has its own local node_modules (including bunfig.toml preload deps
+  // like @opentui/solid) that aren't hoisted to the root.
+  const wtRootNodeModules = path.join(wt, "node_modules")
+  if (!fs.existsSync(wtRootNodeModules)) {
+    fs.symlinkSync(path.join(repoRoot, "node_modules"), wtRootNodeModules)
   }
-
   const wtOpencode = path.join(wt, "packages", "opencode")
+  const wtOpencodeNodeModules = path.join(wtOpencode, "node_modules")
+  if (!fs.existsSync(wtOpencodeNodeModules)) {
+    fs.symlinkSync(path.join(repoRoot, "packages", "opencode", "node_modules"), wtOpencodeNodeModules)
+  }
   const wtTarget = path.join(wt, "packages", "opencode", rel)
 
   // Baseline tsgo output (pre-change).
@@ -143,8 +149,13 @@ for (const rel of targets) {
   const baseline = run(wtOpencode, ["bunx", "--bun", "tsgo", "--noEmit"], { capture: true, allowFail: true })
   fs.writeFileSync(baselinePath, (baseline.stdout ?? "") + (baseline.stderr ?? ""))
 
-  // Run the unwrap script inside the worktree.
-  run(wtOpencode, ["bun", "script/unwrap-and-self-reexport.ts", rel])
+  // Run the unwrap script from the MAIN repo checkout (where the tooling
+  // lives) targeting the worktree's file by absolute path. We run from the
+  // worktree root (not `packages/opencode`) to avoid triggering the
+  // bunfig.toml preload, which needs `@opentui/solid` that only the TUI
+  // workspace has installed.
+  const unwrapScript = path.join(repoRoot, "packages", "opencode", "script", "unwrap-and-self-reexport.ts")
+  run(wt, ["bun", unwrapScript, wtTarget])
 
   // Post-change tsgo.
   const after = run(wtOpencode, ["bunx", "--bun", "tsgo", "--noEmit"], { capture: true, allowFail: true })
