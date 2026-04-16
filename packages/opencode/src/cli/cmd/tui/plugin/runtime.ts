@@ -12,8 +12,6 @@ import {
 } from "@opencode-ai/plugin/tui"
 import path from "path"
 import { fileURLToPath } from "url"
-
-import { Config } from "@/config/config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
@@ -38,16 +36,17 @@ import { Flag } from "@/flag/flag"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
+import { ConfigPlugin } from "@/config/plugin"
 
 type PluginLoad = {
-  options: Config.PluginOptions | undefined
+  options: ConfigPlugin.Options | undefined
   spec: string
   target: string
   retry: boolean
   source: PluginSource | "internal"
   id: string
   module: TuiPluginModule
-  origin: Config.PluginOrigin
+  origin: ConfigPlugin.Origin
   theme_root: string
   theme_files: string[]
 }
@@ -76,7 +75,7 @@ type RuntimeState = {
   slots: HostSlots
   plugins: PluginEntry[]
   plugins_by_id: Map<string, PluginEntry>
-  pending: Map<string, Config.PluginOrigin>
+  pending: Map<string, ConfigPlugin.Origin>
 }
 
 const log = Log.create({ service: "tui.plugin" })
@@ -146,7 +145,7 @@ function resolveRoot(root: string) {
 }
 
 function createThemeInstaller(
-  meta: Config.PluginOrigin,
+  meta: ConfigPlugin.Origin,
   root: string,
   spec: string,
   plugin: PluginEntry,
@@ -589,7 +588,7 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
   }
 }
 
-async function resolveExternalPlugins(list: Config.PluginOrigin[], wait: () => Promise<void>) {
+async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => Promise<void>) {
   return PluginLoader.loadExternal({
     items: list,
     kind: "tui",
@@ -744,7 +743,7 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
   return { plugins, ok }
 }
 
-function defaultPluginOrigin(state: RuntimeState, spec: string): Config.PluginOrigin {
+function defaultPluginOrigin(state: RuntimeState, spec: string): ConfigPlugin.Origin {
   return {
     spec,
     scope: "local",
@@ -785,7 +784,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   if (!spec) return false
 
   const cfg = state.pending.get(spec) ?? defaultPluginOrigin(state, spec)
-  const next = Config.pluginSpecifier(cfg.spec)
+  const next = ConfigPlugin.pluginSpecifier(cfg.spec)
   if (state.plugins.some((plugin) => plugin.load.spec === next)) {
     state.pending.delete(spec)
     return true
@@ -897,7 +896,7 @@ async function installPluginBySpec(
   const tui = manifest.targets.find((item) => item.kind === "tui")
   if (tui) {
     const file = patch.items.find((item) => item.kind === "tui")?.file
-    const next = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
+    const next = tui.opts ? ([spec, tui.opts] as ConfigPlugin.Spec) : spec
     state.pending.set(spec, {
       spec: next,
       scope: global ? "global" : "local",

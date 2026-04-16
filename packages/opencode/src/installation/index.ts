@@ -8,7 +8,7 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "../flag/flag"
 import { Log } from "../util/log"
-import { CHANNEL as channel, VERSION as version } from "./meta"
+import { InstallationChannel as channel, InstallationVersion as version } from "./version"
 
 import semver from "semver"
 
@@ -57,7 +57,7 @@ export namespace Installation {
 
   export const VERSION = version
   export const CHANNEL = channel
-  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
+  export const USER_AGENT = `opencode/${channel}/${version}/${Flag.OPENCODE_CLIENT}`
 
   export function isPreview() {
     return CHANNEL !== "latest"

@@ -4,6 +4,7 @@ import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { Config } from "@/config/config"
 import { ConfigPaths } from "@/config/paths"
+import { ConfigPlugin } from "@/config/plugin"
 import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
 import { Flag } from "@/flag/flag"
@@ -33,7 +34,7 @@ export namespace TuiConfig {
 
   export type Info = z.output<typeof Info> & {
     // Internal resolved plugin list used by runtime loading.
-    plugin_origins?: Config.PluginOrigin[]
+    plugin_origins?: ConfigPlugin.Origin[]
   }
 
   export interface Interface {
@@ -43,7 +44,7 @@ export namespace TuiConfig {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/TuiConfig") {}
 
-  function pluginScope(file: string, ctx: { directory: string }): Config.PluginScope {
+  function pluginScope(file: string, ctx: { directory: string }): ConfigPlugin.Scope {
     if (Filesystem.contains(ctx.directory, file)) return "local"
     // if (ctx.worktree !== "/" && Filesystem.contains(ctx.worktree, file)) return "local"
     return "global"
@@ -75,11 +76,11 @@ export namespace TuiConfig {
     if (!data.plugin?.length) return
 
     const scope = pluginScope(file, ctx)
-    const plugins = Config.deduplicatePluginOrigins([
+    const plugins = ConfigPlugin.deduplicatePluginOrigins([
       ...(acc.result.plugin_origins ?? []),
-      ...data.plugin.map((spec) => ({ spec, scope, source: file })),
+      ...data.plugin.map((spec: ConfigPlugin.Spec) => ({ spec, scope, source: file })),
     ])
-    acc.result.plugin = plugins.map((item) => item.spec)
+    acc.result.plugin = plugins.map((item: ConfigPlugin.Origin) => item.spec)
     acc.result.plugin_origins = plugins
   }
 
@@ -206,7 +207,7 @@ export namespace TuiConfig {
     const data = parsed.data
     if (data.plugin) {
       for (let i = 0; i < data.plugin.length; i++) {
-        data.plugin[i] = await Config.resolvePluginSpec(data.plugin[i], configFilepath)
+        data.plugin[i] = await ConfigPlugin.resolvePluginSpec(data.plugin[i], configFilepath)
       }
     }
 

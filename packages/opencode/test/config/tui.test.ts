@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config/config"
+import { ConfigPlugin } from "../../src/config/plugin"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
@@ -93,8 +94,8 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
     fn: async () => {
       const server = await load()
       const tui = await getTuiConfig(tmp.path)
-      const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
-      const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
+      const serverPlugins = (server.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
+      const tuiPlugins = (tui.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
 
       expect(serverPlugins).toEqual(tuiPlugins)
       expect(serverPlugins).toContain("shared-plugin@2.0.0")
@@ -102,8 +103,8 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
 
       const serverOrigins = server.plugin_origins ?? []
       const tuiOrigins = tui.plugin_origins ?? []
-      expect(serverOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(serverPlugins)
-      expect(tuiOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(tuiPlugins)
+      expect(serverOrigins.map((item) => ConfigPlugin.pluginSpecifier(item.spec))).toEqual(serverPlugins)
+      expect(tuiOrigins.map((item) => ConfigPlugin.pluginSpecifier(item.spec))).toEqual(tuiPlugins)
       expect(serverOrigins.map((item) => item.scope)).toEqual(tuiOrigins.map((item) => item.scope))
     },
   })

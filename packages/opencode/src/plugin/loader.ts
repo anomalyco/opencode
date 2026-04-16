@@ -1,4 +1,3 @@
-import { Config } from "@/config/config"
 import { Installation } from "@/installation"
 import {
   checkPluginCompatibility,
@@ -10,11 +9,12 @@ import {
   type PluginPackage,
   type PluginSource,
 } from "./shared"
+import { ConfigPlugin } from "@/config/plugin"
 
 export namespace PluginLoader {
   export type Plan = {
     spec: string
-    options: Config.PluginOptions | undefined
+    options: ConfigPlugin.Options | undefined
     deprecated: boolean
   }
   export type Resolved = Plan & {
@@ -33,7 +33,7 @@ export namespace PluginLoader {
     mod: Record<string, unknown>
   }
 
-  type Candidate = { origin: Config.PluginOrigin; plan: Plan }
+  type Candidate = { origin: ConfigPlugin.Origin; plan: Plan }
   type Report = {
     start?: (candidate: Candidate, retry: boolean) => void
     missing?: (candidate: Candidate, retry: boolean, message: string, resolved: Missing) => void
@@ -46,9 +46,9 @@ export namespace PluginLoader {
     ) => void
   }
 
-  function plan(item: Config.PluginSpec): Plan {
-    const spec = Config.pluginSpecifier(item)
-    return { spec, options: Config.pluginOptions(item), deprecated: isDeprecatedPlugin(spec) }
+  function plan(item: ConfigPlugin.Spec): Plan {
+    const spec = ConfigPlugin.pluginSpecifier(item)
+    return { spec, options: ConfigPlugin.pluginOptions(item), deprecated: isDeprecatedPlugin(spec) }
   }
 
   export async function resolve(
@@ -111,8 +111,8 @@ export namespace PluginLoader {
     candidate: Candidate,
     kind: PluginKind,
     retry: boolean,
-    finish: ((load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
-    missing: ((value: Missing, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
+    finish: ((load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
+    missing: ((value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report | undefined,
   ): Promise<R | undefined> {
     const plan = candidate.plan
@@ -141,11 +141,11 @@ export namespace PluginLoader {
   }
 
   type Input<R> = {
-    items: Config.PluginOrigin[]
+    items: ConfigPlugin.Origin[]
     kind: PluginKind
     wait?: () => Promise<void>
-    finish?: (load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
-    missing?: (value: Missing, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
+    finish?: (load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>
+    missing?: (value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>
     report?: Report
   }
 

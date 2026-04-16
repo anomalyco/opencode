@@ -34,23 +34,12 @@ import type { ConsoleState } from "@/cli/cmd/tui/config/console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
-import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import { InstanceRef } from "@/effect/instance-ref"
 import { Npm } from "@opencode-ai/shared/npm"
+import { ConfigPlugin } from "./plugin"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
-  const PluginOptions = z.record(z.string(), z.unknown())
-  export const PluginSpec = z.union([z.string(), z.tuple([z.string(), PluginOptions])])
-
-  export type PluginOptions = z.infer<typeof PluginOptions>
-  export type PluginSpec = z.infer<typeof PluginSpec>
-  export type PluginScope = "global" | "local"
-  export type PluginOrigin = {
-    spec: PluginSpec
-    source: string
-    scope: PluginScope
-  }
 
   const log = Log.create({ service: "config" })
 
@@ -264,60 +253,6 @@ export namespace Config {
       }
     }
     return result
-  }
-
-  async function loadPlugin(dir: string) {
-    const plugins: PluginSpec[] = []
-
-    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      plugins.push(pathToFileURL(item).href)
-    }
-    return plugins
-  }
-
-  export function pluginSpecifier(plugin: PluginSpec): string {
-    return Array.isArray(plugin) ? plugin[0] : plugin
-  }
-
-  export function pluginOptions(plugin: PluginSpec): PluginOptions | undefined {
-    return Array.isArray(plugin) ? plugin[1] : undefined
-  }
-
-  export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
-    const spec = pluginSpecifier(plugin)
-    if (!isPathPluginSpec(spec)) return plugin
-
-    const base = path.dirname(configFilepath)
-    const file = (() => {
-      if (spec.startsWith("file://")) return spec
-      if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
-      return pathToFileURL(path.resolve(base, spec)).href
-    })()
-
-    const resolved = await resolvePathPluginTarget(file).catch(() => file)
-
-    if (Array.isArray(plugin)) return [resolved, plugin[1]]
-    return resolved
-  }
-
-  export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
-    const seen = new Set<string>()
-    const list: PluginOrigin[] = []
-
-    for (const plugin of plugins.toReversed()) {
-      const spec = pluginSpecifier(plugin.spec)
-      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
-      if (seen.has(name)) continue
-      seen.add(name)
-      list.push(plugin)
-    }
-
-    return list.toReversed()
   }
 
   export const McpLocal = z
@@ -878,7 +813,7 @@ export namespace Config {
         .describe(
           "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
         ),
-      plugin: PluginSpec.array().optional(),
+      plugin: ConfigPlugin.Spec.array().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -1055,7 +990,7 @@ export namespace Config {
     })
 
   export type Info = z.output<typeof Info> & {
-    plugin_origins?: PluginOrigin[]
+    plugin_origins?: ConfigPlugin.Origin[]
   }
 
   type State = {
@@ -1212,7 +1147,7 @@ export namespace Config {
           if (data.plugin && isFile) {
             const list = data.plugin
             for (let i = 0; i < list.length; i++) {
-              list[i] = yield* Effect.promise(() => resolvePluginSpec(list[i], options.path))
+              list[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(list[i], options.path))
             }
           }
           return data
@@ -1312,10 +1247,14 @@ export namespace Config {
           return "global"
         })
 
-        const track = Effect.fnUntraced(function* (source: string, list: PluginSpec[] | undefined, kind?: PluginScope) {
+        const track = Effect.fnUntraced(function* (
+          source: string,
+          list: ConfigPlugin.Spec[] | undefined,
+          kind?: ConfigPlugin.Scope,
+        ) {
           if (!list?.length) return
           const hit = kind ?? (yield* scope(source))
-          const plugins = deduplicatePluginOrigins([
+          const plugins = ConfigPlugin.deduplicatePluginOrigins([
             ...(result.plugin_origins ?? []),
             ...list.map((spec) => ({ spec, source, scope: hit })),
           ])
@@ -1323,7 +1262,7 @@ export namespace Config {
           result.plugin_origins = plugins
         })
 
-        const merge = (source: string, next: Info, kind?: PluginScope) => {
+        const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
           result = mergeConfigConcatArrays(result, next)
           return track(source, next.plugin, kind)
         }
@@ -1408,7 +1347,7 @@ export namespace Config {
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
           result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
           result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
-          const list = yield* Effect.promise(() => loadPlugin(dir))
+          const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
           yield* track(dir, list)
         }
 
