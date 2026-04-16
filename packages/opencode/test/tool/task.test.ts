@@ -1,16 +1,17 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
-import { Config } from "../../src/config/config"
+import { Config } from "../../src/config"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
-import { SessionPrompt } from "../../src/session/prompt"
+import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { TaskTool } from "../../src/tool/task"
-import { ToolRegistry } from "../../src/tool/registry"
+import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { Truncate } from "../../src/tool"
+import { ToolRegistry } from "../../src/tool"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -29,6 +30,7 @@ const it = testEffect(
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
+    Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
   ),
 )
@@ -62,7 +64,19 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
-function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string): MessageV2.WithParts {
+function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
+  return {
+    cancel() {},
+    resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+    prompt: (input) =>
+      Effect.sync(() => {
+        opts?.onPrompt?.(input)
+        return reply(input, opts?.text ?? "done")
+      }),
+  }
+}
+
+function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -179,41 +193,27 @@ describe("tool.task", () => {
         const { chat, assistant } = yield* seed()
         const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
-        const resolve = SessionPrompt.resolvePromptParts
-        const prompt = SessionPrompt.prompt
-        let seen: Parameters<typeof SessionPrompt.prompt>[0] | undefined
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ text: "resumed", onPrompt: (input) => (seen = input) })
 
-        SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-        SessionPrompt.prompt = async (input) => {
-          seen = input
-          return reply(input, "resumed")
-        }
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            SessionPrompt.resolvePromptParts = resolve
-            SessionPrompt.prompt = prompt
-          }),
-        )
-
-        const result = yield* Effect.promise(() =>
-          def.execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "general",
-              task_id: child.id,
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: new AbortController().signal,
-              messages: [],
-              metadata() {},
-              ask: async () => {},
-            },
-          ),
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: child.id,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
         )
 
         const kids = yield* sessions.children(chat.id)
@@ -231,41 +231,30 @@ describe("tool.task", () => {
       Effect.gen(function* () {
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
-        const resolve = SessionPrompt.resolvePromptParts
-        const prompt = SessionPrompt.prompt
+        const def = yield* tool.init()
         const calls: unknown[] = []
+        const promptOps = stubOps()
 
-        SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-        SessionPrompt.prompt = async (input) => reply(input, "done")
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            SessionPrompt.resolvePromptParts = resolve
-            SessionPrompt.prompt = prompt
-          }),
-        )
-
-        const exec = (extra?: { bypassAgentCheck?: boolean }) =>
-          Effect.promise(() =>
-            def.execute(
-              {
-                description: "inspect bug",
-                prompt: "look into the cache key path",
-                subagent_type: "general",
-              },
-              {
-                sessionID: chat.id,
-                messageID: assistant.id,
-                agent: "build",
-                abort: new AbortController().signal,
-                extra,
-                messages: [],
-                metadata() {},
-                ask: async (input) => {
+        const exec = (extra?: Record<string, any>) =>
+          def.execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps, ...extra },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: (input) =>
+                Effect.sync(() => {
                   calls.push(input)
-                },
-              },
-            ),
+                }),
+            },
           )
 
         yield* exec()
@@ -291,41 +280,27 @@ describe("tool.task", () => {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
-        const resolve = SessionPrompt.resolvePromptParts
-        const prompt = SessionPrompt.prompt
-        let seen: Parameters<typeof SessionPrompt.prompt>[0] | undefined
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
-        SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-        SessionPrompt.prompt = async (input) => {
-          seen = input
-          return reply(input, "created")
-        }
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            SessionPrompt.resolvePromptParts = resolve
-            SessionPrompt.prompt = prompt
-          }),
-        )
-
-        const result = yield* Effect.promise(() =>
-          def.execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "general",
-              task_id: "ses_missing",
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: new AbortController().signal,
-              messages: [],
-              metadata() {},
-              ask: async () => {},
-            },
-          ),
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: "ses_missing",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
         )
 
         const kids = yield* sessions.children(chat.id)
@@ -345,40 +320,26 @@ describe("tool.task", () => {
           const sessions = yield* Session.Service
           const { chat, assistant } = yield* seed()
           const tool = yield* TaskTool
-          const def = yield* Effect.promise(() => tool.init())
-          const resolve = SessionPrompt.resolvePromptParts
-          const prompt = SessionPrompt.prompt
-          let seen: Parameters<typeof SessionPrompt.prompt>[0] | undefined
+          const def = yield* tool.init()
+          let seen: SessionPrompt.PromptInput | undefined
+          const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
 
-          SessionPrompt.resolvePromptParts = async (template) => [{ type: "text", text: template }]
-          SessionPrompt.prompt = async (input) => {
-            seen = input
-            return reply(input, "done")
-          }
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              SessionPrompt.resolvePromptParts = resolve
-              SessionPrompt.prompt = prompt
-            }),
-          )
-
-          const result = yield* Effect.promise(() =>
-            def.execute(
-              {
-                description: "inspect bug",
-                prompt: "look into the cache key path",
-                subagent_type: "reviewer",
-              },
-              {
-                sessionID: chat.id,
-                messageID: assistant.id,
-                agent: "build",
-                abort: new AbortController().signal,
-                messages: [],
-                metadata() {},
-                ask: async () => {},
-              },
-            ),
+          const result = yield* def.execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "reviewer",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
           )
 
           const child = yield* sessions.get(result.metadata.sessionId)

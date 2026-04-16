@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/plugin",
-  "version": "1.4.3",
+  "version": "1.4.6",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -18,11 +18,12 @@
   ],
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
+    "effect": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.1.97",
-    "@opentui/solid": ">=0.1.97"
+    "@opentui/core": ">=0.1.99",
+    "@opentui/solid": ">=0.1.99"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {
@@ -33,8 +34,8 @@
     }
   },
   "devDependencies": {
-    "@opentui/core": "0.1.97",
-    "@opentui/solid": "0.1.97",
+    "@opentui/core": "0.1.99",
+    "@opentui/solid": "0.1.99",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",

@@ -1,20 +1,36 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
-import { Cause, Exit, Stream } from "effect"
+import { Cause, Effect, Exit, Stream } from "effect"
 import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
-import { Provider } from "../../src/provider/provider"
-import { ProviderTransform } from "../../src/provider/transform"
-import { ModelsDev } from "../../src/provider/models"
+import { Provider } from "../../src/provider"
+import { ProviderTransform } from "../../src/provider"
+import { ModelsDev } from "../../src/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
-import type { MessageV2 } from "../../src/session/message-v2"
+import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
+
+async function getModel(providerID: ProviderID, modelID: ModelID) {
+  return AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      return yield* provider.getModel(providerID, modelID)
+    }),
+  )
+}
+
+const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
+
+async function drain(input: LLM.StreamInput) {
+  return llm.runPromise((svc) => svc.stream(input).pipe(Stream.runDrain))
+}
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -213,7 +229,7 @@ beforeEach(() => {
 })
 
 afterAll(() => {
-  state.server?.stop()
+  void state.server?.stop()
 })
 
 function createChatStream(text: string) {
@@ -325,7 +341,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
@@ -345,19 +361,15 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make(providerID), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         const body = capture.body
@@ -379,80 +391,6 @@ describe("session.llm.stream", () => {
 
         const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
         expect(reasoning).toBe("high")
-      },
-    })
-  })
-
-  test("raw stream abort signal cancels provider response body promptly", async () => {
-    const server = state.server
-    if (!server) throw new Error("Server not initialized")
-
-    const providerID = "alibaba"
-    const modelID = "qwen-plus"
-    const fixture = await loadFixture(providerID, modelID)
-    const model = fixture.model
-    const pending = waitStreamingRequest("/chat/completions")
-
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            enabled_providers: [providerID],
-            provider: {
-              [providerID]: {
-                options: {
-                  apiKey: "test-key",
-                  baseURL: `${server.url.origin}/v1`,
-                },
-              },
-            },
-          }),
-        )
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
-        const sessionID = SessionID.make("session-test-raw-abort")
-        const agent = {
-          name: "test",
-          mode: "primary",
-          options: {},
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        } satisfies Agent.Info
-        const user = {
-          id: MessageID.make("user-raw-abort"),
-          sessionID,
-          role: "user",
-          time: { created: Date.now() },
-          agent: agent.name,
-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
-        } satisfies MessageV2.User
-
-        const ctrl = new AbortController()
-        const result = await LLM.stream({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          abort: ctrl.signal,
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        })
-
-        const iter = result.fullStream[Symbol.asyncIterator]()
-        await pending.request
-        await iter.next()
-        ctrl.abort()
-
-        await Promise.race([pending.responseCanceled, timeout(500)])
-        await Promise.race([pending.requestAborted, timeout(500)]).catch(() => undefined)
-        await iter.return?.()
       },
     })
   })
@@ -490,7 +428,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-service-abort")
         const agent = {
           name: "test",
@@ -508,8 +446,7 @@ describe("session.llm.stream", () => {
         } satisfies MessageV2.User
 
         const ctrl = new AbortController()
-        const { runPromiseExit } = makeRuntime(LLM.Service, LLM.defaultLayer)
-        const run = runPromiseExit(
+        const run = llm.runPromiseExit(
           (svc) =>
             svc
               .stream({
@@ -581,7 +518,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-tools")
         const agent = {
           name: "test",
@@ -600,14 +537,13 @@ describe("session.llm.stream", () => {
           tools: { question: true },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           model: resolved,
           agent,
           permission: [{ permission: "question", pattern: "*", action: "allow" }],
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [{ role: "user", content: "Hello" }],
           tools: {
             question: tool({
@@ -617,9 +553,6 @@ describe("session.llm.stream", () => {
             }),
           },
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         const tools = capture.body.tools as Array<{ function?: { name?: string } }> | undefined
@@ -699,7 +632,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
@@ -718,19 +651,15 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         const body = capture.body
@@ -819,7 +748,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-data-url")
         const agent = {
           name: "test",
@@ -837,13 +766,12 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [
             {
               role: "user",
@@ -860,9 +788,6 @@ describe("session.llm.stream", () => {
           ] as ModelMessage[],
           tools: {},
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         expect(capture.url.pathname.endsWith("/responses")).toBe(true)
@@ -942,7 +867,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-3")
         const agent = {
           name: "test",
@@ -962,19 +887,15 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.5") },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         const body = capture.body
@@ -988,6 +909,269 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("sends anthropic tool_use blocks with tool_result immediately after them", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("anthropic", "claude-opus-4-6")
+    const model = source.model
+    const chunks = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg-tool-order",
+          model: model.id,
+          usage: {
+            input_tokens: 3,
+            cache_creation_input_tokens: null,
+            cache_read_input_tokens: null,
+          },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "ok" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+        usage: {
+          input_tokens: 3,
+          output_tokens: 2,
+          cache_creation_input_tokens: null,
+          cache_read_input_tokens: null,
+        },
+      },
+      { type: "message_stop" },
+    ]
+    const request = waitRequest("/messages", createEventResponse(chunks))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["anthropic"],
+            provider: {
+              anthropic: {
+                name: "Anthropic",
+                env: ["ANTHROPIC_API_KEY"],
+                npm: "@ai-sdk/anthropic",
+                api: "https://api.anthropic.com/v1",
+                models: {
+                  [model.id]: model,
+                },
+                options: {
+                  apiKey: "test-anthropic-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-anthropic-tools")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("user-anthropic-tools"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id, variant: "max" },
+        } satisfies MessageV2.User
+
+        const input = [
+          {
+            info: {
+              id: "msg_user",
+              sessionID,
+              role: "user",
+              time: { created: 1 },
+              agent: "gentleman",
+              model: { providerID: "anthropic", modelID: "claude-opus-4-6", variant: "max" },
+            },
+            parts: [
+              {
+                id: "p_user",
+                sessionID,
+                messageID: "msg_user",
+                type: "text",
+                text: "Can you check whether there are any PDF files in my home directory?",
+              },
+            ],
+          },
+          {
+            info: {
+              id: "msg_call",
+              sessionID,
+              parentID: "msg_user",
+              role: "assistant",
+              mode: "gentleman",
+              agent: "gentleman",
+              variant: "max",
+              path: { cwd: "/root", root: "/" },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: "claude-opus-4-6",
+              providerID: "anthropic",
+              time: { created: 2, completed: 3 },
+              finish: "tool-calls",
+            },
+            parts: [
+              {
+                id: "p_step",
+                sessionID,
+                messageID: "msg_call",
+                type: "step-start",
+              },
+              {
+                id: "p_read",
+                sessionID,
+                messageID: "msg_call",
+                type: "tool",
+                tool: "read",
+                callID: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
+                state: {
+                  status: "completed",
+                  input: { filePath: "/root" },
+                  output: "<path>/root</path>",
+                  metadata: {},
+                  title: "root",
+                  time: { start: 10, end: 11 },
+                },
+              },
+              {
+                id: "p_glob",
+                sessionID,
+                messageID: "msg_call",
+                type: "tool",
+                tool: "glob",
+                callID: "toolu_01APxrADs7VozN8uWzw9WwHr",
+                state: {
+                  status: "completed",
+                  input: { pattern: "**/*.pdf", path: "/root" },
+                  output: "No files found",
+                  metadata: {},
+                  title: "root",
+                  time: { start: 12, end: 13 },
+                },
+              },
+              {
+                id: "p_text",
+                sessionID,
+                messageID: "msg_call",
+                type: "text",
+                text: "I checked your home directory and looked for PDF files.",
+                time: { start: 14, end: 15 },
+              },
+            ],
+          },
+        ] as any[]
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: await MessageV2.toModelMessages(input as any, resolved),
+          tools: {
+            read: tool({
+              description: "Stub read tool",
+              inputSchema: z.object({
+                filePath: z.string(),
+              }),
+              execute: async () => ({ output: "stub" }),
+            }),
+            glob: tool({
+              description: "Stub glob tool",
+              inputSchema: z.object({
+                pattern: z.string(),
+                path: z.string().optional(),
+              }),
+              execute: async () => ({ output: "stub" }),
+            }),
+          },
+        })
+
+        const capture = await request
+        const body = capture.body
+
+        expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+        expect(body.messages).toStrictEqual([
+          {
+            role: "user",
+            content: [{ type: "text", text: "Can you check whether there are any PDF files in my home directory?" }],
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "I checked your home directory and looked for PDF files.",
+              },
+              {
+                type: "tool_use",
+                id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
+                name: "read",
+                input: { filePath: "/root" },
+              },
+              {
+                type: "tool_use",
+                id: "toolu_01APxrADs7VozN8uWzw9WwHr",
+                name: "glob",
+                input: { pattern: "**/*.pdf", path: "/root" },
+                cache_control: {
+                  type: "ephemeral",
+                },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
+                content: "<path>/root</path>",
+              },
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_01APxrADs7VozN8uWzw9WwHr",
+                content: "No files found",
+                cache_control: {
+                  type: "ephemeral",
+                },
+              },
+            ],
+          },
+        ])
+      },
+    })
+  })
+
   test("sends Google API payload for Gemini models", async () => {
     const server = state.server
     if (!server) {
@@ -997,7 +1181,6 @@ describe("session.llm.stream", () => {
     const providerID = "google"
     const modelID = "gemini-2.5-flash"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
     const pathSuffix = `/v1beta/models/${model.id}:streamGenerateContent`
 
@@ -1043,7 +1226,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",
@@ -1063,19 +1246,15 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        const stream = await LLM.stream({
+        await drain({
           user,
           sessionID,
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
-
-        for await (const _ of stream.fullStream) {
-        }
 
         const capture = await request
         const body = capture.body

@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Context } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
@@ -7,16 +7,15 @@ import path from "path"
 import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
+import { InstanceState } from "@/effect"
 import { Flag } from "@/flag/flag"
 import { Git } from "@/git"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
-import { Config } from "../config/config"
+import { Config } from "../config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -65,7 +64,7 @@ export namespace FileWatcher {
     readonly init: () => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileWatcher") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/FileWatcher") {}
 
   export const layer = Layer.effect(
     Service,
@@ -99,9 +98,9 @@ export namespace FileWatcher {
             const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
               if (err) return
               for (const evt of evts) {
-                if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-                if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-                if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+                if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
+                if (evt.type === "update") void Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+                if (evt.type === "delete") void Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
               }
             })
 
@@ -161,10 +160,4 @@ export namespace FileWatcher {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export function init() {
-    return runPromise((svc) => svc.init())
-  }
 }

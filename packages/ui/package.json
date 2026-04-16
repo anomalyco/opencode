@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.4.3",
+  "version": "1.4.6",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -44,7 +44,7 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/shared": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",

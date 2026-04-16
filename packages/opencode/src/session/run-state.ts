@@ -1,8 +1,7 @@
-import { InstanceState } from "@/effect/instance-state"
-import { Runner } from "@/effect/runner"
-import { makeRuntime } from "@/effect/run-service"
-import { Effect, Layer, Scope, ServiceMap } from "effect"
-import { Session } from "."
+import { InstanceState } from "@/effect"
+import { Runner } from "@/effect"
+import { Effect, Layer, Scope, Context } from "effect"
+import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
@@ -23,7 +22,7 @@ export namespace SessionRunState {
     ) => Effect.Effect<MessageV2.WithParts>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionRunState") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
 
   export const layer = Layer.effect(
     Service,
@@ -33,7 +32,7 @@ export namespace SessionRunState {
       const state = yield* InstanceState.make(
         Effect.fn("SessionRunState.state")(function* () {
           const scope = yield* Scope.Scope
-          const runners = new Map<SessionID, Runner<MessageV2.WithParts>>()
+          const runners = new Map<SessionID, Runner.Runner<MessageV2.WithParts>>()
           yield* Effect.addFinalizer(
             Effect.fnUntraced(function* () {
               yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
@@ -106,9 +105,4 @@ export namespace SessionRunState {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(SessionStatus.defaultLayer))
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function assertNotBusy(sessionID: SessionID) {
-    return runPromise((svc) => svc.assertNotBusy(sessionID))
-  }
 }

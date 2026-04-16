@@ -4,8 +4,8 @@ import { createReadStream } from "fs"
 import { open } from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
-import { Tool } from "./tool"
-import { AppFileSystem } from "../filesystem"
+import * as Tool from "./tool"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
@@ -25,7 +25,7 @@ const parameters = z.object({
   limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
 })
 
-export const ReadTool = Tool.defineEffect(
+export const ReadTool = Tool.define(
   "read",
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
@@ -106,14 +106,12 @@ export const ReadTool = Tool.defineEffect(
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
-      yield* Effect.promise(() =>
-        ctx.ask({
-          permission: "read",
-          patterns: [filepath],
-          always: ["*"],
-          metadata: {},
-        }),
-      )
+      yield* ctx.ask({
+        permission: "read",
+        patterns: [filepath],
+        always: ["*"],
+        metadata: {},
+      })
 
       if (!stat) return yield* miss(filepath)
 
@@ -183,7 +181,7 @@ export const ReadTool = Tool.defineEffect(
         )
       }
 
-      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>" + "\n"].join("\n")
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
       output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
 
       const last = file.offset + file.raw.length - 1
@@ -218,9 +216,7 @@ export const ReadTool = Tool.defineEffect(
     return {
       description: DESCRIPTION,
       parameters,
-      async execute(params: z.infer<typeof parameters>, ctx) {
-        return Effect.runPromise(run(params, ctx).pipe(Effect.orDie))
-      },
+      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

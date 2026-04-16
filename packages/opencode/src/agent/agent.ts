@@ -1,12 +1,12 @@
-import { Config } from "../config/config"
+import { Config } from "../config"
 import z from "zod"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { Instance } from "../project/instance"
-import { Truncate } from "../tool/truncate"
+import { Truncate } from "../tool"
 import { Auth } from "../auth"
-import { ProviderTransform } from "../provider/transform"
+import { ProviderTransform } from "../provider"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -19,9 +19,10 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
-import { Effect, ServiceMap, Layer } from "effect"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
+import { Effect, Context, Layer } from "effect"
+import { InstanceState } from "@/effect"
+import * as Option from "effect/Option"
+import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
 export namespace Agent {
   export const Info = z
@@ -34,7 +35,7 @@ export namespace Agent {
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
-      permission: Permission.Ruleset,
+      permission: Permission.Ruleset.zod,
       model: z
         .object({
           modelID: ModelID.zod,
@@ -67,18 +68,19 @@ export namespace Agent {
 
   type State = Omit<Interface, "generate">
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Agent") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
+      const plugin = yield* Plugin.Service
       const skill = yield* Skill.Service
       const provider = yield* Provider.Service
 
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Agent.state")(function* (ctx) {
+        Effect.fn("Agent.state")(function* (_ctx) {
           const cfg = yield* config.get()
           const skillDirs = yield* skill.dirs()
           const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
@@ -334,11 +336,12 @@ export namespace Agent {
           const model = input.model ?? (yield* provider.defaultModel())
           const resolved = yield* provider.getModel(model.providerID, model.modelID)
           const language = yield* provider.getLanguage(resolved)
+          const tracer = cfg.experimental?.openTelemetry
+            ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
+            : undefined
 
           const system = [PROMPT_GENERATE]
-          yield* Effect.promise(() =>
-            Plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system }),
-          )
+          yield* plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system })
           const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
           // TODO: clean this up so provider specific logic doesnt bleed over
@@ -348,6 +351,7 @@ export namespace Agent {
           const params = {
             experimental_telemetry: {
               isEnabled: cfg.experimental?.openTelemetry,
+              tracer,
               metadata: {
                 userId: cfg.username ?? "unknown",
               },
@@ -364,7 +368,7 @@ export namespace Agent {
                   )),
               {
                 role: "user",
-                content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
+                content: `Create an agent configuration based on this request: "${input.description}".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
               },
             ],
             model: language,
@@ -398,30 +402,11 @@ export namespace Agent {
     }),
   )
 
-  export const defaultLayer = Layer.suspend(() =>
-    layer.pipe(
-      Layer.provide(Provider.defaultLayer),
-      Layer.provide(Auth.defaultLayer),
-      Layer.provide(Config.defaultLayer),
-      Layer.provide(Skill.defaultLayer),
-    ),
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Skill.defaultLayer),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(agent: string) {
-    return runPromise((svc) => svc.get(agent))
-  }
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function defaultAgent() {
-    return runPromise((svc) => svc.defaultAgent())
-  }
-
-  export async function generate(input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
-    return runPromise((svc) => svc.generate(input))
-  }
 }

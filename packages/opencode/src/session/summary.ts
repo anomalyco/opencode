@@ -1,10 +1,9 @@
 import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
-import { makeRuntime } from "@/effect/run-service"
+import { Effect, Layer, Context } from "effect"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
-import { Storage } from "@/storage/storage"
-import { Session } from "."
+import { Storage } from "@/storage"
+import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
 
@@ -71,7 +70,7 @@ export namespace SessionSummary {
     readonly computeDiff: (input: { messages: MessageV2.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionSummary") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
 
   export const layer = Layer.effect(
     Service,
@@ -159,17 +158,8 @@ export namespace SessionSummary {
     ),
   )
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export const summarize = (input: { sessionID: SessionID; messageID: MessageID }) =>
-    void runPromise((svc) => svc.summarize(input)).catch(() => {})
-
   export const DiffInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod.optional(),
   })
-
-  export async function diff(input: z.infer<typeof DiffInput>) {
-    return runPromise((svc) => svc.diff(input))
-  }
 }

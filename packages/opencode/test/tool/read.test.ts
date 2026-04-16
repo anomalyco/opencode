@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { FileTime } from "../../src/file/time"
 import { LSP } from "../../src/lsp"
 import { Permission } from "../../src/permission"
@@ -11,10 +11,12 @@ import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Tool } from "../../src/tool/tool"
-import { Filesystem } from "../../src/util/filesystem"
+import { Truncate } from "../../src/tool"
+import { Tool } from "../../src/tool"
+import { Filesystem } from "../../src/util"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Npm } from "@opencode-ai/shared/npm"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -29,8 +31,8 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
 const it = testEffect(
@@ -41,12 +43,13 @@ const it = testEffect(
     FileTime.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
+    Truncate.defaultLayer,
   ),
 )
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
-  return yield* Effect.promise(() => info.init())
+  return yield* info.init()
 })
 
 const run = Effect.fn("ReadToolTest.run")(function* (
@@ -54,7 +57,7 @@ const run = Effect.fn("ReadToolTest.run")(function* (
   next: Tool.Context = ctx,
 ) {
   const tool = yield* init()
-  return yield* Effect.promise(() => tool.execute(args, next))
+  return yield* tool.execute(args, next)
 })
 
 const exec = Effect.fn("ReadToolTest.exec")(function* (
@@ -95,9 +98,10 @@ const asks = () => {
     items,
     next: {
       ...ctx,
-      ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-        items.push(req)
-      },
+      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => {
+          items.push(req)
+        }),
     },
   }
 }
@@ -226,17 +230,18 @@ describe("tool.read env file permissions", () => {
                 let asked = false
                 const next = {
                   ...ctx,
-                  ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-                    for (const pattern of req.patterns) {
-                      const rule = Permission.evaluate(req.permission, pattern, info.permission)
-                      if (rule.action === "ask" && req.permission === "read") {
-                        asked = true
+                  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+                    Effect.sync(() => {
+                      for (const pattern of req.patterns) {
+                        const rule = Permission.evaluate(req.permission, pattern, info.permission)
+                        if (rule.action === "ask" && req.permission === "read") {
+                          asked = true
+                        }
+                        if (rule.action === "deny") {
+                          throw new Permission.DeniedError({ ruleset: info.permission })
+                        }
                       }
-                      if (rule.action === "deny") {
-                        throw new Permission.DeniedError({ ruleset: info.permission })
-                      }
-                    }
-                  },
+                    }),
                 }
 
                 yield* run({ filePath: path.join(dir, filename) }, next)

@@ -1,5 +1,5 @@
 if (location.pathname === "/loading") {
-  import("./loading")
+  void import("./loading")
 } else {
-  import("./")
+  void import("./")
 }

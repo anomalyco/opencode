@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Effect } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
-import { ProviderAuth } from "../../src/provider/auth"
+import { ProviderAuth } from "../../src/provider"
 import { ProviderID } from "../../src/provider/schema"
 
 describe("plugin.auth-override", () => {
@@ -39,14 +40,18 @@ describe("plugin.auth-override", () => {
     const methods = await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        return ProviderAuth.methods()
+        return Effect.runPromise(
+          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
+        )
       },
     })
 
     const plainMethods = await Instance.provide({
       directory: plain.path,
       fn: async () => {
-        return ProviderAuth.methods()
+        return Effect.runPromise(
+          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
+        )
       },
     })
 
@@ -58,7 +63,7 @@ describe("plugin.auth-override", () => {
   }, 30000) // Increased timeout for plugin installation
 })
 
-const file = path.join(import.meta.dir, "../../src/plugin/index.ts")
+const file = path.join(import.meta.dir, "../../src/plugin/plugin.ts")
 
 describe("plugin.config-hook-error-isolation", () => {
   test("config hooks are individually error-isolated in the layer factory", async () => {

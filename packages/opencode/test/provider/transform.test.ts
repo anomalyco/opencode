@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { ProviderTransform } from "../../src/provider/transform"
+import { ProviderTransform } from "../../src/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-
-const OUTPUT_TOKEN_MAX = 32000
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -102,6 +100,58 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+})
+
+describe("ProviderTransform.options - zai/zhipuai thinking", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (providerID: string) =>
+    ({
+      id: `${providerID}/glm-4.6`,
+      providerID,
+      api: {
+        id: "glm-4.6",
+        url: "https://open.bigmodel.cn/api/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "GLM 4.6",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  for (const providerID of ["zai-coding-plan", "zai", "zhipuai-coding-plan", "zhipuai"]) {
+    test(`${providerID} should set thinking cfg`, () => {
+      const result = ProviderTransform.options({
+        model: createModel(providerID),
+        sessionID,
+        providerOptions: {},
+      })
+
+      expect(result.thinking).toEqual({
+        type: "enabled",
+        clear_thinking: false,
+      })
+    })
+  }
 })
 
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
@@ -1219,6 +1269,110 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content).toBe("")
     expect(result[1].content).toHaveLength(1)
   })
+
+  test("splits anthropic assistant messages when text trails tool calls", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Check my home directory for PDFs" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+          { type: "text", text: "I checked your home directory and looked for PDF files." },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+          {
+            type: "tool-result",
+            toolCallId: "toolu_2",
+            toolName: "glob",
+            output: { type: "text", value: "No files found" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(4)
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "I checked your home directory and looked for PDF files." }],
+    })
+    expect(result[2]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+        { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+      ],
+    })
+  })
+
+  test("leaves valid anthropic assistant tool ordering unchanged", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "I checked your home directory and looked for PDF files." },
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toMatchObject([
+      { type: "text", text: "I checked your home directory and looked for PDF files." },
+      { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+      { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+    ])
+  })
+
+  test("splits vertex anthropic assistant messages when text trails tool calls", () => {
+    const model = {
+      ...anthropicModel,
+      providerID: "google-vertex-anthropic",
+      api: {
+        id: "claude-sonnet-4@20250514",
+        url: "https://us-central1-aiplatform.googleapis.com",
+        npm: "@ai-sdk/google-vertex/anthropic",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+          { type: "text", text: "I checked your home directory and looked for PDF files." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "I checked your home directory and looked for PDF files." }],
+    })
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+        { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+      ],
+    })
+  })
 })
 
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
@@ -1790,6 +1944,11 @@ describe("ProviderTransform.message - cache control on gateway", () => {
           type: "ephemeral",
         },
       },
+      alibaba: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
     })
   })
 
@@ -1839,6 +1998,11 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       },
       copilot: {
         copilot_cache_control: {
+          type: "ephemeral",
+        },
+      },
+      alibaba: {
+        cacheControl: {
           type: "ephemeral",
         },
       },
