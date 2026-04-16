@@ -7,7 +7,7 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Hash } from "@opencode-ai/shared/util/hash"
-import { Config } from "../config/config"
+import { Config } from "../config"
 import { Global } from "../global"
 import { Log } from "../util/log"
 

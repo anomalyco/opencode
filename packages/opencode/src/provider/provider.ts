@@ -1,7 +1,7 @@
 import z from "zod"
 import os from "os"
 import fuzzysort from "fuzzysort"
-import { Config } from "../config/config"
+import { Config } from "../config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"

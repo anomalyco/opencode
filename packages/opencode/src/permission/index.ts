@@ -1,6 +1,6 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { Config } from "@/config/config"
+import { Config } from "@/config"
 import { InstanceState } from "@/effect/instance-state"
 import { ProjectID } from "@/project/schema"
 import { Instance } from "@/project/instance"

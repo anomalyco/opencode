@@ -2,7 +2,7 @@ import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { SyncEvent } from "@/sync"
 import { Effect, Layer, Scope, Context } from "effect"
-import { Config } from "../config/config"
+import { Config } from "../config"
 import { Flag } from "../flag/flag"
 import { ShareNext } from "./share-next"
 

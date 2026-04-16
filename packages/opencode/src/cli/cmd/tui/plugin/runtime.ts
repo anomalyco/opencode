@@ -13,7 +13,7 @@ import {
 import path from "path"
 import { fileURLToPath } from "url"
 
-import { Config } from "@/config/config"
+import { Config } from "@/config"
 import { TuiConfig } from "@/config/tui"
 import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"

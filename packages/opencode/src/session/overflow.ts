@@ -1,4 +1,4 @@
-import type { Config } from "@/config/config"
+import type { Config } from "@/config"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"

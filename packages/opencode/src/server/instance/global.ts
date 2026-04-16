@@ -12,7 +12,7 @@ import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
 import { errors } from "../error"
 
 const log = Log.create({ service: "server" })
