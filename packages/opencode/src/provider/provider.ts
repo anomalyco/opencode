@@ -53,7 +53,6 @@ import {
   isWorkflowModel,
   discoverWorkflowModels,
 } from "gitlab-ai-provider"
-import { createLLMGateway } from "@llmgateway/ai-sdk-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
@@ -131,7 +130,6 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
-    "@llmgateway/ai-sdk-provider": createLLMGateway,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
     "@ai-sdk/groq": createGroq,
