@@ -821,12 +821,16 @@ export namespace Provider {
    * Populate the provider models dynamically using provider config
    * Returns models or emty object if fails
    */
-  async function populateDynamicModels(providerID: string, provider: any): Promise<Record<string, Model>> {
-    const authSvc = await Effect.runPromise(
+  async function populateDynamicModels(
+    providerID: string,
+    provider: any,
+    bridge: EffectBridge.Shape,
+  ): Promise<Record<string, Model>> {
+    const authSvc = await bridge.promise(
       Effect.gen(function* () {
         const svc = yield* Auth.Service
         return svc
-      }).pipe(Effect.provide(Auth.defaultLayer)),
+      }),
     )
 
     const baseURL = provider.options?.baseURL
@@ -840,7 +844,7 @@ export namespace Provider {
     if (key) {
       authInfo = { type: "api" as const, key }
     } else {
-      authInfo = await Effect.runPromise(authSvc.get(providerID))
+      authInfo = await bridge.promise(authSvc.get(providerID))
     }
 
     const authType = authInfo?.type === "api" ? authInfo : null
@@ -1405,7 +1409,7 @@ export namespace Provider {
             const hasExplicitModels = Object.keys(provider.models ?? {}).length > 0
             if (!hasExplicitModels && provider.dynamicModelList) {
               try {
-                partial.models = yield* Effect.promise(() => populateDynamicModels(providerID, provider))
+                partial.models = yield* Effect.promise(() => populateDynamicModels(providerID, provider, bridge))
               } catch (err) {
                 log.warn("Dynamic model discovery failed", { providerID, error: err })
                 partial.models = {}
