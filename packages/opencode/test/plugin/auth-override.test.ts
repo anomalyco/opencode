@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import { Effect } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
-import { ProviderAuth } from "../../src/provider/auth"
+import { ProviderAuth } from "../../src/provider"
 import { ProviderID } from "../../src/provider/schema"
 
 describe("plugin.auth-override", () => {

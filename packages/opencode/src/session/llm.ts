@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
-import { ProviderTransform } from "@/provider/transform"
+import { ProviderTransform } from "@/provider"
 import { Config } from "@/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
@@ -20,6 +20,7 @@ import { Wildcard } from "@/util"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { InstallationVersion } from "@/installation/version"
 import { EffectBridge } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
@@ -365,7 +366,7 @@ export namespace LLM {
               : {
                   "x-session-affinity": input.sessionID,
                   ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                  "User-Agent": `opencode/${Installation.VERSION}`,
+                  "User-Agent": `opencode/${InstallationVersion}`,
                 }),
             ...input.model.headers,
             ...headers,

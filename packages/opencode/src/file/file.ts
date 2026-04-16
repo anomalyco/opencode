@@ -3,7 +3,7 @@ import { InstanceState } from "@/effect"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Git } from "@/git"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
@@ -345,6 +345,7 @@ export const layer = Layer.effect(
     const appFs = yield* AppFileSystem.Service
     const rg = yield* Ripgrep.Service
     const git = yield* Git.Service
+    const scope = yield* Scope.Scope
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("File.state")(() =>
@@ -419,7 +420,7 @@ export const layer = Layer.effect(
     })
 
     const init = Effect.fn("File.init")(function* () {
-      yield* ensure()
+      yield* ensure().pipe(Effect.forkIn(scope))
     })
 
     const status = Effect.fn("File.status")(function* () {

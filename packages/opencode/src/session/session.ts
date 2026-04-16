@@ -7,6 +7,7 @@ import z from "zod"
 import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
+import { InstallationVersion } from "../installation/version"
 
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage"
 import { SyncEvent } from "../sync"
@@ -399,7 +400,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       const result: Info = {
         id: SessionID.descending(input.id),
         slug: Slug.create(),
-        version: Installation.VERSION,
+        version: InstallationVersion,
         projectID: ctx.project.id,
         directory: input.directory,
         workspaceID: input.workspaceID,
@@ -518,12 +519,13 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       workspaceID?: WorkspaceID
     }) {
       const directory = yield* InstanceState.directory
+      const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
         parentID: input?.parentID,
         directory,
         title: input?.title,
         permission: input?.permission,
-        workspaceID: input?.workspaceID,
+        workspaceID: workspace,
       })
     })
 

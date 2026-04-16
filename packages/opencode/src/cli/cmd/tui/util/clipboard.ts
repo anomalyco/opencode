@@ -1,12 +1,21 @@
 import { platform, release } from "os"
-import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../../../util"
-import { Process } from "../../../../util"
-import { which } from "../../../../util/which"
+import * as Filesystem from "../../../../util/filesystem"
+import * as Process from "../../../../util/process"
+
+// Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
+const getWhich = lazy(async () => {
+  const { which } = await import("../../../../util/which")
+  return which
+})
+
+const getClipboardy = lazy(async () => {
+  const { default: clipboardy } = await import("clipboardy")
+  return clipboardy
+})
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -94,14 +103,16 @@ export async function read(): Promise<Content | undefined> {
     }
   }
 
+  const clipboardy = await getClipboardy()
   const text = await clipboardy.read().catch(() => {})
   if (text) {
     return { data: text, mime: "text/plain" }
   }
 }
 
-const getCopyMethod = lazy(() => {
+const getCopyMethod = lazy(async () => {
   const os = platform()
+  const which = await getWhich()
 
   if (os === "darwin" && which("osascript")) {
     console.log("clipboard: using osascript")
@@ -180,11 +191,13 @@ const getCopyMethod = lazy(() => {
 
   console.log("clipboard: no native support")
   return async (text: string) => {
+    const clipboardy = await getClipboardy()
     await clipboardy.write(text).catch(() => {})
   }
 })
 
 export async function copy(text: string): Promise<void> {
   writeOsc52(text)
-  await getCopyMethod()(text)
+  const method = await getCopyMethod()
+  await method(text)
 }

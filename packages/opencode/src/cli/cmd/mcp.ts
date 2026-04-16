@@ -10,6 +10,7 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config"
 import { Instance } from "../../project/instance"
 import { Installation } from "../../installation"
+import { InstallationVersion } from "../../installation/version"
 import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
@@ -697,7 +698,7 @@ export const McpDebugCommand = cmd({
               params: {
                 protocolVersion: "2024-11-05",
                 capabilities: {},
-                clientInfo: { name: "opencode-debug", version: Installation.VERSION },
+                clientInfo: { name: "opencode-debug", version: InstallationVersion },
               },
               id: 1,
             }),
@@ -746,7 +747,7 @@ export const McpDebugCommand = cmd({
             try {
               const client = new Client({
                 name: "opencode-debug",
-                version: Installation.VERSION,
+                version: InstallationVersion,
               })
               await client.connect(transport)
               prompts.log.success("Connection successful (already authenticated)")

@@ -8,9 +8,9 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "../flag/flag"
 import { Log } from "../util"
-import { CHANNEL as channel, VERSION as version } from "./meta"
 
 import semver from "semver"
+import { InstallationChannel, InstallationVersion } from "./version"
 
 const log = Log.create({ service: "installation" })
 
@@ -54,16 +54,14 @@ export const Info = z
   })
 export type Info = z.infer<typeof Info>
 
-export const VERSION = version
-export const CHANNEL = channel
-export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
+export const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 export function isPreview() {
-  return CHANNEL !== "latest"
+  return InstallationChannel !== "latest"
 }
 
 export function isLocal() {
-  return CHANNEL === "local"
+  return InstallationChannel === "local"
 }
 
 export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
@@ -222,7 +220,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           const r = (yield* text(["npm", "config", "get", "registry"])).trim()
           const reg = r || "https://registry.npmjs.org"
           const registry = reg.endsWith("/") ? reg.slice(0, -1) : reg
-          const channel = CHANNEL
+          const channel = InstallationChannel
           const response = yield* httpOk.execute(
             HttpClientRequest.get(`${registry}/opencode-ai/${channel}`).pipe(HttpClientRequest.acceptJson),
           )
@@ -321,7 +319,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
       return Service.of({
         info: Effect.fn("Installation.info")(function* () {
           return {
-            version: VERSION,
+            version: InstallationVersion,
             latest: yield* latestImpl(),
           }
         }),

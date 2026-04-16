@@ -2,13 +2,11 @@ import path from "path"
 import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { unique } from "remeda"
 import z from "zod"
-import * as ConfigPaths from "./paths"
 import { TuiInfo, TuiOptions } from "./tui-schema"
-import { Instance } from "@/project/instance"
 import { Flag } from "@/flag/flag"
-import { Log } from "@/util"
-import { Filesystem } from "@/util"
 import { Global } from "@/global"
+import { Filesystem, Log } from "@/util"
+import * as ConfigPaths from "@/config/paths"
 
 const log = Log.create({ service: "tui.migrate" })
 
@@ -26,9 +24,9 @@ const TuiLegacy = z
   .strip()
 
 interface MigrateInput {
+  cwd: string
   directories: string[]
   custom?: string
-  managed: string
 }
 
 /**
@@ -134,16 +132,13 @@ async function backupAndStripLegacy(file: string, source: string) {
     })
 }
 
-async function opencodeFiles(input: { directories: string[]; managed: string }) {
-  const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-    ? []
-    : await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.worktree)
+async function opencodeFiles(input: { directories: string[]; cwd: string }) {
+  const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("opencode", input.cwd)
   const files = [...project, ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode")]
   for (const dir of unique(input.directories)) {
     files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))
   }
   if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
-  files.push(...ConfigPaths.fileInDirectory(input.managed, "opencode"))
 
   const existing = await Promise.all(
     unique(files).map(async (file) => {

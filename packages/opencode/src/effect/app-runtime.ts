@@ -16,7 +16,7 @@ import { Storage } from "@/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider"
-import { ProviderAuth } from "@/provider/auth"
+import { ProviderAuth } from "@/provider"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Discovery } from "@/skill/discovery"
@@ -47,8 +47,10 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share"
 import { SessionShare } from "@/share"
+import { Npm } from "@opencode-ai/shared/npm"
 
 export const AppLayer = Layer.mergeAll(
+  Npm.defaultLayer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,

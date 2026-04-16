@@ -140,7 +140,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          expect(Filesystem.mimeType(filepath)).toContain("application/json")
+          expect(await Filesystem.mimeType(filepath)).toContain("application/json")
 
           const result = await read("test.json")
           expect(result.type).toBe("text")
@@ -164,7 +164,7 @@ describe("file/index Filesystem patterns", () => {
         await Instance.provide({
           directory: tmp.path,
           fn: async () => {
-            expect(Filesystem.mimeType(filepath)).toContain(mime)
+            expect(await Filesystem.mimeType(filepath)).toContain(mime)
           },
         })
       }

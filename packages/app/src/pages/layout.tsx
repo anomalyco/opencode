@@ -132,9 +132,11 @@ export default function Layout(props: ParentProps) {
     if (!slug) return { slug, dir: "" }
     const dir = decode64(slug)
     if (!dir) return { slug, dir: "" }
+    const store = globalSync.peek(dir, { bootstrap: false })
     return {
       slug,
-      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+      store,
+      dir: store[0].path.directory || dir,
     }
   })
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
@@ -2353,8 +2355,14 @@ export default function Layout(props: ParentProps) {
     />
   )
 
+  const [loading] = createResource(
+    () => route()?.store?.[0]?.bootstrapPromise,
+    (p) => p,
+  )
+
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      {(autoselecting(), loading()) ?? ""}
       <Titlebar />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">

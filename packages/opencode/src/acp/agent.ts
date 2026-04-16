@@ -49,6 +49,7 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+import { InstallationVersion } from "@/installation/version"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -570,7 +571,7 @@ export namespace ACP {
         authMethods: [authMethod],
         agentInfo: {
           name: "OpenCode",
-          version: Installation.VERSION,
+          version: InstallationVersion,
         },
       }
     }

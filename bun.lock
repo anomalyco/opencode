@@ -523,7 +523,9 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
+        "@types/npmcli__arborist": "6.3.3",
         "@types/semver": "catalog:",
       },
     },

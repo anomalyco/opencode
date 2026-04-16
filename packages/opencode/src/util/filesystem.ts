@@ -1,6 +1,5 @@
 import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
-import { lookup } from "mime-types"
 import { realpathSync } from "fs"
 import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
@@ -101,7 +100,8 @@ export async function writeStream(
   }
 }
 
-export function mimeType(p: string): string {
+export async function mimeType(p: string): Promise<string> {
+  const { lookup } = await import("mime-types")
   return lookup(p) || "application/octet-stream"
 }
 

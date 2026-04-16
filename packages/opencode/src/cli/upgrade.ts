@@ -3,6 +3,7 @@ import { Config } from "@/config"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Flag } from "@/flag/flag"
 import { Installation } from "@/installation"
+import { InstallationVersion } from "@/installation/version"
 
 export async function upgrade() {
   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
@@ -15,10 +16,10 @@ export async function upgrade() {
     return
   }
 
-  if (Installation.VERSION === latest) return
+  if (InstallationVersion === latest) return
   if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
 
-  const kind = Installation.getReleaseType(Installation.VERSION, latest)
+  const kind = Installation.getReleaseType(InstallationVersion, latest)
 
   if (config.autoupdate === "notify" || kind !== "patch") {
     await Bus.publish(Installation.Event.UpdateAvailable, { version: latest })

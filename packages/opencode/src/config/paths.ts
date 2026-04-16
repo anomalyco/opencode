@@ -7,11 +7,11 @@ import { Filesystem } from "@/util"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
-export async function projectFiles(name: string, directory: string, worktree: string) {
+export async function projectFiles(name: string, directory: string, worktree?: string) {
   return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, worktree, { rootFirst: true })
 }
 
-export async function directories(directory: string, worktree: string) {
+export async function directories(directory: string, worktree?: string) {
   return [
     Global.Path.config,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
