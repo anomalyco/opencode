@@ -121,6 +121,10 @@ const InfoSchema = Schema.Struct({
   autoshare: Schema.optional(Schema.Boolean).annotate({
     description: "@deprecated Use 'share' field instead. Share newly created sessions automatically",
   }),
+  autotitle: Schema.optional(Schema.Literals(["branch", "llm"])).annotate({
+    description:
+      "Controls automatic session title generation. 'branch' uses the current git branch name, 'llm' generates a title from the first message (default behavior when omitted).",
+  }),
   autoupdate: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("notify")])).annotate({
     description:
       "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
