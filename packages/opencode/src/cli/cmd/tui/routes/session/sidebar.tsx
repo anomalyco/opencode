@@ -2,7 +2,7 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
-import { Installation } from "@/installation"
+import { InstallationVersion } from "@/installation/version"
 import { TuiPluginRuntime } from "../../plugin"
 
 import { getScrollAcceleration } from "../../util/scroll"
@@ -64,7 +64,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <span style={{ fg: theme.text }}>
                 <b>Code</b>
               </span>{" "}
-              <span>{Installation.VERSION}</span>
+              <span>{InstallationVersion}</span>
             </text>
           </TuiPluginRuntime.Slot>
         </box>

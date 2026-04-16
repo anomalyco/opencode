@@ -191,7 +191,7 @@ export const Terminal = (props: TerminalProps) => {
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
-  let ghostty: Ghostty
+  let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
@@ -372,7 +372,7 @@ export const Terminal = (props: TerminalProps) => {
         cleanup()
         return
       }
-      ghostty = g
+      _ghostty = g
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
@@ -415,7 +415,7 @@ export const Terminal = (props: TerminalProps) => {
       if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
-        document.fonts.ready.then(scheduleFit)
+        void document.fonts.ready.then(scheduleFit)
       }
 
       const onResize = t.onResize((size) => {
@@ -634,7 +634,7 @@ export const Terminal = (props: TerminalProps) => {
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         "select-text": true,
         "size-full px-6 py-3 font-mono relative overflow-hidden": true,
         [local.class ?? ""]: !!local.class,

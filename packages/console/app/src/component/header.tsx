@@ -47,7 +47,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           notation: "compact",
           compactDisplay: "short",
           maximumFractionDigits: 0,
-        }).format(githubData()?.stars!)
+        }).format(githubData()?.stars)
       : config.github.starsFormatted.compact,
   )
 

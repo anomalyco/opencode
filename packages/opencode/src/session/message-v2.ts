@@ -6,16 +6,16 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "../sync"
-import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
+import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
-import { ProviderError } from "@/provider/error"
+import { ProviderError } from "@/provider"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import type { SystemError } from "bun"
-import type { Provider } from "@/provider/provider"
+import type { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect } from "effect"
-import { EffectLogger } from "@/effect/logger"
+import { EffectLogger } from "@/effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {

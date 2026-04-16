@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "child_process"
-import { Process } from "../util/process"
+import { Process } from "../util"
 
 type Child = Process.Child & ChildProcessWithoutNullStreams
 
@@ -9,7 +9,7 @@ export function spawn(cmd: string, argsOrOpts?: string[] | Process.Options, opts
   const args = Array.isArray(argsOrOpts) ? [...argsOrOpts] : []
   const cfg = Array.isArray(argsOrOpts) ? opts : argsOrOpts
   const proc = Process.spawn([cmd, ...args], {
-    ...(cfg ?? {}),
+    ...cfg,
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",

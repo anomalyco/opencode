@@ -12,7 +12,7 @@ import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
-import { Truncate } from "../../src/tool/truncate"
+import { Truncate } from "../../src/tool"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {

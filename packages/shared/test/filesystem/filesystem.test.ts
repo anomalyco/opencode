@@ -290,7 +290,7 @@ describe("AppFileSystem", () => {
     it(
       "exists works",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        yield* AppFileSystem.Service
         const filesys = yield* FileSystem.FileSystem
         const tmp = yield* filesys.makeTempDirectoryScoped()
         const file = path.join(tmp, "exists.txt")
@@ -304,7 +304,7 @@ describe("AppFileSystem", () => {
     it(
       "remove works",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        yield* AppFileSystem.Service
         const filesys = yield* FileSystem.FileSystem
         const tmp = yield* filesys.makeTempDirectoryScoped()
         const file = path.join(tmp, "delete-me.txt")
