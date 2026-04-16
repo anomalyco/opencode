@@ -910,6 +910,10 @@ export function smallOptions(model: Provider.Model) {
       if (model.api.id.includes("5.")) {
         return { store: false, reasoningEffort: "low" }
       }
+      // github-copilot rejects "minimal" for gpt-5-mini; use "low" instead
+      if (model.api.npm === "@ai-sdk/github-copilot") {
+        return { store: false, reasoningEffort: "low" }
+      }
       return { store: false, reasoningEffort: "minimal" }
     }
     return { store: false }
