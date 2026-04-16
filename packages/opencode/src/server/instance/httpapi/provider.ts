@@ -2,7 +2,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
-const root = "/experimental/httpapi/provider"
+const root = "/provider"
 
 export const ProviderApi = HttpApi.make("provider")
   .add(
@@ -33,7 +33,7 @@ export const ProviderApi = HttpApi.make("provider")
     }),
   )
 
-export const ProviderLive = Layer.unwrap(
+export const providerHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const svc = yield* ProviderAuth.Service
 

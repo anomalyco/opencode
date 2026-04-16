@@ -78,7 +78,7 @@ export namespace Tool {
   ) {
     return () =>
       Effect.gen(function* () {
-        const toolInfo = init instanceof Function ? { ...(yield* init()) } : { ...init }
+        const toolInfo = typeof init === "function" ? { ...(yield* init()) } : { ...init }
         const execute = toolInfo.execute
         toolInfo.execute = (args, ctx) => {
           const attrs = {

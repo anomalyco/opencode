@@ -313,7 +313,7 @@ export function deriveNewContentsFromChunks(filePath: string, chunks: UpdateFile
   try {
     originalContent = readFileSync(filePath, "utf-8")
   } catch (error) {
-    throw new Error(`Failed to read file ${filePath}: ${error}`)
+    throw new Error(`Failed to read file ${filePath}: ${error}`, { cause: error })
   }
 
   let originalLines = originalContent.split("\n")

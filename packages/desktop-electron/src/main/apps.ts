@@ -28,7 +28,7 @@ export function wslPath(path: string, mode: "windows" | "linux" | null): string 
     const output = execFileSync("wsl", ["-e", "wslpath", flag, path])
     return output.toString().trim()
   } catch (error) {
-    throw new Error(`Failed to run wslpath: ${String(error)}`)
+    throw new Error(`Failed to run wslpath: ${String(error)}`, { cause: error })
   }
 }
 

@@ -55,7 +55,7 @@ export const QuestionApi = HttpApi.make("question")
     }),
   )
 
-export const QuestionLive = Layer.unwrap(
+export const questionHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const svc = yield* Question.Service
 

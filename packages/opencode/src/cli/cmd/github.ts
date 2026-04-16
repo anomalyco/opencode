@@ -1031,6 +1031,7 @@ export const GithubRunCommand = cmd({
           console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
             "Could not fetch an OIDC token. Make sure to add `id-token: write` to your workflow permissions.",
+            { cause: error },
           )
         }
       }
@@ -1221,7 +1222,7 @@ export const GithubRunCommand = cmd({
           console.log(`  permission: ${permission}`)
         } catch (error) {
           console.error(`Failed to check permissions: ${error}`)
-          throw new Error(`Failed to check permissions for user ${actor}: ${error}`)
+          throw new Error(`Failed to check permissions for user ${actor}: ${error}`, { cause: error })
         }
 
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
