@@ -1,5 +1,4 @@
 import { platform, release } from "os"
-import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
@@ -7,6 +6,12 @@ import fs from "fs/promises"
 import { Filesystem } from "../../../../util"
 import { Process } from "../../../../util"
 import { which } from "../../../../util/which"
+
+// Lazy load clipboardy to avoid expensive execa/which/isexe chain at startup
+const getClipboardy = lazy(async () => {
+  const { default: clipboardy } = await import("clipboardy")
+  return clipboardy
+})
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -94,6 +99,7 @@ export async function read(): Promise<Content | undefined> {
     }
   }
 
+  const clipboardy = await getClipboardy()
   const text = await clipboardy.read().catch(() => {})
   if (text) {
     return { data: text, mime: "text/plain" }
@@ -180,6 +186,7 @@ const getCopyMethod = lazy(() => {
 
   console.log("clipboard: no native support")
   return async (text: string) => {
+    const clipboardy = await getClipboardy()
     await clipboardy.write(text).catch(() => {})
   }
 })

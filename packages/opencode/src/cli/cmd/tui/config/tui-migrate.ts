@@ -6,7 +6,7 @@ import { TuiInfo, TuiOptions } from "./tui-schema"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Filesystem, Log } from "@/util"
-import { ConfigPaths } from "@/config"
+import * as ConfigPaths from "@/config/paths"
 
 const log = Log.create({ service: "tui.migrate" })
 

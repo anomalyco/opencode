@@ -118,6 +118,12 @@ async function traceFile(filePath: string, depth = 0): Promise<void> {
 
   const imports = extractImports(sourceFile)
   const internalImports = imports.filter(isInternalImport)
+  const externalImports = imports.filter((imp) => !isInternalImport(imp))
+
+  // Print external imports
+  for (const imp of externalImports) {
+    console.log("\t".repeat(depth + 1) + `[ext] ${imp}`)
+  }
 
   for (const imp of internalImports) {
     const resolved = resolveImport(imp, filePath)
