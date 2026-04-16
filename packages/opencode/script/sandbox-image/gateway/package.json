@@ -1,0 +1,12 @@
+{
+  "name": "opencode-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "In-sandbox WebSocket exec gateway used by opencode's VercelBackend.",
+  "bin": {
+    "opencode-gateway": "./gateway.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
