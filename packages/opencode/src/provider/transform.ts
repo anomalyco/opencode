@@ -193,7 +193,7 @@ function normalizeMessages(
             providerOptions: {
               ...msg.providerOptions,
               openaiCompatible: {
-                ...(msg.providerOptions as any)?.openaiCompatible,
+                ...msg.providerOptions?.openaiCompatible,
                 [field]: reasoningText,
               },
             },
