@@ -467,7 +467,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status
       },
       get ready() {
-        return true
+        return store.status !== "loading"
       },
       get path() {
         return project.instance.path()
