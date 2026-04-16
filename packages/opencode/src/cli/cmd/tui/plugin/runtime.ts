@@ -194,7 +194,8 @@ function createThemeInstaller(
           }
           return
         }
-        if (prev?.dest === dest && prev.mtime === mtime && prev.size === size) return
+        if (path.normalize(prev?.dest ?? "") === path.normalize(dest) && prev.mtime === mtime && prev.size === size)
+          return
       }
 
       const text = await Filesystem.readText(src).catch((error) => {
