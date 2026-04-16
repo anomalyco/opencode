@@ -161,6 +161,13 @@ function findBinary(startDir) {
         if (fs.existsSync(candidate)) return candidate
       }
     }
+    const dist = path.join(current, "dist")
+    if (fs.existsSync(dist)) {
+      for (const name of names) {
+        const candidate = path.join(dist, name, "bin", binary)
+        if (fs.existsSync(candidate)) return candidate
+      }
+    }
     const parent = path.dirname(current)
     if (parent === current) {
       return
