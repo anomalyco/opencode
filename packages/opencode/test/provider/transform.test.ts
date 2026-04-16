@@ -4205,3 +4205,110 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.message - bedrock cache_point_ttl", () => {
+  const bedrockModel = {
+    id: "amazon-bedrock/anthropic.claude-opus-4-6",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "anthropic.claude-opus-4-6",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude Opus 4.6",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("should add ttl to bedrock cachePoint when cache_point_ttl is set to 5m", () => {
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant.",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, { cache_point_ttl: "5m" })
+
+    expect(result).toHaveLength(2)
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({
+      type: "default",
+      ttl: "5m",
+    })
+    expect(result[1].providerOptions?.bedrock?.cachePoint).toEqual({
+      type: "default",
+      ttl: "5m",
+    })
+  })
+
+  test("should add ttl to bedrock cachePoint when cache_point_ttl is set to 1h", () => {
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant.",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, { cache_point_ttl: "1h" })
+
+    expect(result).toHaveLength(2)
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({
+      type: "default",
+      ttl: "1h",
+    })
+    expect(result[1].providerOptions?.bedrock?.cachePoint).toEqual({
+      type: "default",
+      ttl: "1h",
+    })
+  })
+
+  test("should not add ttl to bedrock cachePoint when cache_point_ttl is not set", () => {
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant.",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({
+      type: "default",
+    })
+    expect(result[1].providerOptions?.bedrock?.cachePoint).toEqual({
+      type: "default",
+    })
+  })
+})
