@@ -9,6 +9,7 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import type { Sizing } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { done, fit, pipe, pull, push, type Hold } from "./browser-stream"
 
 type Status = {
   enabled: boolean
@@ -36,6 +37,13 @@ type Group = {
 type Tree = {
   sessionID: string
   tabs: Tab[]
+}
+
+type Shot = {
+  src: string
+  rev: number
+  width?: number
+  height?: number
 }
 
 const parse = (raw: string) => {
@@ -93,7 +101,6 @@ export function BrowserPanel(props: { size: Sizing }) {
   const { params, view } = useSessionLayout()
   const desktop = createMediaQuery("(min-width: 768px)")
   const [store, setStore] = createStore({
-    frame: "",
     loading: false,
     connected: false,
     screencasting: false,
@@ -173,9 +180,13 @@ export function BrowserPanel(props: { size: Sizing }) {
     }).then((res) => json(res) as Promise<Status>)
 
   let box: HTMLDivElement | undefined
+  let img: HTMLImageElement | undefined
   let timer: number | undefined
   let hard = false
-  let hold: { width: number; height: number; until: number } | undefined
+  let hold: Hold | undefined
+  let rev = 0
+  let run = 0
+  const slot = pipe<Shot>()
 
   const dpr = () => {
     if (typeof window === "undefined") return 1
@@ -194,17 +205,78 @@ export function BrowserPanel(props: { size: Sizing }) {
   }
 
   const ok = (width?: number, height?: number, clear = true) => {
-    const slot = hold
-    if (!slot) return true
-    if (Date.now() >= slot.until) {
-      hold = undefined
-      return true
-    }
-    if (!width || !height) return false
-    const same = Math.abs(width - slot.width) <= 3 && Math.abs(height - slot.height) <= 3
-    if (!same) return false
-    if (clear) hold = undefined
-    return true
+    const next = fit(hold, width, height, Date.now(), clear)
+    hold = next.hold
+    return next.ok
+  }
+
+  const wait = (img: HTMLImageElement) =>
+    new Promise<void>((resolve, reject) => {
+      if (img.complete) {
+        if (img.naturalWidth > 0) {
+          resolve()
+          return
+        }
+        reject(new Error("Browser stream frame decode failed"))
+        return
+      }
+      const done = () => {
+        img.removeEventListener("load", done)
+        img.removeEventListener("error", fail)
+        resolve()
+      }
+      const fail = () => {
+        img.removeEventListener("load", done)
+        img.removeEventListener("error", fail)
+        reject(new Error("Browser stream frame decode failed"))
+      }
+      img.addEventListener("load", done, { once: true })
+      img.addEventListener("error", fail, { once: true })
+    })
+
+  const load = (img: HTMLImageElement) => (typeof img.decode === "function" ? img.decode().catch(() => wait(img)) : wait(img))
+
+  const reset = () => {
+    rev += 1
+    run += 1
+    slot.busy = false
+    slot.next = undefined
+    if (img) img.removeAttribute("src")
+  }
+
+  const show = (shot: Shot) => {
+    const id = ++run
+    const probe = new Image()
+    probe.decoding = "async"
+    probe.src = shot.src
+    return load(probe)
+      .then(() => {
+        if (id !== run || shot.rev !== rev || !img) return
+        if (!ok(shot.width, shot.height)) return
+        img.src = shot.src
+        setStore({
+          loading: false,
+          error: "",
+          width: shot.width ?? store.width,
+          height: shot.height ?? store.height,
+        })
+      })
+      .catch(() => {
+        if (id !== run || shot.rev !== rev) return
+        if (store.width || store.height) return
+        setStore({ loading: false, error: "Browser stream frame decode failed" })
+      })
+      .finally(() => {
+        if (id !== run) return
+        const next = done(slot)
+        if (next) void show(next)
+      })
+  }
+
+  const paint = (shot: Shot) => {
+    push(slot, shot)
+    const next = pull(slot)
+    if (next) void show(next)
   }
 
   const syncViewport = (force = false) => {
@@ -347,9 +419,9 @@ export function BrowserPanel(props: { size: Sizing }) {
     let fail = false
     let ws: WebSocket | undefined
     hold = undefined
+    reset()
 
     setStore({
-      frame: "",
       loading: true,
       connected: false,
       screencasting: false,
@@ -414,12 +486,11 @@ export function BrowserPanel(props: { size: Sizing }) {
         const height = int(meta?.deviceHeight)
         if (!ok(width, height)) return
         seen = true
-        setStore({
-          loading: false,
-          error: "",
-          frame,
-          width: width ?? store.width,
-          height: height ?? store.height,
+        paint({
+          src: `data:image/jpeg;base64,${frame}`,
+          rev,
+          width,
+          height,
         })
         return
       }
@@ -428,27 +499,20 @@ export function BrowserPanel(props: { size: Sizing }) {
       const width = int(data.viewportWidth)
       const height = int(data.viewportHeight)
       seen = true
-      if (!ok(width, height, false) || hold) {
-        setStore({
-          loading: false,
-          error: "",
-          connected: bool(data.connected) ?? store.connected,
-          screencasting: bool(data.screencasting) ?? store.screencasting,
-        })
-        return
-      }
+      ok(width, height, false)
       setStore({
         loading: false,
         error: "",
         connected: bool(data.connected) ?? false,
         screencasting: bool(data.screencasting) ?? false,
-        width: width ?? store.width,
-        height: height ?? store.height,
       })
     })
 
     onCleanup(() => {
       done = true
+      run += 1
+      slot.busy = false
+      slot.next = undefined
       if (ws && ws.readyState !== WebSocket.CLOSING && ws.readyState !== WebSocket.CLOSED) ws.close()
     })
   })
@@ -533,27 +597,19 @@ export function BrowserPanel(props: { size: Sizing }) {
           </div>
 
           <div ref={box} class="flex-1 min-h-0 bg-black relative overflow-hidden">
-            <Show
-              when={store.frame}
-              fallback={
-                <div class="absolute inset-0 flex items-center justify-center text-text-weak text-12-regular bg-background-base">
-                  <Show
-                    when={store.error}
-                    fallback={<span>{store.loading ? "Connecting browser stream..." : "No stream frame yet"}</span>}
-                  >
-                    <span>{store.error}</span>
-                  </Show>
-                </div>
-              }
-            >
-              {(frame) => (
-                <img
-                  src={`data:image/jpeg;base64,${frame()}`}
-                  alt="Agent browser stream"
-                  class="w-full h-full object-contain select-none"
-                  draggable={false}
-                />
-              )}
+            <img
+              ref={img}
+              alt="Agent browser stream"
+              class="w-full h-full object-contain select-none"
+              classList={{ hidden: !store.width || !store.height }}
+              draggable={false}
+            />
+            <Show when={!store.width || !store.height}>
+              <div class="absolute inset-0 flex items-center justify-center text-text-weak text-12-regular bg-background-base">
+                <Show when={store.error} fallback={<span>{store.loading ? "Connecting browser stream..." : "No stream frame yet"}</span>}>
+                  <span>{store.error}</span>
+                </Show>
+              </div>
             </Show>
           </div>
         </div>
