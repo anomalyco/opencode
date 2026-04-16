@@ -5,6 +5,7 @@
  * Usage:
  *   bun script/unwrap-namespace.ts src/bus/index.ts
  *   bun script/unwrap-namespace.ts src/bus/index.ts --dry-run
+ *   bun script/unwrap-namespace.ts src/pty/index.ts --name service   # avoid collision with pty.ts
  *
  * What it does:
  *   1. Reads the file and finds the `export namespace Foo { ... }` block
@@ -24,10 +25,11 @@ import fs from "fs"
 
 const args = process.argv.slice(2)
 const dryRun = args.includes("--dry-run")
-const filePath = args.find((a) => !a.startsWith("--"))
+const nameFlag = args.find((a, i) => args[i - 1] === "--name")
+const filePath = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--name")
 
 if (!filePath) {
-  console.error("Usage: bun script/unwrap-namespace.ts <file> [--dry-run]")
+  console.error("Usage: bun script/unwrap-namespace.ts <file> [--dry-run] [--name <impl-name>]")
   process.exit(1)
 }
 
@@ -188,7 +190,7 @@ if (exportedNames.size > 0) {
 const dir = path.dirname(absPath)
 const basename = path.basename(absPath, ".ts")
 const isIndex = basename === "index"
-const implName = isIndex ? nsName.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : basename
+const implName = nameFlag ?? (isIndex ? nsName.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : basename)
 const implFile = path.join(dir, `${implName}.ts`)
 const indexFile = path.join(dir, "index.ts")
 const barrelLine = `export * as ${nsName} from "./${implName}"\n`
