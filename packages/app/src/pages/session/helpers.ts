@@ -1,5 +1,6 @@
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { Message } from "@opencode-ai/sdk/v2/client"
 import { same } from "@/utils/same"
 
 const emptyTabs: string[] = []
@@ -18,6 +19,19 @@ type TabsInput = {
 }
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
+
+export const clipMessages = (list: Message[], limit?: number) => {
+  if (limit === undefined || list.length <= limit) return list
+
+  const start = list.length - limit
+  if (list[start]?.role === "user") return list.slice(start)
+
+  for (let i = start - 1; i >= 0; i--) {
+    if (list[i]?.role === "user") return list.slice(i)
+  }
+
+  return list.slice(start)
+}
 
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)

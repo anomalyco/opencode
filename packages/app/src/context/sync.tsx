@@ -40,6 +40,16 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   return [...map.values()].sort((x, y) => cmp(x.id, y.id))
 }
 
+export function shown(input: { cached: number; show?: number; page: number }) {
+  if (input.cached <= 0) return 0
+  const value = input.show === undefined ? Math.min(input.cached, input.page) : input.show
+  return Math.max(0, Math.min(input.cached, value))
+}
+
+export function reveal(input: { cached: number; show?: number; step: number; page: number }) {
+  return Math.min(input.cached, shown(input) + input.step)
+}
+
 type OptimisticStore = {
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>
@@ -194,7 +204,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const maxDirs = 30
     const seen = new Map<string, Set<string>>()
     const [meta, setMeta] = createStore({
-      limit: {} as Record<string, number>,
+      show: {} as Record<string, number | undefined>,
       cursor: {} as Record<string, string | undefined>,
       complete: {} as Record<string, boolean>,
       loading: {} as Record<string, boolean>,
@@ -263,7 +273,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         produce((draft) => {
           for (const sessionID of sessionIDs) {
             const key = keyFor(directory, sessionID)
-            delete draft.limit[key]
+            delete draft.show[key]
             delete draft.cursor[key]
             delete draft.complete[key]
             delete draft.loading[key]
@@ -318,6 +328,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
 
+    const count = (directory: string, sessionID: string) => {
+      const [store] = target(directory)
+      return store.message[sessionID]?.length ?? 0
+    }
+
+    const view = (directory: string, sessionID: string) => {
+      return shown({
+        cached: count(directory, sessionID),
+        show: meta.show[keyFor(directory, sessionID)],
+        page: initialMessagePageSize,
+      })
+    }
+
     const loadMessages = async (input: {
       directory: string
       client: typeof sdk.client
@@ -332,7 +355,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
       setMeta("loading", key, true)
       console.debug(
-        `[loadMessages] start: sessionID=${input.sessionID} mode=${input.mode ?? "replace"} limit=${input.limit} before=${input.before ?? "none"} existingLength=${current()[0].message[input.sessionID]?.length ?? 0} metaLimit=${meta.limit[key] ?? "none"} metaCursor=${meta.cursor[key] ?? "none"} metaComplete=${meta.complete[key] ?? false}`,
+        `[loadMessages] start: sessionID=${input.sessionID} mode=${input.mode ?? "replace"} limit=${input.limit} before=${input.before ?? "none"} existingLength=${current()[0].message[input.sessionID]?.length ?? 0} metaShow=${meta.show[key] ?? "none"} metaCursor=${meta.cursor[key] ?? "none"} metaComplete=${meta.complete[key] ?? false}`,
       )
       await fetchMessages(input)
         .then((page) => {
@@ -350,13 +373,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               const filtered = p.part.filter((x) => !SKIP_PARTS.has(x.type))
               if (filtered.length) input.setStore("part", p.id, filtered)
             }
-            setMeta("limit", key, message.length)
+            if ((meta.show[key] ?? 0) > message.length) setMeta("show", key, message.length)
             setMeta("cursor", key, next.cursor)
             setMeta("complete", key, next.complete)
             setSessionPrefetch({
               directory: input.directory,
               sessionID: input.sessionID,
-              limit: message.length,
+              count: message.length,
               cursor: next.cursor,
               complete: next.complete,
             })
@@ -447,9 +470,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           touch(directory, setStore, sessionID)
 
           const seeded = getSessionPrefetch(directory, sessionID)
-          if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
+          if (seeded && store.message[sessionID] !== undefined && meta.complete[key] === undefined) {
             batch(() => {
-              setMeta("limit", key, seeded.limit)
               setMeta("cursor", key, seeded.cursor)
               setMeta("complete", key, seeded.complete)
               setMeta("loading", key, false)
@@ -461,9 +483,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             if (pending) {
               await pending
               const seeded = getSessionPrefetch(directory, sessionID)
-              if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
+              if (seeded && store.message[sessionID] !== undefined && meta.complete[key] === undefined) {
                 batch(() => {
-                  setMeta("limit", key, seeded.limit)
                   setMeta("cursor", key, seeded.cursor)
                   setMeta("complete", key, seeded.complete)
                   setMeta("loading", key, false)
@@ -472,20 +493,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }
 
             const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
-            const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
+            const cached = store.message[sessionID] !== undefined && meta.complete[key] !== undefined
             const currentLength = store.message[sessionID]?.length ?? 0
-            const currentLimit = meta.limit[key]
+            const currentShow = view(directory, sessionID)
             const currentCursor = meta.cursor[key]
             const currentComplete = meta.complete[key]
             console.debug(
-              `[syncSession] start: sessionID=${sessionID} cached=${cached} hasSession=${hasSession} force=${!!opts?.force} length=${currentLength} limit=${currentLimit ?? "none"} cursor=${currentCursor ?? "none"} complete=${currentComplete ?? false} seededLimit=${seeded?.limit ?? "none"} seededCursor=${seeded?.cursor ?? "none"} seededComplete=${seeded?.complete ?? false}`,
+              `[syncSession] start: sessionID=${sessionID} cached=${cached} hasSession=${hasSession} force=${!!opts?.force} length=${currentLength} show=${currentShow} cursor=${currentCursor ?? "none"} complete=${currentComplete ?? false} seededCount=${seeded?.count ?? "none"} seededCursor=${seeded?.cursor ?? "none"} seededComplete=${seeded?.complete ?? false}`,
             )
             if (cached && hasSession && !opts?.force) {
               console.debug(`[syncSession] skip fetch: sessionID=${sessionID} using cached data length=${currentLength}`)
               return
             }
 
-            const limit = meta.limit[key] ?? initialMessagePageSize
+            const limit = Math.max(view(directory, sessionID), initialMessagePageSize)
             const sessionReq =
               hasSession && !opts?.force
                 ? Promise.resolve()
@@ -520,7 +541,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             await Promise.all([sessionReq, messagesReq])
             const nextLength = current()[0].message[sessionID]?.length ?? 0
             console.debug(
-              `[syncSession] done: sessionID=${sessionID} force=${!!opts?.force} requestedLimit=${limit} nextLength=${nextLength} nextLimit=${meta.limit[key] ?? "none"} nextCursor=${meta.cursor[key] ?? "none"} nextComplete=${meta.complete[key] ?? false}`,
+              `[syncSession] done: sessionID=${sessionID} force=${!!opts?.force} requestedLimit=${limit} nextLength=${nextLength} nextShow=${view(directory, sessionID)} nextCursor=${meta.cursor[key] ?? "none"} nextComplete=${meta.complete[key] ?? false}`,
             )
           })
         },
@@ -571,14 +592,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           more(sessionID: string) {
             const store = current()[0]
             const key = keyFor(sdk.directory, sessionID)
-            if (store.message[sessionID] === undefined) return false
-            if (meta.limit[key] === undefined) return false
+            const cached = store.message[sessionID]?.length ?? 0
+            if (cached === 0) return false
+            if (view(sdk.directory, sessionID) < cached) return true
             if (meta.complete[key]) return false
             return !!meta.cursor[key]
           },
           limit(sessionID: string) {
-            const key = keyFor(sdk.directory, sessionID)
-            return meta.limit[key]
+            const cached = count(sdk.directory, sessionID)
+            if (cached === 0) return undefined
+            return view(sdk.directory, sessionID)
           },
           loading(sessionID: string) {
             const key = keyFor(sdk.directory, sessionID)
@@ -592,12 +615,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const key = keyFor(directory, sessionID)
             const step = count ?? historyMessagePageSize
             if (meta.loading[key]) return
+            const cached = current()[0].message[sessionID]?.length ?? 0
+            const show = view(directory, sessionID)
+
+            if (show < cached) {
+              setMeta("show", key, reveal({ cached, show: meta.show[key], step, page: initialMessagePageSize }))
+              return
+            }
+
             if (meta.complete[key]) return
             const before = meta.cursor[key]
             if (!before) return
 
             console.debug(
-              `[historyLoadMore] start: sessionID=${sessionID} step=${step} before=${before} existingLength=${current()[0].message[sessionID]?.length ?? 0}`,
+              `[historyLoadMore] start: sessionID=${sessionID} step=${step} before=${before} existingLength=${cached}`,
             )
             await loadMessages({
               directory,
@@ -608,8 +639,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               before,
               mode: "prepend",
             })
+            setMeta("show", key, reveal({ cached: current()[0].message[sessionID]?.length ?? 0, show, step, page: initialMessagePageSize }))
             console.debug(
-              `[historyLoadMore] done: sessionID=${sessionID} nextLength=${current()[0].message[sessionID]?.length ?? 0} nextCursor=${meta.cursor[key] ?? "none"} nextComplete=${meta.complete[key] ?? false}`,
+              `[historyLoadMore] done: sessionID=${sessionID} nextLength=${current()[0].message[sessionID]?.length ?? 0} nextShow=${view(directory, sessionID)} nextCursor=${meta.cursor[key] ?? "none"} nextComplete=${meta.complete[key] ?? false}`,
             )
           },
         },
