@@ -12,20 +12,6 @@ type Env = {
   WEB_DOMAIN: string
 }
 
-async function getFeishuTenantToken(): Promise<string> {
-  const response = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      app_id: Resource.FEISHU_APP_ID.value,
-      app_secret: Resource.FEISHU_APP_SECRET.value,
-    }),
-  })
-  const data = (await response.json()) as { tenant_access_token?: string }
-  if (!data.tenant_access_token) throw new Error("Failed to get Feishu tenant token")
-  return data.tenant_access_token
-}
-
 export class SyncServer extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)

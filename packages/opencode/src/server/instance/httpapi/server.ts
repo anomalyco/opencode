@@ -26,10 +26,6 @@ const Headers = Schema.Struct({
 })
 
 export namespace ExperimentalHttpApiServer {
-  function text(input: string, status: number, headers?: Record<string, string>) {
-    return HttpServerResponse.text(input, { status, headers })
-  }
-
   function decode(input: string) {
     try {
       return decodeURIComponent(input)

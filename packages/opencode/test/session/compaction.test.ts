@@ -143,25 +143,6 @@ async function assistant(sessionID: SessionID, parentID: MessageID, root: string
   return msg
 }
 
-async function tool(sessionID: SessionID, messageID: MessageID, tool: string, output: string) {
-  return svc.updatePart({
-    id: PartID.ascending(),
-    messageID,
-    sessionID,
-    type: "tool",
-    callID: crypto.randomUUID(),
-    tool,
-    state: {
-      status: "completed",
-      input: {},
-      output,
-      title: "done",
-      metadata: {},
-      time: { start: Date.now(), end: Date.now() },
-    },
-  })
-}
-
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",

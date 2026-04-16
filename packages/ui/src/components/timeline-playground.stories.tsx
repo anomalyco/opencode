@@ -555,10 +555,6 @@ function toolPart(sample: (typeof TOOL_SAMPLES)[keyof typeof TOOL_SAMPLES], stat
   } as ToolPart
 }
 
-function compactionPart(): CompactionPart {
-  return { id: uid(), type: "compaction", auto: true } as CompactionPart
-}
-
 // ---------------------------------------------------------------------------
 // CSS Controls definition
 // ---------------------------------------------------------------------------
