@@ -18,6 +18,17 @@ export default defineConfig({
   server: {
     allowedHosts: true,
   },
+  resolve: {
+    alias: process.env.NODE_ENV === "development"
+      ? {
+          "@solidjs/start/dist/shared/lazy.js": "/src/shims/solid-start-lazy.ts",
+          "solid-start:get-manifest": "/src/shims/solid-start-get-manifest.ts",
+        }
+      : {},
+  },
+  worker: {
+    format: "es",
+  },
   build: {
     rollupOptions: {
       external: ["cloudflare:workers"],
