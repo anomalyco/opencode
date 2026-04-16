@@ -398,6 +398,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    nvidia: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }),
     vercel: () =>
       Effect.succeed({
         autoload: false,
@@ -1643,7 +1653,7 @@ export const defaultLayer = Layer.suspend(() =>
   ),
 )
 
-const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
+const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro", "nemotron-3-super"]
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
     models,
