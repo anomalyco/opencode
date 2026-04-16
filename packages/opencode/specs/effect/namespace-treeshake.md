@@ -196,14 +196,58 @@ import regressions at runtime — the typechecker does not catch these.
 ## Rules for new code
 
 - No new `export namespace`.
-- Every module file that wants a namespace gets a self-reexport at the
+- Every module directory has a single canonical file — typically
+  `dir/index.ts` — with flat top-level exports and a self-reexport at the
   bottom:
-  `export * as Foo from "./foo"`
-- Consumers import from the file itself:
-  `import { Foo } from "../path/to/foo"`
-- No new barrel `index.ts` files for internal code.
+  `export * as Foo from "."`
+- Consumers import from the directory:
+  `import { Foo } from "@/dir"` or `import { Foo } from "../dir"`.
+- No sibling barrel files. If a directory has multiple independent
+  namespaces, they each get their own file (e.g. `config/config.ts`,
+  `config/plugin.ts`) and their own self-reexport; the `index.ts` in that
+  directory stays minimal or does not exist.
 - If a file needs a sibling, import the sibling file directly:
   `import * as Sibling from "./sibling"`, not `from "."`.
+
+### Why `dir/index.ts` + `"."` is fine for us
+
+A single-file module (e.g. `pty/`) can live entirely in `dir/index.ts`
+with `export * as Foo from "."` at the bottom. Consumers write the
+short form:
+
+```ts
+import { Pty } from "@/pty"
+```
+
+This works in Bun runtime, Bun build, esbuild, and Rollup. It does NOT
+work under Node's `--experimental-strip-types` runner:
+
+```
+node --experimental-strip-types entry.ts
+  ERR_UNSUPPORTED_DIR_IMPORT: Directory import '/.../pty' is not supported
+```
+
+Node requires an explicit file or a `package.json#exports` map for ESM.
+We don't care about that target right now because the opencode CLI is
+built with Bun and the web apps are built with Vite/Rollup. If we ever
+want to run raw `.ts` through Node, we'll need to either use explicit
+`.ts` extensions everywhere or add per-directory `package.json` exports
+maps.
+
+### When NOT to collapse to `index.ts`
+
+Some directories contain multiple independent namespaces where
+`dir/index.ts` would be misleading. Examples:
+
+- `config/` has `Config`, `ConfigPaths`, `ConfigMarkdown`, `ConfigPlugin`,
+  `ConfigKeybinds`. Each lives in its own file with its own self-reexport
+  (`config/config.ts`, `config/plugin.ts`, etc.). Consumers import the
+  specific one: `import { ConfigPlugin } from "@/config/plugin"`.
+- Same shape for `session/`, `server/`, etc.
+
+Collapsing one of those into `index.ts` would mean picking a single
+"canonical" namespace for the directory, which breaks the symmetry and
+hides the other files.
 
 ## Scope
 
