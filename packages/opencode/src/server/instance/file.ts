@@ -15,7 +15,7 @@ export const FileRoutes = lazy(() =>
       "/find",
       describeRoute({
         summary: "Find text",
-        description: "Search for text patterns across files in the project using ripgrep.",
+        description: "Search for text patterns across files in the project.",
         operationId: "find.text",
         responses: {
           200: {
