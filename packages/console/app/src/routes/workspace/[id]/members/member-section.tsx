@@ -38,7 +38,7 @@ const inviteMember = action(async (form: FormData) => {
       () =>
         User.invite({ email, role, monthlyLimit })
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listMembers.key },
@@ -56,7 +56,7 @@ const removeMember = action(async (form: FormData) => {
       () =>
         User.remove(id)
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listMembers.key },
@@ -81,7 +81,7 @@ const updateMember = action(async (form: FormData) => {
       () =>
         User.update({ id, role, monthlyLimit })
           .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listMembers.key },

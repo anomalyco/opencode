@@ -90,7 +90,7 @@ const createLiteCheckoutUrl = action(
           Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
             .then((data) => ({ error: undefined, data }))
             .catch((e) => ({
-              error: e.message as string,
+              error: String(e?.message ?? e),
               data: undefined,
             })),
         workspaceID,
@@ -109,7 +109,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
         Billing.generateSessionUrl({ returnUrl })
           .then((data) => ({ error: undefined, data }))
           .catch((e) => ({
-            error: e.message as string,
+            error: String(e?.message ?? e),
             data: undefined,
           })),
       workspaceID,
@@ -135,7 +135,7 @@ const setLiteUseBalance = action(async (form: FormData) => {
           .where(eq(BillingTable.workspaceID, workspaceID)),
       )
       return { error: undefined }
-    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    }, workspaceID).catch((e) => ({ error: String(e?.message ?? e) })),
     { revalidate: [queryBillingInfo.key, queryLiteSubscription.key] },
   )
 }, "setLiteUseBalance")

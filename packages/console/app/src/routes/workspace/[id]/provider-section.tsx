@@ -43,7 +43,7 @@ const saveProvider = action(async (form: FormData) => {
       () =>
         Provider.create({ provider, credentials })
           .then(() => ({ error: undefined }))
-          .catch((e) => ({ error: e.message as string })),
+          .catch((e) => ({ error: String(e?.message ?? e) })),
       workspaceID,
     ),
     { revalidate: listProviders.key },

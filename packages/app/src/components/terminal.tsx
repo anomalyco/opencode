@@ -538,8 +538,8 @@ export const Terminal = (props: TerminalProps) => {
             if (bytes[0] !== 0) return
             const json = decoder.decode(bytes.subarray(1))
             try {
-              const meta = JSON.parse(json) as { cursor?: unknown }
-              const next = meta?.cursor
+              const meta: unknown = JSON.parse(json)
+              const next = meta && typeof meta === "object" && "cursor" in meta ? meta.cursor : undefined
               if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
                 cursor = next
                 seek = next

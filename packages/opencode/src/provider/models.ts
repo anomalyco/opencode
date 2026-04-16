@@ -127,17 +127,21 @@ const fetchApi = async () => {
   return { ok: result.ok, text: await result.text() }
 }
 
-export const Data = lazy(async () => {
-  const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+export const Data = lazy(async (): Promise<Record<string, Provider>> => {
+  const result = await Filesystem.readJson<Record<string, Provider>>(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(
+    () => undefined,
+  )
   if (result) return result
   // @ts-ignore
   const snapshot = await import("./models-snapshot.js")
-    .then((m) => m.snapshot as Record<string, unknown>)
+    .then((m) => m.snapshot as Record<string, Provider>)
     .catch(() => undefined)
   if (snapshot) return snapshot
   if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
   return Flock.withLock(`models-dev:${filepath}`, async () => {
-    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+    const result = await Filesystem.readJson<Record<string, Provider>>(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(
+      () => undefined,
+    )
     if (result) return result
     const result2 = await fetchApi()
     if (result2.ok) {
@@ -145,13 +149,12 @@ export const Data = lazy(async () => {
         log.error("Failed to write models cache", { error: e })
       })
     }
-    return JSON.parse(result2.text)
+    return JSON.parse(result2.text) as Record<string, Provider>
   })
 })
 
 export async function get() {
-  const result = await Data()
-  return result as Record<string, Provider>
+  return await Data()
 }
 
 export async function refresh(force = false) {
