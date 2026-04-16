@@ -13,7 +13,7 @@ const DEFAULT_AXIOM_ORIGIN = "https://api.axiom.co"
 
 /**
  * Browser OTLP → **Axiom** only (`VITE_PUBLIC_AXIOM_TOKEN` + `VITE_PUBLIC_AXIOM_DATASET`).
- * Put the same values as `AXIOM_*` in `packages/app/.env` — Vite does not expose non-VITE_ vars to the bundle.
+ * Put the same values as `AXIOM_*` in `.env.development` / `.env.production` — Vite does not expose non-VITE_ vars to the bundle.
  *
  * Spans: dev smoke (`veritly.debug.smoke`), or call `browserTracer().startActiveSpan(...)` from app code.
  * Server OTLP: `initVeritlyTracer` in opencode / edge / usip / sdk-relay (needs `OTEL_*` + `AXIOM_*` in env).

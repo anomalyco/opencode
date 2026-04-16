@@ -2,36 +2,3 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: veritly
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: veritly-secrets
-  namespace: veritly
-type: Opaque
-stringData:
-  OPENCODE_SERVER_PASSWORD: "change-me-in-production"
-  OTEL_EXPORTER_OTLP_HEADERS: ""
-  DATABASE_URL: "postgresql://veritly:veritly@postgres:5432/veritly"
-  WORKOS_API_KEY: "sk_test_your_workos_secret_key"
-  WORKOS_CLIENT_ID: "your_workos_client_id"
-  COOKIE_PASSWORD: "change-this-to-a-random-32-character-string"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: veritly-config
-  namespace: veritly
-data:
-  PUBLIC_HOST: "app.veritly.co.uk"
-  PUBLIC_BASE_URL: "https://app.veritly.co.uk"
-  VITE_UNIVER_BACKEND_URL: "https://univer.veritly.co.uk"
-  VITE_UNIVER_SDK_WS: "wss://relay.veritly.co.uk/ws"
-  OPENCODE_SERVER_USERNAME: "opencode"
-  OPENCODE_DISABLE_LOCAL_FILESYSTEM: "false"
-  DEPLOYMENT_ENVIRONMENT: "production"
-  EXECUTOR_DRIVER: "stub"
-  EXECUTOR_DEFAULT_TIMEOUT_MS: "120000"
-  VERITLY_TENANT_USER_ID: "default"
-  WORKOS_REDIRECT_URI: "https://api.veritly.co.uk/auth/callback"
-  OPENCODE_WORKOS_ENABLED: "true"

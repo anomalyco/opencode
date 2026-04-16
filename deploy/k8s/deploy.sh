@@ -6,6 +6,7 @@ set -e
 
 ENV=${1:-production}
 REGISTRY=${REGISTRY:-"registry.digitalocean.com/veritly"}
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 echo "🚀 Deploying Veritly to Kubernetes (env: $ENV)"
 echo ""
@@ -39,9 +40,9 @@ kubectl get nodes
 # Build images
 echo ""
 echo "📦 Building images..."
-cd /Users/Apple/Documents/Github/veritly/vendor/opencode-veritly
+cd "$ROOT"
 
-docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml build relay opencode executor-api
+docker compose --env-file .env.production -f docker-compose.selfhost.yml build relay opencode executor-api
 
 # Tag images
 echo ""
@@ -93,6 +94,7 @@ EOF
 # Deploy
 echo ""
 echo "🚀 Applying manifests..."
+"$ROOT/deploy/k8s/sync-env.sh"
 kubectl apply -k .
 
 # Wait for rollout

@@ -19,10 +19,10 @@ The relay is now a **standalone service** - no more HTTP proxy chains through Op
 
 ## Files
 
-- App stack: [docker-compose.selfhost.yml](/Users/Apple/Documents/Github/veritly/vendor/opencode-veritly/docker-compose.selfhost.yml)
-- Env example: [.env.selfhost.example](/Users/Apple/Documents/Github/veritly/vendor/opencode-veritly/.env.selfhost.example)
-- Relay service: [deploy/relay/](/Users/Apple/Documents/Github/veritly/vendor/opencode-veritly/deploy/relay/)
-- Executor API: [deploy/executor-api/server.mjs](/Users/Apple/Documents/Github/veritly/vendor/opencode-veritly/deploy/executor-api/server.mjs)
+- App stack: `docker-compose.selfhost.yml`
+- Env example: [.env.production.example](/Users/Apple/Documents/Github/opencode-veritly/.env.production.example)
+- Relay service: [deploy/relay/](/Users/Apple/Documents/Github/opencode-veritly/deploy/relay/)
+- Executor API: [deploy/executor-api/server.mjs](/Users/Apple/Documents/Github/opencode-veritly/deploy/executor-api/server.mjs)
 
 ## Quick Start
 
@@ -41,12 +41,12 @@ This uses the external Docker network `univer-prod`.
 
 ### 2. Bring up Veritly self-host
 
-From `vendor/opencode-veritly`:
+From this repo:
 
 ```bash
-cp .env.selfhost.example .env.selfhost
-# Edit .env.selfhost and set OPENCODE_SERVER_PASSWORD
-docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml up --build -d
+cp .env.production.example .env.production
+# Edit .env.production and set OPENCODE_SERVER_PASSWORD
+docker compose --env-file .env.production -f docker-compose.selfhost.yml up --build -d
 ```
 
 ## Sticky WebSocket Routing
@@ -54,7 +54,7 @@ docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml up --buil
 Traefik handles sticky sessions for the relay service. When you scale:
 
 ```bash
-docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml up -d --scale relay=3
+docker compose --env-file .env.production -f docker-compose.selfhost.yml up -d --scale relay=3
 ```
 
 Browsers get a `veritly_relay` cookie that pins them to the same relay replica for the session.

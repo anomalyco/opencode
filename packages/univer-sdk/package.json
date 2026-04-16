@@ -9,7 +9,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit -p .",
     "test": "bun test ./src",
-    "sdk-relay": "bun --env-file=../app/.env ./script/sdk-relay.ts"
+    "sdk-relay": "bun --env-file=../../.env.development ./script/sdk-relay.ts"
   },
   "peerDependencies": {
     "@univerjs/core": "0.18.0",

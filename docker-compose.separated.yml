@@ -17,16 +17,15 @@ services:
     image: opencode-veritly-api:lean
     ports:
       - "8001:3000"
+    env_file:
+      - .env.development
     environment:
       - OPENCODE_DISABLE_LOCAL_FILESYSTEM=false
       - DEPLOYMENT_ENVIRONMENT=local
       - DATABASE_URL=postgresql://veritly:veritly@postgres:5432/veritly
       - VERITLY_TENANT_USER_ID=default
       - VERITLY_WS_DEBUG=0
-      - WORKOS_API_KEY=${WORKOS_API_KEY:?WORKOS_API_KEY required}
-      - WORKOS_CLIENT_ID=${WORKOS_CLIENT_ID:?WORKOS_CLIENT_ID required}
-      - WORKOS_REDIRECT_URI=${WORKOS_REDIRECT_URI:-http://localhost:8001/auth/callback}
-      - COOKIE_PASSWORD=${COOKIE_PASSWORD:?COOKIE_PASSWORD required (32+ chars)}
+      - WORKOS_REDIRECT_URI=http://localhost:8001/auth/callback
       - PUBLIC_BASE_URL=http://localhost:8000
       - NODE_ENV=development
       - VERITLY_HEALTH_RELAY_URL=
@@ -46,14 +45,13 @@ services:
     image: opencode-veritly-frontend:lean
     ports:
       - "8000:80"
+    env_file:
+      - .env.development
     environment:
       - PORT=80
       - FRONTEND_BACKEND_HEALTH_URL=http://opencode-api:3000/healthz
       - FRONTEND_RELAY_HEALTH_URL=http://relay:8080/healthz
       - FRONTEND_RELAY_WS_HEALTH_URL=ws://relay:8080/health/ws
-      - FRONTEND_PUBLIC_OPENCODE_SERVER_URL=http://localhost:8001
-      - FRONTEND_PUBLIC_UNIVER_BACKEND_URL=https://univer.veritly.co.uk
-      - FRONTEND_PUBLIC_UNIVER_SDK_WS=wss://relay.veritly.co.uk/ws
     depends_on:
       opencode-api:
         condition: service_started
@@ -69,6 +67,8 @@ services:
     image: opencode-veritly-relay:latest
     ports:
       - "18766:8080"
+    env_file:
+      - .env.development
     environment:
       - PORT=8080
       - RELAY_BACKEND_HEALTH_URL=http://opencode-api:3000/healthz

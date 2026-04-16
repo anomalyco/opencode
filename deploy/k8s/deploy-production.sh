@@ -14,6 +14,7 @@ NC='\033[0m' # No Color
 # Configuration
 REGISTRY="registry.digitalocean.com/veritly"
 CLUSTER_ID="602c73dd-37fe-4c00-a23e-1aa027878fa2"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 echo "Step 1: Checking prerequisites..."
 if ! command -v kubectl &> /dev/null; then
@@ -53,9 +54,9 @@ echo -e "${GREEN}✅ Logged in${NC}"
 echo ""
 
 echo "Step 5: Building images..."
-cd /Users/Apple/Documents/Github/veritly/vendor/opencode-veritly
+cd "$ROOT"
 
-docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml build relay opencode executor-api
+docker compose --env-file .env.production -f docker-compose.selfhost.yml build relay opencode executor-api
 echo -e "${GREEN}✅ Images built${NC}"
 echo ""
 
@@ -114,14 +115,9 @@ EOF
 echo -e "${GREEN}✅ Kustomization updated${NC}"
 echo ""
 
-echo "Step 9: Updating secrets..."
-read -sp "Enter OpenCode server password: " PASSWORD
-echo ""
-kubectl create secret generic veritly-secrets \
-  --from-literal=OPENCODE_SERVER_PASSWORD="$PASSWORD" \
-  --namespace veritly \
-  --dry-run=client -o yaml | kubectl apply -f -
-echo -e "${GREEN}✅ Secrets updated${NC}"
+echo "Step 9: Syncing env from .env.production..."
+"$ROOT/deploy/k8s/sync-env.sh"
+echo -e "${GREEN}✅ Env synced${NC}"
 echo ""
 
 echo "Step 10: Deploying to Kubernetes..."

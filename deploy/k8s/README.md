@@ -45,7 +45,9 @@ External: univer.veritly.co.uk (already deployed)
 ## Quick Deploy
 
 ```bash
-cd /Users/Apple/Documents/Github/veritly/vendor/opencode-veritly
+cd /Users/Apple/Documents/Github/opencode-veritly
+cp .env.production.example .env.production # first time only
+./deploy/k8s/sync-env.sh
 ./deploy/k8s/deploy-production.sh
 ```
 
@@ -75,8 +77,8 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/cont
 doctl registry create veritly  # if not exists
 doctl registry login
 
-# Build
-docker compose --env-file .env.selfhost -f docker-compose.selfhost.yml build
+# Sync Kubernetes config + secrets from .env.production
+./deploy/k8s/sync-env.sh
 
 # Tag
 docker tag opencode-veritly-relay:latest registry.digitalocean.com/veritly/relay:latest
@@ -95,11 +97,9 @@ docker push registry.digitalocean.com/veritly/executor-api:latest
 # Change image newName to your registry
 ```
 
-### 5. Set Secrets
+### 5. Sync Env
 ```bash
-kubectl create secret generic veritly-secrets \
-  --from-literal=OPENCODE_SERVER_PASSWORD='your-secure-password' \
-  --namespace veritly
+./deploy/k8s/sync-env.sh
 ```
 
 ### 6. Deploy
@@ -139,7 +139,7 @@ curl https://app.veritly.co.uk/global/health
 
 ## Configuration
 
-Edit `deploy/k8s/base/00-namespace.yaml` ConfigMap:
+Edit `.env.production`, then re-run `./deploy/k8s/sync-env.sh`:
 
 | Key | Default | Description |
 |-----|---------|-------------|

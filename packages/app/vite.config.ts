@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import { defineConfig, loadEnv } from "vite"
 import desktopPlugin from "./vite"
 
@@ -34,7 +35,8 @@ function devApiProxy(target: string) {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "")
+  const root = fileURLToPath(new URL("../..", import.meta.url))
+  const env = loadEnv(mode, root, "")
   const axiomHost = (env.VITE_PUBLIC_AXIOM_URL || "https://api.axiom.co").replace(/\/+$/, "")
   /** Forward `/api/*` (HTTP + WebSocket) to hosted edge so `VITE_UNIVER_SDK_WS=/api/...` is same-origin in dev. */
   const devProxyTarget = env.DEV_PROXY_TARGET?.trim()
@@ -42,6 +44,7 @@ export default defineConfig(({ mode }) => {
   const tunnelPublicHost = env.VERITLY_TUNNEL_PUBLIC_HOST?.trim()
 
   return {
+    envDir: root,
     plugins: [desktopPlugin] as any,
     server: {
       /** `true` listens on all interfaces (v4 + v6); `0.0.0.0` is IPv4-only and can break `localhost`→`::1` clients (e.g. cloudflared). */

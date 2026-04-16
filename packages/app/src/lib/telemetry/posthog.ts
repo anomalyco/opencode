@@ -57,7 +57,7 @@ export function initPosthog(): void {
   if (!key) {
     if (import.meta.env.DEV) {
       console.warn(
-        "[veritly] PostHog off: set VITE_PUBLIC_POSTHOG_KEY in packages/app/.env and restart Vite (env is baked at dev-server start).",
+        "[veritly] PostHog off: set VITE_PUBLIC_POSTHOG_KEY in .env.development and restart Vite (env is baked at dev-server start).",
       )
     }
     return

@@ -11,7 +11,7 @@
   "scripts": {
     "typecheck": "tsgo -b",
     "start": "vite",
-    "dev": "vite",
+    "dev": "bun --env-file=../../.env.development ./script/dev.ts",
     "build": "vite build",
     "serve": "vite preview",
     "test": "bun run test:unit",

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { config } from "dotenv";
 
 const packageRoot = path.resolve(import.meta.dir);
 const opencodeRoot = path.resolve(packageRoot, "..", "..");
@@ -9,6 +10,7 @@ const managedDir = path.join(opencodeRoot, ".veritly", ".managed-opencode");
 const managedInstructionsPath = path.join(managedDir, "veritly-instructions.md");
 const examplesPath = path.join(opencodeRoot, "packages", "veritly-components", "examples.md");
 const userInstructionsPath = path.join(os.homedir(), ".config", "opencode", "AGENTS.md");
+const envPath = path.join(opencodeRoot, ".env.development");
 
 function log(message: string) {
 	console.log(`[veritly-debug-serve] ${message}`);
@@ -25,6 +27,21 @@ async function readOptional(filePath: string) {
 	}
 }
 
+config({ path: envPath, override: false });
+
+const frontHost = process.env.DEV_FRONTEND_HOST?.trim() || "127.0.0.1";
+const frontPort = process.env.DEV_FRONTEND_PORT?.trim() || "4444";
+const host = process.env.DEV_BACKEND_HOST?.trim() || "127.0.0.1";
+const port = process.env.DEV_BACKEND_PORT?.trim() || "4096";
+
+if (!process.env.PUBLIC_BASE_URL?.trim()) {
+	process.env.PUBLIC_BASE_URL = `http://${frontHost}:${frontPort}`;
+}
+
+if (!process.env.WORKOS_REDIRECT_URI?.trim()) {
+	process.env.WORKOS_REDIRECT_URI = `http://${host}:${port}/auth/callback`;
+}
+
 const examples = await readFile(examplesPath, "utf8");
 const userInstructions = await readOptional(userInstructionsPath);
 
@@ -34,9 +51,7 @@ const content = [
 	"# Veritly managed instructions",
 	"",
 	examples.trimEnd(),
-	userInstructions
-		? ["", "---", "", "# User instructions", "", userInstructions.trimEnd()].join("\n")
-		: "",
+	userInstructions ? ["", "---", "", "# User instructions", "", userInstructions.trimEnd()].join("\n") : "",
 	"",
 ].join("\n");
 
@@ -89,11 +104,19 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 process.on("exit", stopOwnedRelay);
 
-if (!await relayHealthy()) {
+if (!(await relayHealthy())) {
 	log(`univer-sdk-relay: not healthy at ${relayHealthUrl}`);
 }
 
-// Make the downstream CLI parse as `opencode serve --port 4096`.
-process.argv = [process.argv[0] ?? "bun", path.join(packageRoot, "src", "index.ts"), "serve", "--port", "4096"];
+// Make the downstream CLI parse as `opencode serve --port <DEV_BACKEND_PORT>`.
+process.argv = [
+	process.argv[0] ?? "bun",
+	path.join(packageRoot, "src", "index.ts"),
+	"serve",
+	"--port",
+	port,
+	"--hostname",
+	host,
+];
 
 await import("./src/index.ts");

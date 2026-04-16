@@ -17,7 +17,7 @@ Cloudflare prints a **`https://*.trycloudflare.com`** URL. That origin uses **TL
 
 3. Open that URL in the browser. For the **spreadsheet relay**, you still need either:
    - **Full stack** on `3000` (edge `serve-custom-app` + OpenCode + sdk-relay), or  
-   - **Vite only** plus `DEV_PROXY_TARGET` + `VITE_UNIVER_SDK_WS=/api/univer-sdk-relay/ws` in `packages/app/.env` so `/api` proxies to a real backend (see `vite.config.ts`).
+   - **Vite only** plus `DEV_PROXY_TARGET` + `VITE_UNIVER_SDK_WS=/api/univer-sdk-relay/ws` in `.env.development` so `/api` proxies to a real backend (see `vite.config.ts`).
 
 ## Named tunnel + your own hostname
 

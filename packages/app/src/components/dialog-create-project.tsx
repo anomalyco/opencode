@@ -31,6 +31,7 @@ export function DialogCreateProject(props: { onCreate: (directory: string) => vo
 
     const response = await (platform.fetch ?? fetch)(`${current.http.url}/project/create`, {
       method: "POST",
+      credentials: "include",
       headers,
       body: JSON.stringify({ name }),
     })

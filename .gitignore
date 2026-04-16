@@ -3,6 +3,8 @@ node_modules
 .worktrees
 .sst
 .env
+.env.development
+.env.production
 .idea
 .vscode
 .codex

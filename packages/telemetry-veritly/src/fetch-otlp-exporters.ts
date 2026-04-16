@@ -57,7 +57,7 @@ export class FetchOtlpTraceExporter implements SpanExporter {
       const text = await res.text().catch(() => "")
       const hint401 =
         res.status === 401 && !mergeOtlpHeaders()?.Authorization
-          ? " No Authorization header — ensure AXIOM_TOKEN (or OTEL_EXPORTER_OTLP_HEADERS) is in the process environment for this binary (e.g. bun --env-file=…/app/.env)."
+          ? " No Authorization header — ensure AXIOM_TOKEN (or OTEL_EXPORTER_OTLP_HEADERS) is in the process environment for this binary (e.g. bun --env-file=…/.env.development)."
           : ""
       resultCallback({
         code: ExportResultCode.FAILED,
@@ -108,7 +108,7 @@ export class FetchOtlpLogExporter implements LogRecordExporter {
       const text = await res.text().catch(() => "")
       const hint401 =
         res.status === 401 && !mergeOtlpHeaders()?.Authorization
-          ? " No Authorization header — ensure AXIOM_TOKEN (or OTEL_EXPORTER_OTLP_HEADERS) is in the process environment for this binary (e.g. bun --env-file=…/app/.env)."
+          ? " No Authorization header — ensure AXIOM_TOKEN (or OTEL_EXPORTER_OTLP_HEADERS) is in the process environment for this binary (e.g. bun --env-file=…/.env.development)."
           : ""
       resultCallback({
         code: ExportResultCode.FAILED,

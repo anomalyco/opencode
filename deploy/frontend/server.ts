@@ -6,11 +6,17 @@ const backendHealthUrl = process.env.FRONTEND_BACKEND_HEALTH_URL?.trim() || "htt
 const relayHealthUrl = process.env.FRONTEND_RELAY_HEALTH_URL?.trim() || "http://relay:8080/healthz";
 const relayWsHealthUrl = process.env.FRONTEND_RELAY_WS_HEALTH_URL?.trim() || "ws://relay:8080/health/ws";
 const publicOpencodeServerUrl =
-	process.env.FRONTEND_PUBLIC_OPENCODE_SERVER_URL?.trim() || "https://api.veritly.co.uk";
+	process.env.FRONTEND_PUBLIC_OPENCODE_SERVER_URL?.trim() ||
+	process.env.VITE_OPENCODE_SERVER_URL?.trim() ||
+	"https://api.veritly.co.uk";
 const publicUniverBackendUrl =
-	process.env.FRONTEND_PUBLIC_UNIVER_BACKEND_URL?.trim() || "https://univer.veritly.co.uk";
+	process.env.FRONTEND_PUBLIC_UNIVER_BACKEND_URL?.trim() ||
+	process.env.VITE_UNIVER_BACKEND_URL?.trim() ||
+	"https://univer.veritly.co.uk";
 const publicRelayWsUrl =
-	process.env.FRONTEND_PUBLIC_UNIVER_SDK_WS?.trim() || "wss://relay.veritly.co.uk/ws";
+	process.env.FRONTEND_PUBLIC_UNIVER_SDK_WS?.trim() ||
+	process.env.VITE_UNIVER_SDK_WS?.trim() ||
+	"wss://relay.veritly.co.uk/ws";
 const healthTimeoutMs = Number(process.env.VERITLY_HEALTH_TIMEOUT_MS ?? "5000");
 
 type HealthCheckResult = {
