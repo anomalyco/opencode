@@ -56,6 +56,7 @@ import { Spinner } from "./spinner"
 import { animate } from "motion"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
+import { streamsplit } from "./message-part-stream"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -173,6 +174,7 @@ export type PartComponent = Component<MessagePartProps>
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
 const TEXT_RENDER_THROTTLE_MS = 100
+const TEXT_SETTLE_MS = 160
 
 function createThrottledValue(getValue: () => string) {
   const [value, setValue] = createSignal(getValue())
@@ -1586,6 +1588,41 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return last?.id === part.id
   })
   const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
+  const [idle, setIdle] = createSignal(!streaming())
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  createEffect(() => {
+    const text = renderText()
+    const live = streaming() && isLastTextPart()
+    if (timer) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+    if (!live) {
+      setIdle(true)
+      return
+    }
+    setIdle(false)
+    console.debug("[text-part] stream update", { id: part.id, size: text.length })
+    timer = setTimeout(() => {
+      console.debug("[text-part] stream settled", { id: part.id, size: text.length })
+      setIdle(true)
+      timer = undefined
+    }, TEXT_SETTLE_MS)
+  })
+
+  onCleanup(() => {
+    if (!timer) return
+    clearTimeout(timer)
+    timer = undefined
+  })
+
+  const block = createMemo(() => {
+    const text = renderText()
+    if (!text) return { head: "", tail: "" }
+    if (!streaming() || !isLastTextPart() || idle()) return { head: text, tail: "" }
+    return streamsplit(text)
+  })
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
@@ -1603,18 +1640,30 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   }
 
   return (
-    <Show when={renderText()}>
+    <Show when={block().head || block().tail}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown
-            text={renderText()}
-            cacheKey={part.id}
-            streaming={streaming()}
-            eager={props.markdownEager}
-            viewport={props.markdownViewport}
-            highlight={props.markdownHighlight}
-            math={props.markdownMath}
-          />
+          <Show when={block().head}>
+            <Markdown
+              text={block().head}
+              cacheKey={`${part.id}:head`}
+              eager={props.markdownEager}
+              viewport={props.markdownViewport}
+              highlight={props.markdownHighlight}
+              math={props.markdownMath}
+            />
+          </Show>
+          <Show when={block().tail}>
+            <Markdown
+              text={block().tail}
+              cacheKey={`${part.id}:tail`}
+              streaming
+              eager={props.markdownEager}
+              viewport={props.markdownViewport}
+              highlight={props.markdownHighlight}
+              math={props.markdownMath}
+            />
+          </Show>
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
