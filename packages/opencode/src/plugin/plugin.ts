@@ -168,6 +168,7 @@ export const layer = Layer.effect(
           PluginLoader.loadExternal({
             items: plugins,
             kind: "server",
+            configCwd: ctx.directory,
             report: {
               start(candidate) {
                 log.info("loading plugin", { path: candidate.plan.spec })

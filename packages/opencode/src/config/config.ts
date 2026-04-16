@@ -1294,7 +1294,7 @@ export const layer: Layer.Layer<
 
       if (hasDep && hasIgnore && hasPkg) return
 
-      yield* Effect.promise(() => Npm.install(dir))
+      yield* Effect.promise(() => Npm.install(dir, dir))
     })
 
     const installDependencies = Effect.fn("Config.installDependencies")(function* (dir: string, input?: InstallInput) {

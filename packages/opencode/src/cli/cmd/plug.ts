@@ -24,7 +24,7 @@ export type PlugDeps = {
     info: (msg: string) => void
     success: (msg: string) => void
   }
-  resolve: (spec: string) => Promise<string>
+  resolve: (spec: string, configCwd: string) => Promise<string>
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
@@ -51,7 +51,7 @@ const defaultPlugDeps: PlugDeps = {
     info: (msg) => log.info(msg),
     success: (msg) => log.success(msg),
   },
-  resolve: (spec) => resolvePluginTarget(spec),
+  resolve: (spec, configCwd) => resolvePluginTarget(spec, configCwd),
   readText: (file) => Filesystem.readText(file),
   write: async (file, text) => {
     await Filesystem.write(file, text)
@@ -75,7 +75,7 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
   return async (ctx: PlugCtx) => {
     const install = dep.spinner()
     install.start("Installing plugin package...")
-    const target = await installPlugin(mod, dep)
+    const target = await installPlugin(mod, dep, ctx.directory)
     if (!target.ok) {
       install.stop("Install failed", 1)
       dep.log.error(`Could not install "${mod}"`)

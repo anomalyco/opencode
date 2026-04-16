@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { describe, expect, spyOn, test } from "bun:test"
+import path from "path"
+import { pathToFileURL } from "url"
+import { tmpdir } from "../fixture/fixture"
+import { Filesystem } from "../../src/util/filesystem"
+import { parsePluginSpecifier, resolvePluginTarget } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +88,30 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+
+describe("resolvePluginTarget", () => {
+  test("resolves relative path specs against config cwd", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const config = path.join(dir, "config")
+        const plugin = path.join(config, "plugin")
+        const outside = path.join(dir, "outside")
+        await Filesystem.write(path.join(plugin, "index.ts"), "export default {}")
+        await Filesystem.write(path.join(outside, "index.ts"), "export default {}")
+        return { config, plugin, outside }
+      },
+    })
+
+    const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.extra.outside)
+
+    try {
+      const target = await resolvePluginTarget("./plugin", tmp.extra.config)
+      expect(target).toBe(pathToFileURL(path.join(tmp.extra.plugin, "index.ts")).href)
+    } finally {
+      cwd.mockRestore()
+    }
   })
 })

@@ -7,6 +7,7 @@ import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { TuiConfig } from "../../../src/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
+const { Npm } = await import("../../../src/npm")
 
 test("installs plugin without loading it", async () => {
   await using tmp = await tmpdir({
@@ -81,6 +82,84 @@ test("installs plugin without loading it", async () => {
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("loaded")
   } finally {
     await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    get.mockRestore()
+    wait.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
+
+test("installs npm plugins using the runtime directory as config cwd", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const pkg = path.join(dir, "packages", "demo-install-plugin")
+      const file = path.join(pkg, "install-plugin.ts")
+
+      await fs.mkdir(pkg, { recursive: true })
+
+      await Bun.write(
+        path.join(pkg, "package.json"),
+        JSON.stringify(
+          {
+            name: "demo-install-plugin",
+            type: "module",
+            exports: {
+              "./tui": "./install-plugin.ts",
+            },
+          },
+          null,
+          2,
+        ),
+      )
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.install",
+  tui: async () => {},
+}
+`,
+      )
+
+      return { pkg }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
+    plugin: [],
+    plugin_origins: undefined,
+  }
+  const get = spyOn(TuiConfig, "get").mockImplementation(async () => cfg)
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => path.dirname(tmp.path))
+  const add = spyOn(Npm, "add").mockResolvedValue({
+    directory: tmp.extra.pkg,
+    entrypoint: tmp.extra.pkg,
+  })
+  const api = createTuiPluginApi({
+    state: {
+      path: {
+        state: path.join(tmp.path, "state.json"),
+        config: path.join(tmp.path, "tui.json"),
+        worktree: tmp.path,
+        directory: tmp.path,
+      },
+    },
+  })
+
+  try {
+    await TuiPluginRuntime.init(api)
+    const out = await TuiPluginRuntime.installPlugin("demo-install-plugin")
+    expect(out).toMatchObject({
+      ok: true,
+      tui: true,
+    })
+    expect(add).toHaveBeenCalledWith("demo-install-plugin@latest", tmp.path)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    add.mockRestore()
     cwd.mockRestore()
     get.mockRestore()
     wait.mockRestore()

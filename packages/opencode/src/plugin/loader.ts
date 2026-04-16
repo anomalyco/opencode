@@ -1,3 +1,4 @@
+import path from "path"
 import { Config } from "@/config"
 import { Installation } from "@/installation"
 import {
@@ -54,6 +55,7 @@ export namespace PluginLoader {
   export async function resolve(
     plan: Plan,
     kind: PluginKind,
+    configCwd?: string,
   ): Promise<
     | { ok: true; value: Resolved }
     | { ok: false; stage: "missing"; value: Missing }
@@ -61,7 +63,7 @@ export namespace PluginLoader {
   > {
     let target = ""
     try {
-      target = await resolvePluginTarget(plan.spec)
+      target = await resolvePluginTarget(plan.spec, configCwd)
     } catch (error) {
       return { ok: false, stage: "install", error }
     }
@@ -107,10 +109,20 @@ export namespace PluginLoader {
     return { ok: true, value: { ...row, mod } }
   }
 
+  function configCwd(origin: Config.PluginOrigin, fallback?: string) {
+    if (origin.source === "OPENCODE_CONFIG_CONTENT") return fallback
+    if (origin.source.startsWith("http://") || origin.source.startsWith("https://")) return fallback
+    if (origin.source.endsWith(".json") || origin.source.endsWith(".jsonc")) {
+      return path.dirname(origin.source)
+    }
+    return origin.source
+  }
+
   async function attempt<R>(
     candidate: Candidate,
     kind: PluginKind,
     retry: boolean,
+    configRoot: string | undefined,
     finish: ((load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
     missing: ((value: Missing, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report | undefined,
@@ -118,7 +130,7 @@ export namespace PluginLoader {
     const plan = candidate.plan
     if (plan.deprecated) return
     report?.start?.(candidate, retry)
-    const resolved = await resolve(plan, kind)
+    const resolved = await resolve(plan, kind, configRoot)
     if (!resolved.ok) {
       if (resolved.stage === "missing") {
         if (missing) {
@@ -143,6 +155,7 @@ export namespace PluginLoader {
   type Input<R> = {
     items: Config.PluginOrigin[]
     kind: PluginKind
+    configCwd?: string
     wait?: () => Promise<void>
     finish?: (load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
     missing?: (value: Missing, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
@@ -153,7 +166,17 @@ export namespace PluginLoader {
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<R | undefined>> = []
     for (const candidate of candidates) {
-      list.push(attempt(candidate, input.kind, false, input.finish, input.missing, input.report))
+      list.push(
+        attempt(
+          candidate,
+          input.kind,
+          false,
+          configCwd(candidate.origin, input.configCwd),
+          input.finish,
+          input.missing,
+          input.report,
+        ),
+      )
     }
     const out = await Promise.all(list)
     if (input.wait) {
@@ -164,7 +187,15 @@ export namespace PluginLoader {
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
         await deps
-        out[i] = await attempt(candidate, input.kind, true, input.finish, input.missing, input.report)
+        out[i] = await attempt(
+          candidate,
+          input.kind,
+          true,
+          configCwd(candidate.origin, input.configCwd),
+          input.finish,
+          input.missing,
+          input.report,
+        )
       }
     }
     const ready: R[] = []

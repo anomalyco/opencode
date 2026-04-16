@@ -246,8 +246,8 @@ describe("plugin.loader.shared", () => {
     try {
       await load(tmp.path)
 
-      expect(add.mock.calls).toContainEqual(["acme-plugin@latest"])
-      expect(add.mock.calls).toContainEqual(["scope-plugin@2.3.4"])
+      expect(add.mock.calls).toContainEqual(["acme-plugin@latest", tmp.path])
+      expect(add.mock.calls).toContainEqual(["scope-plugin@2.3.4", tmp.path])
     } finally {
       add.mockRestore()
     }
@@ -592,7 +592,7 @@ describe("plugin.loader.shared", () => {
 
     try {
       await load(tmp.path)
-      expect(install).toHaveBeenCalledWith("broken-plugin@9.9.9")
+      expect(install).toHaveBeenCalledWith("broken-plugin@9.9.9", tmp.path)
       expect(await Bun.file(tmp.extra.mark).text()).toBe("ok")
     } finally {
       install.mockRestore()

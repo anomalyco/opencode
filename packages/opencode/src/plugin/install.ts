@@ -24,7 +24,7 @@ export type Target = {
 }
 
 export type InstallDeps = {
-  resolve: (spec: string) => Promise<string>
+  resolve: (spec: string, configCwd: string) => Promise<string>
 }
 
 export type PatchDeps = {
@@ -76,7 +76,7 @@ type PatchOne = Ok<{ item: PatchItem }> | PatchErr
 export type PatchResult = Ok<{ dir: string; items: PatchItem[] }> | (PatchErr & { dir: string })
 
 const defaultInstallDeps: InstallDeps = {
-  resolve: (spec) => resolvePluginTarget(spec),
+  resolve: (spec, configCwd) => resolvePluginTarget(spec, configCwd),
 }
 
 const defaultPatchDeps: PatchDeps = {
@@ -256,8 +256,12 @@ function patchPluginList(
   }
 }
 
-export async function installPlugin(spec: string, dep: InstallDeps = defaultInstallDeps): Promise<InstallResult> {
-  const target = await dep.resolve(spec).then(
+export async function installPlugin(
+  spec: string,
+  dep: InstallDeps = defaultInstallDeps,
+  configCwd = process.cwd(),
+): Promise<InstallResult> {
+  const target = await dep.resolve(spec, configCwd).then(
     (item) => ({
       ok: true as const,
       item,

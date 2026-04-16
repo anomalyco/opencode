@@ -8,6 +8,8 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Arborist } from "@npmcli/arborist"
+import NpmConfig from "@npmcli/config"
+import npmConfigDefinitions from "@npmcli/config/lib/definitions"
 
 const log = Log.create({ service: "npm" })
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
@@ -22,6 +24,81 @@ export const InstallFailedError = NamedError.create(
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
+}
+
+const ARBORIST_OPTIONS = {
+  binLinks: true,
+  progress: false,
+  savePrefix: "",
+  ignoreScripts: true,
+} as const
+
+function resolveConfigCwd(configCwd: string) {
+  if (!configCwd.trim()) {
+    throw new Error("npm config cwd is required")
+  }
+  return Filesystem.resolve(configCwd)
+}
+
+async function findNpmPackageRoot(start: string) {
+  let current = Filesystem.resolve(start)
+  for (let i = 0; i < 4; i++) {
+    const pkg = await Filesystem.readJson<{ name?: string }>(path.join(current, "package.json")).catch(() => undefined)
+    if (pkg?.name === "npm") return current
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+}
+
+let npmPathPromise: Promise<string> | undefined
+
+async function resolveNpmPath() {
+  if (npmPathPromise) return npmPathPromise
+
+  npmPathPromise = (async () => {
+    const execDir = path.dirname(process.execPath)
+    const candidates = [
+      process.env.npm_execpath,
+      path.join(execDir, "..", "lib", "node_modules", "npm"),
+      path.join(execDir, "..", "node_modules", "npm"),
+      path.join(execDir, "node_modules", "npm"),
+    ].filter((candidate): candidate is string => Boolean(candidate))
+
+    for (const candidate of candidates) {
+      const npmPath = await findNpmPackageRoot(candidate)
+      if (npmPath) return npmPath
+    }
+
+    return execDir
+  })()
+
+  return npmPathPromise
+}
+
+async function loadArboristConfig(cwd: string) {
+  const config = new NpmConfig({
+    definitions: npmConfigDefinitions.definitions,
+    flatten: npmConfigDefinitions.flatten,
+    shorthands: npmConfigDefinitions.shorthands,
+    nerfDarts: npmConfigDefinitions.nerfDarts,
+    npmPath: await resolveNpmPath(),
+    cwd,
+    argv: [],
+    env: process.env,
+  })
+  await config.load()
+  return config.flat
+}
+
+async function createArborist(installPath: string, configCwd: string) {
+  const cwd = resolveConfigCwd(configCwd)
+  const config = await loadArboristConfig(cwd)
+  return new Arborist({
+    ...config,
+    path: installPath,
+    ...ARBORIST_OPTIONS,
+  })
 }
 
 function directory(pkg: string) {
@@ -60,19 +137,20 @@ export async function outdated(pkg: string, cachedVersion: string): Promise<bool
   return semver.lt(cachedVersion, latestVersion)
 }
 
-export async function add(pkg: string) {
+export async function add(pkg: string, configCwd = process.cwd()) {
   const dir = directory(pkg)
   await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
   log.info("installing package", {
     pkg,
   })
 
-  const arborist = new Arborist({
-    path: dir,
-    binLinks: true,
-    progress: false,
-    savePrefix: "",
-    ignoreScripts: true,
+  const arborist = await createArborist(dir, configCwd).catch((cause) => {
+    throw new InstallFailedError(
+      { pkg },
+      {
+        cause,
+      },
+    )
   })
   const tree = await arborist.loadVirtual().catch(() => {})
   if (tree) {
@@ -102,18 +180,12 @@ export async function add(pkg: string) {
   return resolveEntryPoint(first.name, first.path)
 }
 
-export async function install(dir: string) {
+export async function install(dir: string, configCwd = process.cwd()) {
   await using _ = await Flock.acquire(`npm-install:${dir}`)
   log.info("checking dependencies", { dir })
 
   const reify = async () => {
-    const arb = new Arborist({
-      path: dir,
-      binLinks: true,
-      progress: false,
-      savePrefix: "",
-      ignoreScripts: true,
-    })
+    const arb = await createArborist(dir, configCwd)
     await arb.reify().catch(() => {})
   }
 

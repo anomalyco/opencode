@@ -1,6 +1,7 @@
-import { test, expect } from "bun:test"
+import { test, expect, spyOn } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 
 import { tmpdir } from "../fixture/fixture"
 import { Global } from "../../src/global"
@@ -11,6 +12,7 @@ import { Provider } from "../../src/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { Env } from "../../src/env"
+import { Npm } from "../../src/npm"
 import { Effect } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { makeRuntime } from "../../src/effect/run-service"
@@ -113,6 +115,63 @@ test("provider loaded from config with apiKey option", async () => {
       expect(providers[ProviderID.anthropic]).toBeDefined()
     },
   })
+})
+
+test("custom npm providers use the instance directory for npm config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const mod = path.join(dir, "mods", "demo-provider.mjs")
+      await mkdir(path.dirname(mod), { recursive: true })
+      await Bun.write(
+        mod,
+        [
+          "export function createDemoProvider() {",
+          "  return {",
+          "    languageModel(modelId) {",
+          "      return { modelId }",
+          "    },",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+      )
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            demo: {
+              npm: "demo-provider",
+              models: {
+                demo: {},
+              },
+            },
+          },
+        }),
+      )
+      return { mod }
+    },
+  })
+
+  const add = spyOn(Npm, "add").mockResolvedValue({
+    directory: path.dirname(tmp.extra.mod),
+    entrypoint: pathToFileURL(tmp.extra.mod).href,
+  })
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await getModel(ProviderID.make("demo"), ModelID.make("demo"))
+        const language = await getLanguage(model)
+        expect((language as any).modelId).toBe("demo")
+      },
+    })
+
+    expect(add.mock.calls).toContainEqual(["demo-provider", tmp.path])
+  } finally {
+    add.mockRestore()
+  }
 })
 
 test("disabled_providers excludes provider", async () => {

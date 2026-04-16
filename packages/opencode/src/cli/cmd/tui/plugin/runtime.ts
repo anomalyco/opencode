@@ -590,10 +590,11 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
   }
 }
 
-async function resolveExternalPlugins(list: Config.PluginOrigin[], wait: () => Promise<void>) {
+async function resolveExternalPlugins(list: Config.PluginOrigin[], wait: () => Promise<void>, configCwd?: string) {
   return PluginLoader.loadExternal({
     items: list,
     kind: "tui",
+    configCwd,
     wait: async () => {
       await wait().catch((error) => {
         log.warn("failed waiting for tui plugin dependencies", { error })
@@ -794,7 +795,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
 
   const ready = await Instance.provide({
     directory: state.directory,
-    fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()),
+    fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies(), state.directory),
   }).catch((error) => {
     fail("failed to add tui plugin", { path: next, error })
     return [] as PluginLoad[]
@@ -855,7 +856,7 @@ async function installPluginBySpec(
     }
   }
 
-  const install = await installModulePlugin(spec)
+  const install = await installModulePlugin(spec, undefined, dir.directory)
   if (!install.ok) {
     const out = installDetail(install.error)
     return {
@@ -1011,7 +1012,7 @@ export namespace TuiPluginRuntime {
           })
         }
 
-        const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
+        const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies(), cwd)
         await addExternalPluginEntries(next, ready)
 
         applyInitialPluginEnabledState(next, config)

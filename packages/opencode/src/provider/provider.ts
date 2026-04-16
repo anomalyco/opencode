@@ -1356,7 +1356,7 @@ const layer: Layer.Layer<
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
-    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
+    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>, configCwd: string) {
       try {
         using _ = log.time("getSDK", {
           providerID: model.providerID,
@@ -1470,7 +1470,7 @@ const layer: Layer.Layer<
 
         let installedPath: string
         if (!model.api.npm.startsWith("file://")) {
-          const item = await Npm.add(model.api.npm)
+          const item = await Npm.add(model.api.npm, configCwd)
           if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
           installedPath = item.entrypoint
         } else {
@@ -1520,9 +1520,11 @@ const layer: Layer.Layer<
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
 
+      const configCwd = yield* InstanceState.directory
+
       return yield* Effect.promise(async () => {
         const provider = s.providers[model.providerID]
-        const sdk = await resolveSDK(model, s, envs)
+        const sdk = await resolveSDK(model, s, envs, configCwd)
 
         try {
           const language = s.modelLoaders[model.providerID]

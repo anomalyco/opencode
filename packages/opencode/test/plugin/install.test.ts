@@ -109,6 +109,28 @@ async function read(file: string) {
 }
 
 describe("plugin.install.task", () => {
+  test("resolves plugins relative to the task directory", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const calls: Array<[string, string]> = []
+    const run = createPlugTask(
+      {
+        mod: "./plugin",
+      },
+      {
+        ...deps(path.join(tmp.path, "global"), target),
+        resolve: async (spec, configCwd) => {
+          calls.push([spec, configCwd])
+          return target
+        },
+      },
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    expect(calls).toEqual([["./plugin", tmp.path]])
+  })
+
   test("writes both server and tui config entries", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server", "tui"])
