@@ -155,20 +155,16 @@ function process<Def extends Definition>(def: Def, event: Event<Def>, options: {
           workspace: WorkspaceContext.workspaceID,
           payload: {
             type: "sync",
-            name: versionedType(def.type, def.version),
-            ...event,
+            syncEvent: {
+              type: versionedType(def.type, def.version),
+              ...event,
+            },
           },
         })
       }
     })
   })
 }
-
-// TODO:
-//
-// * Support applying multiple events at one time. One transaction,
-//   and it validets all the sequence ids
-// * when loading events from db, apply zod validation to ensure shape
 
 export function replay(event: SerializedEvent, options?: { publish: boolean }) {
   const def = registry.get(event.type)
