@@ -793,6 +793,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       fetch: this.config.fetch,
     })
 
+    // oxlint-disable-next-line no-this-alias -- needed for closure scope inside generator
     const self = this
 
     let finishReason: {

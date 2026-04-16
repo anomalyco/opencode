@@ -1,7 +1,7 @@
-import { Npm } from "@/npm"
+import { Npm } from "../npm"
 import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
-import { Process } from "../util/process"
+import { Filesystem } from "../util"
+import { Process } from "../util"
 import { which } from "../util/which"
 import { Flag } from "@/flag/flag"
 

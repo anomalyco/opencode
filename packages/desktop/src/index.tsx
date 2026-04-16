@@ -410,7 +410,7 @@ const createPlatform = (): Platform => {
 }
 
 let menuTrigger = null as null | ((id: string) => void)
-createMenu((id) => {
+void createMenu((id) => {
   menuTrigger?.(id)
 })
 void listenForDeepLinks()

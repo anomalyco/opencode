@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer } from "effect"
-import { Tool } from "../../src/tool/tool"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { Truncate } from "../../src/tool/truncate"
+import { Truncate } from "../../src/tool"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 

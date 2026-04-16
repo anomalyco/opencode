@@ -2,7 +2,8 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { MCP } from "../../mcp"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
+import { ConfigMCP } from "../../config/mcp"
 import { AppRuntime } from "../../effect/app-runtime"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -53,7 +54,7 @@ export const McpRoutes = lazy(() =>
         "json",
         z.object({
           name: z.string(),
-          config: Config.Mcp,
+          config: ConfigMCP.Info,
         }),
       ),
       async (c) => {
