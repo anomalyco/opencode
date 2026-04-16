@@ -10,6 +10,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider"
@@ -407,9 +408,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })) {
           const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
           tools[item.id] = tool({
-            id: item.id as any,
             description: item.description,
-            inputSchema: jsonSchema(schema as any),
+            inputSchema: jsonSchema(schema),
             execute(args, options) {
               return run.promise(
                 Effect.gen(function* () {
@@ -1827,9 +1827,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const { $schema: _, ...toolSchema } = input.schema
 
     return tool({
-      id: "StructuredOutput" as any,
       description: STRUCTURED_OUTPUT_DESCRIPTION,
-      inputSchema: jsonSchema(toolSchema as any),
+      inputSchema: jsonSchema(toolSchema as JSONSchema7),
       async execute(args) {
         // AI SDK validates args against inputSchema before calling execute()
         input.onSuccess(args)
