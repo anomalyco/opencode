@@ -12,13 +12,13 @@ type Usage = {
   total_tokens?: number
 }
 
-export const openaiHelper: ProviderHelper = () => ({
+export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   format: "openai",
   modifyUrl: (providerApi: string) => providerApi + "/responses",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
-  modifyBody: (body: Record<string, any>, workspaceID?: string) => ({
+  modifyBody: (body: Record<string, any>) => ({
     ...body,
     ...(workspaceID ? { safety_identifier: workspaceID } : {}),
   }),
@@ -36,7 +36,7 @@ export const openaiHelper: ProviderHelper = () => ({
         let json
         try {
           json = JSON.parse(data.slice(6)) as { response?: { usage?: Usage } }
-        } catch (e) {
+        } catch {
           return
         }
 

@@ -11,6 +11,7 @@ adamdotdevin
 -agusbasari29 AI PR slop
 ariane-emory
 -atharvau AI review spamming literally every PR
+-borealbytes
 -danieljoshuanazareth
 -danieljoshuanazareth
 edemaine
@@ -21,8 +22,13 @@ jayair
 kitlangton
 kommander
 -opencode2026
+-opencodeengineer bot that spams issues
 r44vc0rp
 rekram1-node
+-ricardo-m-l
+-robinmordasiewicz
+shantur
+simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
--OpenCodeEngineer bot that spams issues
+-toastythebot

@@ -1,7 +1,7 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { createMemo, createSignal } from "solid-js"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import { useTheme } from "../context/theme"
 import { useKeybind } from "../context/keybind"
 import { usePromptStash, type StashEntry } from "./prompt/stash"

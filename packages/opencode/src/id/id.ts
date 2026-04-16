@@ -13,6 +13,7 @@ export namespace Identifier {
     pty: "pty",
     tool: "tool",
     workspace: "wrk",
+    entry: "ent",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
@@ -26,16 +27,16 @@ export namespace Identifier {
   let counter = 0
 
   export function ascending(prefix: keyof typeof prefixes, given?: string) {
-    return generateID(prefix, false, given)
+    return generateID(prefix, "ascending", given)
   }
 
   export function descending(prefix: keyof typeof prefixes, given?: string) {
-    return generateID(prefix, true, given)
+    return generateID(prefix, "descending", given)
   }
 
-  function generateID(prefix: keyof typeof prefixes, descending: boolean, given?: string): string {
+  function generateID(prefix: keyof typeof prefixes, direction: "descending" | "ascending", given?: string): string {
     if (!given) {
-      return create(prefix, descending)
+      return create(prefixes[prefix], direction)
     }
 
     if (!given.startsWith(prefixes[prefix])) {
@@ -54,7 +55,7 @@ export namespace Identifier {
     return result
   }
 
-  export function create(prefix: keyof typeof prefixes, descending: boolean, timestamp?: number): string {
+  export function create(prefix: string, direction: "descending" | "ascending", timestamp?: number): string {
     const currentTimestamp = timestamp ?? Date.now()
 
     if (currentTimestamp !== lastTimestamp) {
@@ -65,14 +66,14 @@ export namespace Identifier {
 
     let now = BigInt(currentTimestamp) * BigInt(0x1000) + BigInt(counter)
 
-    now = descending ? ~now : now
+    now = direction === "descending" ? ~now : now
 
     const timeBytes = Buffer.alloc(6)
     for (let i = 0; i < 6; i++) {
       timeBytes[i] = Number((now >> BigInt(40 - 8 * i)) & BigInt(0xff))
     }
 
-    return prefixes[prefix] + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
+    return prefix + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
   }
 
   /** Extract timestamp from an ascending ID. Does not work with descending IDs. */

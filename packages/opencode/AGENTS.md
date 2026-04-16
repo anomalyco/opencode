@@ -13,7 +13,7 @@
 
 Use these rules when writing or migrating Effect code.
 
-See `specs/effect-migration.md` for the compact pattern reference and examples.
+See `specs/effect/migration.md` for the compact pattern reference and examples.
 
 ## Core
 
@@ -39,6 +39,12 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 - Do the work directly in the `InstanceState.make` closure — `ScopedCache` handles run-once semantics. Don't add fibers, `ensure()` callbacks, or `started` flags on top.
 - Use `Effect.addFinalizer` or `Effect.acquireRelease` inside the `InstanceState.make` closure for cleanup (subscriptions, process teardown, etc.).
 - Use `Effect.forkScoped` inside the closure for background stream consumers — the fiber is interrupted when the instance is disposed.
+- To make a service's `init()` non-blocking, fork `InstanceState.get(state)` at the `init()` call site (e.g. `Effect.forkIn(scope)`), not by forking work inside the `InstanceState.make` closure. Forking inside the closure leaves state incomplete for other methods that read it.
+- `src/project/bootstrap.ts` already wraps every service `init()` in `Effect.forkDetach`, so `init()` is fire-and-forget in production. Keep `init()` methods synchronous internally; the caller controls concurrency.
+
+## Effect v4 beta API
+
+- `Effect.fork` and `Effect.forkDaemon` do not exist. Use `Effect.forkIn(scope)` to fork a fiber into a specific scope.
 
 ## Preferred Effect services
 
@@ -51,7 +57,7 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 
 ## Effect.cached for deduplication
 
-Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect-migration.md` for the full pattern.
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect/migration.md` for the full pattern.
 
 ## Instance.bind — ALS for native callbacks
 

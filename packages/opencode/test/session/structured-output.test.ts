@@ -157,16 +157,6 @@ describe("structured-output.AssistantMessage", () => {
 })
 
 describe("structured-output.createStructuredOutputTool", () => {
-  test("creates tool with correct id", () => {
-    const tool = SessionPrompt.createStructuredOutputTool({
-      schema: { type: "object", properties: { name: { type: "string" } } },
-      onSuccess: () => {},
-    })
-
-    // AI SDK tool type doesn't expose id, but we set it internally
-    expect((tool as any).id).toBe("StructuredOutput")
-  })
-
   test("creates tool with description", () => {
     const tool = SessionPrompt.createStructuredOutputTool({
       schema: { type: "object" },
@@ -363,20 +353,25 @@ describe("structured-output.createStructuredOutputTool", () => {
     expect(inputSchema.jsonSchema?.properties?.tags?.items?.type).toBe("string")
   })
 
-  test("toModelOutput returns text value", () => {
+  test("toModelOutput returns text value", async () => {
     const tool = SessionPrompt.createStructuredOutputTool({
       schema: { type: "object" },
       onSuccess: () => {},
     })
 
     expect(tool.toModelOutput).toBeDefined()
-    const modelOutput = tool.toModelOutput!({
-      output: "Test output",
-      title: "Test",
-      metadata: { valid: true },
-    })
+    const modelOutput = await Promise.resolve(
+      tool.toModelOutput!({
+        toolCallId: "test-call-id",
+        input: {},
+        output: {
+          output: "Test output",
+        },
+      }),
+    )
 
     expect(modelOutput.type).toBe("text")
+    if (modelOutput.type !== "text") throw new Error("expected text model output")
     expect(modelOutput.value).toBe("Test output")
   })
 

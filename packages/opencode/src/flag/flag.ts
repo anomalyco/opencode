@@ -11,22 +11,30 @@ function falsy(key: string) {
 }
 
 export namespace Flag {
+  export const OTEL_EXPORTER_OTLP_ENDPOINT = process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+  export const OTEL_EXPORTER_OTLP_HEADERS = process.env["OTEL_EXPORTER_OTLP_HEADERS"]
+
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
+  export const OPENCODE_AUTO_HEAP_SNAPSHOT = truthy("OPENCODE_AUTO_HEAP_SNAPSHOT")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
+  export declare const OPENCODE_PURE: boolean
   export declare const OPENCODE_TUI_CONFIG: string | undefined
   export declare const OPENCODE_CONFIG_DIR: string | undefined
+  export declare const OPENCODE_PLUGIN_META_FILE: string | undefined
   export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
   export const OPENCODE_ALWAYS_NOTIFY_UPDATE = truthy("OPENCODE_ALWAYS_NOTIFY_UPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
   export const OPENCODE_DISABLE_TERMINAL_TITLE = truthy("OPENCODE_DISABLE_TERMINAL_TITLE")
+  export const OPENCODE_SHOW_TTFD = truthy("OPENCODE_SHOW_TTFD")
   export const OPENCODE_PERMISSION = process.env["OPENCODE_PERMISSION"]
   export const OPENCODE_DISABLE_DEFAULT_PLUGINS = truthy("OPENCODE_DISABLE_DEFAULT_PLUGINS")
   export const OPENCODE_DISABLE_LSP_DOWNLOAD = truthy("OPENCODE_DISABLE_LSP_DOWNLOAD")
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
   export const OPENCODE_DISABLE_AUTOCOMPACT = truthy("OPENCODE_DISABLE_AUTOCOMPACT")
   export const OPENCODE_DISABLE_MODELS_FETCH = truthy("OPENCODE_DISABLE_MODELS_FETCH")
+  export const OPENCODE_DISABLE_MOUSE = truthy("OPENCODE_DISABLE_MOUSE")
   export const OPENCODE_DISABLE_CLAUDE_CODE = truthy("OPENCODE_DISABLE_CLAUDE_CODE")
   export const OPENCODE_DISABLE_CLAUDE_CODE_PROMPT =
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT")
@@ -66,7 +74,6 @@ export namespace Flag {
     Config.withDefault(false),
   )
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
-  export const OPENCODE_EXPERIMENTAL_WORKSPACES = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = !falsy("OPENCODE_EXPERIMENTAL_MARKDOWN")
   export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
   export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
@@ -75,6 +82,10 @@ export namespace Flag {
   export const OPENCODE_DISABLE_CHANNEL_DB = truthy("OPENCODE_DISABLE_CHANNEL_DB")
   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
   export const OPENCODE_STRICT_CONFIG_DEPS = truthy("OPENCODE_STRICT_CONFIG_DEPS")
+
+  export const OPENCODE_WORKSPACE_ID = process.env["OPENCODE_WORKSPACE_ID"]
+  export const OPENCODE_EXPERIMENTAL_HTTPAPI = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_HTTPAPI")
+  export const OPENCODE_EXPERIMENTAL_WORKSPACES = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES")
 
   function number(key: string) {
     const value = process.env[key]
@@ -112,6 +123,28 @@ Object.defineProperty(Flag, "OPENCODE_TUI_CONFIG", {
 Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
   get() {
     return process.env["OPENCODE_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_PURE
+// This must be evaluated at access time, not module load time,
+// because the CLI can set this flag at runtime
+Object.defineProperty(Flag, "OPENCODE_PURE", {
+  get() {
+    return truthy("OPENCODE_PURE")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_PLUGIN_META_FILE
+// This must be evaluated at access time, not module load time,
+// because tests and external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
+  get() {
+    return process.env["OPENCODE_PLUGIN_META_FILE"]
   },
   enumerable: true,
   configurable: false,

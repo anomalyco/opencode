@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { Effect } from "effect"
 
 export type ToolContext = {
   sessionID: string
@@ -16,7 +17,7 @@ export type ToolContext = {
   worktree: string
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
-  ask(input: AskInput): Promise<void>
+  ask(input: AskInput): Effect.Effect<void>
 }
 
 type AskInput = {

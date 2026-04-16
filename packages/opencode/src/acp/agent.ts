@@ -21,6 +21,9 @@ import {
   type Role,
   type SessionInfo,
   type SetSessionModelRequest,
+  type SessionConfigOption,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
@@ -28,23 +31,26 @@ import {
   type Usage,
 } from "@agentclientprotocol/sdk"
 
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { pathToFileURL } from "url"
-import { Filesystem } from "../util/filesystem"
-import { Hash } from "../util/hash"
+import { Filesystem } from "../util"
+import { Hash } from "@opencode-ai/shared/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
-import { Config } from "@/config/config"
+import { Config } from "@/config"
+import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+import { InstallationVersion } from "@/installation/version"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -172,7 +178,7 @@ export namespace ACP {
         })
         for await (const event of events.stream) {
           if (this.eventAbort.signal.aborted) return
-          const payload = (event as any)?.payload
+          const payload = event?.payload
           if (!payload) continue
           await this.handleEvent(payload as Event).catch((error) => {
             log.error("failed to handle event", { error, type: payload.type })
@@ -238,7 +244,7 @@ export namespace ACP {
                 const newContent = getNewContent(content, diff)
 
                 if (newContent) {
-                  this.connection.writeTextFile({
+                  void this.connection.writeTextFile({
                     sessionId: session.id,
                     path: filepath,
                     content: newContent,
@@ -449,6 +455,12 @@ export namespace ACP {
                 return
             }
           }
+
+          // ACP clients already know the prompt they just submitted, so replaying
+          // live user parts duplicates the message. We still replay user history in
+          // loadSession() and forkSession() via processMessage().
+          if (part.type !== "text" && part.type !== "file") return
+
           return
         }
 
@@ -484,6 +496,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_message_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -502,6 +515,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -558,7 +572,7 @@ export namespace ACP {
         authMethods: [authMethod],
         agentInfo: {
           name: "OpenCode",
-          version: Installation.VERSION,
+          version: InstallationVersion,
         },
       }
     }
@@ -586,6 +600,7 @@ export namespace ACP {
 
         return {
           sessionId,
+          configOptions: load.configOptions,
           models: load.models,
           modes: load.modes,
           _meta: load._meta,
@@ -645,6 +660,11 @@ export namespace ACP {
             result.modes.currentModeId = lastUser.agent
             this.sessionManager.setMode(sessionId, lastUser.agent)
           }
+          result.configOptions = buildConfigOptions({
+            currentModelId: result.models.currentModelId,
+            availableModels: result.models.availableModels,
+            modes: result.modes,
+          })
         }
 
         for (const msg of messages ?? []) {
@@ -666,7 +686,7 @@ export namespace ACP {
       }
     }
 
-    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
@@ -970,6 +990,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1001,6 +1022,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: messageChunk,
+                  messageId: message.info.id,
                   content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
                 },
               })
@@ -1022,6 +1044,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: {
                       type: "image",
                       mimeType: effectiveMime,
@@ -1050,6 +1073,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: { type: "resource", resource },
                   },
                 })
@@ -1066,6 +1090,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1137,7 +1162,7 @@ export namespace ACP {
         this.sessionManager.get(sessionId).modeId ||
         (await (async () => {
           if (!availableModes.length) return undefined
-          const defaultAgentName = await AgentModule.defaultAgent()
+          const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
           const resolvedModeId =
             availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
           this.sessionManager.setMode(sessionId, resolvedModeId)
@@ -1189,7 +1214,7 @@ export namespace ACP {
           description: "compact the session",
         })
 
-      const mcpServers: Record<string, Config.Mcp> = {}
+      const mcpServers: Record<string, ConfigMCP.Info> = {}
       for (const server of params.mcpServers) {
         if ("type" in server) {
           mcpServers[server.name] = {
@@ -1230,7 +1255,7 @@ export namespace ACP {
       )
 
       setTimeout(() => {
-        this.connection.sessionUpdate({
+        void this.connection.sessionUpdate({
           sessionId,
           update: {
             sessionUpdate: "available_commands_update",
@@ -1246,6 +1271,11 @@ export namespace ACP {
           availableModels,
         },
         modes,
+        configOptions: buildConfigOptions({
+          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          availableModels,
+          modes,
+        }),
         _meta: buildVariantMeta({
           model,
           variant: this.sessionManager.getVariant(sessionId),
@@ -1285,6 +1315,44 @@ export namespace ACP {
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
+    async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+      const session = this.sessionManager.get(params.sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+
+      if (params.configId === "model") {
+        if (typeof params.value !== "string") throw RequestError.invalidParams("model value must be a string")
+        const selection = parseModelSelection(params.value, providers)
+        this.sessionManager.setModel(session.id, selection.model)
+        this.sessionManager.setVariant(session.id, selection.variant)
+      } else if (params.configId === "mode") {
+        if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
+        const availableModes = await this.loadAvailableModes(session.cwd)
+        if (!availableModes.some((mode) => mode.id === params.value)) {
+          throw RequestError.invalidParams(JSON.stringify({ error: `Mode not found: ${params.value}` }))
+        }
+        this.sessionManager.setMode(session.id, params.value)
+      } else {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
+      }
+
+      const updatedSession = this.sessionManager.get(session.id)
+      const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, true)
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const modeState = await this.resolveModeState(session.cwd, session.id)
+      const modes = modeState.currentModeId
+        ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
+        : undefined
+
+      return {
+        configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
+      }
+    }
+
     async prompt(params: PromptRequest) {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
@@ -1295,7 +1363,8 @@ export namespace ACP {
       if (!current) {
         this.sessionManager.setModel(session.id, model)
       }
-      const agent = session.modeId ?? (await AgentModule.defaultAgent())
+      const agent =
+        session.modeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
 
       const parts: Array<
         | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
@@ -1499,7 +1568,6 @@ export namespace ACP {
       case "context7_get_library_docs":
         return "search"
 
-      case "list":
       case "read":
         return "read"
 
@@ -1520,8 +1588,6 @@ export namespace ACP {
         return input["path"] ? [{ path: input["path"] }] : []
       case "bash":
         return []
-      case "list":
-        return input["path"] ? [{ path: input["path"] }] : []
       default:
         return []
     }
@@ -1739,5 +1805,37 @@ export namespace ACP {
     }
 
     return { model: parsed, variant: undefined }
+  }
+
+  function buildConfigOptions(input: {
+    currentModelId: string
+    availableModels: ModelOption[]
+    modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
+  }): SessionConfigOption[] {
+    const options: SessionConfigOption[] = [
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: input.currentModelId,
+        options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
+      },
+    ]
+    if (input.modes) {
+      options.push({
+        id: "mode",
+        name: "Session Mode",
+        category: "mode",
+        type: "select",
+        currentValue: input.modes.currentModeId,
+        options: input.modes.availableModes.map((m) => ({
+          value: m.id,
+          name: m.name,
+          ...(m.description ? { description: m.description } : {}),
+        })),
+      })
+    }
+    return options
   }
 }

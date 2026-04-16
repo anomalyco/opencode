@@ -1,6 +1,6 @@
 import path from "path"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"

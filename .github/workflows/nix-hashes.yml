@@ -17,6 +17,10 @@ on:
       - "patches/**"
       - ".github/workflows/nix-hashes.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Native runners required: bun install cross-compilation flags (--os/--cpu)
   # do not produce byte-identical node_modules as native installs.
