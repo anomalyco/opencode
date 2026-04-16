@@ -47,31 +47,13 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
-import * as Effect from "effect/Effect"
-
-// Adjusts the default Config layer to ensure that plugins are always initialised before
-// any other layers read the current config
-const ConfigWithPluginPriority = Layer.effect(
-  Config.Service,
-  Effect.gen(function* () {
-    const config = yield* Config.Service
-    const plugin = yield* Plugin.Service
-
-    return {
-      ...config,
-      get: () => Effect.andThen(plugin.init(), config.get),
-      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
-      getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
-    }
-  }),
-).pipe(Layer.provide(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
 
 export const AppLayer = Layer.mergeAll(
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
-  ConfigWithPluginPriority,
+  Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
   FileTime.defaultLayer,
