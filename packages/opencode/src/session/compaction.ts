@@ -219,7 +219,7 @@ When constructing the summary, try to stick to this template:
         const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
         const ctx = yield* InstanceState.context
         const msg: MessageV2.Assistant = {
-          id: MessageID.ascending(),
+          id: MessageID.ascendingAfter(input.parentID),
           role: "assistant",
           parentID: input.parentID,
           sessionID: input.sessionID,
