@@ -1,6 +1,6 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { Config } from "@/config"
+import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect"
 import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
@@ -289,7 +289,7 @@ function expand(pattern: string): string {
   return pattern
 }
 
-export function fromConfig(permission: Config.Permission) {
+export function fromConfig(permission: ConfigPermission.Info) {
   const ruleset: Ruleset = []
   for (const [key, value] of Object.entries(permission)) {
     if (typeof value === "string") {

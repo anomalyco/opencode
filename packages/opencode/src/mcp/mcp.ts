@@ -10,6 +10,7 @@ import {
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config"
+import { ConfigMCP } from "../config/mcp"
 import { Log } from "../util"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import z from "zod/v4"
@@ -123,7 +124,7 @@ type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][numbe
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
 type McpEntry = NonNullable<Config.Info["mcp"]>[string]
 
-function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
+function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
 }
 
@@ -224,7 +225,7 @@ export interface Interface {
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
-  readonly add: (name: string, mcp: Config.Mcp) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void>
   readonly disconnect: (name: string) => Effect.Effect<void>
   readonly getPrompt: (
@@ -276,7 +277,10 @@ export const layer = Layer.effect(
 
     const DISABLED_RESULT: CreateResult = { status: { status: "disabled" } }
 
-    const connectRemote = Effect.fn("MCP.connectRemote")(function* (key: string, mcp: Config.Mcp & { type: "remote" }) {
+    const connectRemote = Effect.fn("MCP.connectRemote")(function* (
+      key: string,
+      mcp: ConfigMCP.Info & { type: "remote" },
+    ) {
       const oauthDisabled = mcp.oauth === false
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
       let authProvider: McpOAuthProvider | undefined
@@ -382,7 +386,10 @@ export const layer = Layer.effect(
       }
     })
 
-    const connectLocal = Effect.fn("MCP.connectLocal")(function* (key: string, mcp: Config.Mcp & { type: "local" }) {
+    const connectLocal = Effect.fn("MCP.connectLocal")(function* (
+      key: string,
+      mcp: ConfigMCP.Info & { type: "local" },
+    ) {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
@@ -414,7 +421,7 @@ export const layer = Layer.effect(
       )
     })
 
-    const create = Effect.fn("MCP.create")(function* (key: string, mcp: Config.Mcp) {
+    const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCP.Info) {
       if (mcp.enabled === false) {
         log.info("mcp server disabled", { key })
         return DISABLED_RESULT
@@ -424,8 +431,8 @@ export const layer = Layer.effect(
 
       const { client: mcpClient, status } =
         mcp.type === "remote"
-          ? yield* connectRemote(key, mcp as Config.Mcp & { type: "remote" })
-          : yield* connectLocal(key, mcp as Config.Mcp & { type: "local" })
+          ? yield* connectRemote(key, mcp as ConfigMCP.Info & { type: "remote" })
+          : yield* connectLocal(key, mcp as ConfigMCP.Info & { type: "local" })
 
       if (!mcpClient) {
         return { status } satisfies CreateResult
@@ -588,7 +595,7 @@ export const layer = Layer.effect(
       return s.clients
     })
 
-    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: Config.Mcp) {
+    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCP.Info) {
       const s = yield* InstanceState.get(state)
       const result = yield* create(name, mcp)
 
@@ -602,7 +609,7 @@ export const layer = Layer.effect(
       return yield* storeClient(s, name, result.mcpClient, result.defs!, mcp.timeout)
     })
 
-    const add = Effect.fn("MCP.add")(function* (name: string, mcp: Config.Mcp) {
+    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCP.Info) {
       yield* createAndStore(name, mcp)
       const s = yield* InstanceState.get(state)
       return { status: s.status }
