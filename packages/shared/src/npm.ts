@@ -5,6 +5,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
+import { $ } from "bun"
 
 export namespace Npm {
   export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
@@ -64,9 +65,18 @@ export namespace Npm {
       const flock = yield* EffectFlock.Service
       const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
 
+      let cachedRegistry: string | undefined
+      const getRegistry = async () => {
+        if (cachedRegistry) return cachedRegistry
+        const result = await $`npm config get registry`.text().catch(() => "https://registry.npmjs.org")
+        cachedRegistry = result.trim().replace(/\/$/, "")
+        return cachedRegistry
+      }
+
       const outdated = Effect.fn("Npm.outdated")(function* (pkg: string, cachedVersion: string) {
+        const registry = yield* Effect.promise(() => getRegistry())
         const response = yield* Effect.tryPromise({
-          try: () => fetch(`https://registry.npmjs.org/${pkg}`),
+          try: () => fetch(`${registry}/${pkg}`),
           catch: () => undefined,
         }).pipe(Effect.orElseSucceed(() => undefined))
 

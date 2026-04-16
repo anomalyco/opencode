@@ -7,6 +7,7 @@ import path from "path"
 import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/shared/util/flock"
+import { $ } from "bun"
 
 const log = Log.create({ service: "npm" })
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
@@ -39,8 +40,17 @@ function resolveEntryPoint(name: string, dir: string) {
   return result
 }
 
+let cachedRegistry: string | undefined
+async function getRegistry() {
+  if (cachedRegistry) return cachedRegistry
+  const result = await $`npm config get registry`.text().catch(() => "https://registry.npmjs.org")
+  cachedRegistry = result.trim().replace(/\/$/, "")
+  return cachedRegistry
+}
+
 export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
-  const response = await fetch(`https://registry.npmjs.org/${pkg}`)
+  const registry = await getRegistry()
+  const response = await fetch(`${registry}/${pkg}`)
   if (!response.ok) {
     log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
     return false
