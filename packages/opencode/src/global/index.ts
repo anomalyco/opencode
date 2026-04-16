@@ -3,7 +3,7 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 import { Filesystem } from "../util/filesystem"
-// import { Flock } from "@opencode-ai/shared/util/flock"
+import { Flock } from "@opencode-ai/shared/util/flock"
 
 const app = "opencode"
 
@@ -28,7 +28,7 @@ export namespace Global {
 }
 
 // Initialize Flock with global state path
-// Flock.setGlobal({ state })
+Flock.setGlobal({ state })
 
 await Promise.all([
   fs.mkdir(Global.Path.data, { recursive: true }),
