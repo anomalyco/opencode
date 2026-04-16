@@ -1,6 +1,6 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { which } from "@/util/which"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"

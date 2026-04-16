@@ -7,13 +7,13 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 const env = Layer.mergeAll(
   Session.defaultLayer,

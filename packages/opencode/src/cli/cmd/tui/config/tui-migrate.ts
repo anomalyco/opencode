@@ -2,12 +2,11 @@ import path from "path"
 import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { unique } from "remeda"
 import z from "zod"
-import { ConfigPaths } from "@/config/paths"
 import { TuiInfo, TuiOptions } from "./tui-schema"
 import { Flag } from "@/flag/flag"
-import { Log } from "@/util/log"
-import { Filesystem } from "@/util/filesystem"
 import { Global } from "@/global"
+import { Filesystem, Log } from "@/util"
+import { ConfigPaths } from "@/config"
 
 const log = Log.create({ service: "tui.migrate" })
 

@@ -277,7 +277,7 @@ const WorkspaceSessionList = (props: {
           class="flex w-full text-left justify-start text-14-regular text-text-weak pl-2 pr-10"
           size="large"
           onClick={(e: MouseEvent) => {
-            props.loadMore()
+            void props.loadMore()
             ;(e.currentTarget as HTMLButtonElement).blur()
           }}
         >

@@ -202,6 +202,7 @@ export namespace SessionEntry {
         case "tool.input.delta": {
           if (!pendingAssistant) break
           const match = pendingAssistant.content.findLast((x) => x.type === "tool")
+          // oxlint-disable-next-line no-base-to-string -- event.delta is a Schema.String (runtime string)
           if (match) match.state.input += event.delta
           break
         }

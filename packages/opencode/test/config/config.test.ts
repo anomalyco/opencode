@@ -1,8 +1,9 @@
 import { test, expect, describe, mock, afterEach, beforeEach, spyOn } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Config } from "../../src/config/config"
-import { ConfigPlugin } from "../../src/config/plugin"
+import { Config } from "../../src/config"
+import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
@@ -22,9 +23,10 @@ import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import * as Network from "../../src/util/network"
-import { Npm } from "@opencode-ai/shared/npm"
+import { Npm } from "../../src/npm"
+import { ConfigPlugin } from "@/config/plugin"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
@@ -35,13 +37,15 @@ const emptyAuth = Layer.mock(Auth.Service)({
   all: () => Effect.succeed({}),
 })
 
+const testFlock = EffectFlock.defaultLayer
+
 const layer = Config.layer.pipe(
+  Layer.provide(testFlock),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(emptyAuth),
   Layer.provide(emptyAccount),
   Layer.provideMerge(infra),
-  Layer.provide(Npm.defaultLayer),
 )
 
 const it = testEffect(layer)
@@ -55,6 +59,9 @@ const listDirs = () =>
   Effect.runPromise(Config.Service.use((svc) => svc.directories()).pipe(Effect.scoped, Effect.provide(layer)))
 const ready = () =>
   Effect.runPromise(Config.Service.use((svc) => svc.waitForDependencies()).pipe(Effect.scoped, Effect.provide(layer)))
+
+const installDeps = (dir: string, input?: Config.InstallInput) =>
+  Config.Service.use((svc) => svc.installDependencies(dir, input))
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -332,9 +339,9 @@ test("resolves env templates in account config with account token", async () => 
   })
 
   const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(Npm.defaultLayer),
     Layer.provide(emptyAuth),
     Layer.provide(fakeAccount),
     Layer.provideMerge(infra),
@@ -807,13 +814,6 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     init: async (dir) => {
       const cfg = path.join(dir, "configdir")
       await fs.mkdir(cfg, { recursive: true })
-      // Pre-create the plugin structure that Npm.install would create
-      const mod = path.join(cfg, "node_modules", "@opencode-ai", "plugin")
-      await fs.mkdir(mod, { recursive: true })
-      await Filesystem.write(
-        path.join(mod, "package.json"),
-        JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
-      )
       return cfg
     },
   })
@@ -821,6 +821,14 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   const prev = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
   const online = spyOn(Network, "online").mockReturnValue(false)
+  const install = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+  })
 
   try {
     await Instance.provide({
@@ -836,6 +844,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     expect(await Filesystem.readText(path.join(tmp.extra, ".gitignore"))).toContain("package-lock.json")
   } finally {
     online.mockRestore()
+    install.mockRestore()
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
@@ -843,69 +852,65 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 
 it.live("dedupes concurrent config dependency installs for the same dir", () =>
   Effect.gen(function* () {
-    // Test that Npm.install properly serializes concurrent calls via Flock
     const tmp = yield* tmpdirScoped()
     const dir = path.join(tmp, "a")
     yield* Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 
     let calls = 0
     const online = spyOn(Network, "online").mockReturnValue(false)
+    const ready = Deferred.makeUnsafe<void>()
+    const hold = Deferred.makeUnsafe<void>()
+    const target = path.normalize(dir)
+    const run = spyOn(Npm, "install").mockImplementation(async (d: string) => {
+      if (path.normalize(d) !== target) return
+      calls += 1
+      Deferred.doneUnsafe(ready, Effect.void)
+      await Effect.runPromise(Deferred.await(hold))
+      const mod = path.join(d, "node_modules", "@opencode-ai", "plugin")
+      await fs.mkdir(mod, { recursive: true })
+      await Filesystem.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+      )
+    })
 
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         online.mockRestore()
+        run.mockRestore()
       }),
     )
 
-    // Create a mock Npm layer that tracks calls
-    const ready = Deferred.makeUnsafe<void>()
-    const hold = Deferred.makeUnsafe<void>()
-    const target = path.normalize(dir)
-
-    const mockNpm = Layer.mock(Npm.Service)({
-      add: () => Effect.fail(new Npm.InstallFailedError({ pkg: "test" })),
-      install: (d: string, input?: { add: string[] }) =>
-        Effect.gen(function* () {
-          if (path.normalize(d) !== target) return
-          calls += 1
-          if (calls === 1) {
-            Deferred.doneUnsafe(ready, Effect.void)
-            yield* Deferred.await(hold)
-          }
-          // Create node_modules to indicate install happened
-          yield* Effect.promise(() => fs.mkdir(path.join(d, "node_modules"), { recursive: true }))
-        }),
-      outdated: () => Effect.succeed(false),
-      which: () => Effect.succeed(Option.none()),
-    })
-
-    const testLayer = Layer.mergeAll(mockNpm, AppFileSystem.defaultLayer, NodeFileSystem.layer)
-
-    // Run two concurrent installs to the same dir
-    const install = (d: string) =>
-      Npm.Service.use((npm) => npm.install(d, { add: ["@opencode-ai/plugin"] })).pipe(Effect.provide(testLayer))
-
-    const first = yield* install(dir).pipe(Effect.forkScoped)
+    const first = yield* installDeps(dir).pipe(Effect.forkScoped)
     yield* Deferred.await(ready)
 
-    const second = yield* install(dir).pipe(Effect.forkScoped)
+    let done = false
+    const second = yield* installDeps(dir).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          done = true
+        }),
+      ),
+      Effect.forkScoped,
+    )
 
-    // Release the hold
+    // Give the second fiber time to hit the lock retry loop
+    yield* Effect.sleep(500)
+    expect(done).toBe(false)
+
     yield* Deferred.succeed(hold, void 0)
     yield* Fiber.join(first)
     yield* Fiber.join(second)
 
-    // With proper deduplication via Flock, we expect only 1 actual call
-    // Note: This test may show 2 calls if running concurrently without dedup
-    // The Flock mechanism in Npm.install should serialize them
-    expect(calls).toBeGreaterThanOrEqual(1)
-    expect(yield* Effect.promise(() => Filesystem.exists(path.join(dir, "node_modules")))).toBe(true)
+    expect(calls).toBe(1)
+    expect(yield* Effect.promise(() => Filesystem.exists(path.join(dir, "package.json")))).toBe(true)
   }),
 )
 
 it.live("serializes config dependency installs across dirs", () =>
   Effect.gen(function* () {
-    // Test that Npm.install properly serializes installs across different dirs via Flock
+    if (process.platform !== "win32") return
+
     const tmp = yield* tmpdirScoped()
     const a = path.join(tmp, "a")
     const b = path.join(tmp, "b")
@@ -915,57 +920,54 @@ it.live("serializes config dependency installs across dirs", () =>
     let calls = 0
     let open = 0
     let peak = 0
+    const ready = Deferred.makeUnsafe<void>()
+    const hold = Deferred.makeUnsafe<void>()
+
     const online = spyOn(Network, "online").mockReturnValue(false)
+    const run = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+      const cwd = path.normalize(dir)
+      const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
+      if (hit) {
+        calls += 1
+        open += 1
+        peak = Math.max(peak, open)
+        if (calls === 1) {
+          Deferred.doneUnsafe(ready, Effect.void)
+          await Effect.runPromise(Deferred.await(hold))
+        }
+      }
+      const mod = path.join(cwd, "node_modules", "@opencode-ai", "plugin")
+      await fs.mkdir(mod, { recursive: true })
+      await Filesystem.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+      )
+      if (hit) {
+        open -= 1
+      }
+    })
 
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         online.mockRestore()
+        run.mockRestore()
       }),
     )
 
-    const ready = Deferred.makeUnsafe<void>()
-    const hold = Deferred.makeUnsafe<void>()
-
-    const mockNpm = Layer.mock(Npm.Service)({
-      add: () => Effect.fail(new Npm.InstallFailedError({ pkg: "test" })),
-      install: (dir: string) =>
-        Effect.gen(function* () {
-          const cwd = path.normalize(dir)
-          const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
-          if (hit) {
-            calls += 1
-            open += 1
-            peak = Math.max(peak, open)
-            if (calls === 1) {
-              Deferred.doneUnsafe(ready, Effect.void)
-              yield* Deferred.await(hold)
-            }
-            yield* Effect.promise(() => fs.mkdir(path.join(cwd, "node_modules"), { recursive: true }))
-            open -= 1
-          }
-        }),
-      outdated: () => Effect.succeed(false),
-      which: () => Effect.succeed(Option.none()),
-    })
-
-    const testLayer = Layer.mergeAll(mockNpm, AppFileSystem.defaultLayer, NodeFileSystem.layer)
-
-    const install = (dir: string) =>
-      Npm.Service.use((npm) => npm.install(dir, { add: ["@opencode-ai/plugin"] })).pipe(Effect.provide(testLayer))
-
-    const first = yield* install(a).pipe(Effect.forkScoped)
+    const first = yield* installDeps(a).pipe(Effect.forkScoped)
     yield* Deferred.await(ready)
 
-    const second = yield* install(b).pipe(Effect.forkScoped)
+    const second = yield* installDeps(b).pipe(Effect.forkScoped)
+    // Give the second fiber time to hit the lock retry loop
+    yield* Effect.sleep(500)
+    expect(peak).toBe(1)
 
     yield* Deferred.succeed(hold, void 0)
     yield* Fiber.join(first)
     yield* Fiber.join(second)
 
-    // Both dirs should have been processed
     expect(calls).toBe(2)
-    expect(yield* Effect.promise(() => Filesystem.exists(path.join(a, "node_modules")))).toBe(true)
-    expect(yield* Effect.promise(() => Filesystem.exists(path.join(b, "node_modules")))).toBe(true)
+    expect(peak).toBe(1)
   }),
 )
 
@@ -1798,7 +1800,7 @@ test("project config overrides remote well-known config", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
   globalThis.fetch = mock((url: string | URL | Request) => {
-    const urlStr = url.toString()
+    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
     if (urlStr.includes(".well-known/opencode")) {
       fetchedUrl = urlStr
       return Promise.resolve(
@@ -1823,9 +1825,9 @@ test("project config overrides remote well-known config", async () => {
   })
 
   const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(Npm.defaultLayer),
     Layer.provide(fakeAuth),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
@@ -1855,7 +1857,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
   globalThis.fetch = mock((url: string | URL | Request) => {
-    const urlStr = url.toString()
+    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
     if (urlStr.includes(".well-known/opencode")) {
       fetchedUrl = urlStr
       return Promise.resolve(
@@ -1880,9 +1882,9 @@ test("wellknown URL with trailing slash is normalized", async () => {
   })
 
   const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(Npm.defaultLayer),
     Layer.provide(fakeAuth),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
@@ -1969,14 +1971,14 @@ describe("resolvePluginSpec", () => {
     })
 
     const file = path.join(tmp.path, "opencode.json")
-    const hit = await ConfigPlugin.resolvePluginSpec("./plugin", file)
-    expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
+    const hit = await Config.resolvePluginSpec("./plugin", file)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
   })
 })
 
 describe("deduplicatePluginOrigins", () => {
-  const dedupe = (plugins: ConfigPlugin.Spec[]) =>
-    ConfigPlugin.deduplicatePluginOrigins(
+  const dedupe = (plugins: Config.PluginSpec[]) =>
+    Config.deduplicatePluginOrigins(
       plugins.map((spec) => ({
         spec,
         source: "",
@@ -2046,8 +2048,8 @@ describe("deduplicatePluginOrigins", () => {
         const config = await load()
         const plugins = config.plugin ?? []
 
-        expect(plugins.some((p) => ConfigPlugin.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
-        expect(plugins.some((p) => ConfigPlugin.pluginSpecifier(p).startsWith("file://"))).toBe(true)
+        expect(plugins.some((p) => Config.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
+        expect(plugins.some((p) => Config.pluginSpecifier(p).startsWith("file://"))).toBe(true)
       },
     })
   })

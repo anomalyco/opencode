@@ -7,12 +7,12 @@ import { ModelsDev } from "../../provider/models"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
-import { Process } from "../../util/process"
+import { Process } from "../../util"
 import { text } from "node:stream/consumers"
 import { Effect } from "effect"
 
@@ -40,12 +40,10 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   } else if (plugin.auth.methods.length > 1) {
     const method = await prompts.select({
       message: "Login method",
-      options: [
-        ...plugin.auth.methods.map((x, index) => ({
-          label: x.label,
-          value: index.toString(),
-        })),
-      ],
+      options: plugin.auth.methods.map((x, index) => ({
+        label: x.label,
+        value: index.toString(),
+      })),
     })
     if (prompts.isCancel(method)) throw new UI.CancelledError()
     index = parseInt(method)

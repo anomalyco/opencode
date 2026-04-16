@@ -37,5 +37,5 @@ export async function GET({ params: { platform, channel } }: APIEvent) {
   const headers = new Headers(resp.headers)
   if (downloadName) headers.set("content-disposition", `attachment; filename="${downloadName}"`)
 
-  return new Response(resp.body, { ...resp, headers })
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers })
 }

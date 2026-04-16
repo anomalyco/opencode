@@ -1,7 +1,7 @@
-import { InstanceState } from "@/effect/instance-state"
-import { Runner } from "@/effect/runner"
+import { InstanceState } from "@/effect"
+import { Runner } from "@/effect"
 import { Effect, Layer, Scope, Context } from "effect"
-import { Session } from "."
+import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
@@ -32,7 +32,7 @@ export namespace SessionRunState {
       const state = yield* InstanceState.make(
         Effect.fn("SessionRunState.state")(function* () {
           const scope = yield* Scope.Scope
-          const runners = new Map<SessionID, Runner<MessageV2.WithParts>>()
+          const runners = new Map<SessionID, Runner.Runner<MessageV2.WithParts>>()
           yield* Effect.addFinalizer(
             Effect.fnUntraced(function* () {
               yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {

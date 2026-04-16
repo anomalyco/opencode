@@ -297,7 +297,7 @@ export const ExportCommand = cmd({
 
         process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
         process.stdout.write(EOL)
-      } catch (error) {
+      } catch {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)
       }

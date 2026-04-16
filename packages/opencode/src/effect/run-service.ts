@@ -1,9 +1,9 @@
 import { Effect, Layer, ManagedRuntime } from "effect"
 import * as Context from "effect/Context"
 import { Instance } from "@/project/instance"
-import { LocalContext } from "@/util/local-context"
+import { LocalContext } from "@/util"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
-import { Observability } from "./observability"
+import * as Observability from "./observability"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import type { InstanceContext } from "@/project/instance"
 

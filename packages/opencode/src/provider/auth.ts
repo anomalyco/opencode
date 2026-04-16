@@ -1,71 +1,63 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Auth } from "@/auth"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, Context } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
 import z from "zod"
 
 export namespace ProviderAuth {
-  export const Method = z
-    .object({
-      type: z.union([z.literal("oauth"), z.literal("api")]),
-      label: z.string(),
-      prompts: z
-        .array(
-          z.union([
-            z.object({
-              type: z.literal("text"),
-              key: z.string(),
-              message: z.string(),
-              placeholder: z.string().optional(),
-              when: z
-                .object({
-                  key: z.string(),
-                  op: z.union([z.literal("eq"), z.literal("neq")]),
-                  value: z.string(),
-                })
-                .optional(),
-            }),
-            z.object({
-              type: z.literal("select"),
-              key: z.string(),
-              message: z.string(),
-              options: z.array(
-                z.object({
-                  label: z.string(),
-                  value: z.string(),
-                  hint: z.string().optional(),
-                }),
-              ),
-              when: z
-                .object({
-                  key: z.string(),
-                  op: z.union([z.literal("eq"), z.literal("neq")]),
-                  value: z.string(),
-                })
-                .optional(),
-            }),
-          ]),
-        )
-        .optional(),
-    })
-    .meta({
-      ref: "ProviderAuthMethod",
-    })
-  export type Method = z.infer<typeof Method>
+  const When = Schema.Struct({
+    key: Schema.String,
+    op: Schema.Literals(["eq", "neq"]),
+    value: Schema.String,
+  })
 
-  export const Authorization = z
-    .object({
-      url: z.string(),
-      method: z.union([z.literal("auto"), z.literal("code")]),
-      instructions: z.string(),
-    })
-    .meta({
-      ref: "ProviderAuthAuthorization",
-    })
-  export type Authorization = z.infer<typeof Authorization>
+  const TextPrompt = Schema.Struct({
+    type: Schema.Literal("text"),
+    key: Schema.String,
+    message: Schema.String,
+    placeholder: Schema.optional(Schema.String),
+    when: Schema.optional(When),
+  })
+
+  const SelectOption = Schema.Struct({
+    label: Schema.String,
+    value: Schema.String,
+    hint: Schema.optional(Schema.String),
+  })
+
+  const SelectPrompt = Schema.Struct({
+    type: Schema.Literal("select"),
+    key: Schema.String,
+    message: Schema.String,
+    options: Schema.Array(SelectOption),
+    when: Schema.optional(When),
+  })
+
+  const Prompt = Schema.Union([TextPrompt, SelectPrompt])
+
+  export class Method extends Schema.Class<Method>("ProviderAuthMethod")({
+    type: Schema.Literals(["oauth", "api"]),
+    label: Schema.String,
+    prompts: Schema.optional(Schema.Array(Prompt)),
+  }) {
+    static readonly zod = zod(this)
+  }
+
+  export const Methods = Schema.Record(Schema.String, Schema.Array(Method)).pipe(withStatics((s) => ({ zod: zod(s) })))
+  export type Methods = typeof Methods.Type
+
+  export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuthorization")({
+    url: Schema.String,
+    method: Schema.Literals(["auto", "code"]),
+    instructions: Schema.String,
+  }) {
+    static readonly zod = zod(this)
+  }
 
   export const OauthMissing = NamedError.create("ProviderAuthOauthMissing", z.object({ providerID: ProviderID.zod }))
 
@@ -94,7 +86,7 @@ export namespace ProviderAuth {
   type Hook = NonNullable<Hooks["auth"]>
 
   export interface Interface {
-    readonly methods: () => Effect.Effect<Record<ProviderID, Method[]>>
+    readonly methods: () => Effect.Effect<Methods>
     readonly authorize: (input: {
       providerID: ProviderID
       method: number
@@ -131,11 +123,12 @@ export namespace ProviderAuth {
         }),
       )
 
+      const decode = Schema.decodeUnknownSync(Methods)
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
         const hooks = (yield* InstanceState.get(state)).hooks
-        return Record.map(hooks, (item) =>
-          item.methods.map(
-            (method): Method => ({
+        return decode(
+          Record.map(hooks, (item) =>
+            item.methods.map((method) => ({
               type: method.type,
               label: method.label,
               prompts: method.prompts?.map((prompt) => {
@@ -156,7 +149,7 @@ export namespace ProviderAuth {
                   when: prompt.when,
                 }
               }),
-            }),
+            })),
           ),
         )
       })

@@ -1,14 +1,12 @@
 import z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
-import { ConfigPaths } from "@/config/paths"
+import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
 import { Flag } from "@/flag/flag"
-import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Npm } from "@opencode-ai/shared/npm"
 import { CurrentWorkingDirectory } from "./cwd"
@@ -16,6 +14,7 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
 import { makeRuntime } from "@/cli/effect/runtime"
+import { Filesystem, Log } from "@/util"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -38,7 +37,7 @@ export namespace TuiConfig {
 
   export interface Interface {
     readonly get: () => Effect.Effect<Info>
-    readonly waitForDependencies: () => Effect.Effect<void, AppFileSystem.Error>
+    readonly waitForDependencies: () => Effect.Effect<void>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/TuiConfig") {}
@@ -156,7 +155,7 @@ export namespace TuiConfig {
       const get = Effect.fn("TuiConfig.get")(() => Effect.succeed(data.config))
 
       const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
-        Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
+        Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.ignore(), Effect.asVoid),
       )
       return Service.of({ get, waitForDependencies })
     }).pipe(Effect.withSpan("TuiConfig.layer")),

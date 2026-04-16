@@ -385,7 +385,6 @@ export const SessionReview = (props: SessionReviewProps) => {
               <Accordion multiple value={open()} onChange={handleChange}>
                 <For each={items()}>
                   {(diff) => {
-                    let wrapper: HTMLDivElement | undefined
                     const file = diff.file
 
                     // binary files have empty diffs that we can't render
@@ -569,7 +568,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <div
                             data-slot="session-review-diff-wrapper"
                             ref={(el) => {
-                              wrapper = el
                               anchors.set(file, el)
                               nodes.set(file, el)
                               queue()

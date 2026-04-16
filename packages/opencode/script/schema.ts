@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { z } from "zod"
-import { Config } from "../src/config/config"
+import { Config } from "../src/config"
 import { TuiConfig } from "../src/cli/cmd/tui/config/tui"
 
 function generate(schema: z.ZodType) {
@@ -33,7 +33,7 @@ function generate(schema: z.ZodType) {
           schema.examples = [schema.default]
         }
 
-        schema.description = [schema.description || "", `default: \`${schema.default}\``]
+        schema.description = [schema.description || "", `default: \`${String(schema.default)}\``]
           .filter(Boolean)
           .join("\n\n")
           .trim()

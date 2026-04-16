@@ -3,8 +3,6 @@ import { UI } from "@/cli/ui"
 import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
-import { Effect } from "effect"
-import { CliLayer } from "./layer"
 
 export const AttachCommand = cmd({
   command: "attach <url>",

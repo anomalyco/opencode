@@ -1,6 +1,6 @@
 import type { Argv } from "yargs"
 import { Instance } from "../../project/instance"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 import { ProviderID } from "../../provider/schema"
 import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
