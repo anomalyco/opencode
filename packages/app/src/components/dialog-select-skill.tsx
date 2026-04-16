@@ -1,7 +1,5 @@
 import { Component, createMemo, createResource } from "solid-js"
-import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { useLanguage } from "@/context/language"
@@ -44,8 +42,6 @@ const loadSkills = async (sdk: ReturnType<typeof useSDK>): Promise<SkillItem[]> 
 
 export const DialogSelectSkill: Component = () => {
   const sdk = useSDK()
-  const prompt = usePrompt()
-  const dialog = useDialog()
   const language = useLanguage()
 
   // Use sdk.client as source to only reload if client changes
@@ -57,15 +53,6 @@ export const DialogSelectSkill: Component = () => {
   )
 
   const items = createMemo(() => (skills() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
-
-  const handleSelect = (item: SkillItem | undefined) => {
-    if (!item) return
-    const text = `/${item.name} `
-    dialog.close()
-    requestAnimationFrame(() => {
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-    })
-  }
 
   return (
     <Dialog
@@ -79,7 +66,6 @@ export const DialogSelectSkill: Component = () => {
         items={items}
         filterKeys={["name", "description"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
-        onSelect={handleSelect}
       >
         {(item) => (
           <div class="w-full flex items-center gap-2">
