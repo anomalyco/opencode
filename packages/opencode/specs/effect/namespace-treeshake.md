@@ -442,3 +442,58 @@ Going forward:
 - If a file grows large enough that it's hard to navigate, split by concern
   (errors.ts, schema.ts, etc.) for readability. Not for tree-shaking — the
   bundler handles that.
+
+## Circular import rules
+
+Barrel files (`index.ts` with `export * as`) introduce circular import risks.
+These cause `ReferenceError: Cannot access 'X' before initialization` at
+runtime — not caught by the type checker.
+
+### Rule 1: Sibling files never import through their own barrel
+
+Files in the same directory must import directly from the source file, never
+through `"."` or `"@/<own-dir>"`:
+
+```ts
+// BAD — circular: index.ts re-exports both files, so A → index → B → index → A
+import { Sibling } from "."
+
+// GOOD — direct, no cycle
+import * as Sibling from "./sibling"
+```
+
+### Rule 2: Cross-directory imports must not form cycles through barrels
+
+If `src/lsp/lsp.ts` imports `Config` from `"../config"`, and
+`src/config/config.ts` imports `LSPServer` from `"../lsp"`, that's a cycle:
+
+```
+lsp/lsp.ts → config/index.ts → config/config.ts → lsp/index.ts → lsp/lsp.ts 💥
+```
+
+Fix by importing the specific file, breaking the cycle:
+
+```ts
+// In config/config.ts — import directly, not through the lsp barrel
+import * as LSPServer from "../lsp/server"
+```
+
+### Why the type checker doesn't catch this
+
+TypeScript resolves types lazily — it doesn't evaluate module-scope
+expressions. The `ReferenceError` only happens at runtime when a module-scope
+`const` or function call accesses a value from a circular dependency that
+hasn't finished initializing. The SDK build step (`bun run --conditions=browser
+./src/index.ts generate`) is the reliable way to catch these because it
+evaluates all modules eagerly.
+
+### How to verify
+
+After any namespace conversion, run:
+
+```bash
+cd packages/opencode
+bun run --conditions=browser ./src/index.ts generate
+```
+
+If this completes without `ReferenceError`, the module graph is safe.

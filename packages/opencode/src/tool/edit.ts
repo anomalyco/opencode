@@ -6,7 +6,7 @@
 import z from "zod"
 import * as path from "path"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
@@ -416,7 +416,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
             if (match) {
               yield match[0]
             }
-          } catch (e) {
+          } catch {
             // Invalid regex pattern, skip
           }
         }

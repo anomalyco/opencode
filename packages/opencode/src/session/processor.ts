@@ -2,11 +2,11 @@ import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
-import { Config } from "@/config/config"
+import { Config } from "@/config"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
-import { Session } from "."
+import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
@@ -15,10 +15,10 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import type { Provider } from "@/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { isRecord } from "@/util/record"
 
 export namespace SessionProcessor {
@@ -249,6 +249,7 @@ export namespace SessionProcessor {
 
             case "reasoning-end":
               if (!(value.id in ctx.reasoningMap)) return
+              // oxlint-disable-next-line no-self-assign -- reactivity trigger
               ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
               ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
               if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
@@ -431,6 +432,7 @@ export namespace SessionProcessor {
 
             case "text-end":
               if (!ctx.currentText) return
+              // oxlint-disable-next-line no-self-assign -- reactivity trigger
               ctx.currentText.text = ctx.currentText.text
               ctx.currentText.text = (yield* plugin.trigger(
                 "experimental.text.complete",

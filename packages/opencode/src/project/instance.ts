@@ -3,9 +3,9 @@ import { disposeInstance } from "@/effect/instance-registry"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { iife } from "@/util/iife"
-import { Log } from "@/util/log"
-import { LocalContext } from "../util/local-context"
-import { Project } from "./project"
+import { Log } from "@/util"
+import { LocalContext } from "../util"
+import * as Project from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 export interface InstanceContext {

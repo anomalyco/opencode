@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import * as Fence from "./fence"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
@@ -76,7 +76,7 @@ const app = (upgrade: UpgradeWebSocket) =>
             queue.length = 0
           }
           remote.onmessage = (event) => {
-            send(ws, event.data)
+            void send(ws, event.data)
           }
           remote.onerror = () => {
             ws.close(1011, "proxy error")

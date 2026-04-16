@@ -24,7 +24,7 @@ function openSessionContext(args: {
 }) {
   if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
   if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
-  args.tabs.open("context")
+  void args.tabs.open("context")
   args.tabs.setActive("context")
 }
 

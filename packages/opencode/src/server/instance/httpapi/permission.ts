@@ -3,7 +3,7 @@ import { PermissionID } from "@/permission/schema"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
-const root = "/experimental/httpapi/permission"
+const root = "/permission"
 
 export const PermissionApi = HttpApi.make("permission")
   .add(
@@ -45,7 +45,7 @@ export const PermissionApi = HttpApi.make("permission")
     }),
   )
 
-export const PermissionLive = Layer.unwrap(
+export const permissionHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const svc = yield* Permission.Service
 

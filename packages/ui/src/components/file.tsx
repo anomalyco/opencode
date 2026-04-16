@@ -698,6 +698,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     if (typeof value === "string") return value
     if (Array.isArray(value)) return value.join("\n")
     if (value == null) return ""
+    // oxlint-disable-next-line no-base-to-string -- file contents cast to unknown, coercion is intentional
     return String(value)
   }
 
@@ -712,11 +713,13 @@ function TextViewer<T>(props: TextFileProps<T>) {
     if (typeof value === "string") return value.length
     if (Array.isArray(value)) {
       return value.reduce(
+        // oxlint-disable-next-line no-base-to-string -- array parts coerced intentionally
         (sum, part) => sum + (typeof part === "string" ? part.length + 1 : String(part).length + 1),
         0,
       )
     }
     if (value == null) return 0
+    // oxlint-disable-next-line no-base-to-string -- file contents cast to unknown, coercion is intentional
     return String(value).length
   })
 

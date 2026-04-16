@@ -6,11 +6,11 @@ import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
-import { Provider } from "../../src/provider/provider"
-import { ProviderTransform } from "../../src/provider/transform"
-import { ModelsDev } from "../../src/provider/models"
+import { Provider } from "../../src/provider"
+import { ProviderTransform } from "../../src/provider"
+import { ModelsDev } from "../../src/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -229,7 +229,7 @@ beforeEach(() => {
 })
 
 afterAll(() => {
-  state.server?.stop()
+  void state.server?.stop()
 })
 
 function createChatStream(text: string) {
@@ -1181,7 +1181,6 @@ describe("session.llm.stream", () => {
     const providerID = "google"
     const modelID = "gemini-2.5-flash"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
     const pathSuffix = `/v1beta/models/${model.id}:streamGenerateContent`
 

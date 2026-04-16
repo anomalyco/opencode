@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, createMemo, createEffect, on, For, Show, Index, batch } from "solid-js"
+import { createSignal, createMemo, createEffect, on, For, Show, batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type {
   Message,
@@ -9,7 +9,6 @@ import type {
   TextPart,
   ReasoningPart,
   ToolPart,
-  CompactionPart,
   FilePart,
   AgentPart,
 } from "@opencode-ai/sdk/v2"
@@ -553,10 +552,6 @@ function toolPart(sample: (typeof TOOL_SAMPLES)[keyof typeof TOOL_SAMPLES], stat
     ...base,
     state: { status: "pending", input: sample.input, raw: "" },
   } as ToolPart
-}
-
-function compactionPart(): CompactionPart {
-  return { id: uid(), type: "compaction", auto: true } as CompactionPart
 }
 
 // ---------------------------------------------------------------------------

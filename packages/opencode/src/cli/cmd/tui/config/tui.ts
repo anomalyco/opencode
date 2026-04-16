@@ -1,18 +1,20 @@
-import { existsSync } from "fs"
 import z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
-import { Config } from "./config"
-import { ConfigPaths } from "./paths"
+import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
 import { Flag } from "@/flag/flag"
-import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Npm } from "@opencode-ai/shared/npm"
+import { CurrentWorkingDirectory } from "./cwd"
+import { ConfigPlugin } from "@/config/plugin"
+import { ConfigKeybinds } from "@/config/keybinds"
+import { InstallationLocal, InstallationVersion } from "@/installation/version"
+import { makeRuntime } from "@/cli/effect/runtime"
+import { Filesystem, Log } from "@/util"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -30,19 +32,19 @@ export namespace TuiConfig {
 
   export type Info = z.output<typeof Info> & {
     // Internal resolved plugin list used by runtime loading.
-    plugin_origins?: Config.PluginOrigin[]
+    plugin_origins?: ConfigPlugin.Origin[]
   }
 
   export interface Interface {
     readonly get: () => Effect.Effect<Info>
-    readonly waitForDependencies: () => Effect.Effect<void, AppFileSystem.Error>
+    readonly waitForDependencies: () => Effect.Effect<void>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/TuiConfig") {}
 
-  function pluginScope(file: string, ctx: { directory: string; worktree: string }): Config.PluginScope {
-    if (AppFileSystem.contains(ctx.directory, file)) return "local"
-    if (ctx.worktree !== "/" && AppFileSystem.contains(ctx.worktree, file)) return "local"
+  function pluginScope(file: string, ctx: { directory: string }): ConfigPlugin.Scope {
+    if (Filesystem.contains(ctx.directory, file)) return "local"
+    // if (ctx.worktree !== "/" && Filesystem.contains(ctx.worktree, file)) return "local"
     return "global"
   }
 
@@ -66,13 +68,13 @@ export namespace TuiConfig {
     }
   }
 
-  async function mergeFile(acc: Acc, file: string, ctx: { directory: string; worktree: string }) {
+  async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
     const data = await loadFile(file)
     acc.result = mergeDeep(acc.result, data)
     if (!data.plugin?.length) return
 
     const scope = pluginScope(file, ctx)
-    const plugins = Config.deduplicatePluginOrigins([
+    const plugins = ConfigPlugin.deduplicatePluginOrigins([
       ...(acc.result.plugin_origins ?? []),
       ...data.plugin.map((spec) => ({ spec, scope, source: file })),
     ])
@@ -80,18 +82,13 @@ export namespace TuiConfig {
     acc.result.plugin_origins = plugins
   }
 
-  async function loadState(ctx: { directory: string; worktree: string }) {
-    let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-      ? []
-      : await ConfigPaths.projectFiles("tui", ctx.directory, ctx.worktree)
-    const directories = await ConfigPaths.directories(ctx.directory, ctx.worktree)
+  async function loadState(ctx: { directory: string }) {
+    let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
+    const directories = await ConfigPaths.directories(ctx.directory)
     const custom = customPath()
-    const managed = Config.managedConfigDir()
-    await migrateTuiConfig({ directories, custom, managed })
+    await migrateTuiConfig({ directories, custom, cwd: ctx.directory })
     // Re-compute after migration since migrateTuiConfig may have created new tui.json files
-    projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-      ? []
-      : await ConfigPaths.projectFiles("tui", ctx.directory, ctx.worktree)
+    projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
 
     const acc: Acc = {
       result: {},
@@ -119,21 +116,16 @@ export namespace TuiConfig {
       }
     }
 
-    if (existsSync(managed)) {
-      for (const file of ConfigPaths.fileInDirectory(managed, "tui")) {
-        await mergeFile(acc, file, ctx)
-      }
-    }
-
-    const keybinds = { ...acc.result.keybinds }
+    const keybinds = { ...(acc.result.keybinds ?? {}) }
     if (process.platform === "win32") {
       // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
       keybinds.terminal_suspend = "none"
-      keybinds.input_undo ??= unique(["ctrl+z", ...Config.Keybinds.shape.input_undo.parse(undefined).split(",")]).join(
-        ",",
-      )
+      keybinds.input_undo ??= unique([
+        "ctrl+z",
+        ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
+      ]).join(",")
     }
-    acc.result.keybinds = Config.Keybinds.parse(keybinds)
+    acc.result.keybinds = ConfigKeybinds.Keybinds.parse(keybinds)
 
     return {
       config: acc.result,
@@ -144,39 +136,41 @@ export namespace TuiConfig {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const cfg = yield* Config.Service
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("TuiConfig.state")(function* (ctx) {
-          const data = yield* Effect.promise(() => loadState(ctx))
-          const deps = yield* Effect.forEach(data.dirs, (dir) => cfg.installDependencies(dir).pipe(Effect.forkScoped), {
-            concurrency: "unbounded",
-          })
-          return { config: data.config, deps }
-        }),
+      const directory = yield* CurrentWorkingDirectory
+      const npm = yield* Npm.Service
+      const data = yield* Effect.promise(() => loadState({ directory }))
+      const deps = yield* Effect.forEach(
+        data.dirs,
+        (dir) =>
+          npm
+            .install(dir, {
+              add: ["@opencode-ai/plugin" + (InstallationLocal ? "" : "@" + InstallationVersion)],
+            })
+            .pipe(Effect.forkScoped),
+        {
+          concurrency: "unbounded",
+        },
       )
 
-      const get = Effect.fn("TuiConfig.get")(() => InstanceState.use(state, (s) => s.config))
+      const get = Effect.fn("TuiConfig.get")(() => Effect.succeed(data.config))
 
       const waitForDependencies = Effect.fn("TuiConfig.waitForDependencies")(() =>
-        InstanceState.useEffect(state, (s) =>
-          Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
-        ),
+        Effect.forEach(deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.ignore(), Effect.asVoid),
       )
-
       return Service.of({ get, waitForDependencies })
-    }),
+    }).pipe(Effect.withSpan("TuiConfig.layer")),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Npm.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function get() {
-    return runPromise((svc) => svc.get())
-  }
-
   export async function waitForDependencies() {
     await runPromise((svc) => svc.waitForDependencies())
+  }
+
+  export async function get() {
+    return runPromise((svc) => svc.get())
   }
 
   async function loadFile(filepath: string): Promise<Info> {
@@ -205,7 +199,7 @@ export namespace TuiConfig {
     const data = parsed.data
     if (data.plugin) {
       for (let i = 0; i < data.plugin.length; i++) {
-        data.plugin[i] = await Config.resolvePluginSpec(data.plugin[i], configFilepath)
+        data.plugin[i] = await ConfigPlugin.resolvePluginSpec(data.plugin[i], configFilepath)
       }
     }
 

@@ -11,11 +11,12 @@ import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Truncate } from "../../src/tool/truncate"
-import { Tool } from "../../src/tool/tool"
-import { Filesystem } from "../../src/util/filesystem"
+import { Truncate } from "../../src/tool"
+import { Tool } from "../../src/tool"
+import { Filesystem } from "../../src/util"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Npm } from "@opencode-ai/shared/npm"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 

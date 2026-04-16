@@ -1,15 +1,15 @@
 import z from "zod"
 import { setTimeout as sleep } from "node:timers/promises"
 import { fn } from "@/util/fn"
-import { Database, asc, eq, inArray } from "@/storage/db"
-import { Project } from "@/project/project"
+import { Database, asc, eq, inArray } from "@/storage"
+import { Project } from "@/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { SyncEvent } from "@/sync"
 import { EventTable } from "@/sync/event.sql"
 import { Flag } from "@/flag/flag"
-import { Log } from "@/util/log"
-import { Filesystem } from "@/util/filesystem"
+import { Log } from "@/util"
+import { Filesystem } from "@/util"
 import { ProjectID } from "@/project/schema"
 import { Slug } from "@opencode-ai/shared/util/slug"
 import { WorkspaceTable } from "./workspace.sql"
@@ -328,7 +328,7 @@ export namespace Workspace {
       try {
         const adaptor = await getAdaptor(info.projectID, row.type)
         await adaptor.remove(info)
-      } catch (err) {
+      } catch {
         log.error("adaptor not available when removing workspace", { type: row.type })
       }
       Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
@@ -404,7 +404,7 @@ export namespace Workspace {
           return synced(state)
         },
       })
-    } catch (error) {
+    } catch {
       if (signal?.aborted) throw signal.reason ?? new Error("Request aborted")
       throw new Error(`Timed out waiting for sync fence: ${JSON.stringify(state)}`)
     }

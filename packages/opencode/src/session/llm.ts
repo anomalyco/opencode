@@ -1,12 +1,12 @@
-import { Provider } from "@/provider/provider"
-import { Log } from "@/util/log"
+import { Provider } from "@/provider"
+import { Log } from "@/util"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
-import { ProviderTransform } from "@/provider/transform"
-import { Config } from "@/config/config"
+import { ProviderTransform } from "@/provider"
+import { Config } from "@/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -16,11 +16,12 @@ import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
-import { Wildcard } from "@/util/wildcard"
+import { Wildcard } from "@/util"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
-import { EffectBridge } from "@/effect/bridge"
+import { InstallationVersion } from "@/installation/version"
+import { EffectBridge } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
@@ -277,11 +278,10 @@ export namespace LLM {
             }
 
             const id = PermissionID.ascending()
-            let reply: Permission.Reply | undefined
             let unsub: (() => void) | undefined
             try {
               unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
-                if (evt.properties.requestID === id) reply = evt.properties.reply
+                if (evt.properties.requestID === id) void evt.properties.reply
               })
               const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
                 try {
@@ -366,7 +366,7 @@ export namespace LLM {
               : {
                   "x-session-affinity": input.sessionID,
                   ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                  "User-Agent": `opencode/${Installation.VERSION}`,
+                  "User-Agent": `opencode/${InstallationVersion}`,
                 }),
             ...input.model.headers,
             ...headers,

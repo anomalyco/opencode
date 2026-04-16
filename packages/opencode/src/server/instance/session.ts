@@ -9,7 +9,7 @@ import { SessionPrompt } from "../../session/prompt"
 import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
-import { SessionShare } from "@/share/session"
+import { SessionShare } from "@/share"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
@@ -18,7 +18,7 @@ import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Command } from "../../command"
-import { Log } from "../../util/log"
+import { Log } from "../../util"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -898,7 +898,7 @@ export const SessionRoutes = lazy(() =>
           const msg = await AppRuntime.runPromise(
             SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
           )
-          stream.write(JSON.stringify(msg))
+          void stream.write(JSON.stringify(msg))
         })
       },
     )
@@ -926,13 +926,15 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID }))).catch((err) => {
-          log.error("prompt_async failed", { sessionID, error: err })
-          Bus.publish(Session.Event.Error, {
-            sessionID,
-            error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
-          })
-        })
+        void AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID }))).catch(
+          (err) => {
+            log.error("prompt_async failed", { sessionID, error: err })
+            void Bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+            })
+          },
+        )
 
         return c.body(null, 204)
       },

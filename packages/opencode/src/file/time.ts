@@ -1,9 +1,9 @@
 import { DateTime, Effect, Layer, Option, Semaphore, Context } from "effect"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })

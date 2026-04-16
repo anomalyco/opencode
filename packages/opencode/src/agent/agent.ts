@@ -1,12 +1,12 @@
-import { Config } from "../config/config"
+import { Config } from "../config"
 import z from "zod"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { Instance } from "../project/instance"
-import { Truncate } from "../tool/truncate"
+import { Truncate } from "../tool"
 import { Auth } from "../auth"
-import { ProviderTransform } from "../provider/transform"
+import { ProviderTransform } from "../provider"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -20,7 +20,7 @@ import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, Context, Layer } from "effect"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
@@ -80,7 +80,7 @@ export namespace Agent {
       const provider = yield* Provider.Service
 
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Agent.state")(function* (ctx) {
+        Effect.fn("Agent.state")(function* (_ctx) {
           const cfg = yield* config.get()
           const skillDirs = yield* skill.dirs()
           const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]

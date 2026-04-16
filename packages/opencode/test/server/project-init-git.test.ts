@@ -3,15 +3,14 @@ import { Effect } from "effect"
 import path from "path"
 import { GlobalBus } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Filesystem } from "../../src/util/filesystem"
-import { Log } from "../../src/util/log"
+import { Filesystem } from "../../src/util"
+import { Log } from "../../src/util"
 import { resetDatabase } from "../fixture/db"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 afterEach(async () => {
   await resetDatabase()

@@ -3,23 +3,23 @@ import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { SessionRevert } from "./revert"
-import { Session } from "."
+import * as Session from "./session"
 import { Agent } from "../agent/agent"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
-import { ProviderTransform } from "../provider/transform"
+import { ProviderTransform } from "../provider"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
-import { ToolRegistry } from "../tool/registry"
+import { ToolRegistry } from "../tool"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
@@ -30,25 +30,25 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
-import { ConfigMarkdown } from "../config/markdown"
+import { ConfigMarkdown } from "../config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { SessionProcessor } from "./processor"
-import { Tool } from "@/tool/tool"
+import { Tool } from "@/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Truncate } from "@/tool/truncate"
+import { Truncate } from "@/tool"
 import { decodeDataUrl } from "@/util/data-url"
-import { Process } from "@/util/process"
+import { Process } from "@/util"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
-import { InstanceState } from "@/effect/instance-state"
+import { EffectLogger } from "@/effect"
+import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
-import { EffectBridge } from "@/effect/bridge"
+import { EffectBridge } from "@/effect"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -260,8 +260,7 @@ export namespace SessionPrompt {
             messageID: userMessage.info.id,
             sessionID: userMessage.info.sessionID,
             type: "text",
-            text:
-              BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+            text: `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`,
             synthetic: true,
           })
           userMessage.parts.push(part)
@@ -1825,7 +1824,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     onSuccess: (output: unknown) => void
   }): AITool {
     // Remove $schema property if present (not needed for tool input)
-    const { $schema, ...toolSchema } = input.schema
+    const { $schema: _, ...toolSchema } = input.schema
 
     return tool({
       id: "StructuredOutput" as any,
