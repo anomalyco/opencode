@@ -95,7 +95,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     return items
   }
 
-  function insert(values: any[], table: any, label: string) {
+  function insert(values: unknown[], table: Parameters<typeof db.insert>[0], label: string) {
     if (values.length === 0) return 0
     try {
       db.insert(table).values(values).onConflictDoNothing().run()
@@ -152,7 +152,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   // Migrate projects first (no FK deps)
   // Derive all IDs from file paths, not JSON content
   const projectIds = new Set<string>()
-  const projectValues = [] as any[]
+  const projectValues: unknown[] = []
   for (let i = 0; i < projectFiles.length; i += batchSize) {
     const end = Math.min(i + batchSize, projectFiles.length)
     const batch = await read(projectFiles, i, end)
@@ -186,7 +186,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   // migrations may have moved sessions to new directories without updating the JSON
   const sessionProjects = sessionFiles.map((file) => path.basename(path.dirname(file)))
   const sessionIds = new Set<string>()
-  const sessionValues = [] as any[]
+  const sessionValues: unknown[] = []
   for (let i = 0; i < sessionFiles.length; i += batchSize) {
     const end = Math.min(i + batchSize, sessionFiles.length)
     const batch = await read(sessionFiles, i, end)
@@ -314,7 +314,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   for (let i = 0; i < todoFiles.length; i += batchSize) {
     const end = Math.min(i + batchSize, todoFiles.length)
     const batch = await read(todoFiles, i, end)
-    const values = [] as any[]
+    const values: unknown[] = []
     for (let j = 0; j < batch.length; j++) {
       const data = batch[j]
       if (!data) continue
@@ -351,7 +351,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
 
   // Migrate permissions
   const permProjects = permFiles.map((file) => path.basename(file, ".json"))
-  const permValues = [] as any[]
+  const permValues: unknown[] = []
   for (let i = 0; i < permFiles.length; i += batchSize) {
     const end = Math.min(i + batchSize, permFiles.length)
     const batch = await read(permFiles, i, end)
@@ -376,7 +376,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
 
   // Migrate session shares
   const shareSessions = shareFiles.map((file) => path.basename(file, ".json"))
-  const shareValues = [] as any[]
+  const shareValues: unknown[] = []
   for (let i = 0; i < shareFiles.length; i += batchSize) {
     const end = Math.min(i + batchSize, shareFiles.length)
     const batch = await read(shareFiles, i, end)

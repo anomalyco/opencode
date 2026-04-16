@@ -465,12 +465,12 @@ export const layer = Layer.effect(
       direction: "callHierarchy/incomingCalls" | "callHierarchy/outgoingCalls",
     ) {
       const results = yield* run(input.file, async (client) => {
-        const items = (await client.connection
-          .sendRequest("textDocument/prepareCallHierarchy", {
+        const items = await client.connection
+          .sendRequest<unknown[] | null>("textDocument/prepareCallHierarchy", {
             textDocument: { uri: pathToFileURL(input.file).href },
             position: { line: input.line, character: input.character },
           })
-          .catch(() => [])) as any[]
+          .catch(() => [] as unknown[])
         if (!items?.length) return []
         return client.connection.sendRequest(direction, { item: items[0] }).catch(() => [])
       })

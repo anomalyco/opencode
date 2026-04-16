@@ -193,7 +193,7 @@ function normalizeMessages(
             providerOptions: {
               ...msg.providerOptions,
               openaiCompatible: {
-                ...(msg.providerOptions as any)?.openaiCompatible,
+                ...msg.providerOptions?.openaiCompatible,
                 [field]: reasoningText,
               },
             },
@@ -594,6 +594,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             {
               thinking: {
                 type: "adaptive",
+                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
+                  ? { display: "summarized" }
+                  : {}),
               },
               effort,
             },
@@ -920,7 +923,7 @@ export function smallOptions(model: Provider.Model) {
     model.api.npm === "@ai-sdk/github-copilot"
   ) {
     if (model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.")) {
+      if (model.api.id.includes("5.") || model.api.id.includes("5-mini")) {
         return { store: false, reasoningEffort: "low" }
       }
       return { store: false, reasoningEffort: "minimal" }

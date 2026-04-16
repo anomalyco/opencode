@@ -517,7 +517,7 @@ export const layer = Layer.effect(
           if (!response.ok) {
             throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
           }
-          const wellknown = (yield* Effect.promise(() => response.json())) as any
+          const wellknown = (yield* Effect.promise(() => response.json())) as { config?: Record<string, unknown> }
           const remoteConfig = wellknown.config ?? {}
           if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
           const source = `${url}/.well-known/opencode`
