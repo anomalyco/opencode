@@ -1,6 +1,6 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
-import { Rpc } from "@/util/rpc"
+import { Rpc } from "@/util"
 import { type rpc } from "./worker"
 import path from "path"
 import { fileURLToPath } from "url"
