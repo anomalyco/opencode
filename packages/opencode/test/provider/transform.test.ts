@@ -1212,6 +1212,103 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
+  test("replaces empty text with placeholder in assistant messages with reasoning", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking...", providerOptions: { anthropic: { signature: "sig_abc" } } },
+          { type: "text", text: "" },
+          { type: "reasoning", text: "more thinking", providerOptions: { anthropic: { signature: "sig_xyz" } } },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(4)
+    expect(result[0].content[0]).toEqual({ type: "reasoning", text: "thinking...", providerOptions: { anthropic: { signature: "sig_abc" } } })
+    expect(result[0].content[1]).toEqual({ type: "text", text: "..." })
+    expect(result[0].content[2]).toEqual({ type: "reasoning", text: "more thinking", providerOptions: { anthropic: { signature: "sig_xyz" } } })
+    expect(result[0].content[3]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("replaces empty text and appends fallback when only reasoning remains", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking...", providerOptions: { anthropic: { signature: "sig_abc" } } },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect((result[0].content as any[])[0].type).toBe("reasoning")
+    expect(result[0].content[1]).toEqual({ type: "text", text: "..." })
+  })
+
+  test("appends fallback text when assistant has only reasoning with signature", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "deep thought", providerOptions: { anthropic: { signature: "sig_xyz" } } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect((result[0].content as any[])[0].type).toBe("reasoning")
+    expect(result[0].content[1]).toEqual({ type: "text", text: "..." })
+  })
+
+  test("does not replace text in assistant messages without reasoning", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+
+  test("does not replace empty text in user messages with reasoning", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "reasoning", text: "user reasoning", providerOptions: { anthropic: { signature: "sig_abc" } } },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect((result[0].content as any[])[0].type).toBe("reasoning")
+  })
+
   test("filters empty content for bedrock provider", () => {
     const bedrockModel = {
       ...anthropicModel,

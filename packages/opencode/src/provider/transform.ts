@@ -60,14 +60,28 @@ function normalizeMessages(
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
-            return part.text !== ""
+          const hasReasoning = msg.role === "assistant" && msg.content.some((p) => p.type === "reasoning" && p.providerOptions !== undefined)
+          const filtered = msg.content
+            .filter((part) => {
+              if (part.type === "reasoning") {
+                return part.text !== "" || part.providerOptions !== undefined
+              }
+              if (part.type === "text" && !hasReasoning) {
+                return part.text !== ""
+              }
+              return true
+            })
+            .map((part) => {
+              if (hasReasoning && part.type === "text" && part.text === "") {
+                return { ...part, text: "..." } as typeof part
+              }
+              return part
+            })
+          if (filtered.length === 0) return undefined
+          if (hasReasoning && filtered.length > 0 && filtered[filtered.length - 1].type === "reasoning") {
+            filtered.push({ type: "text", text: "..." } as (typeof filtered)[number])
           }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
+          return { ...msg, content: filtered }
       })
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
