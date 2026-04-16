@@ -13,6 +13,7 @@ import {
   on,
   onMount,
   untrack,
+  createResource,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -27,7 +28,7 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@opencode-ai/shared/util/encode"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -432,8 +433,6 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
   const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
-  const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
-  const hasSessionReview = createMemo(() => sessionCount() > 0)
   const canReview = createMemo(() => !!sync.project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
@@ -443,8 +442,6 @@ export default function Page() {
     review: reviewTab,
     hasReview: canReview,
   })
-  const contextOpen = tabState.contextOpen
-  const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
@@ -487,7 +484,7 @@ export default function Page() {
     if (!tab) return
 
     const path = file.pathFromTab(tab)
-    if (path) file.load(path)
+    if (path) void file.load(path)
   })
 
   createEffect(
@@ -808,8 +805,9 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  createEffect(
-    on([() => sdk.directory, () => params.id] as const, ([, id]) => {
+  const [sessionSync] = createResource(
+    () => [sdk.directory, params.id] as const,
+    ([directory, id]) => {
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       refreshFrame = undefined
@@ -820,13 +818,10 @@ export default function Page() {
       const stale = !cached
         ? false
         : (() => {
-            const info = getSessionPrefetch(sdk.directory, id)
+            const info = getSessionPrefetch(directory, id)
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
-      untrack(() => {
-        void sync.session.sync(id)
-      })
 
       refreshFrame = requestAnimationFrame(() => {
         refreshFrame = undefined
@@ -838,7 +833,9 @@ export default function Page() {
           })
         }, 0)
       })
-    }),
+
+      return sync.session.sync(id)
+    },
   )
 
   createEffect(
@@ -1885,6 +1882,7 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+      {sessionSync() ?? ""}
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>

@@ -6,7 +6,7 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import "./user-menu.css"
 
-const logout = action(async () => {
+const _logout = action(async () => {
   "use server"
   const auth = await useAuthSession()
   const event = getRequestEvent()

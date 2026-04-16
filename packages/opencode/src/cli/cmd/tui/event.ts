@@ -1,5 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 import z from "zod"
 

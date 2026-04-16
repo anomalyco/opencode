@@ -1,13 +1,13 @@
 import z from "zod"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import path from "path"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "../filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 const operations = [
   "goToDefinition",

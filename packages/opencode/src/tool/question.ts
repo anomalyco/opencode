@@ -1,15 +1,15 @@
 import z from "zod"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 
 const parameters = z.object({
-  questions: z.array(Question.Info.omit({ custom: true })).describe("Questions to ask"),
+  questions: z.array(Question.Prompt.zod).describe("Questions to ask"),
 })
 
 type Metadata = {
-  answers: Question.Answer[]
+  answers: ReadonlyArray<Question.Answer>
 }
 
 export const QuestionTool = Tool.define<typeof parameters, Metadata, Question.Service>(
