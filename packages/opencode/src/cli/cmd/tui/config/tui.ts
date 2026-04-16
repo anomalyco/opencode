@@ -15,7 +15,7 @@ import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
-import { makeRuntime } from "@/effect/run-service"
+import { makeRuntime } from "@/cli/effect/runtime"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
