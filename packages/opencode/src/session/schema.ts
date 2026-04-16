@@ -19,6 +19,7 @@ export const MessageID = Schema.String.annotate({ [ZodOverride]: Identifier.sche
   Schema.brand("MessageID"),
   withStatics((s) => ({
     ascending: (id?: string) => s.make(Identifier.ascending("message", id)),
+    ascendingAfter: (afterID: string) => s.make(Identifier.ascendingAfter("message", afterID)),
     zod: Identifier.schema("message").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
   })),
 )
