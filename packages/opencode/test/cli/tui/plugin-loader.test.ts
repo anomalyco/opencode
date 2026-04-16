@@ -38,6 +38,7 @@ async function load(): Promise<Data> {
   const backup = await Bun.file(globalConfigPath)
     .text()
     .catch(() => undefined)
+  const backupPluginMetaFile = process.env.OPENCODE_PLUGIN_META_FILE
 
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -324,6 +325,7 @@ export default {
   })
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
 
   try {
     expect(addTheme(tmp.extra.preloadedThemeName, { theme: { primary: "#303030" } })).toBe(true)
@@ -453,6 +455,11 @@ export default {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
+    if (backupPluginMetaFile === undefined) {
+      delete process.env.OPENCODE_PLUGIN_META_FILE
+    } else {
+      process.env.OPENCODE_PLUGIN_META_FILE = backupPluginMetaFile
+    }
     if (backup === undefined) {
       await fs.rm(globalConfigPath, { force: true })
     } else {
