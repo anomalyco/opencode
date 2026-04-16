@@ -4,6 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID } from "../../src/session/schema"
@@ -35,7 +36,7 @@ describe("session.start", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      init: InstanceBootstrap,
+      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         const session = await Session.create({})
         expect(await SessionStart.pending(session.id)).toEqual([`startup:${session.id}`])
@@ -77,7 +78,7 @@ describe("session.start", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      init: InstanceBootstrap,
+      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         const session = await Session.create({})
         expect(await SessionStart.pending(session.id)).toEqual(["ok:startup"])
@@ -128,7 +129,7 @@ describe("session.start", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      init: InstanceBootstrap,
+      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         const parent = await Session.create({})
         const id = MessageID.ascending()

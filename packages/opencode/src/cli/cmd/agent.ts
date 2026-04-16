@@ -1,5 +1,6 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
+import { AppRuntime } from "@/effect/app-runtime"
 import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
@@ -110,7 +111,9 @@ const AgentCreateCommand = cmd({
         const spinner = prompts.spinner()
         spinner.start("Generating agent configuration...")
         const model = args.model ? Provider.parseModel(args.model) : undefined
-        const generated = await Agent.generate({ description, model }).catch((error) => {
+        const generated = await AppRuntime.runPromise(
+          Agent.Service.use((svc) => svc.generate({ description, model })),
+        ).catch((error) => {
           spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
           if (isFullyNonInteractive) process.exit(1)
           throw new UI.CancelledError()
@@ -220,7 +223,7 @@ const AgentListCommand = cmd({
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
-        const agents = await Agent.list()
+        const agents = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
         const sortedAgents = agents.sort((a, b) => {
           if (a.native !== b.native) {
             return a.native ? -1 : 1

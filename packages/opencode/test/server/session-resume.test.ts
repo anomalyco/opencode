@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
 import { SessionStart } from "../../src/session/start"
@@ -34,7 +35,7 @@ describe("session resume endpoint", () => {
 
     const sessionID = await Instance.provide({
       directory: tmp.path,
-      init: InstanceBootstrap,
+      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         const session = await Session.create({})
         await SessionStart.clear(session.id)
@@ -42,7 +43,7 @@ describe("session resume endpoint", () => {
       },
     })
 
-    const app = Server.Default()
+    const { app } = Server.Default()
     const res = await app.request(`/session/${sessionID}/resume`, {
       method: "POST",
       headers: {
@@ -55,7 +56,7 @@ describe("session resume endpoint", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      init: InstanceBootstrap,
+      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         expect(await SessionStart.take(sessionID)).toEqual([`resume:${sessionID}`])
         await Session.remove(sessionID)
@@ -67,7 +68,7 @@ describe("session resume endpoint", () => {
     await Instance.provide({
       directory: root,
       fn: async () => {
-        const app = Server.Default()
+        const { app } = Server.Default()
         const res = await app.request("/session/ses_missing/resume", {
           method: "POST",
           headers: {

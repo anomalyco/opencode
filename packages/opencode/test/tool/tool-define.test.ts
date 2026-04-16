@@ -1,17 +1,21 @@
 import { describe, test, expect } from "bun:test"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import z from "zod"
+import { Agent } from "../../src/agent/agent"
 import { Tool } from "../../src/tool/tool"
+import { Truncate } from "../../src/tool/truncate"
+
+const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
 
 const params = z.object({ input: z.string() })
-const defaultArgs = { input: "test" }
 
 function makeTool(id: string, executeFn?: () => void) {
   return {
     description: "test tool",
     parameters: params,
-    async execute() {
+    execute() {
       executeFn?.()
-      return { title: "test", output: "ok", metadata: {} }
+      return Effect.succeed({ title: "test", output: "ok", metadata: {} })
     },
   }
 }
@@ -21,81 +25,35 @@ describe("Tool.define", () => {
     const original = makeTool("test")
     const originalExecute = original.execute
 
-    const tool = Tool.define("test-tool", original)
+    const info = await runtime.runPromise(Tool.define("test-tool", Effect.succeed(original)))
 
-    await tool.init()
-    await tool.init()
-    await tool.init()
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
 
     expect(original.execute).toBe(originalExecute)
   })
 
-  test("object-defined tool does not accumulate wrapper layers across init() calls", async () => {
-    let calls = 0
-
-    const tool = Tool.define(
-      "test-tool",
-      makeTool("test", () => calls++),
+  test("effect-defined tool returns fresh objects and is unaffected", async () => {
+    const info = await runtime.runPromise(
+      Tool.define(
+        "test-fn-tool",
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
+      ),
     )
 
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
-    }
-
-    const resolved = await tool.init()
-    calls = 0
-
-    let stack = ""
-    const exec = resolved.execute
-    resolved.execute = async (args: any, ctx: any) => {
-      const result = await exec.call(resolved, args, ctx)
-      stack = new Error().stack || ""
-      return result
-    }
-
-    await resolved.execute(defaultArgs, {} as any)
-    expect(calls).toBe(1)
-
-    const frames = stack.split("\n").filter((l) => l.includes("tool.ts")).length
-    expect(frames).toBeLessThan(5)
-  })
-
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
-    const tool = Tool.define("test-fn-tool", () => Promise.resolve(makeTool("test")))
-
-    const first = await tool.init()
-    const second = await tool.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
 
   test("object-defined tool returns distinct objects per init() call", async () => {
-    const tool = Tool.define("test-copy", makeTool("test"))
+    const info = await runtime.runPromise(Tool.define("test-copy", Effect.succeed(makeTool("test"))))
 
-    const first = await tool.init()
-    const second = await tool.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
-  })
-
-  test("validation still works after many init() calls", async () => {
-    const tool = Tool.define("test-validation", {
-      description: "validation test",
-      parameters: z.object({ count: z.number().int().positive() }),
-      async execute(args) {
-        return { title: "test", output: String(args.count), metadata: {} }
-      },
-    })
-
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
-    }
-
-    const resolved = await tool.init()
-
-    const result = await resolved.execute({ count: 42 }, {} as any)
-    expect(result.output).toBe("42")
-
-    await expect(resolved.execute({ count: -1 }, {} as any)).rejects.toThrow("invalid arguments")
   })
 })

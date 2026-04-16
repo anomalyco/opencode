@@ -1,10 +1,12 @@
-import z from "zod"
-import { Tool } from "./tool"
 import * as path from "path"
-import DESCRIPTION from "./ls.txt"
-import { Instance } from "../project/instance"
+import z from "zod"
+import { Effect } from "effect"
+import * as Stream from "effect/Stream"
+import { InstanceState } from "@/effect/instance-state"
 import { Ripgrep } from "../file/ripgrep"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectoryEffect } from "./external-directory"
+import DESCRIPTION from "./ls.txt"
+import { Tool } from "./tool"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -35,87 +37,86 @@ export const IGNORE_PATTERNS = [
 
 const LIMIT = 100
 
-export const ListTool = Tool.define("list", {
-  description: DESCRIPTION,
-  parameters: z.object({
-    path: z.string().describe("The absolute path to the directory to list (must be absolute, not relative)").optional(),
-    ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
-  }),
-  async execute(params, ctx) {
-    const searchPath = path.resolve(Instance.directory, params.path || ".")
-    await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
-
-    await ctx.ask({
-      permission: "list",
-      patterns: [searchPath],
-      always: ["*"],
-      metadata: {
-        path: searchPath,
-      },
-    })
-
-    const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
-    const files = []
-    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, signal: ctx.abort })) {
-      files.push(file)
-      if (files.length >= LIMIT) break
-    }
-
-    // Build directory structure
-    const dirs = new Set<string>()
-    const filesByDir = new Map<string, string[]>()
-
-    for (const file of files) {
-      const dir = path.dirname(file)
-      const parts = dir === "." ? [] : dir.split("/")
-
-      // Add all parent directories
-      for (let i = 0; i <= parts.length; i++) {
-        const dirPath = i === 0 ? "." : parts.slice(0, i).join("/")
-        dirs.add(dirPath)
-      }
-
-      // Add file to its directory
-      if (!filesByDir.has(dir)) filesByDir.set(dir, [])
-      filesByDir.get(dir)!.push(path.basename(file))
-    }
-
-    function renderDir(dirPath: string, depth: number): string {
-      const indent = "  ".repeat(depth)
-      let output = ""
-
-      if (depth > 0) {
-        output += `${indent}${path.basename(dirPath)}/\n`
-      }
-
-      const childIndent = "  ".repeat(depth + 1)
-      const children = Array.from(dirs)
-        .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
-        .sort()
-
-      // Render subdirectories first
-      for (const child of children) {
-        output += renderDir(child, depth + 1)
-      }
-
-      // Render files
-      const files = filesByDir.get(dirPath) || []
-      for (const file of files.sort()) {
-        output += `${childIndent}${file}\n`
-      }
-
-      return output
-    }
-
-    const output = `${searchPath}/\n` + renderDir(".", 0)
+export const ListTool = Tool.define(
+  "list",
+  Effect.gen(function* () {
+    const rg = yield* Ripgrep.Service
 
     return {
-      title: path.relative(Instance.worktree, searchPath),
-      metadata: {
-        count: files.length,
-        truncated: files.length >= LIMIT,
-      },
-      output,
+      description: DESCRIPTION,
+      parameters: z.object({
+        path: z
+          .string()
+          .describe("The absolute path to the directory to list (must be absolute, not relative)")
+          .optional(),
+        ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
+      }),
+      execute: (params: { path?: string; ignore?: string[] }, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const ins = yield* InstanceState.context
+          const search = path.resolve(ins.directory, params.path || ".")
+          yield* assertExternalDirectoryEffect(ctx, search, { kind: "directory" })
+
+          yield* ctx.ask({
+            permission: "list",
+            patterns: [search],
+            always: ["*"],
+            metadata: {
+              path: search,
+            },
+          })
+
+          const glob = IGNORE_PATTERNS.map((item) => `!${item}*`).concat(params.ignore?.map((item) => `!${item}`) || [])
+          const files = yield* rg.files({ cwd: search, glob, signal: ctx.abort }).pipe(
+            Stream.take(LIMIT + 1),
+            Stream.runCollect,
+            Effect.map((chunk) => [...chunk]),
+          )
+
+          const truncated = files.length > LIMIT
+          if (truncated) files.length = LIMIT
+
+          const dirs = new Set<string>()
+          const map = new Map<string, string[]>()
+          for (const file of files) {
+            const dir = path.dirname(file)
+            const parts = dir === "." ? [] : dir.split("/")
+            for (let i = 0; i <= parts.length; i++) {
+              dirs.add(i === 0 ? "." : parts.slice(0, i).join("/"))
+            }
+            if (!map.has(dir)) map.set(dir, [])
+            map.get(dir)!.push(path.basename(file))
+          }
+
+          function render(dir: string, depth: number): string {
+            const indent = "  ".repeat(depth)
+            let output = ""
+            if (depth > 0) output += `${indent}${path.basename(dir)}/\n`
+
+            const child = "  ".repeat(depth + 1)
+            const dirs2 = Array.from(dirs)
+              .filter((item) => path.dirname(item) === dir && item !== dir)
+              .sort()
+            for (const item of dirs2) {
+              output += render(item, depth + 1)
+            }
+
+            const files = map.get(dir) || []
+            for (const file of files.sort()) {
+              output += `${child}${file}\n`
+            }
+            return output
+          }
+
+          return {
+            title: path.relative(ins.worktree, search),
+            metadata: {
+              count: files.length,
+              truncated,
+            },
+            output: `${search}/\n` + render(".", 0),
+          }
+        }).pipe(Effect.orDie),
     }
-  },
-})
+  }),
+)

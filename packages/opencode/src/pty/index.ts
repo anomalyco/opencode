@@ -1,16 +1,16 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
-import { type IPty } from "bun-pty"
+import type { Proc } from "#pty"
 import z from "zod"
 import { Log } from "../util/log"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
+import { EffectLogger } from "@/effect/logger"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -26,9 +26,11 @@ export namespace Pty {
     close: (code?: number, reason?: string) => void
   }
 
+  const sock = (ws: Socket) => (ws.data && typeof ws.data === "object" ? ws.data : ws)
+
   type Active = {
     info: Info
-    process: IPty
+    process: Proc
     buffer: string
     bufferCursor: number
     cursor: number
@@ -50,10 +52,7 @@ export namespace Pty {
     return out
   }
 
-  const pty = lazy(async () => {
-    const { spawn } = await import("bun-pty")
-    return spawn
-  })
+  const pty = lazy(() => import("#pty"))
 
   export const Info = z
     .object({
@@ -113,7 +112,7 @@ export namespace Pty {
     ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Pty") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
 
   export const layer = Layer.effect(
     Service,
@@ -124,9 +123,9 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const [key, ws] of session.subscribers.entries()) {
+        for (const [sub, ws] of session.subscribers.entries()) {
           try {
-            if (ws.data === key) ws.close()
+            if (sock(ws) === sub) ws.close()
           } catch {}
         }
         session.subscribers.clear()
@@ -198,7 +197,7 @@ export namespace Pty {
         }
         log.info("creating session", { id, cmd: command, args, cwd })
 
-        const spawn = yield* Effect.promise(() => pty())
+        const { spawn } = yield* Effect.promise(() => pty())
         const proc = yield* Effect.sync(() =>
           spawn(command, args, {
             name: "xterm-256color",
@@ -234,7 +233,7 @@ export namespace Pty {
                 session.subscribers.delete(key)
                 continue
               }
-              if (ws.data !== key) {
+              if (sock(ws) !== key) {
                 session.subscribers.delete(key)
                 continue
               }
@@ -257,8 +256,8 @@ export namespace Pty {
             if (session.info.status === "exited") return
             log.info("session exited", { id, exitCode })
             session.info.status = "exited"
-            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }))
-            Effect.runFork(remove(id))
+            Effect.runFork(bus.publish(Event.Exited, { id, exitCode }).pipe(Effect.provide(EffectLogger.layer)))
+            Effect.runFork(remove(id).pipe(Effect.provide(EffectLogger.layer)))
           }),
         )
         yield* bus.publish(Event.Created, { info })
@@ -304,15 +303,12 @@ export namespace Pty {
         }
         log.info("client connected to session", { id })
 
-        // Use ws.data as the unique key for this connection lifecycle.
-        // If ws.data is undefined, fallback to ws object.
-        const key = ws.data && typeof ws.data === "object" ? ws.data : ws
-        // Optionally cleanup if the key somehow exists
-        session.subscribers.delete(key)
-        session.subscribers.set(key, ws)
+        const sub = sock(ws)
+        session.subscribers.delete(sub)
+        session.subscribers.set(sub, ws)
 
         const cleanup = () => {
-          session.subscribers.delete(key)
+          session.subscribers.delete(sub)
         }
 
         const start = session.bufferCursor
@@ -363,39 +359,5 @@ export namespace Pty {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function list() {
-    return runPromise((svc) => svc.list())
-  }
-
-  export async function get(id: PtyID) {
-    return runPromise((svc) => svc.get(id))
-  }
-
-  export async function resize(id: PtyID, cols: number, rows: number) {
-    return runPromise((svc) => svc.resize(id, cols, rows))
-  }
-
-  export async function write(id: PtyID, data: string) {
-    return runPromise((svc) => svc.write(id, data))
-  }
-
-  export async function connect(id: PtyID, ws: Socket, cursor?: number) {
-    return runPromise((svc) => svc.connect(id, ws, cursor))
-  }
-
-  export async function create(input: CreateInput) {
-    return runPromise((svc) => svc.create(input))
-  }
-
-  export async function update(id: PtyID, input: UpdateInput) {
-    return runPromise((svc) => svc.update(id, input))
-  }
-
-  export async function remove(id: PtyID) {
-    return runPromise((svc) => svc.remove(id))
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
 }

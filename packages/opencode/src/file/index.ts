@@ -3,7 +3,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Git } from "@/git"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
+import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
@@ -11,7 +12,6 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
@@ -338,12 +338,14 @@ export namespace File {
     }) => Effect.Effect<string[]>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/File") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/File") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const appFs = yield* AppFileSystem.Service
+      const rg = yield* Ripgrep.Service
+      const git = yield* Git.Service
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("File.state")(() =>
@@ -382,7 +384,10 @@ export namespace File {
 
           next.dirs = Array.from(dirs).toSorted()
         } else {
-          const files = yield* Effect.promise(() => Array.fromAsync(Ripgrep.files({ cwd: Instance.directory })))
+          const files = yield* rg.files({ cwd: Instance.directory }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => [...chunk]),
+          )
           const seen = new Set<string>()
           for (const file of files) {
             next.files.push(file)
@@ -410,6 +415,10 @@ export namespace File {
         cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
       })
 
+      const gitText = Effect.fnUntraced(function* (args: string[]) {
+        return (yield* git.run(args, { cwd: Instance.directory })).text()
+      })
+
       const init = Effect.fn("File.init")(function* () {
         yield* ensure()
       })
@@ -417,100 +426,87 @@ export namespace File {
       const status = Effect.fn("File.status")(function* () {
         if (Instance.project.vcs !== "git") return []
 
-        return yield* Effect.promise(async () => {
-          const diffOutput = (
-            await Git.run(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
-              cwd: Instance.directory,
+        const diffOutput = yield* gitText([
+          "-c",
+          "core.fsmonitor=false",
+          "-c",
+          "core.quotepath=false",
+          "diff",
+          "--numstat",
+          "HEAD",
+        ])
+
+        const changed: File.Info[] = []
+
+        if (diffOutput.trim()) {
+          for (const line of diffOutput.trim().split("\n")) {
+            const [added, removed, file] = line.split("\t")
+            changed.push({
+              path: file,
+              added: added === "-" ? 0 : parseInt(added, 10),
+              removed: removed === "-" ? 0 : parseInt(removed, 10),
+              status: "modified",
             })
-          ).text()
-
-          const changed: File.Info[] = []
-
-          if (diffOutput.trim()) {
-            for (const line of diffOutput.trim().split("\n")) {
-              const [added, removed, file] = line.split("\t")
-              changed.push({
-                path: file,
-                added: added === "-" ? 0 : parseInt(added, 10),
-                removed: removed === "-" ? 0 : parseInt(removed, 10),
-                status: "modified",
-              })
-            }
           }
+        }
 
-          const untrackedOutput = (
-            await Git.run(
-              [
-                "-c",
-                "core.fsmonitor=false",
-                "-c",
-                "core.quotepath=false",
-                "ls-files",
-                "--others",
-                "--exclude-standard",
-              ],
-              {
-                cwd: Instance.directory,
-              },
-            )
-          ).text()
+        const untrackedOutput = yield* gitText([
+          "-c",
+          "core.fsmonitor=false",
+          "-c",
+          "core.quotepath=false",
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+        ])
 
-          if (untrackedOutput.trim()) {
-            for (const file of untrackedOutput.trim().split("\n")) {
-              try {
-                const content = await Filesystem.readText(path.join(Instance.directory, file))
-                changed.push({
-                  path: file,
-                  added: content.split("\n").length,
-                  removed: 0,
-                  status: "added",
-                })
-              } catch {
-                continue
-              }
-            }
+        if (untrackedOutput.trim()) {
+          for (const file of untrackedOutput.trim().split("\n")) {
+            const content = yield* appFs
+              .readFileString(path.join(Instance.directory, file))
+              .pipe(Effect.catch(() => Effect.succeed<string | undefined>(undefined)))
+            if (content === undefined) continue
+            changed.push({
+              path: file,
+              added: content.split("\n").length,
+              removed: 0,
+              status: "added",
+            })
           }
+        }
 
-          const deletedOutput = (
-            await Git.run(
-              [
-                "-c",
-                "core.fsmonitor=false",
-                "-c",
-                "core.quotepath=false",
-                "diff",
-                "--name-only",
-                "--diff-filter=D",
-                "HEAD",
-              ],
-              {
-                cwd: Instance.directory,
-              },
-            )
-          ).text()
+        const deletedOutput = yield* gitText([
+          "-c",
+          "core.fsmonitor=false",
+          "-c",
+          "core.quotepath=false",
+          "diff",
+          "--name-only",
+          "--diff-filter=D",
+          "HEAD",
+        ])
 
-          if (deletedOutput.trim()) {
-            for (const file of deletedOutput.trim().split("\n")) {
-              changed.push({
-                path: file,
-                added: 0,
-                removed: 0,
-                status: "deleted",
-              })
-            }
+        if (deletedOutput.trim()) {
+          for (const file of deletedOutput.trim().split("\n")) {
+            changed.push({
+              path: file,
+              added: 0,
+              removed: 0,
+              status: "deleted",
+            })
           }
+        }
 
-          return changed.map((item) => {
-            const full = path.isAbsolute(item.path) ? item.path : path.join(Instance.directory, item.path)
-            return {
-              ...item,
-              path: path.relative(Instance.directory, full),
-            }
-          })
+        return changed.map((item) => {
+          const full = path.isAbsolute(item.path) ? item.path : path.join(Instance.directory, item.path)
+          return {
+            ...item,
+            path: path.relative(Instance.directory, full),
+          }
         })
       })
 
-      const read = Effect.fn("File.read")(function* (file: string) {
+      const read: Interface["read"] = Effect.fn("File.read")(function* (file: string) {
         using _ = log.time("read", { file })
         const full = path.join(Instance.directory, file)
 
@@ -558,27 +554,19 @@ export namespace File {
         )
 
         if (Instance.project.vcs === "git") {
-          return yield* Effect.promise(async (): Promise<File.Content> => {
-            let diff = (
-              await Git.run(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })
-            ).text()
-            if (!diff.trim()) {
-              diff = (
-                await Git.run(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], {
-                  cwd: Instance.directory,
-                })
-              ).text()
-            }
-            if (diff.trim()) {
-              const original = (await Git.run(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
-              const patch = structuredPatch(file, file, original, content, "old", "new", {
-                context: Infinity,
-                ignoreWhitespace: true,
-              })
-              return { type: "text", content, patch, diff: formatPatch(patch) }
-            }
-            return { type: "text", content }
-          })
+          let diff = yield* gitText(["-c", "core.fsmonitor=false", "diff", "--", file])
+          if (!diff.trim()) {
+            diff = yield* gitText(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file])
+          }
+          if (diff.trim()) {
+            const original = yield* git.show(Instance.directory, "HEAD", file)
+            const patch = structuredPatch(file, file, original, content, "old", "new", {
+              context: Infinity,
+              ignoreWhitespace: true,
+            })
+            return { type: "text" as const, content, patch, diff: formatPatch(patch) }
+          }
+          return { type: "text" as const, content }
         }
 
         return { type: "text" as const, content }
@@ -660,7 +648,11 @@ export namespace File {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+  )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Scope, Context } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
@@ -8,7 +8,6 @@ import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Git } from "@/git"
 import { Instance } from "@/project/instance"
@@ -65,12 +64,13 @@ export namespace FileWatcher {
     readonly init: () => Effect.Effect<void>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/FileWatcher") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/FileWatcher") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
+      const git = yield* Git.Service
 
       const state = yield* InstanceState.make(
         Effect.fn("FileWatcher.state")(
@@ -131,11 +131,9 @@ export namespace FileWatcher {
             }
 
             if (Instance.project.vcs === "git") {
-              const result = yield* Effect.promise(() =>
-                Git.run(["rev-parse", "--git-dir"], {
-                  cwd: Instance.project.worktree,
-                }),
-              )
+              const result = yield* git.run(["rev-parse", "--git-dir"], {
+                cwd: Instance.project.worktree,
+              })
               const vcsDir =
                 result.exitCode === 0 ? path.resolve(Instance.project.worktree, result.text().trim()) : undefined
               if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
@@ -161,11 +159,5 @@ export namespace FileWatcher {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export function init() {
-    return runPromise((svc) => svc.init())
-  }
+  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
 }

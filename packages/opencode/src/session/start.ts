@@ -3,6 +3,7 @@ import { Plugin } from "@/plugin"
 import { Database, NotFoundError, eq } from "@/storage/db"
 import type { SessionID } from "./schema"
 import { SessionTable } from "./session.sql"
+import { Effect } from "effect"
 
 // Coordinates the "session.start" plugin hook for startup, resume, and compact
 // triggers. All execution happens server-side inside Instance.provide() context.
@@ -100,7 +101,15 @@ export namespace SessionStart {
 
   export async function trigger(input: { sessionID: SessionID; trigger: Trigger }) {
     const output = { additionalContext: [] as string[] }
-    for (const hook of await Plugin.list()) {
+    // Lazy import to avoid circular module initialization (AppRuntime → ShareNext → Session)
+    const { AppRuntime } = await import("@/effect/app-runtime")
+    const hooks = await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        return yield* plugin.list()
+      }),
+    )
+    for (const hook of hooks) {
       const fn = hook["session.start"]
       if (!fn) continue
       try {
