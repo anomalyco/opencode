@@ -106,13 +106,7 @@ export default function Page() {
     })
   })
 
-  createEffect(
-    on(
-      sessionKey,
-      () => {},
-      { defer: true },
-    ),
-  )
+  createEffect(on(sessionKey, () => {}, { defer: true }))
 
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
@@ -229,15 +223,6 @@ export default function Page() {
     const limit = explicitMessageLimit()
     if (limit === undefined || all.length <= limit) return all
     return all.slice(-limit)
-  })
-  createEffect(() => {
-    const id = params.id
-    if (!id) return
-    const all = sync.data.message[id] ?? []
-    const limit = explicitMessageLimit()
-    console.debug(
-      `[sessionMessages] sessionID=${id} rawLength=${all.length} explicitLimit=${limit ?? "none"} visibleLength=${messages().length}`,
-    )
   })
   const messagesReady = createMemo(() => {
     const id = params.id
@@ -470,9 +455,6 @@ export default function Page() {
 
   const setActiveMessage = (message: UserMessage | undefined) => {
     messageMark = scrollMark
-    console.debug(
-      `[session:setActiveMessage] messageId=${message?.id ?? "none"} scrollMark=${scrollMark} messageMark=${messageMark}`,
-    )
     setStore("messageId", message?.id)
   }
 

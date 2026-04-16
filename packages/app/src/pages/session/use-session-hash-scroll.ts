@@ -155,10 +155,7 @@ export const useSessionHashScroll = (input: {
     if (messageId) {
       input.enterAnchored(messageId)
       input.autoScroll.pause()
-      if (input.currentMessageId() === messageId) {
-        console.debug(`[applyHash] target already active: messageId=${messageId}`)
-        return
-      }
+      if (input.currentMessageId() === messageId) return
       const msg = messageById().get(messageId)
       if (msg) {
         scrollToMessage(msg, behavior)

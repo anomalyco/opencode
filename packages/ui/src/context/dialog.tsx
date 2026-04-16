@@ -31,6 +31,22 @@ type Active = {
 
 const Context = createContext<ReturnType<typeof init>>()
 
+function snapshotViewportScroll() {
+  const items = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].map((el) => ({
+    el,
+    top: el.scrollTop,
+    left: el.scrollLeft,
+  }))
+
+  return () => {
+    for (const item of items) {
+      if (!item.el.isConnected) continue
+      item.el.scrollTop = item.top
+      item.el.scrollLeft = item.left
+    }
+  }
+}
+
 function init() {
   const [active, setActive] = createSignal<Active | undefined>()
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -90,6 +106,7 @@ function init() {
       timer.current = undefined
     }
     lock.value = false
+    const restoreScroll = snapshotViewportScroll()
 
     const id = Math.random().toString(36).slice(2)
     let dispose: (() => void) | undefined
@@ -122,6 +139,11 @@ function init() {
     if (!dispose || !setClosing) return
 
     setActive({ id, node, dispose, owner, onClose, setClosing })
+    queueMicrotask(restoreScroll)
+    requestAnimationFrame(() => {
+      restoreScroll()
+      requestAnimationFrame(restoreScroll)
+    })
   }
 
   return {
