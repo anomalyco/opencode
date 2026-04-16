@@ -95,7 +95,7 @@ app.message(async ({ message, say }) => {
 
     const shareResult = await client.session.share({ path: { id: createResult.data.id } })
     if (!shareResult.error && shareResult.data) {
-      const sessionUrl = shareResult.data.share?.url!
+      const sessionUrl = shareResult.data.share?.url
       console.log("🔗 Session shared:", sessionUrl)
       await app.client.chat.postMessage({ channel, thread_ts: thread, text: sessionUrl })
     }

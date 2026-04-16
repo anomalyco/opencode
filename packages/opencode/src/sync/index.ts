@@ -1,6 +1,5 @@
 import z from "zod"
 import type { ZodObject } from "zod"
-import { EventEmitter } from "events"
 import { Database, eq } from "@/storage/db"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"

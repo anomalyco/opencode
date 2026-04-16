@@ -4,7 +4,6 @@ import { describeRoute, resolver } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import { Log } from "@/util/log"
 import { BusEvent } from "@/bus/bus-event"
-import { SyncEvent } from "@/sync"
 import { Bus } from "@/bus"
 import { AsyncQueue } from "../../util/queue"
 

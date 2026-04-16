@@ -10,7 +10,6 @@ import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
-import { SessionStatus } from "./status"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })

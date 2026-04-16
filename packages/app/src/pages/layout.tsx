@@ -704,7 +704,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     const active = new Set(visibleSessionDirs())
-    for (const directory of [...prefetchedByDir.keys()]) {
+    for (const directory of prefetchedByDir.keys()) {
       if (active.has(directory)) continue
       prefetchedByDir.delete(directory)
     }

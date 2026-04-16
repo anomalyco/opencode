@@ -19,7 +19,7 @@ export const WorkspaceContext = {
   get workspaceID() {
     try {
       return context.use().workspaceID
-    } catch (err) {
+    } catch {
       return undefined
     }
   },

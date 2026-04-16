@@ -6,7 +6,6 @@ import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
 import { Config } from "../config"
-import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import * as Formatter from "./formatter"
 

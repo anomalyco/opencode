@@ -1,5 +1,5 @@
 import { SECRET } from "./secret"
-import { domain, shortDomain } from "./stage"
+import { shortDomain } from "./stage"
 
 const storage = new sst.cloudflare.Bucket("EnterpriseStorage")
 

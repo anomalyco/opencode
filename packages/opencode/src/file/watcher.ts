@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Scope, Context } from "effect"
+import { Cause, Effect, Layer, Context } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"

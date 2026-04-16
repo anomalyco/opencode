@@ -49,7 +49,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
         let json
         try {
           json = JSON.parse(chunk.slice(6)) as { usage?: Usage }
-        } catch (e) {
+        } catch {
           return
         }
 
@@ -289,7 +289,7 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
         index: 0,
         message: {
           role: "assistant" as const,
-          ...(content.length > 0 && content.some((c) => c.type === "text")
+          ...(content.some((c) => c.type === "text")
             ? {
                 content: content
                   .filter((c) => c.type === "text")
@@ -297,7 +297,7 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
                   .join(""),
               }
             : {}),
-          ...(content.length > 0 && content.some((c) => c.type === "tool_use")
+          ...(content.some((c) => c.type === "tool_use")
             ? {
                 tool_calls: content
                   .filter((c) => c.type === "tool_use")

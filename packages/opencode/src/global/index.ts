@@ -53,6 +53,6 @@ if (version !== CACHE_VERSION) {
         }),
       ),
     )
-  } catch (e) {}
+  } catch {}
   await Filesystem.write(path.join(Global.Path.cache, "version"), CACHE_VERSION)
 }

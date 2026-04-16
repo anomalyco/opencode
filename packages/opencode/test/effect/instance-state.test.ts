@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
+import { Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
 import { InstanceState } from "../../src/effect/instance-state"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"

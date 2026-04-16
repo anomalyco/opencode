@@ -345,7 +345,7 @@ export async function handler(
         logger.metric({
           "error.cause2": JSON.stringify(error.cause),
         })
-      } catch (e) {}
+      } catch {}
     }
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.

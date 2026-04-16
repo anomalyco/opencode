@@ -7,7 +7,6 @@ import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { AppRuntime } from "../../effect/app-runtime"
-import { Effect } from "effect"
 import { jsonRequest } from "./trace"
 
 export const ConfigRoutes = lazy(() =>

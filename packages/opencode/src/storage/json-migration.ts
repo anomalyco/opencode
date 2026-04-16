@@ -77,11 +77,13 @@ export namespace JsonMigration {
 
     async function read(files: string[], start: number, end: number) {
       const count = end - start
+      // oxlint-disable-next-line unicorn/no-new-array -- pre-allocated for index-based batch fill
       const tasks = new Array(count)
       for (let i = 0; i < count; i++) {
         tasks[i] = Filesystem.readJson(files[start + i])
       }
       const results = await Promise.allSettled(tasks)
+      // oxlint-disable-next-line unicorn/no-new-array -- pre-allocated for index-based batch fill
       const items = new Array(count)
       for (let i = 0; i < results.length; i++) {
         const result = results[i]
@@ -243,6 +245,7 @@ export namespace JsonMigration {
     for (let i = 0; i < allMessageFiles.length; i += batchSize) {
       const end = Math.min(i + batchSize, allMessageFiles.length)
       const batch = await read(allMessageFiles, i, end)
+      // oxlint-disable-next-line unicorn/no-new-array -- pre-allocated for index-based batch fill
       const values = new Array(batch.length)
       let count = 0
       for (let j = 0; j < batch.length; j++) {
@@ -273,6 +276,7 @@ export namespace JsonMigration {
     for (let i = 0; i < partFiles.length; i += batchSize) {
       const end = Math.min(i + batchSize, partFiles.length)
       const batch = await read(partFiles, i, end)
+      // oxlint-disable-next-line unicorn/no-new-array -- pre-allocated for index-based batch fill
       const values = new Array(batch.length)
       let count = 0
       for (let j = 0; j < batch.length; j++) {

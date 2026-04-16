@@ -1,8 +1,6 @@
 import { Context, Layer, Schema, Effect } from "effect"
 import { SessionEntry } from "./session-entry"
 import { Struct } from "effect"
-import { Identifier } from "@/id/id"
-import { withStatics } from "@/util/schema"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 
