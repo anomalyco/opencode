@@ -1,4 +1,4 @@
-import { Effect, Layer, Context, Stream } from "effect"
+import { Effect, Layer, Context, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
@@ -157,6 +157,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
     const fs = yield* AppFileSystem.Service
     const git = yield* Git.Service
     const bus = yield* Bus.Service
+    const scope = yield* Scope.Scope
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Vcs.state")(function* (ctx) {
@@ -164,21 +165,14 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
           return { current: undefined, root: undefined }
         }
 
-        const value: State = { current: undefined, root: undefined }
-
         const get = Effect.fnUntraced(function* () {
           return yield* git.branch(ctx.directory)
         })
-
-        yield* Effect.gen(function* () {
-          const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
-            concurrency: 2,
-          })
-          value.current = current
-          value.root = root
-          log.info("initialized", { branch: value.current, default_branch: value.root?.name })
-          yield* bus.publish(Event.BranchUpdated, { branch: current })
-        }).pipe(Effect.forkScoped)
+        const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
+          concurrency: 2,
+        })
+        const value = { current, root }
+        log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
         yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
           Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
@@ -201,7 +195,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
 
     return Service.of({
       init: Effect.fn("Vcs.init")(function* () {
-        yield* InstanceState.get(state)
+        yield* InstanceState.get(state).pipe(Effect.forkIn(scope))
       }),
       branch: Effect.fn("Vcs.branch")(function* () {
         return yield* InstanceState.use(state, (x) => x.current)
