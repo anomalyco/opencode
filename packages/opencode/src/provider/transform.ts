@@ -793,6 +793,10 @@ export function options(input: {
     result["store"] = false
   }
 
+  if (input.model.api.npm === "@ai-sdk/azure") {
+    result["store"] = true
+  }
+
   if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
     result["usage"] = {
       include: true,
