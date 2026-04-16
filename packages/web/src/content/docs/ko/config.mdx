@@ -624,51 +624,6 @@ provider를 하나씩 비활성화하는 대신, OpenCode가 특정 provider만 
 experimental 옵션은 안정적이지 않습니다. 예고 없이 변경되거나 제거될 수 있습니다.
 :::
 
-### Sandbox
-
-OpenCode는 macOS에서 bash 명령, 세션 셸 명령, PTY 시작을 샌드박스할 수 있습니다.
-샌드박싱은 실험적이며 opt-in 방식이고 기본적으로 비활성화되어 있습니다.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "sandbox": {
-      "enabled": true,
-      "preset": "default",
-      "mode": "workspace-write",
-      "network": false,
-      "excluded_commands": ["rm"],
-      "allow_unsandboxed_retry": true,
-      "extra_read_roots": ["/Volumes/shared"]
-    }
-  }
-}
-```
-
-사용 가능한 옵션:
-
-| 옵션                      | 타입                               | 설명                                                                              |
-| ------------------------- | ---------------------------------- | --------------------------------------------------------------------------------- |
-| `enabled`                 | `boolean`                          | 지원되는 macOS 실행 경로에 대해 샌드박싱을 활성화합니다.                          |
-| `preset`                  | `string`                           | 내장 프리셋(`default`, `strict`, `network`) 또는 커스텀 프리셋 이름을 선택합니다. |
-| `mode`                    | `"workspace-write" \| "read-only"` | 프리셋 모드를 오버라이드합니다.                                                   |
-| `network`                 | `boolean`                          | 아웃바운드 네트워크 접근 허용 여부를 오버라이드합니다.                            |
-| `protected_roots`         | `string[]`                         | 쓰기 가능한 루트 안에서도 쓰기 보호를 유지할 작업 공간 상대 경로입니다.           |
-| `extra_read_roots`        | `string[]`                         | 샌드박스가 읽을 수 있는 추가 절대 경로입니다.                                     |
-| `extra_write_roots`       | `string[]`                         | 샌드박스가 쓸 수 있는 추가 절대 경로입니다.                                       |
-| `extra_deny_paths`        | `string[]`                         | 샌드박스가 거부해야 하는 추가 절대 경로입니다.                                    |
-| `excluded_commands`       | `string[]`                         | 실행 전에 차단해야 하는 명령 접두사입니다.                                        |
-| `allow_unsandboxed_retry` | `boolean`                          | 샌드박스 거부 후 별도의 `bash:unsandboxed` 권한 기반 재시도를 허용합니다.         |
-| `fail_if_unavailable`     | `boolean`                          | 샌드박싱이 활성화되었지만 작동할 수 없을 때 하드 실패합니다.                      |
-| `presets`                 | `Record<string, object>`           | `mode`, `network`, 루트 및 권한 오버라이드로 커스텀 프리셋을 정의합니다.          |
-
-:::note
-샌드박스된 명령은 `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp`, `/private/etc` 같은 내장 시스템 루트를 읽을 수 있습니다.
-`~/.ssh`, `~/.gnupg` 및 클라우드 자격 증명 디렉토리 같은 민감한 홈 경로는 기본적으로 거부됩니다.
-전체 위협 모델, 적용 범위 및 현재 제한 사항은 [보안 정책](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md)을 참조하세요.
-:::
-
 ---
 
 ## Variables

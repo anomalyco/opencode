@@ -792,14 +792,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "List filer i en mappe",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Kjør shell-kommandoer",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (uten sandbox)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Prøv en skalkommando på nytt uten sandbox-begrensninger",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (uten sandbox)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "Sandbox-nettverk er deaktivert, så det forrige forsøket kan ha mislyktes på grunn av sandboxen.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (uten sandbox)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "Kommandoen ba om å kjøre uten sandbox-begrensninger.",
   "settings.permissions.tool.task.title": "Oppgave",
   "settings.permissions.tool.task.description": "Start underagenter",
   "settings.permissions.tool.skill.title": "Ferdighet",

@@ -622,51 +622,6 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 实验性选项不稳定。它们可能会在不另行通知的情况下被更改或移除。
 :::
 
-### Sandbox
-
-OpenCode 可以在 macOS 上对 bash 命令、会话 shell 命令和 PTY 启动进行沙箱隔离。
-沙箱功能为实验性功能，需要手动启用，默认处于关闭状态。
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "sandbox": {
-      "enabled": true,
-      "preset": "default",
-      "mode": "workspace-write",
-      "network": false,
-      "excluded_commands": ["rm"],
-      "allow_unsandboxed_retry": true,
-      "extra_read_roots": ["/Volumes/shared"]
-    }
-  }
-}
-```
-
-可用选项：
-
-| 选项                      | 类型                               | 描述                                                             |
-| ------------------------- | ---------------------------------- | ---------------------------------------------------------------- |
-| `enabled`                 | `boolean`                          | 为支持的 macOS 执行路径启用沙箱。                                |
-| `preset`                  | `string`                           | 选择内置预设（`default`、`strict`、`network`）或自定义预设名称。 |
-| `mode`                    | `"workspace-write" \| "read-only"` | 覆盖预设模式。                                                   |
-| `network`                 | `boolean`                          | 覆盖是否允许出站网络访问。                                       |
-| `protected_roots`         | `string[]`                         | 即使在可写根目录内也保持写保护的工作空间相对路径。               |
-| `extra_read_roots`        | `string[]`                         | 沙箱可以读取的额外绝对路径。                                     |
-| `extra_write_roots`       | `string[]`                         | 沙箱可以写入的额外绝对路径。                                     |
-| `extra_deny_paths`        | `string[]`                         | 沙箱必须拒绝的额外绝对路径。                                     |
-| `excluded_commands`       | `string[]`                         | 执行前必须阻止的命令前缀。                                       |
-| `allow_unsandboxed_retry` | `boolean`                          | 允许在沙箱拒绝后进行单独的 `bash:unsandboxed` 权限控制重试。     |
-| `fail_if_unavailable`     | `boolean`                          | 当沙箱已启用但无法激活时硬性失败。                               |
-| `presets`                 | `Record<string, object>`           | 使用 `mode`、`network`、根路径和权限覆盖定义自定义预设。         |
-
-:::note
-沙箱中的命令可以读取内置系统根目录，如 `/bin`、`/usr`、`/opt/homebrew`、`/System`、`/Library`、`/dev`、`/tmp` 和 `/private/etc`。
-敏感的主目录路径（如 `~/.ssh`、`~/.gnupg` 和云凭据目录）默认被拒绝。
-请参阅[安全策略](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md)了解完整的威胁模型、覆盖范围和当前限制。
-:::
-
 ---
 
 ## 变量

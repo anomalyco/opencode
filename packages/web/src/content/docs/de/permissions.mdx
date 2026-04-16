@@ -134,7 +134,6 @@ OpenCode-Berechtigungen basieren auf Tool-Namen sowie einigen Sicherheitsvorkehr
 - `glob` – Datei-Globbing (entspricht dem Glob-Muster)
 - `grep` – Inhaltssuche (entspricht dem Regex-Muster)
 - `bash` – Ausführen von Shell-Befehlen (entspricht analysierten Befehlen wie `git status --porcelain`)
-- `bash:unsandboxed` – erneute Ausführung eines Shell-Befehls außerhalb der Sandbox nach einer Ablehnung oder nach einer expliziten Anforderung ohne Sandbox
 - `task` – Subagenten starten (entspricht dem Subagententyp)
 - `skill` – Laden einer Fertigkeit (entspricht dem Fertigkeitsnamen)
 - `lsp` – Ausführen von LSP-Abfragen (derzeit nicht granular)
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 Verwenden Sie den Mustervergleich für Befehle mit Argumenten. `"grep *"` erlaubt `grep pattern file.txt`, während `"grep"` allein es blockieren würde. Befehle wie `git status` funktionieren für das Standardverhalten, erfordern jedoch eine explizite Erlaubnis (wie `"git status *"`), wenn Argumente übergeben werden.
 :::
-
----
-
-## Sandbox-Interaktion
-
-Wenn macOS-Sandboxing aktiviert ist, kann ein blockierter Bash-Befehl eine separate `bash:unsandboxed`-Berechtigungsanfrage auslösen.
-Dies geschieht, wenn OpenCode eine wahrscheinliche Sandbox-Ablehnung erkennt, oder wenn der Befehl explizit das Überspringen der Sandbox mit `# opencode:unsandboxed <reason>` in der ersten nicht-leeren Zeile anfordert.
-Konfigurieren Sie die Sandbox selbst unter [`experimental.sandbox`](/docs/config#sandbox).

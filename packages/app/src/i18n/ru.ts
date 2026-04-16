@@ -793,14 +793,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "Список файлов в директории",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Запуск команд оболочки",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (без песочницы)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Повторить запуск shell-команды без ограничений песочницы",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (без песочницы)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "Сеть в песочнице отключена, поэтому предыдущая попытка могла завершиться неудачей из-за песочницы.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (без песочницы)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "Команда запросила запуск без ограничений песочницы.",
   "settings.permissions.tool.task.title": "Task",
   "settings.permissions.tool.task.description": "Запуск подагентов",
   "settings.permissions.tool.skill.title": "Skill",

@@ -707,13 +707,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "سرد الملفات داخل دليل",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "تشغيل أوامر shell",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (بدون صندوق حماية)",
-  "settings.permissions.tool.bash_unsandboxed.description": "أعد محاولة تشغيل أمر shell بدون قيود صندوق الحماية",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (بدون صندوق حماية)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "تم تعطيل الشبكات في صندوق الحماية، لذلك ربما فشلت المحاولة السابقة بسبب صندوق الحماية.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (بدون صندوق حماية)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description": "طلب الأمر التشغيل بدون قيود صندوق الحماية.",
   "settings.permissions.tool.task.title": "مهمة",
   "settings.permissions.tool.task.description": "تشغيل الوكلاء الفرعيين",
   "settings.permissions.tool.skill.title": "مهارة",

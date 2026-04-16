@@ -60,12 +60,6 @@ description: 管理 LLM 可以使用的工具。
 
 该工具允许 LLM 运行终端命令，例如 `npm install`、`git status` 或其他任何 shell 命令。
 
-:::note
-当 macOS 沙箱启用时，bash 在文件系统限制下运行，并可在需要时请求单独的非沙箱重试。
-如果您知道某个命令必须在沙箱外启动，请在命令的第一个非空行添加 `# opencode:unsandboxed <原因>`。
-有关支持的行为和限制，请参阅[沙箱配置](/docs/config#sandbox)。
-:::
-
 ---
 
 ### edit

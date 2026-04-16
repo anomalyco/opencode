@@ -625,51 +625,6 @@ A chave `experimental` contém opções que estão em desenvolvimento ativo.
 Opções experimentais não são estáveis. Elas podem mudar ou ser removidas sem aviso prévio.
 :::
 
-### Sandbox
-
-O opencode pode sandboxar comandos bash, comandos de shell de sessão e inicialização de PTY no macOS.
-O sandboxing é experimental, opt-in e desabilitado por padrão.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "sandbox": {
-      "enabled": true,
-      "preset": "default",
-      "mode": "workspace-write",
-      "network": false,
-      "excluded_commands": ["rm"],
-      "allow_unsandboxed_retry": true,
-      "extra_read_roots": ["/Volumes/shared"]
-    }
-  }
-}
-```
-
-Opções disponíveis:
-
-| Opção                     | Tipo                               | Descrição                                                                                                  |
-| ------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `enabled`                 | `boolean`                          | Habilitar sandboxing para os caminhos de execução suportados no macOS.                                     |
-| `preset`                  | `string`                           | Selecionar um preset embutido (`default`, `strict`, `network`) ou um nome de preset personalizado.         |
-| `mode`                    | `"workspace-write" \| "read-only"` | Substituir o modo do preset.                                                                               |
-| `network`                 | `boolean`                          | Substituir se o acesso de rede de saída é permitido.                                                       |
-| `protected_roots`         | `string[]`                         | Caminhos relativos ao workspace que permanecem protegidos contra escrita mesmo dentro de raízes graváveis. |
-| `extra_read_roots`        | `string[]`                         | Caminhos absolutos adicionais que o sandbox pode ler.                                                      |
-| `extra_write_roots`       | `string[]`                         | Caminhos absolutos adicionais que o sandbox pode escrever.                                                 |
-| `extra_deny_paths`        | `string[]`                         | Caminhos absolutos adicionais que o sandbox deve negar.                                                    |
-| `excluded_commands`       | `string[]`                         | Prefixos de comandos que devem ser bloqueados antes da execução.                                           |
-| `allow_unsandboxed_retry` | `boolean`                          | Permitir uma nova tentativa separada com permissão `bash:unsandboxed` após uma negação do sandbox.         |
-| `fail_if_unavailable`     | `boolean`                          | Falha severa quando o sandboxing está habilitado mas não pode ser ativado.                                 |
-| `presets`                 | `Record<string, object>`           | Definir presets personalizados com `mode`, `network`, raízes e substituições de permissões.                |
-
-:::note
-Comandos em sandbox podem ler raízes de sistema embutidas como `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` e `/private/etc`.
-Caminhos sensíveis do home como `~/.ssh`, `~/.gnupg` e diretórios de credenciais de nuvem permanecem negados por padrão.
-Veja a [política de segurança](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) para o modelo de ameaças completo, superfícies cobertas e limitações atuais.
-:::
-
 ---
 
 ## Variáveis

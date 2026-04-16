@@ -629,51 +629,6 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 ตัวเลือกการทดลองไม่เสถียร อาจมีการเปลี่ยนแปลงหรือลบออกโดยไม่ต้องแจ้งให้ทราบล่วงหน้า
 :::
 
-### Sandbox
-
-OpenCode สามารถ sandbox คำสั่ง bash, คำสั่ง shell ของเซสชัน และการเริ่มต้น PTY บน macOS
-Sandboxing เป็นฟีเจอร์ทดลอง ต้องเปิดใช้งานเอง และถูกปิดใช้งานตามค่าเริ่มต้น
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "sandbox": {
-      "enabled": true,
-      "preset": "default",
-      "mode": "workspace-write",
-      "network": false,
-      "excluded_commands": ["rm"],
-      "allow_unsandboxed_retry": true,
-      "extra_read_roots": ["/Volumes/shared"]
-    }
-  }
-}
-```
-
-ตัวเลือกที่มี:
-
-| ตัวเลือก                  | ประเภท                             | คำอธิบาย                                                                                    |
-| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| `enabled`                 | `boolean`                          | เปิดใช้งาน sandboxing สำหรับเส้นทางการทำงาน macOS ที่รองรับ                                 |
-| `preset`                  | `string`                           | เลือกพรีเซ็ตในตัว (`default`, `strict`, `network`) หรือชื่อพรีเซ็ตที่กำหนดเอง               |
-| `mode`                    | `"workspace-write" \| "read-only"` | แทนที่โหมดพรีเซ็ต                                                                           |
-| `network`                 | `boolean`                          | แทนที่ว่าอนุญาตให้เข้าถึงเครือข่ายขาออกหรือไม่                                              |
-| `protected_roots`         | `string[]`                         | เส้นทางที่สัมพันธ์กับ workspace ที่ยังคงป้องกันการเขียนแม้จะอยู่ภายในรูทที่เขียนได้         |
-| `extra_read_roots`        | `string[]`                         | เส้นทางสัมบูรณ์เพิ่มเติมที่ sandbox สามารถอ่านได้                                           |
-| `extra_write_roots`       | `string[]`                         | เส้นทางสัมบูรณ์เพิ่มเติมที่ sandbox สามารถเขียนได้                                          |
-| `extra_deny_paths`        | `string[]`                         | เส้นทางสัมบูรณ์เพิ่มเติมที่ sandbox ต้องปฏิเสธ                                              |
-| `excluded_commands`       | `string[]`                         | คำนำหน้าคำสั่งที่ต้องถูกบล็อกก่อนดำเนินการ                                                  |
-| `allow_unsandboxed_retry` | `boolean`                          | อนุญาตให้ลองใหม่แบบ `bash:unsandboxed` แยกต่างหากที่มีการควบคุมสิทธิ์หลังจาก sandbox ปฏิเสธ |
-| `fail_if_unavailable`     | `boolean`                          | ล้มเหลวทันทีเมื่อเปิดใช้งาน sandboxing แต่ไม่สามารถเปิดใช้งานได้                            |
-| `presets`                 | `Record<string, object>`           | กำหนดพรีเซ็ตที่กำหนดเองด้วย `mode`, `network`, รูท และการแทนที่สิทธิ์                       |
-
-:::note
-คำสั่งใน sandbox สามารถอ่านรูทระบบในตัว เช่น `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` และ `/private/etc`
-เส้นทางบ้านที่ละเอียดอ่อน เช่น `~/.ssh`, `~/.gnupg` และไดเรกทอรีข้อมูลรับรองคลาวด์ จะถูกปฏิเสธตามค่าเริ่มต้น
-ดู [นโยบายความปลอดภัย](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) สำหรับรูปแบบภัยคุกคามฉบับเต็ม พื้นผิวที่ครอบคลุม และข้อจำกัดปัจจุบัน
-:::
-
 ---
 
 ## ตัวแปร

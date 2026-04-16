@@ -134,7 +134,6 @@ Les autorisations OpenCode sont classées par nom d'outil, plus quelques garde-f
 - `glob` — globalisation de fichiers (correspond au modèle global)
 - `grep` — recherche de contenu (correspond au modèle regex)
 - `bash` - exécution de commandes shell (correspond aux commandes analysées comme `git status --porcelain`)
-- `bash:unsandboxed` — réexécuter une commande shell en dehors du sandbox après un refus ou après une demande explicite sans sandbox
 - `task` — lancement de sous-agents (correspond au type de sous-agent)
 - `skill` — chargement d'une compétence (correspond au nom de la compétence)
 - `lsp` — exécution de requêtes LSP (actuellement non granulaires)
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 Utilisez la correspondance de modèles pour les commandes avec des arguments. `"grep *"` autorise `grep pattern file.txt`, tandis que `"grep"` seul le bloquerait. Les commandes comme `git status` fonctionnent pour le comportement par défaut mais nécessitent une autorisation explicite (comme `"git status *"`) lorsque des arguments sont passés.
 :::
-
----
-
-## Interaction avec le sandbox
-
-Lorsque le sandboxing macOS est activé, une commande bash bloquée peut déclencher une demande de permission `bash:unsandboxed` séparée.
-Cela se produit lorsque OpenCode détecte un refus probable du sandbox, ou lorsque la commande demande explicitement de contourner le sandbox avec `# opencode:unsandboxed <raison>` sur la première ligne non vide.
-Configurez le sandbox dans [`experimental.sandbox`](/docs/config#sandbox).

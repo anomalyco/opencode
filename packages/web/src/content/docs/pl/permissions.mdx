@@ -134,7 +134,6 @@ Uprawnienia opencode są określane na podstawie nazwy narzędzia i kilku zabezp
 - `glob` — maglowanie plików (pasuje do wzorców globowania)
 - `grep` — wyszukiwanie treści (pasuje do wzorca regularnego)
 - `bash` — uruchamianie poleceń shell (pasuje do poleceń przeanalizowanych, takich jak `git status --porcelain`)
-- `bash:unsandboxed` — ponowne uruchomienie polecenia shell poza sandboxem po odrzuceniu lub po jawnym żądaniu bez sandboxa
 - `task` — uruchamianie podagentów (odpowiada typowi podagenta)
 - `skill` — ładowanie umiejętności (pasuje do nazwy umiejętności)
 - `lsp` — uruchamianie zapytań LSP (obecnie nieszczegółowych)
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 zastosowanie dopasowywania wzorców dla pierwotnych z argumentami. `"grep *"` pozwala na `grep pattern file.txt`, podczas gdy sam `"grep"` blokuje to. Polecenia takie jak `git status` w przypadku postępowania dyscyplinarnego, ale ostatecznego zastosowania (np. `"git status *"`) podczas stosowania argumentów.
 :::
-
----
-
-## Interakcja z sandboxem
-
-Gdy sandboxowanie macOS jest włączone, zablokowane polecenie bash może wywołać osobne żądanie uprawnienia `bash:unsandboxed`.
-Dzieje się tak, gdy OpenCode wykryje prawdopodobne odrzucenie przez sandbox lub gdy polecenie jawnie prosi o pominięcie sandboxa za pomocą `# opencode:unsandboxed <reason>` w pierwszej niepustej linii.
-Skonfiguruj sam sandbox w [`experimental.sandbox`](/docs/config#sandbox).

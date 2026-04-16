@@ -1664,7 +1664,7 @@ export type Config = {
     batch_tool?: boolean
     sandbox?: {
       /**
-       * Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches
+       * Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns
        */
       enabled?: boolean
       /**

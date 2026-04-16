@@ -84,7 +84,7 @@ export const Deno: Info = {
       return
     }
     return {
-      process: await spawn(deno, ["lsp"], {
+      process: spawn(deno, ["lsp"], {
         cwd: root,
       }),
     }
@@ -104,16 +104,7 @@ export const Typescript: Info = {
     if (!tsserver) return
     const bin = await Npm.which("typescript-language-server")
     if (!bin) return
-    const args = ["--stdio", "--tsserver-log-verbosity", "off", "--tsserver-path", tsserver]
-
-    if (
-      !(await pathExists(path.join(root, "tsconfig.json"))) &&
-      !(await pathExists(path.join(root, "jsconfig.json")))
-    ) {
-      args.push("--ignore-node-modules")
-    }
-
-    const proc = await spawn(bin, args, {
+    const proc = spawn(bin, ["--stdio"], {
       cwd: root,
       env: {
         ...process.env,
@@ -144,7 +135,7 @@ export const Vue: Info = {
       binary = resolved
     }
     args.push("--stdio")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -203,7 +194,7 @@ export const ESLint: Info = {
       log.info("installed VS Code ESLint server", { serverPath })
     }
 
-    const proc = await spawn("node", [serverPath, "--stdio"], {
+    const proc = spawn("node", [serverPath, "--stdio"], {
       cwd: root,
       env: {
         ...process.env,
@@ -257,13 +248,13 @@ export const Oxlint: Info = {
     }
 
     if (lintBin) {
-      const proc = await spawn(lintBin, ["--help"])
+      const proc = spawn(lintBin, ["--help"])
       await proc.exited
       if (proc.stdout) {
         const help = await text(proc.stdout)
         if (help.includes("--lsp")) {
           return {
-            process: await spawn(lintBin, ["--lsp"], {
+            process: spawn(lintBin, ["--lsp"], {
               cwd: root,
             }),
           }
@@ -278,7 +269,7 @@ export const Oxlint: Info = {
     }
     if (serverBin) {
       return {
-        process: await spawn(serverBin, [], {
+        process: spawn(serverBin, [], {
           cwd: root,
         }),
       }
@@ -338,7 +329,7 @@ export const Biome: Info = {
       args = ["lsp-proxy", "--stdio"]
     }
 
-    const proc = await spawn(bin, args, {
+    const proc = spawn(bin, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -383,7 +374,7 @@ export const Gopls: Info = {
       })
     }
     return {
-      process: await spawn(bin!, {
+      process: spawn(bin!, {
         cwd: root,
       }),
     }
@@ -421,7 +412,7 @@ export const Rubocop: Info = {
       })
     }
     return {
-      process: await spawn(bin!, ["--lsp"], {
+      process: spawn(bin!, ["--lsp"], {
         cwd: root,
       }),
     }
@@ -479,7 +470,7 @@ export const Ty: Info = {
       return
     }
 
-    const proc = await spawn(binary, ["server"], {
+    const proc = spawn(binary, ["server"], {
       cwd: root,
     })
 
@@ -521,7 +512,7 @@ export const Pyright: Info = {
       }
     }
 
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -590,7 +581,7 @@ export const ElixirLS: Info = {
     }
 
     return {
-      process: await spawn(binary, {
+      process: spawn(binary, {
         cwd: root,
       }),
     }
@@ -702,7 +693,7 @@ export const Zls: Info = {
     }
 
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -739,7 +730,7 @@ export const CSharp: Info = {
     }
 
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -776,7 +767,7 @@ export const FSharp: Info = {
     }
 
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -793,7 +784,7 @@ export const SourceKit: Info = {
     const sourcekit = which("sourcekit-lsp")
     if (sourcekit) {
       return {
-        process: await spawn(sourcekit, {
+        process: spawn(sourcekit, {
           cwd: root,
         }),
       }
@@ -810,7 +801,7 @@ export const SourceKit: Info = {
     const bin = lspLoc.text.trim()
 
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -856,7 +847,7 @@ export const RustAnalyzer: Info = {
       return
     }
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -872,7 +863,7 @@ export const Clangd: Info = {
     const fromPath = which("clangd")
     if (fromPath) {
       return {
-        process: await spawn(fromPath, args, {
+        process: spawn(fromPath, args, {
           cwd: root,
         }),
       }
@@ -882,7 +873,7 @@ export const Clangd: Info = {
     const direct = path.join(Global.Path.bin, "clangd" + ext)
     if (await Filesystem.exists(direct)) {
       return {
-        process: await spawn(direct, args, {
+        process: spawn(direct, args, {
           cwd: root,
         }),
       }
@@ -895,7 +886,7 @@ export const Clangd: Info = {
       const candidate = path.join(Global.Path.bin, entry.name, "bin", "clangd" + ext)
       if (await Filesystem.exists(candidate)) {
         return {
-          process: await spawn(candidate, args, {
+          process: spawn(candidate, args, {
             cwd: root,
           }),
         }
@@ -1002,7 +993,7 @@ export const Clangd: Info = {
     log.info(`installed clangd`, { bin })
 
     return {
-      process: await spawn(bin, args, {
+      process: spawn(bin, args, {
         cwd: root,
       }),
     }
@@ -1023,7 +1014,7 @@ export const Svelte: Info = {
       binary = resolved
     }
     args.push("--stdio")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -1057,7 +1048,7 @@ export const Astro: Info = {
       binary = resolved
     }
     args.push("--stdio")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -1170,7 +1161,7 @@ export const JDTLS: Info = {
     )
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
     return {
-      process: await spawn(
+      process: spawn(
         java,
         [
           "-jar",
@@ -1287,7 +1278,7 @@ export const KotlinLS: Info = {
       return
     }
     return {
-      process: await spawn(launcherScript, ["--stdio"], {
+      process: spawn(launcherScript, ["--stdio"], {
         cwd: root,
       }),
     }
@@ -1308,7 +1299,7 @@ export const YamlLS: Info = {
       binary = resolved
     }
     args.push("--stdio")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -1454,7 +1445,7 @@ export const LuaLS: Info = {
     }
 
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -1475,7 +1466,7 @@ export const PHPIntelephense: Info = {
       binary = resolved
     }
     args.push("--stdio")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -1503,7 +1494,7 @@ export const Prisma: Info = {
       return
     }
     return {
-      process: await spawn(prisma, ["language-server"], {
+      process: spawn(prisma, ["language-server"], {
         cwd: root,
       }),
     }
@@ -1521,7 +1512,7 @@ export const Dart: Info = {
       return
     }
     return {
-      process: await spawn(dart, ["language-server", "--lsp"], {
+      process: spawn(dart, ["language-server", "--lsp"], {
         cwd: root,
       }),
     }
@@ -1539,7 +1530,7 @@ export const Ocaml: Info = {
       return
     }
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -1559,7 +1550,7 @@ export const BashLS: Info = {
       binary = resolved
     }
     args.push("start")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -1639,7 +1630,7 @@ export const TerraformLS: Info = {
     }
 
     return {
-      process: await spawn(bin, ["serve"], {
+      process: spawn(bin, ["serve"], {
         cwd: root,
       }),
       initialization: {
@@ -1733,7 +1724,7 @@ export const TexLab: Info = {
     }
 
     return {
-      process: await spawn(bin, {
+      process: spawn(bin, {
         cwd: root,
       }),
     }
@@ -1754,7 +1745,7 @@ export const DockerfileLS: Info = {
       binary = resolved
     }
     args.push("--stdio")
-    const proc = await spawn(binary, args, {
+    const proc = spawn(binary, args, {
       cwd: root,
       env: {
         ...process.env,
@@ -1777,7 +1768,7 @@ export const Gleam: Info = {
       return
     }
     return {
-      process: await spawn(gleam, ["lsp"], {
+      process: spawn(gleam, ["lsp"], {
         cwd: root,
       }),
     }
@@ -1798,7 +1789,7 @@ export const Clojure: Info = {
       return
     }
     return {
-      process: await spawn(bin, ["listen"], {
+      process: spawn(bin, ["listen"], {
         cwd: root,
       }),
     }
@@ -1826,7 +1817,7 @@ export const Nixd: Info = {
       return
     }
     return {
-      process: await spawn(nixd, [], {
+      process: spawn(nixd, [], {
         cwd: root,
         env: {
           ...process.env,
@@ -1923,7 +1914,7 @@ export const Tinymist: Info = {
     }
 
     return {
-      process: await spawn(bin, { cwd: root }),
+      process: spawn(bin, { cwd: root }),
     }
   },
 }
@@ -1939,7 +1930,7 @@ export const HLS: Info = {
       return
     }
     return {
-      process: await spawn(bin, ["--lsp"], {
+      process: spawn(bin, ["--lsp"], {
         cwd: root,
       }),
     }
@@ -1957,13 +1948,9 @@ export const JuliaLS: Info = {
       return
     }
     return {
-      process: await spawn(
-        julia,
-        ["--startup-file=no", "--history-file=no", "-e", "using LanguageServer; runserver()"],
-        {
-          cwd: root,
-        },
-      ),
+      process: spawn(julia, ["--startup-file=no", "--history-file=no", "-e", "using LanguageServer; runserver()"], {
+        cwd: root,
+      }),
     }
   },
 }

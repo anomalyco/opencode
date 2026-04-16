@@ -712,14 +712,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "ディレクトリ内のファイル一覧表示",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "シェルコマンドの実行",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash（サンドボックスなし）",
-  "settings.permissions.tool.bash_unsandboxed.description": "サンドボックスの制限なしでシェルコマンドを再試行します",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash（サンドボックスなし）",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "サンドボックスのネットワークが無効になっているため、前回の試行はサンドボックスが原因で失敗した可能性があります。",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash（サンドボックスなし）",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "このコマンドはサンドボックスの制限なしで実行するよう要求しました。",
   "settings.permissions.tool.task.title": "タスク",
   "settings.permissions.tool.task.description": "サブエージェントの起動",
   "settings.permissions.tool.skill.title": "スキル",

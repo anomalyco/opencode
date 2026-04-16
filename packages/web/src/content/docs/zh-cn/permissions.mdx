@@ -134,7 +134,6 @@ OpenCode 的权限以工具名称为键，外加几个安全防护项：
 - `glob` — 文件通配（匹配通配模式）
 - `grep` — 内容搜索（匹配正则表达式模式）
 - `bash` — 运行 shell 命令（匹配解析后的命令，如 `git status --porcelain`）
-- `bash:unsandboxed` — 在沙箱拒绝后或在明确的非沙箱请求后，在沙箱外重新运行 shell 命令
 - `task` — 启动子代理（匹配子代理类型）
 - `skill` — 加载技能（匹配技能名称）
 - `lsp` — 运行 LSP 查询（当前不支持细粒度配置）
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 对带参数的命令使用模式匹配。`"grep *"` 允许执行 `grep pattern file.txt`，而单独的 `"grep"` 则会阻止它。像 `git status` 这样的命令适用于默认行为，但在传递参数时需要显式权限（如 `"git status *"`）。
 :::
-
----
-
-## 沙箱交互
-
-当 macOS 沙箱启用时，被阻止的 bash 命令可以触发单独的 `bash:unsandboxed` 权限请求。
-当 OpenCode 检测到可能的沙箱拒绝，或者命令在第一个非空行中使用 `# opencode:unsandboxed <原因>` 明确请求跳过沙箱时，就会发生这种情况。
-在 [`experimental.sandbox`](/docs/config#sandbox) 中配置沙箱本身。

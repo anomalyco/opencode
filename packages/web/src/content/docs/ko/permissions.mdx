@@ -134,7 +134,6 @@ opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 - `glob` - 파일 globbing (glob 패턴 매칭)
 - `grep` - 콘텐츠 검색 ( regex 패턴 매칭)
 - `bash` - shell 명령 실행 (`git status --porcelain`와 같은 팟 명령)
-- `bash:unsandboxed` — 샌드박스 거부 후 또는 명시적 비샌드박스 요청 후 셸 명령을 샌드박스 밖에서 다시 실행
 - `task` - 에이전트 실행 (작업 에이전트 유형)
 - `skill` - 기술을 로딩 (기술 이름을 매칭)
 - `lsp` - LSP 쿼리 실행 (현재 비 과립)
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 인자와 명령에 대한 패턴 매칭을 사용합니다. `"grep *"`는 `grep pattern file.txt`를 허용하고, `"grep"`는 혼자 그것을 막을 것입니다. `git status`와 같은 명령은 기본 동작을 위해 작동하지만, 인수가 전달될 때 명시된 권한 (`"git status *"`와 같은)이 필요합니다.
 :::
-
----
-
-## 샌드박스 상호작용
-
-macOS 샌드박싱이 활성화되면, 차단된 bash 명령은 별도의 `bash:unsandboxed` 권한 요청을 트리거할 수 있습니다.
-이는 OpenCode가 샌드박스 거부를 감지하거나, 명령이 첫 번째 비어있지 않은 줄에 `# opencode:unsandboxed <reason>`을 넣어 명시적으로 샌드박스를 건너뛰도록 요청할 때 발생합니다.
-샌드박스 자체는 [`experimental.sandbox`](/docs/config#sandbox)에서 설정하세요.

@@ -798,15 +798,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "Listar archivos dentro de un directorio",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Ejecutar comandos de shell",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (sin sandbox)",
-  "settings.permissions.tool.bash_unsandboxed.description":
-    "Reintentar un comando de shell sin restricciones de sandbox",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (sin sandbox)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "La red del sandbox está deshabilitada, por lo que el intento anterior pudo haber fallado a causa del sandbox.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (sin sandbox)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "El comando solicitó ejecutarse sin restricciones de sandbox.",
   "settings.permissions.tool.task.title": "Tarea",
   "settings.permissions.tool.task.description": "Lanzar sub-agentes",
   "settings.permissions.tool.skill.title": "Habilidad",

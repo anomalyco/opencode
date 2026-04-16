@@ -134,7 +134,6 @@ OpenCode 的權限以工具名稱為鍵，外加幾個安全防護項：
 - `glob` — 檔案萬用字元比對（比對萬用字元模式）
 - `grep` — 內容搜尋（比對正規表示式模式）
 - `bash` — 執行 shell 指令（比對解析後的指令，如 `git status --porcelain`）
-- `bash:unsandboxed` — 在沙箱拒絕後或在明確的非沙箱請求後，在沙箱外重新執行 shell 指令
 - `task` — 啟動子代理（比對子代理類型）
 - `skill` — 載入技能（比對技能名稱）
 - `lsp` — 執行 LSP 查詢（目前不支援細粒度設定）
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 對帶參數的指令使用模式比對。`"grep *"` 允許執行 `grep pattern file.txt`，而單獨的 `"grep"` 則會阻止它。像 `git status` 這樣的指令適用於預設行為，但在傳遞參數時需要顯式權限（如 `"git status *"`）。
 :::
-
----
-
-## 沙箱互動
-
-當 macOS 沙箱啟用時，被阻止的 bash 指令可以觸發單獨的 `bash:unsandboxed` 權限請求。
-當 OpenCode 偵測到可能的沙箱拒絕，或者指令在第一個非空行中使用 `# opencode:unsandboxed <原因>` 明確請求跳過沙箱時，就會發生這種情況。
-在 [`experimental.sandbox`](/docs/config#sandbox) 中設定沙箱本身。

@@ -707,14 +707,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "디렉터리 내 파일 나열",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "셸 명령어 실행",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (샌드박스 없음)",
-  "settings.permissions.tool.bash_unsandboxed.description": "샌드박스 제한 없이 셸 명령을 다시 시도합니다",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (샌드박스 없음)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "샌드박스 네트워킹이 비활성화되어 있으므로 이전 시도는 샌드박스 때문에 실패했을 수 있습니다.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (샌드박스 없음)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "명령이 샌드박스 제한 없이 실행되도록 요청했습니다.",
   "settings.permissions.tool.task.title": "작업",
   "settings.permissions.tool.task.description": "하위 에이전트 실행",
   "settings.permissions.tool.skill.title": "기술",

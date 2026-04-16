@@ -60,12 +60,6 @@ description: 管理 LLM 可以使用的工具。
 
 該工具允許 LLM 執行終端機指令，例如 `npm install`、`git status` 或其他任何 shell 指令。
 
-:::note
-當 macOS 沙箱啟用時，bash 在檔案系統限制下執行，並可在需要時請求單獨的非沙箱重試。
-如果您知道某個指令必須在沙箱外啟動，請在指令的第一個非空行加上 `# opencode:unsandboxed <原因>`。
-有關支援的行為和限制，請參閱[沙箱設定](/docs/config#sandbox)。
-:::
-
 ---
 
 ### edit

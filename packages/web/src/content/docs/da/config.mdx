@@ -627,51 +627,6 @@ Nøglen `experimental` indeholder muligheder, der er under aktiv udvikling.
 Eksperimentelle muligheder er ikke stabile. De kan ændres eller fjernes uden varsel.
 :::
 
-### Sandbox
-
-OpenCode kan køre bash-kommandoer, sessions shell-kommandoer og PTY-opstart i en sandbox på macOS.
-Sandboxing er eksperimentelt, opt-in og deaktiveret som standard.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "sandbox": {
-      "enabled": true,
-      "preset": "default",
-      "mode": "workspace-write",
-      "network": false,
-      "excluded_commands": ["rm"],
-      "allow_unsandboxed_retry": true,
-      "extra_read_roots": ["/Volumes/shared"]
-    }
-  }
-}
-```
-
-Tilgængelige muligheder:
-
-| Mulighed                  | Type                               | Beskrivelse                                                                                     |
-| ------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `enabled`                 | `boolean`                          | Aktiver sandboxing for de understøttede macOS-eksekveringsstier.                                |
-| `preset`                  | `string`                           | Vælg et indbygget preset (`default`, `strict`, `network`) eller et brugerdefineret navn.        |
-| `mode`                    | `"workspace-write" \| "read-only"` | Tilsidesæt preset-tilstanden.                                                                   |
-| `network`                 | `boolean`                          | Tilsidesæt om udgående netværksadgang er tilladt.                                               |
-| `protected_roots`         | `string[]`                         | Arbejdsområde-relative stier, der forbliver skrivebeskyttede selv inden for skrivbare rødder.   |
-| `extra_read_roots`        | `string[]`                         | Yderligere absolutte stier, som sandboxen kan læse.                                             |
-| `extra_write_roots`       | `string[]`                         | Yderligere absolutte stier, som sandboxen kan skrive til.                                       |
-| `extra_deny_paths`        | `string[]`                         | Yderligere absolutte stier, som sandboxen skal nægte.                                           |
-| `excluded_commands`       | `string[]`                         | Kommandopræfikser, der skal blokeres før udførelse.                                             |
-| `allow_unsandboxed_retry` | `boolean`                          | Tillad et separat `bash:unsandboxed` tilladelsesbeskyttet genforsøg efter en sandbox-afvisning. |
-| `fail_if_unavailable`     | `boolean`                          | Hård fejl, når sandboxing er aktiveret, men ikke kan aktiveres.                                 |
-| `presets`                 | `Record<string, object>`           | Definer brugerdefinerede presets med `mode`, `network`, rødder og tilladelsestilsidesættelser.  |
-
-:::note
-Sandboxede kommandoer kan læse indbyggede systemrødder som `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` og `/private/etc`.
-Følsomme hjemmestier som `~/.ssh`, `~/.gnupg` og cloud-legitimationsmapper forbliver nægtede som standard.
-Se [sikkerhedspolitikken](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) for den fulde trusselsmodel, dækkede overflader og aktuelle begrænsninger.
-:::
-
 ---
 
 ## Variabler

@@ -93,7 +93,7 @@ const SandboxPresetConfig = Schema.Struct({
 
 const SandboxConfig = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean).annotate({
-    description: "Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches",
+    description: "Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns",
   }),
   preset: Schema.optional(Schema.String).annotate({
     description: "Named sandbox preset (default, strict, network, or a custom preset)",
@@ -132,7 +132,7 @@ const SandboxConfig = Schema.Struct({
       enabled: z
         .boolean()
         .optional()
-        .describe("Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches"),
+        .describe("Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns"),
       preset: z.string().optional().describe("Named sandbox preset (default, strict, network, or a custom preset)"),
       mode: z
         .enum(["workspace-write", "read-only"])

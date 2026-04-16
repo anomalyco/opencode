@@ -781,15 +781,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "แสดงรายการไฟล์ภายในไดเรกทอรี",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "เรียกใช้คำสั่งเชลล์",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (ไม่มีแซนด์บ็อกซ์)",
-  "settings.permissions.tool.bash_unsandboxed.description":
-    "ลองเรียกใช้คำสั่ง shell อีกครั้งโดยไม่มีข้อจำกัดของแซนด์บ็อกซ์",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (ไม่มีแซนด์บ็อกซ์)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "เครือข่ายของแซนด์บ็อกซ์ถูกปิดใช้งานอยู่ ดังนั้นความพยายามก่อนหน้านี้อาจล้มเหลวเพราะแซนด์บ็อกซ์",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (ไม่มีแซนด์บ็อกซ์)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "คำสั่งนี้ขอให้ทำงานโดยไม่มีข้อจำกัดของแซนด์บ็อกซ์",
   "settings.permissions.tool.task.title": "งาน",
   "settings.permissions.tool.task.description": "เปิดเอเจนต์ย่อย",
   "settings.permissions.tool.skill.title": "ทักษะ",

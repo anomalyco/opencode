@@ -726,14 +726,6 @@ export const dict = {
   "settings.permissions.tool.list.description": "Lister les fichiers dans un répertoire",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Exécuter des commandes shell",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (sans sandbox)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Réessayer une commande shell sans restrictions de sandbox",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (sans sandbox)",
-  "settings.permissions.tool.bash_unsandboxed_network.description":
-    "Le réseau du sandbox est désactivé, donc la tentative précédente a peut-être échoué à cause du sandbox.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (sans sandbox)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description":
-    "La commande a demandé à s'exécuter sans restrictions de sandbox.",
   "settings.permissions.tool.task.title": "Tâche",
   "settings.permissions.tool.task.description": "Lancer des sous-agents",
   "settings.permissions.tool.skill.title": "Compétence",

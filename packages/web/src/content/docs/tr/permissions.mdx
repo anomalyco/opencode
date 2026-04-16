@@ -134,7 +134,6 @@ opencode izinleri araç adına ve birkaç güvenlik önlemine göre anahtarlanı
 - `glob` — dosya genellemesi (glob düzeniyle eşleşir)
 - `grep` — içerik arama (regex modeliyle eşleşir)
 - `bash` — kabuk komutlarını çalıştırma (`git status --porcelain` gibi ayrıştırılmış komutlarla eşleşir)
-- `bash:unsandboxed` — sandbox reddinden sonra veya açık bir sandbox dışı istekten sonra bir kabuk komutunu sandbox dışında yeniden çalıştırma
 - `task` — alt agent'ların başlatılması (alt agent türüyle eşleşir)
 - `skill` — bir skill yükleniyor (skill adıyla eşleşir)
 - `lsp` — LSP sorgularını çalıştırıyor (şu anda ayrıntılı değil)
@@ -234,11 +233,3 @@ Only analyze code and suggest changes.
 :::tip
 Bağımsız değişken içeren komutlar için kalıp eşleştirmeyi kullanın. `"grep *"`, `grep pattern file.txt`'ye izin verir, ancak `"grep"` tek başına onu engeller. `git status` gibi komutlar varsayılan davranış için çalışır ancak argümanlar aktarıldığında açık izin (`"git status *"` gibi) gerektirir.
 :::
-
----
-
-## Sandbox Etkileşimi
-
-macOS sandbox'ı etkinleştirildiğinde, engellenen bir bash komutu ayrı bir `bash:unsandboxed` izin isteği tetikleyebilir.
-Bu, OpenCode muhtemel bir sandbox reddini tespit ettiğinde veya komut ilk boş olmayan satırda `# opencode:unsandboxed <neden>` ile açıkça sandbox'ı atlamayı istediğinde gerçekleşir.
-Sandbox'ın kendisini [`experimental.sandbox`](/docs/config#sandbox) içinde yapılandırın.
