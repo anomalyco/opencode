@@ -5,6 +5,7 @@ import { Database, asc, eq, inArray } from "@/storage"
 import { Project } from "@/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
+import { Auth } from "@/auth"
 import { SyncEvent } from "@/sync"
 import { EventTable } from "@/sync/event.sql"
 import { Flag } from "@/flag/flag"
@@ -112,7 +113,12 @@ export namespace Workspace {
         .run()
     })
 
-    await adaptor.create(config)
+    const env = {
+      OPENCODE_AUTH_CONTENT: JSON.stringify(await AppRuntime.runPromise(Auth.Service.use((auth) => auth.all()))),
+      OPENCODE_WORKSPACE_ID: config.id,
+      OPENCODE_EXPERIMENTAL_WORKSPACES: "true"
+    }
+    await adaptor.create(config, env)
 
     startSync(info)
 
