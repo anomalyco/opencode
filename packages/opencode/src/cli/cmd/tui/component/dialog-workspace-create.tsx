@@ -44,15 +44,13 @@ export async function openWorkspaceSession(input: {
   console.log("opening!")
   while (true) {
     console.log("creating")
-    const result = await client.session
-      .create({ workspaceID: input.workspaceID, workspace: input.workspaceID })
-      .catch((err) => {
-        log.error("workspace session create request failed", {
-          workspaceID: input.workspaceID,
-          error: errorData(err),
-        })
-        return undefined
+    const result = await client.session.create({ workspace: input.workspaceID }).catch((err) => {
+      log.error("workspace session create request failed", {
+        workspaceID: input.workspaceID,
+        error: errorData(err),
       })
+      return undefined
+    })
     if (!result) {
       input.toast.show({
         message: "Failed to create workspace session",
