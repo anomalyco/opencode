@@ -181,8 +181,7 @@ export function useDialog() {
       return ctx.active
     },
     show(element: DialogElement, onClose?: () => void, opts?: DialogOptions) {
-      const base = ctx.active?.owner ?? owner
-      ctx.show(element, base, onClose, opts)
+      ctx.show(element, owner, onClose, opts)
     },
     close() {
       ctx.close()
