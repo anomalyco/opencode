@@ -13,7 +13,7 @@ type User = ModelKey & { visibility: Visibility; favorite?: boolean }
 type Store = {
   user: User[]
   recent: ModelKey[]
-  variant?: Record<string, string | undefined>
+  variant?: Record<string, string | null | undefined>
 }
 
 const RECENT_LIMIT = 5
@@ -135,7 +135,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
     const getVariant = (model: ModelKey) => store.variant?.[variantKey(model)]
 
-    const setVariant = (model: ModelKey, value: string | undefined) => {
+    const setVariant = (model: ModelKey, value: string | null | undefined) => {
       const key = variantKey(model)
       if (!store.variant) {
         setStore("variant", { [key]: value })

@@ -18,6 +18,10 @@ type VariantInput = {
   configured: string | undefined
 }
 
+type VariantState = {
+  variant?: string | null
+}
+
 export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: Model | undefined }) {
   if (!input.agent?.variant) return undefined
   if (!input.agent.model) return undefined
@@ -26,6 +30,11 @@ export function getConfiguredAgentVariant(input: { agent: Agent | undefined; mod
   if (input.agent.model.modelID !== input.model.modelID) return undefined
   if (!(input.agent.variant in input.model.variants)) return undefined
   return input.agent.variant
+}
+
+export function getSelectedModelVariant(input: { state: VariantState | undefined; stored: string | null | undefined }) {
+  if (input.state && Object.hasOwn(input.state, "variant")) return input.state.variant
+  return input.stored
 }
 
 export function resolveModelVariant(input: VariantInput) {

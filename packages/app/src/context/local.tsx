@@ -6,7 +6,12 @@ import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import {
+  cycleModelVariant,
+  getConfiguredAgentVariant,
+  getSelectedModelVariant,
+  resolveModelVariant,
+} from "./model-variant"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 
@@ -241,7 +246,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
     }
 
-    const selected = () => scope()?.variant
+    const selected = () => {
+      const item = current()
+      return getSelectedModelVariant({
+        state: scope(),
+        stored: item ? models.variant.get({ providerID: item.provider.id, modelID: item.id }) : undefined,
+      })
+    }
 
     const snapshot = () => {
       const model = current()
@@ -334,6 +345,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               model: model ? { providerID: model.provider.id, modelID: model.id } : null,
               variant: value ?? null,
             })
+            if (model) {
+              models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? null)
+            }
             write({ variant: value ?? null })
           })
         },
@@ -376,6 +390,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
+
+          models.variant.set(
+            { providerID: msg.model.providerID, modelID: msg.model.modelID },
+            msg.model.variant ?? null,
+          )
+
           if (saved.session[session] !== undefined) return
           if (handoff.has(handoffKey(sdk.directory, session))) return
 

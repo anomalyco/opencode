@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import {
+  cycleModelVariant,
+  getConfiguredAgentVariant,
+  getSelectedModelVariant,
+  resolveModelVariant,
+} from "./model-variant"
 
 describe("model variant", () => {
   test("resolves configured agent variant when model matches", () => {
@@ -82,5 +87,23 @@ describe("model variant", () => {
     })
 
     expect(value).toBe("low")
+  })
+
+  test("falls back to the persisted model variant when session state has none", () => {
+    const value = getSelectedModelVariant({
+      state: {},
+      stored: "high",
+    })
+
+    expect(value).toBe("high")
+  })
+
+  test("keeps an explicit default from session state over the persisted variant", () => {
+    const value = getSelectedModelVariant({
+      state: { variant: null },
+      stored: "high",
+    })
+
+    expect(value).toBeNull()
   })
 })
