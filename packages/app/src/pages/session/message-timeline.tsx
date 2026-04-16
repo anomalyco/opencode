@@ -201,6 +201,8 @@ export function MessageTimeline(props: {
   historyLoading: boolean
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
+  currentMessageId?: string
+  onJumpToMessage: (message: UserMessage) => void
   anchor: (id: string) => string
 }) {
   let touchGesture: number | undefined
@@ -220,7 +222,11 @@ export function MessageTimeline(props: {
   let viewport: HTMLDivElement | undefined
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
+  let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
+
+  // Debug counter for tracking event sequence
+  let debugSeq = 0
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
@@ -259,7 +265,30 @@ export function MessageTimeline(props: {
   // sessions may stay pinned to the bottom and still use history windowing;
   // otherwise long math-heavy conversations would remount the full timeline
   // and make the whole page feel sluggish.
-  const canWindow = createMemo(() => !isWorking())
+
+  // Track session switches to temporarily disable windowing
+  // This prevents blank pages when switching sessions due to inaccurate height estimates
+  const [sessionSwitching, setSessionSwitching] = createSignal(false)
+
+  createEffect(
+    on(sessionID, (newID, prevID) => {
+      if (prevID !== undefined && newID !== prevID) {
+        const seq = ++debugSeq
+        console.debug(
+          `[${seq}][sessionSwitch] detected: prev=${prevID} new=${newID} - disabling windowing temporarily`,
+        )
+        setSessionSwitching(true)
+        // Re-enable windowing after a delay to allow messages to render and collect height data
+        makeTimer(() => {
+          const seq2 = ++debugSeq
+          console.debug(`[${seq2}][sessionSwitch] re-enabling windowing`)
+          setSessionSwitching(false)
+        }, 500, setTimeout)
+      }
+    }),
+  )
+
+  const canWindow = createMemo(() => !isWorking() && !sessionSwitching())
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
@@ -277,8 +306,12 @@ export function MessageTimeline(props: {
   })
 
   const captureWindowAnchor = () => {
+    const seq = ++debugSeq
     const root = viewport
-    if (!root) return
+    if (!root) {
+      console.debug(`[${seq}][captureWindowAnchor] no viewport`)
+      return
+    }
     const box = root.getBoundingClientRect()
     const nodes = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
     const visible =
@@ -286,10 +319,40 @@ export function MessageTimeline(props: {
         const rect = node.getBoundingClientRect()
         return rect.bottom > box.top && rect.top < box.bottom
       }) ?? nodes[0]
-    if (!visible?.dataset.messageId) return
+    if (!visible?.dataset.messageId) {
+      console.debug(`[${seq}][captureWindowAnchor] no visible node, totalNodes=${nodes.length}`)
+      return
+    }
+    const anchorTop = visible.getBoundingClientRect().top - box.top
+
+    // Detect abnormal anchor position (likely DOM not ready after session switch)
+    const abnormalThreshold = root.clientHeight * 10 // 10x viewport height
+    if (Math.abs(anchorTop) > abnormalThreshold) {
+      console.warn(
+        `[${seq}][captureWindowAnchor] ABNORMAL anchor position: id=${visible.dataset.messageId} top=${anchorTop.toFixed(2)} threshold=${abnormalThreshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
+      )
+      return undefined
+    }
+
+    console.debug(
+      `[${seq}][captureWindowAnchor] found id=${visible.dataset.messageId} top=${anchorTop.toFixed(2)} totalNodes=${nodes.length}`,
+    )
     return {
       id: visible.dataset.messageId,
-      top: visible.getBoundingClientRect().top - box.top,
+      top: anchorTop,
+    }
+  }
+
+  const captureMessageAnchor = (id?: string) => {
+    const root = viewport
+    if (!root || !id) return
+    const key = typeof CSS === "undefined" ? id : CSS.escape(id)
+    const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
+    if (!node) return
+    const box = root.getBoundingClientRect()
+    return {
+      id,
+      top: node.getBoundingClientRect().top - box.top,
     }
   }
 
@@ -313,9 +376,13 @@ export function MessageTimeline(props: {
   }
 
   const buildWindow = () => {
+    const seq = ++debugSeq
     const root = viewport
     const ids = rendered()
     if (!canWindow() || !root || ids.length <= windowThreshold) {
+      console.debug(
+        `[${seq}][buildWindow] no windowing: canWindow=${canWindow()} hasRoot=${!!root} length=${ids.length} threshold=${windowThreshold}`,
+      )
       return {
         start: 0,
         end: ids.length,
@@ -324,10 +391,19 @@ export function MessageTimeline(props: {
       }
     }
 
-    if (props.live) return tailWindow(ids, root)
+    if (props.live) {
+      const result = tailWindow(ids, root)
+      console.debug(
+        `[${seq}][buildWindow] live mode: start=${result.start} end=${result.end} top=${result.top.toFixed(2)} bottom=${result.bottom.toFixed(2)} total=${ids.length}`,
+      )
+      return result
+    }
 
-    const min = Math.max(0, root.scrollTop - windowOverscan)
-    const max = root.scrollTop + root.clientHeight + windowOverscan
+    const scrollTop = root.scrollTop
+    const clientHeight = root.clientHeight
+    const scrollHeight = root.scrollHeight
+    const min = Math.max(0, scrollTop - windowOverscan)
+    const max = scrollTop + clientHeight + windowOverscan
     let offset = 0
     let start = 0
     while (start < ids.length) {
@@ -345,12 +421,27 @@ export function MessageTimeline(props: {
       if (tail >= max) break
     }
 
-    return {
-      start,
-      end: Math.max(start + 1, end),
+    // Clamp window bounds to valid range [0, ids.length]
+    const clampedStart = Math.max(0, Math.min(start, ids.length - 1))
+    const clampedEnd = Math.max(clampedStart + 1, Math.min(end, ids.length))
+
+    // Detect if clamping was needed (indicates height estimation issues)
+    if (start !== clampedStart || end !== clampedEnd) {
+      console.warn(
+        `[${seq}][buildWindow] CLAMPED window bounds: original=[${start},${end}] clamped=[${clampedStart},${clampedEnd}] total=${ids.length} scrollTop=${scrollTop.toFixed(2)} estimatedHeight=${tail.toFixed(2)} actualHeight=${scrollHeight.toFixed(2)}`,
+      )
+    }
+
+    const result = {
+      start: clampedStart,
+      end: clampedEnd,
       top: offset,
       bottom: Math.max(0, totalHeight() - tail),
     }
+    console.debug(
+      `[${seq}][buildWindow] scrollTop=${scrollTop.toFixed(2)} clientHeight=${clientHeight.toFixed(2)} scrollHeight=${scrollHeight.toFixed(2)} total=${ids.length} → start=${result.start} end=${result.end} top=${result.top.toFixed(2)} bottom=${result.bottom.toFixed(2)}`,
+    )
+    return result
   }
 
   const sameWindow = (next: { start: number; end: number; top: number; bottom: number }) =>
@@ -360,17 +451,26 @@ export function MessageTimeline(props: {
     Math.abs(windowed.bottom - next.bottom) <= 1
 
   const syncWindow = (next: { start: number; end: number; top: number; bottom: number }, id?: string) => {
-    if (!id) return next
+    const seq = ++debugSeq
+    if (!id) {
+      console.debug(`[${seq}][syncWindow] no anchor id, returning unchanged window`)
+      return next
+    }
     const ids = rendered()
     let index = renderedIndex().get(id)
+    let usedFallback = false
 
     // Robustness: if anchor not found in renderedIndex, try direct lookup
     // This handles the race condition where activeMessageID updates before renderedIndex
     if (index === undefined) {
+      usedFallback = true
       index = props.renderedUserMessages.findIndex((m) => m.id === id)
       if (index === -1) {
         // Anchor not found at all - this shouldn't happen with _virtualizationSync,
         // but handle gracefully by returning the unchanged window
+        console.warn(
+          `[${seq}][syncWindow] Anchor not found: id=${id} renderedLength=${ids.length} propsLength=${props.renderedUserMessages.length}`,
+        )
         if (import.meta.env.DEV) {
           console.warn("[syncWindow] Anchor not found:", id)
         }
@@ -378,7 +478,12 @@ export function MessageTimeline(props: {
       }
     }
 
-    if (index >= next.start && index < next.end) return next
+    if (index >= next.start && index < next.end) {
+      console.debug(
+        `[${seq}][syncWindow] anchor in window: id=${id} index=${index} start=${next.start} end=${next.end} fallback=${usedFallback}`,
+      )
+      return next
+    }
 
     const start = Math.min(next.start, index)
     const end = Math.max(next.end, index + 1)
@@ -386,46 +491,90 @@ export function MessageTimeline(props: {
     for (let i = 0; i < start; i++) top += estimateTurnHeight(ids[i]!)
     let tail = top
     for (let i = start; i < end; i++) tail += estimateTurnHeight(ids[i]!)
-    return {
+    const result = {
       start,
       end,
       top,
       bottom: Math.max(0, totalHeight() - tail),
     }
+    console.debug(
+      `[${seq}][syncWindow] adjusted window: id=${id} index=${index} fallback=${usedFallback} inputStart=${next.start} inputEnd=${next.end} → start=${result.start} end=${result.end} top=${result.top.toFixed(2)} bottom=${result.bottom.toFixed(2)}`,
+    )
+    return result
   }
 
   const applyWindow = () => {
-    const anchor = captureWindowAnchor()
-    const next = syncWindow(buildWindow(), anchor?.id)
-    if (sameWindow(next)) return
+    const seq = ++debugSeq
+    const viewportAnchor = captureWindowAnchor()
+    const targetId = activeMessageID() ?? viewportAnchor?.id
+    const targetAnchor = captureMessageAnchor(targetId)
+    const scrollAnchor = props.currentMessageId ? targetAnchor ?? viewportAnchor : viewportAnchor
+    const next = syncWindow(buildWindow(), targetId)
+    const same = sameWindow(next)
+    console.debug(
+      `[${seq}][applyWindow] anchorId=${viewportAnchor?.id ?? "none"} targetId=${targetId ?? "none"} targetTop=${targetAnchor?.top?.toFixed(2) ?? "n/a"} preserveId=${scrollAnchor?.id ?? "none"} anchorTop=${viewportAnchor?.top?.toFixed(2) ?? "n/a"} sameWindow=${same} live=${props.live} scrollBottom=${props.scroll.bottom} currentWindow=[${windowed.start},${windowed.end}] nextWindow=[${next.start},${next.end}]`,
+    )
+    if (same) return
 
     setWindowed(next)
-    if (props.live || props.scroll.bottom) {
+    const adjustVersion = ++windowAdjustVersion
+    if ((props.live || props.scroll.bottom) && !props.currentMessageId) {
       requestAnimationFrame(() => {
+        if (adjustVersion !== windowAdjustVersion) {
+          console.debug(
+            `[${seq}][applyWindow] skipped stale bottom adjustment: version=${adjustVersion} current=${windowAdjustVersion}`,
+          )
+          return
+        }
         const root = viewport
         if (!root) return
+        const prevScrollTop = root.scrollTop
         root.scrollTop = root.scrollHeight
+        console.debug(
+          `[${seq}][applyWindow] scrolled to bottom: prevScrollTop=${prevScrollTop.toFixed(2)} newScrollTop=${root.scrollTop.toFixed(2)} scrollHeight=${root.scrollHeight.toFixed(2)}`,
+        )
         props.onScheduleScrollState(root)
       })
       return
     }
-    if (!anchor) return
+    if (!scrollAnchor) {
+      console.debug(`[${seq}][applyWindow] no anchor, skipping scroll adjustment`)
+      return
+    }
 
     // Spacer heights are estimate-driven, so changing the render window can
-    // shift the viewport by a few pixels. Re-apply the previous visible turn's
-    // top offset after the DOM commits so the viewport content stays stable
-    // even while the scrollbar length changes.
+    // shift the viewport by a few pixels. Re-apply the preserved anchor's top
+    // offset after the DOM commits so the viewport content stays stable even
+    // while the scrollbar length changes.
     requestAnimationFrame(() => {
+      if (adjustVersion !== windowAdjustVersion) {
+        console.debug(
+          `[${seq}][applyWindow] skipped stale scroll adjustment: version=${adjustVersion} current=${windowAdjustVersion} preserveId=${scrollAnchor.id}`,
+        )
+        return
+      }
       const root = viewport
       if (!root) return
-      const key = typeof CSS === "undefined" ? anchor.id : CSS.escape(anchor.id)
+      const key = typeof CSS === "undefined" ? scrollAnchor.id : CSS.escape(scrollAnchor.id)
       const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
-      if (!node) return
+      if (!node) {
+        console.warn(
+          `[${seq}][applyWindow] anchor node not found in DOM: id=${scrollAnchor.id} windowStart=${windowed.start} windowEnd=${windowed.end}`,
+        )
+        return
+      }
       const box = root.getBoundingClientRect()
       const top = node.getBoundingClientRect().top - box.top
-      const delta = top - anchor.top
-      if (Math.abs(delta) <= 1) return
+      const delta = top - scrollAnchor.top
+      if (Math.abs(delta) <= 1) {
+        console.debug(`[${seq}][applyWindow] scroll adjustment not needed: delta=${delta.toFixed(2)} preserveId=${scrollAnchor.id}`)
+        return
+      }
+      const prevScrollTop = root.scrollTop
       root.scrollTop += delta
+      console.debug(
+        `[${seq}][applyWindow] adjusted scroll: anchorId=${scrollAnchor.id} expectedTop=${scrollAnchor.top.toFixed(2)} actualTop=${top.toFixed(2)} delta=${delta.toFixed(2)} prevScrollTop=${prevScrollTop.toFixed(2)} newScrollTop=${root.scrollTop.toFixed(2)}`,
+      )
       props.onScheduleScrollState(root)
     })
   }
@@ -451,9 +600,20 @@ export function MessageTimeline(props: {
   }
 
   const visibleRendered = createMemo(() => {
+    const seq = ++debugSeq
     const ids = rendered()
-    if (!canWindow() || ids.length <= windowThreshold) return ids
-    return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
+    if (!canWindow() || ids.length <= windowThreshold) {
+      console.debug(
+        `[${seq}][visibleRendered] no windowing: total=${ids.length} canWindow=${canWindow()} threshold=${windowThreshold}`,
+      )
+      return ids
+    }
+    const visible = ids.slice(windowed.start, Math.min(ids.length, windowed.end))
+    const activeId = activeMessageID()
+    console.debug(
+      `[${seq}][visibleRendered] windowed: total=${ids.length} window=[${windowed.start},${windowed.end}] visible=${visible.length} top=${windowed.top.toFixed(2)} bottom=${windowed.bottom.toFixed(2)} activeId=${activeId ?? "none"} included=${activeId ? visible.includes(activeId) : false}`,
+    )
+    return visible
   })
 
   createEffect(
@@ -468,6 +628,7 @@ export function MessageTimeline(props: {
 
   createEffect(() => {
     if (canWindow()) return
+    windowAdjustVersion += 1
     const ids = rendered()
     setWindowed({
       start: 0,
@@ -511,7 +672,16 @@ export function MessageTimeline(props: {
   })
 
   const activeMessageID = createMemo(() => {
-    const parentID = pendingMessage()?.parentID
+    const current = props.currentMessageId
+    if (current) {
+      console.debug(`[activeMessageID] using currentMessageId=${current}`)
+      return current
+    }
+
+    const pending = pendingMessage()
+    const parentID = pending?.parentID
+
+    // Case 1: pending message is an assistant message with a parent user message
     if (parentID) {
       const messages = sessionMessages()
       const result = Binary.search(messages, parentID, (message) => message.id)
@@ -519,6 +689,13 @@ export function MessageTimeline(props: {
       if (message && message.role === "user") return message.id
     }
 
+    // Case 2: pending message exists but has no parentID (likely a user message when jumping)
+    // User messages don't have parentID, so if pending exists but parentID is undefined, treat it as the target
+    if (pending && !parentID) {
+      return pending.id
+    }
+
+    // Case 3: session is working (streaming)
     const status = sessionStatus()
     if (status.type !== "idle") {
       const messages = sessionMessages()
@@ -529,6 +706,16 @@ export function MessageTimeline(props: {
 
     return undefined
   })
+
+  createEffect(
+    on(activeMessageID, (id, prev) => {
+      if (id === prev) return
+      windowAdjustVersion += 1
+      const seq = ++debugSeq
+      console.debug(`[${seq}][activeMessage] changed: prev=${prev ?? "none"} next=${id ?? "none"}`)
+      scheduleWindow()
+    }),
+  )
 
   /**
    * Virtualization synchronization anchor.
@@ -550,9 +737,14 @@ export function MessageTimeline(props: {
    * This is intentionally separate from UI concerns (currentMessage).
    */
   const _virtualizationSync = createMemo(() => {
+    const seq = ++debugSeq
     const id = activeMessageID()
     const messages = props.renderedUserMessages
-    return messages.find((item) => item.id === id)
+    const found = messages.find((item) => item.id === id)
+    console.debug(
+      `[${seq}][virtualizationSync] activeId=${id ?? "none"} totalMessages=${messages.length} found=${!!found}`,
+    )
+    return found
   })
 
   // UI-specific memo: reuses the sync computation for the message list
@@ -882,8 +1074,11 @@ export function MessageTimeline(props: {
   }
 
   const jumpTo = (message: UserMessage) => {
+    console.debug(
+      `[jumpTo] messageId=${message.id} currentMessageId=${props.currentMessageId ?? "none"} renderedCount=${props.renderedUserMessages.length}`,
+    )
     setJump(false)
-    navigate(`#${props.anchor(message.id)}`)
+    props.onJumpToMessage(message)
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
@@ -976,6 +1171,12 @@ export function MessageTimeline(props: {
             props.onMarkScrollGesture(e.currentTarget)
           }}
           onScroll={(e) => {
+            const seq = ++debugSeq
+            const root = e.currentTarget
+            const shouldWin = shouldWindow()
+            console.debug(
+              `[${seq}][onScroll] scrollTop=${root.scrollTop.toFixed(2)} scrollHeight=${root.scrollHeight.toFixed(2)} clientHeight=${root.clientHeight.toFixed(2)} shouldWindow=${shouldWin} hasGesture=${props.hasScrollGesture()}`,
+            )
             props.onScheduleScrollState(e.currentTarget)
             const gesture = props.hasScrollGesture()
             // Programmatic scroll corrections also emit scroll events. Only let
@@ -983,7 +1184,10 @@ export function MessageTimeline(props: {
             // streaming or anchor correction gets misclassified as manual exit
             // from bottom follow mode.
             if (gesture) props.onAutoScrollHandleScroll()
-            if (shouldWindow()) scheduleWindow()
+            if (shouldWin) {
+              console.debug(`[${seq}][onScroll] triggering scheduleWindow`)
+              scheduleWindow()
+            }
             if (!gesture) return
             props.onUserScroll()
             props.onMarkScrollGesture(e.currentTarget)

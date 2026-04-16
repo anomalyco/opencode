@@ -259,7 +259,20 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const all: CommandOption[] = []
 
       for (const reg of store.registrations) {
-        for (const opt of reg.options()) {
+        if (!reg?.options) {
+          if (import.meta.env.DEV) console.warn("[command] invalid registration", reg)
+          continue
+        }
+
+        let optionsForReg: CommandOption[]
+        try {
+          optionsForReg = reg.options() ?? []
+        } catch (error) {
+          console.error("[command] failed to resolve registration options", error)
+          continue
+        }
+
+        for (const opt of optionsForReg) {
           if (seen.has(opt.id)) {
             if (import.meta.env.DEV && !warnedDuplicates.has(opt.id)) {
               warnedDuplicates.add(opt.id)

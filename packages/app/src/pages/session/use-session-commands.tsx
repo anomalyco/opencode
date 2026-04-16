@@ -20,7 +20,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { Message, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { decode64 } from "@/utils/base64"
 import { dict as enDict } from "@/i18n/en"
@@ -30,6 +30,8 @@ export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
+  explicitMessages: () => Message[]
+  visibleUserMessages: () => UserMessage[]
   review?: () => boolean
 }
 
@@ -82,18 +84,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const idle = { type: "idle" as const }
   const status = () => sync.data.session_status[params.id ?? ""] ?? idle
-  const messages = () => {
-    const id = params.id
-    if (!id) return []
-    return sync.data.message[id] ?? []
-  }
+  const messages = () => actions.explicitMessages()
   const busy = () => sessionWorking(status(), messages())
-  const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
-  const visibleUserMessages = () => {
-    const revert = info()?.revert?.messageID
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  }
+  const userMessages = () => actions.visibleUserMessages()
 
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
@@ -492,7 +485,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.session.undo.description"),
         keywords: kw("command.session.undo", "command.session.undo.description"),
         slash: "undo",
-        disabled: !params.id || visibleUserMessages().length === 0,
+        disabled: !params.id || userMessages().length === 0,
         onSelect: async () => {
           const sessionID = params.id
           if (!sessionID) return
@@ -543,7 +536,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.session.compact.description"),
         keywords: kw("command.session.compact", "command.session.compact.description"),
         slash: "compact",
-        disabled: !params.id || visibleUserMessages().length === 0,
+        disabled: !params.id || userMessages().length === 0,
         onSelect: async () => {
           const sessionID = params.id
           if (!sessionID) return
@@ -568,7 +561,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.session.fork.description"),
         keywords: kw("command.session.fork", "command.session.fork.description"),
         slash: "fork",
-        disabled: !params.id || visibleUserMessages().length === 0,
+        disabled: !params.id || userMessages().length === 0,
         onSelect: () => dialog.show(() => <DialogFork />),
       }),
       ...share,

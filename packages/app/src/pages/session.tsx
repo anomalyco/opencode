@@ -217,7 +217,28 @@ export default function Page() {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const explicitMessageLimit = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    return sync.session.history.limit(id)
+  })
+  const messages = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    const all = sync.data.message[id] ?? []
+    const limit = explicitMessageLimit()
+    if (limit === undefined || all.length <= limit) return all
+    return all.slice(-limit)
+  })
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const all = sync.data.message[id] ?? []
+    const limit = explicitMessageLimit()
+    console.debug(
+      `[sessionMessages] sessionID=${id} rawLength=${all.length} explicitLimit=${limit ?? "none"} visibleLength=${messages().length}`,
+    )
+  })
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -449,6 +470,9 @@ export default function Page() {
 
   const setActiveMessage = (message: UserMessage | undefined) => {
     messageMark = scrollMark
+    console.debug(
+      `[session:setActiveMessage] messageId=${message?.id ?? "none"} scrollMark=${scrollMark} messageMark=${messageMark}`,
+    )
     setStore("messageId", message?.id)
   }
 
@@ -858,6 +882,8 @@ export default function Page() {
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
+    explicitMessages: messages,
+    visibleUserMessages,
     review: reviewTab,
   })
 
@@ -1801,6 +1827,11 @@ export default function Page() {
                       void loadEarlier()
                     }}
                     renderedUserMessages={visibleUserMessages()}
+                    currentMessageId={store.messageId}
+                    onJumpToMessage={(message) => {
+                      autoScroll.pause()
+                      scrollToMessage(message, "auto")
+                    }}
                     anchor={anchor}
                   />
                 </Show>

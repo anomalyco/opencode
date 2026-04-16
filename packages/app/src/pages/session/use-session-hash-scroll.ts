@@ -101,9 +101,17 @@ export const useSessionHashScroll = (input: {
   }
 
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
-    const el = document.getElementById(input.anchor(id))
-    if (el) return scrollToElement(el, behavior)
-    if (left <= 0) return false
+    const anchorId = input.anchor(id)
+    const el = document.getElementById(anchorId)
+    if (el) {
+      console.debug(`[seek] found element: messageId=${id} anchorId=${anchorId} behavior=${behavior}`)
+      return scrollToElement(el, behavior)
+    }
+    if (left <= 0) {
+      console.warn(`[seek] element not found after retries: messageId=${id} anchorId=${anchorId}`)
+      return false
+    }
+    console.debug(`[seek] element not found, retrying: messageId=${id} anchorId=${anchorId} retriesLeft=${left}`)
     queue(() => {
       seek(id, behavior, left - 1)
     })
@@ -111,9 +119,17 @@ export const useSessionHashScroll = (input: {
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+    console.debug(
+      `[scrollToMessage] called: messageId=${message.id} behavior=${behavior} currentMessageId=${input.currentMessageId()}`,
+    )
     cancel()
     input.enterAnchored(message.id)
-    if (input.currentMessageId() !== message.id) input.setActiveMessage(message)
+    if (input.currentMessageId() !== message.id) {
+      console.debug(`[scrollToMessage] setting active message: messageId=${message.id}`)
+      input.setActiveMessage(message)
+    } else {
+      console.debug(`[scrollToMessage] message already active, skipping setActiveMessage`)
+    }
 
     if (seek(message.id, behavior)) {
       updateHash(message.id)
@@ -139,6 +155,10 @@ export const useSessionHashScroll = (input: {
     if (messageId) {
       input.enterAnchored(messageId)
       input.autoScroll.pause()
+      if (input.currentMessageId() === messageId) {
+        console.debug(`[applyHash] target already active: messageId=${messageId}`)
+        return
+      }
       const msg = messageById().get(messageId)
       if (msg) {
         scrollToMessage(msg, behavior)
@@ -215,6 +235,9 @@ export const useSessionHashScroll = (input: {
     if (messageById().has(targetId)) return
     if (!input.historyMore() || input.historyLoading()) return
 
+    console.debug(
+      `[autoLoadMore] loading more messages: targetId=${targetId} visibleCount=${visibleUserMessages().length} historyMore=${input.historyMore()} historyLoading=${input.historyLoading()}`,
+    )
     void input.loadMore(sessionID)
   })
 
