@@ -520,7 +520,7 @@ export function Logo() {
     const shadow = tint(theme.background, ink, 0.25)
     const attrs = bold ? TextAttributes.BOLD : undefined
 
-    return [...line].map((char, i) => {
+    return Array.from(line).map((char, i) => {
       const h = field(off + i, y, frame)
       const n = wave(off + i, y, frame, lit(char)) + h
       const s = wave(off + i, y, dusk, false) + h
