@@ -7,7 +7,6 @@ import path from "path"
 import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/shared/util/flock"
-import { Arborist } from "@npmcli/arborist"
 
 const log = Log.create({ service: "npm" })
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
@@ -61,6 +60,7 @@ export async function outdated(pkg: string, cachedVersion: string): Promise<bool
 }
 
 export async function add(pkg: string) {
+  const { Arborist } = await import("@npmcli/arborist")
   const dir = directory(pkg)
   await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
   log.info("installing package", {
@@ -107,6 +107,7 @@ export async function install(dir: string) {
   log.info("checking dependencies", { dir })
 
   const reify = async () => {
+    const { Arborist } = await import("@npmcli/arborist")
     const arb = new Arborist({
       path: dir,
       binLinks: true,

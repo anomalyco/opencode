@@ -5,9 +5,13 @@ import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "../../../../util"
 import { Process } from "../../../../util"
-import { which } from "../../../../util/which"
 
-// Lazy load clipboardy to avoid expensive execa/which/isexe chain at startup
+// Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
+const getWhich = lazy(async () => {
+  const { which } = await import("../../../../util/which")
+  return which
+})
+
 const getClipboardy = lazy(async () => {
   const { default: clipboardy } = await import("clipboardy")
   return clipboardy
@@ -106,8 +110,9 @@ export async function read(): Promise<Content | undefined> {
   }
 }
 
-const getCopyMethod = lazy(() => {
+const getCopyMethod = lazy(async () => {
   const os = platform()
+  const which = await getWhich()
 
   if (os === "darwin" && which("osascript")) {
     console.log("clipboard: using osascript")
@@ -193,5 +198,6 @@ const getCopyMethod = lazy(() => {
 
 export async function copy(text: string): Promise<void> {
   writeOsc52(text)
-  await getCopyMethod()(text)
+  const method = await getCopyMethod()
+  await method(text)
 }

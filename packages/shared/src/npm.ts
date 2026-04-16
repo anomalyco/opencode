@@ -1,6 +1,5 @@
 import path from "path"
 import semver from "semver"
-import { Arborist } from "@npmcli/arborist"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "./filesystem"
@@ -92,6 +91,7 @@ export namespace Npm {
       })
 
       const add = Effect.fn("Npm.add")(function* (pkg: string) {
+        const { Arborist } = yield* Effect.tryPromise(() => import("@npmcli/arborist"))
         const dir = directory(pkg)
         yield* flock.acquire(`npm-install:${dir}`)
 
@@ -143,6 +143,7 @@ export namespace Npm {
         yield* flock.acquire(`npm-install:${dir}`)
 
         const reify = Effect.fnUntraced(function* () {
+          const { Arborist } = yield* Effect.tryPromise(() => import("@npmcli/arborist"))
           const arb = new Arborist({
             path: dir,
             binLinks: true,
