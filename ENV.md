@@ -9,12 +9,12 @@ Legacy files can be removed once you confirm the new pair works for your setup:
 
 - `.env`
 - `packages/app/.env`
-- `.env.selfhost`
 
 ## Consumers
 
 - `.env.development` keeps split listen vars: `DEV_FRONTEND_HOST`, `DEV_FRONTEND_PORT`, `DEV_BACKEND_HOST`, `DEV_BACKEND_PORT`
 - Local dev launchers derive `PUBLIC_BASE_URL`, `WORKOS_REDIRECT_URI`, and `VITE_OPENCODE_SERVER_*` from those split vars
+- `.env.development` also owns `DATABASE_URL` for the standalone backend, and the dev compose files publish Postgres on `localhost:5432` to match it
 - `packages/app` loads env from the repo root, not `packages/app/.env`
 - `packages/opencode/veritly-debug-serve.ts` loads `.env.development` automatically
 - `packages/univer-sdk` reads `.env.development`

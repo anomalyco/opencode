@@ -5,6 +5,7 @@ node_modules
 .env
 .env.development
 .env.production
+.env.selfhost
 .idea
 .vscode
 .codex
