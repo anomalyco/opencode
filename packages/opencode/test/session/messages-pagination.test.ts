@@ -724,7 +724,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const u1 = await addUser(session.id, "hello")
         await addCompactionPart(session.id, u1)
-        const u2 = await addUser(session.id, "world")
+        await addUser(session.id, "world")
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
         expect(result).toHaveLength(2)
@@ -748,7 +748,7 @@ describe("MessageV2.filterCompacted", () => {
           isRetryable: true,
         }).toObject() as MessageV2.Assistant["error"]
         await addAssistant(session.id, u1, { summary: true, finish: "end_turn", error })
-        const u2 = await addUser(session.id, "retry")
+        await addUser(session.id, "retry")
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
         // Error assistant doesn't add to completed, so compaction boundary never triggers
@@ -770,7 +770,7 @@ describe("MessageV2.filterCompacted", () => {
 
         // summary=true but no finish
         await addAssistant(session.id, u1, { summary: true })
-        const u2 = await addUser(session.id, "next")
+        await addUser(session.id, "next")
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
         expect(result).toHaveLength(3)
@@ -892,7 +892,7 @@ describe("MessageV2 consistency", () => {
       directory: root,
       fn: async () => {
         const session = await svc.create({})
-        const ids = await fill(session.id, 4)
+        await fill(session.id, 4)
 
         const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
         const all = Array.from(MessageV2.stream(session.id)).reverse()

@@ -25,7 +25,7 @@ import { SessionShare } from "@/share/session"
 import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -362,7 +362,7 @@ export const GithubInstallCommand = cmd({
 
               retries++
               await sleep(1000)
-            } while (true)
+            } while (true) // oxlint-disable-line no-constant-condition
 
             s.stop("Installed GitHub app")
 
@@ -931,7 +931,7 @@ export const GithubRunCommand = cmd({
       async function summarize(response: string) {
         try {
           return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
-        } catch (e) {
+        } catch {
           const title = issueEvent
             ? issueEvent.issue.title
             : (payload as PullRequestReviewCommentEvent).pull_request.title

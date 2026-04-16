@@ -2,11 +2,11 @@ import { Layer, ManagedRuntime } from "effect"
 import { attach, memoMap } from "./run-service"
 import { Observability } from "./observability"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
 import { Account } from "@/account"
-import { Config } from "@/config/config"
+import { Config } from "@/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@/file/ripgrep"
 import { FileTime } from "@/file/time"
@@ -15,7 +15,7 @@ import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
-import { Provider } from "@/provider/provider"
+import { Provider } from "@/provider"
 import { ProviderAuth } from "@/provider/auth"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
@@ -49,7 +49,6 @@ import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
 
 export const AppLayer = Layer.mergeAll(
-  Observability.layer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
@@ -95,7 +94,7 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-)
+).pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

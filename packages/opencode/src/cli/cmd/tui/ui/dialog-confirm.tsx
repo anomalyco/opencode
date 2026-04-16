@@ -54,7 +54,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={key === store.active ? theme.primary : undefined}
-              onMouseUp={(evt) => {
+              onMouseUp={(_evt) => {
                 if (key === "confirm") props.onConfirm?.()
                 if (key === "cancel") props.onCancel?.()
                 dialog.clear()

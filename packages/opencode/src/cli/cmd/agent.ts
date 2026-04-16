@@ -4,7 +4,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "../../util/filesystem"
@@ -15,7 +15,7 @@ import type { Argv } from "yargs"
 
 type AgentMode = "all" | "primary" | "subagent"
 
-const AVAILABLE_TOOLS = ["bash", "read", "write", "edit", "list", "glob", "grep", "webfetch", "task", "todowrite"]
+const AVAILABLE_TOOLS = ["bash", "read", "write", "edit", "glob", "grep", "webfetch", "task", "todowrite"]
 
 const AgentCreateCommand = cmd({
   command: "create",

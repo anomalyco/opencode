@@ -67,7 +67,7 @@ describe("session.list", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await svc.create({ title: "new-session" })
+        await svc.create({ title: "new-session" })
         const futureStart = Date.now() + 86400000
 
         const sessions = [...svc.list({ start: futureStart })]

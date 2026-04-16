@@ -4,9 +4,11 @@ import { adapter } from "#hono"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
+import { FenceMiddleware } from "./fence"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
 import { Log } from "@/util/log"
+import { Flag } from "@/flag/flag"
 import { ControlPlaneRoutes } from "./control"
 import { UIRoutes } from "./ui"
 
@@ -30,6 +32,22 @@ export namespace Server {
   function create(opts: { cors?: string[] }) {
     const app = new Hono()
     const runtime = adapter.create(app)
+
+    if (Flag.OPENCODE_WORKSPACE_ID) {
+      return {
+        app: app
+          .onError(ErrorMiddleware)
+          .use(AuthMiddleware)
+          .use(LoggerMiddleware)
+          .use(CompressionMiddleware)
+          .use(CorsMiddleware(opts))
+          .use(FenceMiddleware)
+          .route("/", ControlPlaneRoutes())
+          .route("/", InstanceRoutes(runtime.upgradeWebSocket)),
+        runtime,
+      }
+    }
+
     return {
       app: app
         .onError(ErrorMiddleware)

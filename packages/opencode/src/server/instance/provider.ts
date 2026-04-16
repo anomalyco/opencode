@@ -1,8 +1,8 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "../../config/config"
-import { Provider } from "../../provider/provider"
+import { Config } from "../../config"
+import { Provider } from "../../provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
 import { ProviderID } from "../../provider/schema"
@@ -10,10 +10,7 @@ import { AppRuntime } from "../../effect/app-runtime"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { Log } from "../../util/log"
 import { Effect } from "effect"
-
-const log = Log.create({ service: "server" })
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -85,7 +82,7 @@ export const ProviderRoutes = lazy(() =>
             description: "Provider auth methods",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), z.array(ProviderAuth.Method))),
+                schema: resolver(ProviderAuth.Methods.zod),
               },
             },
           },
@@ -106,7 +103,7 @@ export const ProviderRoutes = lazy(() =>
             description: "Authorization URL and method",
             content: {
               "application/json": {
-                schema: resolver(ProviderAuth.Authorization.optional()),
+                schema: resolver(ProviderAuth.Authorization.zod.optional()),
               },
             },
           },

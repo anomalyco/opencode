@@ -80,8 +80,14 @@ export namespace Tool {
       Effect.gen(function* () {
         const toolInfo = init instanceof Function ? { ...(yield* init()) } : { ...init }
         const execute = toolInfo.execute
-        toolInfo.execute = (args, ctx) =>
-          Effect.gen(function* () {
+        toolInfo.execute = (args, ctx) => {
+          const attrs = {
+            "tool.name": id,
+            "session.id": ctx.sessionID,
+            "message.id": ctx.messageID,
+            ...(ctx.callID ? { "tool.call_id": ctx.callID } : {}),
+          }
+          return Effect.gen(function* () {
             yield* Effect.try({
               try: () => toolInfo.parameters.parse(args),
               catch: (error) => {
@@ -109,7 +115,8 @@ export namespace Tool {
                 ...(truncated.truncated && { outputPath: truncated.outputPath }),
               },
             }
-          }).pipe(Effect.orDie)
+          }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))
+        }
         return toolInfo
       })
   }

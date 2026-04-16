@@ -7,7 +7,7 @@ import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
@@ -32,14 +32,14 @@ import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
@@ -48,6 +48,7 @@ import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { EffectBridge } from "@/effect/bridge"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -105,11 +106,7 @@ export namespace SessionPrompt {
       const sys = yield* SystemPrompt.Service
       const llm = yield* LLM.Service
       const runner = Effect.fn("SessionPrompt.runner")(function* () {
-        const ctx = yield* Effect.context()
-        return {
-          promise: <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(ctx)(effect),
-          fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runForkWith(ctx)(effect),
-        }
+        return yield* EffectBridge.make()
       })
       const ops = Effect.fn("SessionPrompt.ops")(function* () {
         const run = yield* runner()
@@ -500,7 +497,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
                 const metadata = {
-                  ...(result.metadata ?? {}),
+                  ...result.metadata,
                   truncated: truncated.truncated,
                   ...(truncated.truncated && { outputPath: truncated.outputPath }),
                 }
@@ -1828,7 +1825,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     onSuccess: (output: unknown) => void
   }): AITool {
     // Remove $schema property if present (not needed for tool input)
-    const { $schema, ...toolSchema } = input.schema
+    const { $schema: _, ...toolSchema } = input.schema
 
     return tool({
       id: "StructuredOutput" as any,

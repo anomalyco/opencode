@@ -12,7 +12,7 @@ import { Agent } from "../../src/agent/agent"
 import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Plugin } from "../../src/plugin"
 
 const runtime = ManagedRuntime.make(
@@ -1116,8 +1116,8 @@ describe("tool.bash truncation", () => {
           ),
         )
         mustTruncate(result)
-        expect(result.output).toContain("truncated")
-        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+        expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
+        expect(result.output).toMatch(/Full output saved to:\s+\S+/)
       },
     })
   })
@@ -1138,8 +1138,8 @@ describe("tool.bash truncation", () => {
           ),
         )
         mustTruncate(result)
-        expect(result.output).toContain("truncated")
-        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+        expect(result.output).toMatch(/\.\.\.output truncated\.\.\./)
+        expect(result.output).toMatch(/Full output saved to:\s+\S+/)
       },
     })
   })

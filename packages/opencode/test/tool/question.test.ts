@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer } from "effect"
-import { Tool } from "../../src/tool/tool"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"

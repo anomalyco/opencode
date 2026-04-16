@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
+  "rules": {
+    // Effect uses `function*` with Effect.gen/Effect.fnUntraced that don't always yield
+    "require-yield": "off",
+    // SolidJS uses `let ref: T | undefined` for JSX ref bindings assigned at runtime
+    "no-unassigned-vars": "off",
+    // SolidJS tracks reactive deps by reading properties inside createEffect
+    "no-unused-expressions": "off",
+    // Intentional control char matching (ANSI escapes, null byte sanitization)
+    "no-control-regex": "off",
+    // SST and plugin tools require triple-slash references
+    "triple-slash-reference": "off"
+  },
+  "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts"]
+}

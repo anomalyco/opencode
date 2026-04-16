@@ -44,6 +44,7 @@ export namespace ZenData {
   })
 
   const ProviderSchema = z.object({
+    displayName: z.string().optional(),
     api: z.string(),
     apiKey: z.union([z.string(), z.record(z.string(), z.string())]),
     format: FormatSchema.optional(),

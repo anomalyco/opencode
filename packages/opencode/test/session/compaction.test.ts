@@ -2,10 +2,9 @@ import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
 import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as Stream from "effect/Stream"
-import path from "path"
 import z from "zod"
 import { Bus } from "../../src/bus"
-import { Config } from "../../src/config/config"
+import { Config } from "../../src/config"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
@@ -21,7 +20,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import type { Provider } from "../../src/provider/provider"
+import type { Provider } from "../../src/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
@@ -142,25 +141,6 @@ async function assistant(sessionID: SessionID, parentID: MessageID, root: string
   }
   await svc.updateMessage(msg)
   return msg
-}
-
-async function tool(sessionID: SessionID, messageID: MessageID, tool: string, output: string) {
-  return svc.updatePart({
-    id: PartID.ascending(),
-    messageID,
-    sessionID,
-    type: "tool",
-    callID: crypto.randomUUID(),
-    tool,
-    state: {
-      status: "completed",
-      input: {},
-      output,
-      title: "done",
-      metadata: {},
-      time: { start: Date.now(), end: Date.now() },
-    },
-  })
 }
 
 function fake(
@@ -843,6 +823,7 @@ describe("session.compaction.process", () => {
           expect(last?.parts[0]).toMatchObject({
             type: "text",
             synthetic: true,
+            metadata: { compaction_continue: true },
           })
           if (last?.parts[0]?.type === "text") {
             expect(last.parts[0].text).toContain("Continue if you have next steps")

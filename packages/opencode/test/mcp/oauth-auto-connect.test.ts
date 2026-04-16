@@ -1,6 +1,5 @@
 import { test, expect, mock, beforeEach } from "bun:test"
 import { Effect } from "effect"
-import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Mock UnauthorizedError to match the SDK's class
 class MockUnauthorizedError extends Error {
