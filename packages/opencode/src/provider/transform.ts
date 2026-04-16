@@ -378,7 +378,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, options?: Rec
     msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
   }
 
-  log.debug("cache points applied", {
+  log.info("cache points applied", {
     messageCount: unique([...system, ...final]).length,
     providerID: model.providerID,
     ttl,
