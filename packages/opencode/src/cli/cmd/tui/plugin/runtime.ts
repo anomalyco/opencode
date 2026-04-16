@@ -33,7 +33,7 @@ import { installPlugin as installModulePlugin, patchPluginConfig, readPluginMani
 import { hasTheme, upsertTheme } from "../context/theme"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
+import { Process } from "@/util"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Flag } from "@/flag/flag"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"

@@ -8,7 +8,7 @@ import { resolvePluginTarget } from "../../plugin/shared"
 import { Instance } from "../../project/instance"
 import { errorMessage } from "../../util/error"
 import { Filesystem } from "../../util/filesystem"
-import { Process } from "../../util/process"
+import { Process } from "../../util"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 

@@ -32,7 +32,7 @@ import { SessionPrompt } from "@/session/prompt"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Process } from "@/util/process"
+import { Process } from "@/util"
 import { Effect } from "effect"
 
 type GitHubAuthor = {

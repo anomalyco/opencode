@@ -5,7 +5,7 @@ import { tmpdir } from "os"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "../../../../util/filesystem"
-import { Process } from "../../../../util/process"
+import { Process } from "../../../../util"
 import { which } from "../../../../util/which"
 
 /**

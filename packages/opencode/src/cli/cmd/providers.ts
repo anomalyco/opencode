@@ -12,7 +12,7 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
-import { Process } from "../../util/process"
+import { Process } from "../../util"
 import { text } from "node:stream/consumers"
 import { Effect } from "effect"
 
