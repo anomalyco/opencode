@@ -10,13 +10,7 @@ import { NamedError } from "@opencode-ai/shared/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import {
-  type ParseError as JsoncParseError,
-  applyEdits,
-  modify,
-  parse as parseJsonc,
-  printParseErrorCode,
-} from "jsonc-parser"
+import { applyEdits, modify } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
 import * as LSPServer from "../lsp/server"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
@@ -25,7 +19,7 @@ import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Account } from "@/account"
 import { isRecord } from "@/util/record"
-import * as ConfigPaths from "./paths"
+import { InvalidError, JsonError } from "./error"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect"
@@ -39,9 +33,11 @@ import { ConfigModelID } from "./model-id"
 import { ConfigPlugin } from "./plugin"
 import { ConfigManaged } from "./managed"
 import { ConfigCommand } from "./command"
+import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
 import { ConfigProvider } from "./provider"
 import { ConfigSkills } from "./skills"
+import { ConfigPaths } from "./paths"
 
 const log = Log.create({ service: "config" })
 
@@ -52,6 +48,28 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
   return merged
+}
+
+function normalizeLoadedConfig(data: unknown, source: string) {
+  if (!isRecord(data)) return data
+  const copy = { ...data }
+  const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
+  if (!hadLegacy) return copy
+  delete copy.theme
+  delete copy.keybinds
+  delete copy.tui
+  log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
+  return copy
+}
+
+async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
+  if (!config.plugin) return config
+  for (let i = 0; i < config.plugin.length; i++) {
+    // Normalize path-like plugin specs while we still know which config file declared them.
+    // This prevents `./plugin.ts` from being reinterpreted relative to some later merge location.
+    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], filepath)
+  }
+  return config
 }
 
 export const Server = z
@@ -325,42 +343,6 @@ function writable(info: Info) {
   return next
 }
 
-export function parseConfig(text: string, filepath: string): Info {
-  const errors: JsoncParseError[] = []
-  const data = parseJsonc(text, errors, { allowTrailingComma: true })
-  if (errors.length) {
-    const lines = text.split("\n")
-    const errorDetails = errors
-      .map((e) => {
-        const beforeOffset = text.substring(0, e.offset).split("\n")
-        const line = beforeOffset.length
-        const column = beforeOffset[beforeOffset.length - 1].length + 1
-        const problemLine = lines[line - 1]
-
-        const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
-        if (!problemLine) return error
-
-        return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
-      })
-      .join("\n")
-
-    throw new JsonError({
-      path: filepath,
-      message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
-    })
-  }
-
-  const parsed = Info.safeParse(data)
-  if (parsed.success) return parsed.data
-
-  throw new InvalidError({
-    path: filepath,
-    issues: parsed.error.issues,
-  })
-}
-
-export const { JsonError, InvalidError } = ConfigPaths
-
 export const ConfigDirectoryTypoError = NamedError.create(
   "ConfigDirectoryTypoError",
   z.object({
@@ -393,48 +375,31 @@ export const layer = Layer.effect(
       text: string,
       options: { path: string } | { dir: string; source: string },
     ) {
-      const original = text
-      const source = "path" in options ? options.path : options.source
-      const isFile = "path" in options
-      const data = yield* Effect.promise(() =>
-        ConfigPaths.parseText(text, "path" in options ? options.path : { source: options.source, dir: options.dir }),
-      )
-
-      const normalized = (() => {
-        if (!data || typeof data !== "object" || Array.isArray(data)) return data
-        const copy = { ...(data as Record<string, unknown>) }
-        const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
-        if (!hadLegacy) return copy
-        delete copy.theme
-        delete copy.keybinds
-        delete copy.tui
-        log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
-        return copy
-      })()
-
-      const parsed = Info.safeParse(normalized)
-      if (parsed.success) {
-        if (!parsed.data.$schema && isFile) {
-          parsed.data.$schema = "https://opencode.ai/config.json"
-          const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-          yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
-        }
-        const data = parsed.data
-        if (data.plugin && isFile) {
-          const list = data.plugin
-          for (let i = 0; i < list.length; i++) {
-            // Normalize path-like plugin specs while we still know which config file declared them.
-            // This prevents `./plugin.ts` from being reinterpreted relative to some later merge location.
-            list[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(list[i], options.path))
-          }
-        }
-        return data
+      if (!("path" in options)) {
+        return yield* Effect.promise(() =>
+          ConfigParse.load(Info, text, {
+            type: "virtual",
+            dir: options.dir,
+            source: options.source,
+            normalize: normalizeLoadedConfig,
+          }),
+        )
       }
 
-      throw new InvalidError({
-        path: source,
-        issues: parsed.error.issues,
-      })
+      const data = yield* Effect.promise(() =>
+        ConfigParse.load(Info, text, {
+          type: "path",
+          path: options.path,
+          normalize: normalizeLoadedConfig,
+        }),
+      )
+      yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
+      if (!data.$schema) {
+        data.$schema = "https://opencode.ai/config.json"
+        const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
+      }
+      return data
     })
 
     const loadFile = Effect.fnUntraced(function* (filepath: string) {
@@ -692,7 +657,16 @@ export const layer = Layer.effect(
       }
 
       // macOS managed preferences (.mobileconfig deployed via MDM) override everything
-      result = mergeConfigConcatArrays(result, yield* Effect.promise(() => ConfigManaged.readManagedPreferences()))
+      const managed = yield* Effect.promise(() => ConfigManaged.readManagedPreferences())
+      if (managed) {
+        result = mergeConfigConcatArrays(
+          result,
+          yield* loadConfig(managed.text, {
+            dir: path.dirname(managed.source),
+            source: managed.source,
+          }),
+        )
+      }
 
       for (const [name, mode] of Object.entries(result.mode ?? {})) {
         result.agent = mergeDeep(result.agent ?? {}, {
@@ -803,13 +777,13 @@ export const layer = Layer.effect(
 
       let next: Info
       if (!file.endsWith(".jsonc")) {
-        const existing = parseConfig(before, file)
+        const existing = ConfigParse.parse(Info, before, file)
         const merged = mergeDeep(writable(existing), input)
         yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
         next = merged
       } else {
         const updated = patchJsonc(before, input)
-        next = parseConfig(updated, file)
+        next = ConfigParse.parse(Info, updated, file)
         yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
 

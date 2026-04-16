@@ -1,6 +1,7 @@
 import z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
+import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
@@ -66,6 +67,14 @@ export namespace TuiConfig {
       ...tui,
       ...data,
     }
+  }
+
+  async function resolvePlugins(config: Info, configFilepath: string) {
+    if (!config.plugin) return config
+    for (let i = 0; i < config.plugin.length; i++) {
+      config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], configFilepath)
+    }
+    return config
   }
 
   async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
@@ -183,26 +192,22 @@ export namespace TuiConfig {
   }
 
   async function load(text: string, configFilepath: string): Promise<Info> {
-    const raw = await ConfigPaths.parseText(text, configFilepath, "empty")
-    if (!isRecord(raw)) return {}
+    return ConfigParse.load(Info, text, {
+      type: "path",
+      path: configFilepath,
+      missing: "empty",
+      normalize: (data) => {
+        if (!isRecord(data)) return {}
 
-    // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
-    // (mirroring the old opencode.json shape) still get their settings applied.
-    const normalized = normalize(raw)
-
-    const parsed = Info.safeParse(normalized)
-    if (!parsed.success) {
-      log.warn("invalid tui config", { path: configFilepath, issues: parsed.error.issues })
-      return {}
-    }
-
-    const data = parsed.data
-    if (data.plugin) {
-      for (let i = 0; i < data.plugin.length; i++) {
-        data.plugin[i] = await ConfigPlugin.resolvePluginSpec(data.plugin[i], configFilepath)
-      }
-    }
-
-    return data
+        // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
+        // (mirroring the old opencode.json shape) still get their settings applied.
+        return normalize(data)
+      },
+    })
+      .then((data) => resolvePlugins(data, configFilepath))
+      .catch((error) => {
+        log.warn("invalid tui config", { path: configFilepath, error })
+        return {}
+      })
   }
 }
