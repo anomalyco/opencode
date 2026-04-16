@@ -1982,7 +1982,7 @@ describe("deduplicatePluginOrigins", () => {
         source: "",
         scope: "global" as const,
       })),
-    ).map((item: ConfigPlugin.Origin) => item.spec)
+    ).map((item) => item.spec)
 
   test("removes duplicates keeping higher priority (later entries)", () => {
     const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]

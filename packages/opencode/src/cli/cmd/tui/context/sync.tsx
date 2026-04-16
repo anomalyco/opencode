@@ -17,7 +17,6 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
-  SnapshotFileDiff,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "@tui/context/project"
@@ -25,6 +24,7 @@ import { useEvent } from "@tui/context/event"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/shared/util/binary"
 import { createSimpleContext } from "./helper"
+import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, createEffect, on } from "solid-js"
@@ -59,7 +59,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [sessionID: string]: SessionStatus
       }
       session_diff: {
-        [sessionID: string]: SnapshotFileDiff[]
+        [sessionID: string]: Snapshot.FileDiff[]
       }
       todo: {
         [sessionID: string]: Todo[]

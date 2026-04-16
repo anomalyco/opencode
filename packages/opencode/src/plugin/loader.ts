@@ -1,4 +1,3 @@
-import { Installation } from "@/installation"
 import {
   checkPluginCompatibility,
   createPluginEntry,
@@ -10,6 +9,7 @@ import {
   type PluginSource,
 } from "./shared"
 import { ConfigPlugin } from "@/config/plugin"
+import { InstallationVersion } from "@/installation/version"
 
 export namespace PluginLoader {
   export type Plan = {
@@ -88,7 +88,7 @@ export namespace PluginLoader {
 
     if (base.source === "npm") {
       try {
-        await checkPluginCompatibility(base.target, Installation.VERSION, base.pkg)
+        await checkPluginCompatibility(base.target, InstallationVersion, base.pkg)
       } catch (error) {
         return { ok: false, stage: "compatibility", error }
       }

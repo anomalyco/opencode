@@ -28,7 +28,6 @@ interface MigrateInput {
   cwd: string
   directories: string[]
   custom?: string
-  managed: string
 }
 
 /**
@@ -134,14 +133,13 @@ async function backupAndStripLegacy(file: string, source: string) {
     })
 }
 
-async function opencodeFiles(input: { directories: string[]; managed: string; cwd: string }) {
+async function opencodeFiles(input: { directories: string[]; cwd: string }) {
   const project = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("opencode", input.cwd)
   const files = [...project, ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode")]
   for (const dir of unique(input.directories)) {
     files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))
   }
   if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
-  files.push(...ConfigPaths.fileInDirectory(input.managed, "opencode"))
 
   const existing = await Promise.all(
     unique(files).map(async (file) => {

@@ -8,7 +8,7 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "../flag/flag"
 import { Log } from "../util/log"
-import { InstallationChannel as channel, InstallationVersion as version } from "./version"
+import { InstallationChannel, InstallationVersion } from "./version"
 
 import semver from "semver"
 
@@ -55,12 +55,12 @@ export namespace Installation {
     })
   export type Info = z.infer<typeof Info>
 
-  export const VERSION = version
-  export const CHANNEL = channel
-  export const USER_AGENT = `opencode/${channel}/${version}/${Flag.OPENCODE_CLIENT}`
+  export const VERSION = InstallationVersion
+  export const CHANNEL = InstallationChannel
+  export const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
   export function isPreview() {
-    return CHANNEL !== "latest"
+    return InstallationChannel !== "latest"
   }
 
   export function isLocal() {

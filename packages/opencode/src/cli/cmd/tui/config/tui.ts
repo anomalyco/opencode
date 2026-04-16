@@ -1,10 +1,7 @@
-import { existsSync } from "fs"
 import z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
-import { Config } from "@/config/config"
 import { ConfigPaths } from "@/config/paths"
-import { ConfigPlugin } from "@/config/plugin"
 import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
 import { Flag } from "@/flag/flag"
@@ -17,6 +14,8 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Npm } from "@opencode-ai/shared/npm"
 import { Installation } from "@/installation"
 import { CurrentWorkingDirectory } from "./cwd"
+import { ConfigPlugin } from "@/config/plugin"
+import { ConfigKeybinds } from "@/config/keybinds"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -78,9 +77,9 @@ export namespace TuiConfig {
     const scope = pluginScope(file, ctx)
     const plugins = ConfigPlugin.deduplicatePluginOrigins([
       ...(acc.result.plugin_origins ?? []),
-      ...data.plugin.map((spec: ConfigPlugin.Spec) => ({ spec, scope, source: file })),
+      ...data.plugin.map((spec) => ({ spec, scope, source: file })),
     ])
-    acc.result.plugin = plugins.map((item: ConfigPlugin.Origin) => item.spec)
+    acc.result.plugin = plugins.map((item) => item.spec)
     acc.result.plugin_origins = plugins
   }
 
@@ -88,8 +87,7 @@ export namespace TuiConfig {
     let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
     const directories = await ConfigPaths.directories(ctx.directory)
     const custom = customPath()
-    const managed = Config.managedConfigDir()
-    await migrateTuiConfig({ directories, custom, managed, cwd: ctx.directory })
+    await migrateTuiConfig({ directories, custom, cwd: ctx.directory })
     // Re-compute after migration since migrateTuiConfig may have created new tui.json files
     projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
 
@@ -119,21 +117,16 @@ export namespace TuiConfig {
       }
     }
 
-    if (existsSync(managed)) {
-      for (const file of ConfigPaths.fileInDirectory(managed, "tui")) {
-        await mergeFile(acc, file, ctx)
-      }
-    }
-
     const keybinds = { ...(acc.result.keybinds ?? {}) }
     if (process.platform === "win32") {
       // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
       keybinds.terminal_suspend = "none"
-      keybinds.input_undo ??= unique(["ctrl+z", ...Config.Keybinds.shape.input_undo.parse(undefined).split(",")]).join(
-        ",",
-      )
+      keybinds.input_undo ??= unique([
+        "ctrl+z",
+        ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
+      ]).join(",")
     }
-    acc.result.keybinds = Config.Keybinds.parse(keybinds)
+    acc.result.keybinds = ConfigKeybinds.Keybinds.parse(keybinds)
 
     return {
       config: acc.result,
@@ -169,7 +162,7 @@ export namespace TuiConfig {
     }).pipe(Effect.withSpan("TuiConfig.layer")),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Npm.defaultLayer))
+  export const defaultLayer = layer.pipe(Layer.provide(Npm.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

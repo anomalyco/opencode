@@ -11,7 +11,7 @@ import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "../flag/flag"
-import { CHANNEL } from "../installation/meta"
+import { InstallationChannel } from "../installation/version"
 import { InstanceState } from "@/effect/instance-state"
 import { iife } from "@/util/iife"
 import { init } from "#db"
@@ -29,9 +29,10 @@ const log = Log.create({ service: "db" })
 
 export namespace Database {
   export function getChannelPath() {
-    if (["latest", "beta", "prod"].includes(CHANNEL) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
+    const channel = InstallationChannel
+    if (["latest", "beta", "prod"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
       return path.join(Global.Path.data, "opencode.db")
-    const safe = CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
+    const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
     return path.join(Global.Path.data, `opencode-${safe}.db`)
   }
 

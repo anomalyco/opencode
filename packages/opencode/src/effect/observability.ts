@@ -3,7 +3,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
 import { EffectLogger } from "@/effect/logger"
 import { Flag } from "@/flag/flag"
-import { CHANNEL, VERSION } from "@/installation/meta"
+import { InstallationChannel, InstallationVersion } from "@/installation/version"
 
 export namespace Observability {
   const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
@@ -22,9 +22,9 @@ export namespace Observability {
 
   const resource = {
     serviceName: "opencode",
-    serviceVersion: VERSION,
+    serviceVersion: InstallationVersion,
     attributes: {
-      "deployment.environment.name": CHANNEL === "local" ? "local" : CHANNEL,
+      "deployment.environment.name": InstallationChannel === "local" ? "local" : InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
     },
   }

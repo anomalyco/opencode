@@ -1,10 +1,10 @@
 import z from "zod"
-import { Config } from "@/config/config"
 import { ConfigPlugin } from "@/config/plugin"
+import { ConfigKeybinds } from "@/config/keybinds"
 
 const KeybindOverride = z
   .object(
-    Object.fromEntries(Object.keys(Config.Keybinds.shape).map((key) => [key, z.string().optional()])) as Record<
+    Object.fromEntries(Object.keys(ConfigKeybinds.Keybinds.shape).map((key) => [key, z.string().optional()])) as Record<
       string,
       z.ZodOptional<z.ZodString>
     >,

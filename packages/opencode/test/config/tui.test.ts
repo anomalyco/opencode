@@ -4,13 +4,13 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config/config"
-import { ConfigPlugin } from "../../src/config/plugin"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Effect, Layer } from "effect"
 import { CurrentWorkingDirectory } from "@/cli/cmd/tui/config/cwd"
+import { ConfigPlugin } from "@/config/plugin"
 
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 const wintest = process.platform === "win32" ? test : test.skip
