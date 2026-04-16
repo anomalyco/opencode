@@ -91,7 +91,7 @@ export namespace Npm {
       })
 
       const add = Effect.fn("Npm.add")(function* (pkg: string) {
-        const { Arborist } = yield* Effect.tryPromise(() => import("@npmcli/arborist"))
+        const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const dir = directory(pkg)
         yield* flock.acquire(`npm-install:${dir}`)
 
@@ -143,7 +143,7 @@ export namespace Npm {
         yield* flock.acquire(`npm-install:${dir}`)
 
         const reify = Effect.fnUntraced(function* () {
-          const { Arborist } = yield* Effect.tryPromise(() => import("@npmcli/arborist"))
+          const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
           const arb = new Arborist({
             path: dir,
             binLinks: true,
