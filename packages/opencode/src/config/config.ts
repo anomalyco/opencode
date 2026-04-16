@@ -7,7 +7,7 @@ import z from "zod"
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
 import fsNode from "fs/promises"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -26,17 +26,17 @@ import { existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import type { ConsoleState } from "./console-state"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
-import { Flock } from "@/util/flock"
+import { Flock } from "@opencode-ai/shared/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
-import { Npm } from "@/npm"
+import { Npm } from "../npm"
 import { InstanceRef } from "@/effect/instance-ref"
 
 export namespace Config {
@@ -1277,7 +1277,7 @@ export namespace Config {
         return yield* cachedGlobal
       })
 
-      const install = Effect.fnUntraced(function* (dir: string) {
+      const install = Effect.fn("Config.install")(function* (dir: string) {
         const pkg = path.join(dir, "package.json")
         const gitignore = path.join(dir, ".gitignore")
         const plugin = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
@@ -1345,7 +1345,7 @@ export namespace Config {
         )
       })
 
-      const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
+      const loadInstanceState = Effect.fn("Config.loadInstanceState")(function* (ctx: InstanceContext) {
         const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
@@ -1468,13 +1468,16 @@ export namespace Config {
           log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
-        const activeOrg = Option.getOrUndefined(
-          yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+        const activeAccount = Option.getOrUndefined(
+          yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
-        if (activeOrg) {
+        if (activeAccount?.active_org_id) {
+          const accountID = activeAccount.id
+          const orgID = activeAccount.active_org_id
+          const url = activeAccount.url
           yield* Effect.gen(function* () {
             const [configOpt, tokenOpt] = yield* Effect.all(
-              [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
+              [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
               { concurrency: 2 },
             )
             if (Option.isSome(tokenOpt)) {
@@ -1482,10 +1485,8 @@ export namespace Config {
               yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
             }
 
-            activeOrgName = activeOrg.org.name
-
             if (Option.isSome(configOpt)) {
-              const source = `${activeOrg.account.url}/api/config`
+              const source = `${url}/api/config`
               const next = yield* loadConfig(JSON.stringify(configOpt.value), {
                 dir: path.dirname(source),
                 source,
@@ -1496,6 +1497,7 @@ export namespace Config {
               yield* merge(source, next, "global")
             }
           }).pipe(
+            Effect.withSpan("Config.loadActiveOrgConfig"),
             Effect.catch((err) => {
               log.debug("failed to fetch remote account config", {
                 error: err instanceof Error ? err.message : String(err),

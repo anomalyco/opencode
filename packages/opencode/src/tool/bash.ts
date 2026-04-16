@@ -8,7 +8,7 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
@@ -176,7 +176,7 @@ function dynamic(text: string, ps: boolean) {
 }
 
 function prefix(text: string) {
-  const match = /[?*\[]/.exec(text)
+  const match = /[?*[]/.exec(text)
   if (!match) return text
   if (match.index === 0) return
   return text.slice(0, match.index)

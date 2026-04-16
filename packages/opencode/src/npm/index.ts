@@ -1,12 +1,12 @@
 import semver from "semver"
 import z from "zod"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@/util/flock"
+import { Flock } from "@opencode-ai/shared/util/flock"
 import { Arborist } from "@npmcli/arborist"
 
 export namespace Npm {

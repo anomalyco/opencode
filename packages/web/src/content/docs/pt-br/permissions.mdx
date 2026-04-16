@@ -88,7 +88,7 @@ Você pode usar `~` ou `$HOME` no início de um padrão para referenciar seu dir
 
 ### Diretórios Externos
 
-Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o opencode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `list`, `glob`, `grep` e muitos comandos `bash`).
+Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o opencode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `glob`, `grep` e muitos comandos `bash`).
 
 A expansão do home (como `~/...`) afeta apenas como um padrão é escrito. Não torna um caminho externo parte do espaço de trabalho atual, então caminhos fora do diretório de trabalho ainda devem ser permitidos via `external_directory`.
 
@@ -133,7 +133,6 @@ As permissões do opencode são indexadas pelo nome da ferramenta, além de algu
 - `edit` — todas as modificações de arquivo (cobre `edit`, `write`, `patch`, `multiedit`)
 - `glob` — globbing de arquivos (corresponde ao padrão glob)
 - `grep` — busca de conteúdo (corresponde ao padrão regex)
-- `list` — listagem de arquivos em um diretório (corresponde ao caminho do diretório)
 - `bash` — execução de comandos de shell (corresponde a comandos analisados como `git status --porcelain`)
 - `task` — lançamento de subagentes (corresponde ao tipo de subagente)
 - `skill` — carregamento de uma habilidade (corresponde ao nome da habilidade)

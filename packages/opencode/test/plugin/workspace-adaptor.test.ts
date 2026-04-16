@@ -39,7 +39,7 @@ describe("plugin.workspace", () => {
             '    name: "plug",',
             '    description: "plugin workspace adaptor",',
             "    configure(input) {",
-            `      return { ...input, name: \"plug\", branch: \"plug/main\", directory: ${JSON.stringify(space)} }`,
+            `      return { ...input, name: "plug", branch: "plug/main", directory: ${JSON.stringify(space)} }`,
             "    },",
             "    async create(input) {",
             `      await Bun.write(${JSON.stringify(mark)}, JSON.stringify(input))`,

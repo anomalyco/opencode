@@ -1,21 +1,11 @@
-import { AppLayer } from "@/effect/app-runtime"
-import { memoMap } from "@/effect/run-service"
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
-import { lazy } from "@/util/lazy"
 import { Effect, Layer, Schema } from "effect"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import type { Handler } from "hono"
 
 const root = "/experimental/httpapi/question"
-const Reply = Schema.Struct({
-  answers: Schema.Array(Question.Answer).annotate({
-    description: "User answers in order of questions (each answer is an array of selected labels)",
-  }),
-})
 
-const Api = HttpApi.make("question")
+export const QuestionApi = HttpApi.make("question")
   .add(
     HttpApiGroup.make("question")
       .add(
@@ -30,7 +20,7 @@ const Api = HttpApi.make("question")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: QuestionID },
-          payload: Reply,
+          payload: Question.Reply,
           success: Schema.Boolean,
         }).annotateMerge(
           OpenApi.annotations({
@@ -55,10 +45,8 @@ const Api = HttpApi.make("question")
     }),
   )
 
-const QuestionLive = HttpApiBuilder.group(
-  Api,
-  "question",
-  Effect.fn("QuestionHttpApi.handlers")(function* (handlers) {
+export const QuestionLive = Layer.unwrap(
+  Effect.gen(function* () {
     const svc = yield* Question.Service
 
     const list = Effect.fn("QuestionHttpApi.list")(function* () {
@@ -67,7 +55,7 @@ const QuestionLive = HttpApiBuilder.group(
 
     const reply = Effect.fn("QuestionHttpApi.reply")(function* (ctx: {
       params: { requestID: QuestionID }
-      payload: Schema.Schema.Type<typeof Reply>
+      payload: Question.Reply
     }) {
       yield* svc.reply({
         requestID: ctx.params.requestID,
@@ -76,24 +64,8 @@ const QuestionLive = HttpApiBuilder.group(
       return true
     })
 
-    return handlers.handle("list", list).handle("reply", reply)
+    return HttpApiBuilder.group(QuestionApi, "question", (handlers) =>
+      handlers.handle("list", list).handle("reply", reply),
+    )
   }),
 ).pipe(Layer.provide(Question.defaultLayer))
-
-const web = lazy(() =>
-  HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      AppLayer,
-      HttpApiBuilder.layer(Api, { openapiPath: `${root}/doc` }).pipe(
-        Layer.provide(QuestionLive),
-        Layer.provide(HttpServer.layerServices),
-      ),
-    ),
-    {
-      disableLogger: true,
-      memoMap,
-    },
-  ),
-)
-
-export const QuestionHttpApiHandler: Handler = (c, _next) => web().handler(c.req.raw)

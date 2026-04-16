@@ -7,9 +7,8 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Index, createEffect, createMemo, onCleanup } from "solid-js"
+import { Index, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { composerEnabled, composerProbe } from "@/testing/session-composer"
 import { useLanguage } from "@/context/language"
 
 const doneToken = "\u0000done\u0000"
@@ -81,8 +80,6 @@ export function SessionTodoDock(props: {
   const off = createMemo(() => hide() > 0.98)
   const turn = createMemo(() => Math.max(0, Math.min(1, value())))
   const full = createMemo(() => Math.max(78, store.height))
-  const e2e = composerEnabled()
-  const probe = composerProbe(props.sessionID)
   let contentRef: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -93,23 +90,6 @@ export function SessionTodoDock(props: {
     }
     update()
     createResizeObserver(el, update)
-  })
-
-  createEffect(() => {
-    if (!e2e) return
-
-    probe.set({
-      mounted: true,
-      collapsed: store.collapsed,
-      hidden: store.collapsed || off(),
-      count: props.todos.length,
-      states: props.todos.map((todo) => todo.status),
-    })
-  })
-
-  onCleanup(() => {
-    if (!e2e) return
-    probe.drop()
   })
 
   return (

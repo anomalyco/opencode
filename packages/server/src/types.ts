@@ -1,14 +1,5 @@
-export interface ServerApi {
-  readonly name: string
-  readonly groups: readonly string[]
-}
+import type { HttpApi, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
-export interface OpenApiSpec {
-  readonly openapi: string
-  readonly info: {
-    readonly title: string
-    readonly version: string
-    readonly description: string
-  }
-  readonly paths: Record<string, never>
-}
+export type ServerApi = HttpApi.HttpApi<string, HttpApiGroup.Any>
+
+export type OpenApiSpec = OpenApi.OpenAPISpec

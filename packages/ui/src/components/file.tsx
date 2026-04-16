@@ -1,4 +1,4 @@
-import { sampledChecksum } from "@opencode-ai/util/encode"
+import { sampledChecksum } from "@opencode-ai/shared/util/encode"
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,
@@ -655,7 +655,7 @@ function ViewerShell(props: {
       style={styleVariables}
       class="relative outline-none"
       classList={{
-        ...(props.classList || {}),
+        ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
       ref={(el) => (props.viewer.wrapper = el)}

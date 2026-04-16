@@ -10,10 +10,9 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -42,8 +41,8 @@ export namespace TuiConfig {
   export class Service extends Context.Service<Service, Interface>()("@opencode/TuiConfig") {}
 
   function pluginScope(file: string, ctx: { directory: string; worktree: string }): Config.PluginScope {
-    if (Filesystem.contains(ctx.directory, file)) return "local"
-    if (ctx.worktree !== "/" && Filesystem.contains(ctx.worktree, file)) return "local"
+    if (AppFileSystem.contains(ctx.directory, file)) return "local"
+    if (ctx.worktree !== "/" && AppFileSystem.contains(ctx.worktree, file)) return "local"
     return "global"
   }
 
@@ -126,7 +125,7 @@ export namespace TuiConfig {
       }
     }
 
-    const keybinds = { ...(acc.result.keybinds ?? {}) }
+    const keybinds = { ...acc.result.keybinds }
     if (process.platform === "win32") {
       // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
       keybinds.terminal_suspend = "none"

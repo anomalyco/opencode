@@ -34,7 +34,7 @@ import {
 import { Log } from "../util/log"
 import { pathToFileURL } from "url"
 import { Filesystem } from "../util/filesystem"
-import { Hash } from "../util/hash"
+import { Hash } from "@opencode-ai/shared/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
@@ -1566,7 +1566,6 @@ export namespace ACP {
       case "context7_get_library_docs":
         return "search"
 
-      case "list":
       case "read":
         return "read"
 
@@ -1587,8 +1586,6 @@ export namespace ACP {
         return input["path"] ? [{ path: input["path"] }] : []
       case "bash":
         return []
-      case "list":
-        return input["path"] ? [{ path: input["path"] }] : []
       default:
         return []
     }

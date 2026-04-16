@@ -843,6 +843,7 @@ describe("session.compaction.process", () => {
           expect(last?.parts[0]).toMatchObject({
             type: "text",
             synthetic: true,
+            metadata: { compaction_continue: true },
           })
           if (last?.parts[0]?.type === "text") {
             expect(last.parts[0].text).toContain("Continue if you have next steps")
