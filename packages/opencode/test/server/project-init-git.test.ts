@@ -6,7 +6,7 @@ import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Filesystem } from "../../src/util/filesystem"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { resetDatabase } from "../fixture/db"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 

@@ -7,7 +7,7 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { Effect } from "effect"
 import { McpAuth } from "./auth"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 const log = Log.create({ service: "mcp.oauth" })
 

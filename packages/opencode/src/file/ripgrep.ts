@@ -6,7 +6,7 @@ import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { ripgrep } from "ripgrep"
 
 import { Filesystem } from "@/util/filesystem"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })

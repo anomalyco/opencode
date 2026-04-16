@@ -1,6 +1,6 @@
 import { createConnection } from "net"
 import { createServer } from "http"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })

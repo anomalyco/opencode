@@ -1,6 +1,6 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Rpc } from "@/util/rpc"

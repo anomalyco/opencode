@@ -15,7 +15,7 @@ import { lazy } from "@/util/lazy"
 import { Config } from "../config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 declare const OPENCODE_LIBC: string | undefined
 

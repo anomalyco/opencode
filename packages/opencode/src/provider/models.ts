@@ -1,5 +1,5 @@
 import { Global } from "../global"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import path from "path"
 import z from "zod"
 import { Installation } from "../installation"

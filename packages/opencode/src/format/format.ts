@@ -6,7 +6,7 @@ import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
 import { Config } from "../config"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import * as Formatter from "./formatter"
 
 const log = Log.create({ service: "format" })

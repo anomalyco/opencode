@@ -6,7 +6,7 @@ import { Session as SessionNs } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 
 const root = path.join(__dirname, "../..")
 Log.init({ print: false })

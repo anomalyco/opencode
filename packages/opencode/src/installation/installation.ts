@@ -7,7 +7,7 @@ import path from "path"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "../flag/flag"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { CHANNEL as channel, VERSION as version } from "./meta"
 
 import semver from "semver"

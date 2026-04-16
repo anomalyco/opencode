@@ -1,4 +1,4 @@
-import { Log } from "../util/log"
+import { Log } from "../util"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"

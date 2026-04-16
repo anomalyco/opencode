@@ -31,7 +31,7 @@ import {
   type Usage,
 } from "@agentclientprotocol/sdk"
 
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { pathToFileURL } from "url"
 import { Filesystem } from "../util/filesystem"
 import { Hash } from "@opencode-ai/shared/util/hash"

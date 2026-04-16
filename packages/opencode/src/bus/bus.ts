@@ -1,7 +1,7 @@
 import z from "zod"
 import { Effect, Exit, Layer, PubSub, Scope, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 import { InstanceState } from "@/effect"

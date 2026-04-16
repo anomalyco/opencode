@@ -7,7 +7,7 @@ import type {
 } from "@opencode-ai/plugin"
 import { Config } from "../config"
 import { Bus } from "../bus"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
