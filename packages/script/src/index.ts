@@ -32,7 +32,7 @@ const CHANNEL = await (async () => {
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const getRegistry = async () =>
-  (await $`npm config get registry`.text().catch(() => "https://registry.npmjs.org")).trim().replace(/\/$/, "")
+  ((await $`npm config get registry`.text().catch(() => "")).trim() || "https://registry.npmjs.org").replace(/\/$/, "")
 
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION

@@ -44,7 +44,7 @@ let cachedRegistry: string | undefined
 async function getRegistry() {
   if (cachedRegistry) return cachedRegistry
   const result = await $`npm config get registry`.text().catch(() => "https://registry.npmjs.org")
-  cachedRegistry = result.trim().replace(/\/$/, "")
+  cachedRegistry = (result.trim() || "https://registry.npmjs.org").replace(/\/$/, "")
   return cachedRegistry
 }
 
