@@ -1017,6 +1017,39 @@ The `global` region improves availability and reduces errors at no extra cost. U
 
 ---
 
+### HPC-AI
+
+[HPC-AI](https://www.hpc-ai.com/) provides an OpenAI-compatible inference API. See the [quickstart](https://www.hpc-ai.com/doc/docs/quickstart/) for account and API key setup.
+
+1. Generate an API key from the HPC-AI console.
+
+2. Run the `/connect` command and search for **HPC-AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your HPC-AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   You can also set `HPC_AI_API_KEY` in your environment instead of using `/connect`.
+
+4. Run the `/models` command to select a model like `minimax/minimax-m2.5`, `moonshotai/kimi-k2.5`, or `zai-org/glm-5.1`.
+
+   ```txt
+   /models
+   ```
+
+The default endpoint is `https://api.hpc-ai.com/inference/v1`. To use a custom base URL, set `provider.hpc-ai.options.baseURL` in your OpenCode config.
+
+---
+
 ### Hugging Face
 
 [Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) provides access to open models supported by 17+ providers.

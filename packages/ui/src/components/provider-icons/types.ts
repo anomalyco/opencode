@@ -64,6 +64,7 @@ export const iconNames = [
   "inception",
   "iflowcn",
   "huggingface",
+  "hpc-ai",
   "helicone",
   "groq",
   "google",

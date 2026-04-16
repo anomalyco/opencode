@@ -883,6 +883,39 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
+### HPC-AI
+
+[HPC-AI](https://www.hpc-ai.com/) 提供兼容 OpenAI 的推理 API。账号与 API 密钥设置见 [快速开始](https://www.hpc-ai.com/doc/docs/quickstart/)。
+
+1. 在 HPC-AI 控制台生成 API 密钥。
+
+2. 执行 `/connect` 命令并搜索 **HPC-AI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入你的 HPC-AI API 密钥。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   也可以不使用 `/connect`，直接在环境中设置 `HPC_AI_API_KEY`。
+
+4. 执行 `/models` 命令选择模型，例如 `minimax/minimax-m2.5`、`moonshotai/kimi-k2.5` 或 `zai-org/glm-5.1`。
+
+   ```txt
+   /models
+   ```
+
+默认端点是 `https://api.hpc-ai.com/inference/v1`。如需使用自定义基址，可在 OpenCode 配置中设置 `provider.hpc-ai.options.baseURL`。
+
+---
+
 ### Hugging Face
 
 [Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) 提供对由 17+ 提供商支持的开放模型的访问。
