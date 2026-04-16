@@ -117,6 +117,10 @@ impl MainWindow {
 
         let window = window_builder.build()?;
 
+        // window-state plugin may restore maximized state at wrong position
+        // Unmaximize immediately to allow position correction
+        let _ = window.unmaximize();
+
         ensure_window_visible(&window);
 
         // Hidden startup creation must not focus the app. Doing so on macOS can pull
@@ -132,40 +136,29 @@ impl MainWindow {
 }
 
 fn present(window: &WebviewWindow, focus: bool) {
-    let _ = window.show();
     ensure_window_visible(window);
+    let _ = window.show();
+    let _ = window.maximize();
     if focus {
         let _ = window.set_focus();
     }
 }
 
 fn present_on(window: &WebviewWindow, monitor: &Monitor, focus: bool) {
-    let _ = window.show();
-
-    if window
+    if !window
         .current_monitor()
         .ok()
         .flatten()
         .is_some_and(|current| same_monitor(&current, monitor))
     {
-        if focus {
-            let _ = window.set_focus();
+        if let Err(err) = set_window_to_monitor(window, monitor) {
+            tracing::warn!(label = %window.label(), error = ?err, "failed to place window on target monitor");
         }
-        return;
     }
 
-    let max = window.is_maximized().unwrap_or(false);
-    if max {
-        let _ = window.unmaximize();
-    }
-
-    if let Err(err) = set_window_to_monitor(window, monitor) {
-        tracing::warn!(label = %window.label(), error = ?err, "failed to place window on target monitor");
-    }
-
-    if max {
-        let _ = window.maximize();
-    }
+    ensure_window_visible(window);
+    let _ = window.show();
+    let _ = window.maximize();
     if focus {
         let _ = window.set_focus();
     }
