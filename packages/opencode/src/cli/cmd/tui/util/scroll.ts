@@ -1,5 +1,5 @@
 import { MacOSScrollAccel, type ScrollAcceleration } from "@opentui/core"
-import type { TuiConfig } from "@/config/tui"
+import type { TuiConfig } from "@/config"
 
 export class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
