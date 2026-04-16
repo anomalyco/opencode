@@ -463,6 +463,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status
       },
       get ready() {
+        if (process.env.OPENCODE_FAST_BOOT) return true
         return store.status !== "loading"
       },
       get path() {
