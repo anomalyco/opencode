@@ -1,4 +1,4 @@
-import { Hono, type MiddlewareHandler } from "hono"
+import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Effect } from "effect"
@@ -6,7 +6,7 @@ import z from "zod"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
-import { NotFoundError } from "../../storage/db"
+import { NotFoundError } from "../../storage"
 import { errors } from "../error"
 
 export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {

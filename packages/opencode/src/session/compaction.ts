@@ -1,21 +1,20 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { Session } from "."
+import * as Session from "./session"
 import { SessionID, MessageID, PartID } from "./schema"
-import { Instance } from "../project/instance"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
-import { Token } from "../util/token"
-import { Log } from "../util/log"
+import { Token } from "../util"
+import { Log } from "../util"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
-import { Config } from "@/config/config"
-import { NotFoundError } from "@/storage/db"
+import { Config } from "@/config"
+import { NotFoundError } from "@/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context } from "effect"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {
@@ -345,6 +344,10 @@ When constructing the summary, try to stick to this template:
                 messageID: continueMsg.id,
                 sessionID: input.sessionID,
                 type: "text",
+                // Internal marker for auto-compaction followups so provider plugins
+                // can distinguish them from manual post-compaction user prompts.
+                // This is not a stable plugin contract and may change or disappear.
+                metadata: { compaction_continue: true },
                 synthetic: true,
                 text,
                 time: {
