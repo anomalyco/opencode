@@ -5,7 +5,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util"
 import { LocalContext } from "../util"
-import { Project } from "./project"
+import { Project } from "."
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 export interface InstanceContext {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Project } from "../../src/project/project"
+import { Project } from "../../src/project"
 import { Database, eq } from "../../src/storage/db"
 import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"

@@ -1,5 +1,5 @@
 import { EOL } from "os"
-import { Project } from "../../../project/project"
+import { Project } from "../../../project"
 import { Log } from "../../../util"
 import { cmd } from "../cmd"
 
