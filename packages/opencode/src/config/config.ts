@@ -203,7 +203,7 @@ export const Info = z
       .optional(),
     lsp: z
       .union([
-        z.literal(true),
+        z.literal(false),
         z.record(
           z.string(),
           z.union([

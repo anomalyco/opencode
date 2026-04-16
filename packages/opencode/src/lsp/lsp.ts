@@ -167,7 +167,7 @@ export const layer = Layer.effect(
 
         const servers: Record<string, LSPServer.Info> = {}
 
-        if (!cfg.lsp) {
+        if (cfg.lsp === false) {
           log.info("all LSPs are disabled")
         } else {
           for (const server of Object.values(LSPServer)) {
