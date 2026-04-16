@@ -2,7 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { Effect, Layer, Context } from "effect"
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 export namespace McpAuth {
   export const Tokens = z.object({

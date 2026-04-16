@@ -25,7 +25,7 @@ export namespace BusEvent {
             properties: def.properties,
           })
           .meta({
-            ref: "Event" + "." + def.type,
+            ref: `Event.${def.type}`,
           })
       })
       .toArray()

@@ -2,13 +2,13 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { ProviderID, ModelID } from "../../provider/schema"
-import { ToolRegistry } from "../../tool/registry"
+import { ToolRegistry } from "../../tool"
 import { Worktree } from "../../worktree"
 import { Instance } from "../../project/instance"
-import { Project } from "../../project/project"
+import { Project } from "../../project"
 import { MCP } from "../../mcp"
 import { Session } from "../../session"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
 import { ConsoleState } from "../../config/console-state"
 import { Account, AccountID, OrgID } from "../../account"
 import { AppRuntime } from "../../effect/app-runtime"
@@ -18,7 +18,6 @@ import { lazy } from "../../util/lazy"
 import { Effect, Option } from "effect"
 import { WorkspaceRoutes } from "./workspace"
 import { Agent } from "@/agent/agent"
-import { HttpApiRoutes } from "./httpapi"
 
 const ConsoleOrgOption = z.object({
   accountID: z.string(),
@@ -40,7 +39,6 @@ const ConsoleSwitchBody = z.object({
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
-    .route("/httpapi", HttpApiRoutes())
     .get(
       "/console",
       describeRoute({
