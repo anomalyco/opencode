@@ -116,7 +116,7 @@ export const layer: Layer.Layer<
             Effect.succeed({
               code: ChildProcessSpawner.ExitCode(1),
               text: "",
-              stderr: String(err),
+              stderr: err instanceof Error ? err.message : String(err),
             }),
           ),
         )

@@ -346,7 +346,7 @@ export const layer = Layer.effect(
 
       return {
         onMessage: (message: string | ArrayBuffer) => {
-          session.process.write(String(message))
+          session.process.write(typeof message === "string" ? message : new TextDecoder().decode(message))
         },
         onClose: () => {
           log.info("client disconnected from session", { id })

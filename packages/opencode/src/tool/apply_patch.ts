@@ -145,7 +145,15 @@ export const ApplyPatchTool = Tool.define(
           case "delete": {
             const contentToDelete = yield* afs
               .readFileString(filePath)
-              .pipe(Effect.catch((error) => Effect.fail(new Error(`apply_patch verification failed: ${error}`))))
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.fail(
+                    new Error(
+                      `apply_patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                    ),
+                  ),
+                ),
+              )
             const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
 
             const deletions = contentToDelete.split("\n").length

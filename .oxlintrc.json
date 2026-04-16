@@ -1,9 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
+  "options": {
+    "typeAware": true
+  },
   "categories": {
     "suspicious": "warn"
   },
   "rules": {
+    "typescript/no-base-to-string": "warn",
     // Effect uses `function*` with Effect.gen/Effect.fnUntraced that don't always yield
     "require-yield": "off",
     // SolidJS uses `let ref: T | undefined` for JSX ref bindings assigned at runtime

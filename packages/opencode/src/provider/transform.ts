@@ -274,7 +274,7 @@ export namespace ProviderTransform {
 
         // Check for empty base64 image data
         if (part.type === "image") {
-          const imageStr = part.image.toString()
+          const imageStr = String(part.image)
           if (imageStr.startsWith("data:")) {
             const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
             if (match && (!match[2] || match[2].length === 0)) {
@@ -286,7 +286,7 @@ export namespace ProviderTransform {
           }
         }
 
-        const mime = part.type === "image" ? part.image.toString().split(";")[0].replace("data:", "") : part.mediaType
+        const mime = part.type === "image" ? String(part.image).split(";")[0].replace("data:", "") : part.mediaType
         const filename = part.type === "file" ? part.filename : undefined
         const modality = mimeToModality(mime)
         if (!modality) return part
