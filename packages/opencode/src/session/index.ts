@@ -401,13 +401,13 @@ export namespace Session {
         const config = yield* Config.Service
         const git = yield* Git.Service
 
-        const resolveTitle = Effect.fn("Session.resolveTitle")(function* (dir: string, isChild: boolean) {
+        const resolveTitle = Effect.fn("Session.resolveTitle")(function* (dir: string, child: boolean) {
           const cfg = yield* config.get()
           if (cfg.autotitle === "branch") {
             const b = yield* git.branch(dir)
             if (b) return b
           }
-          return createDefaultTitle(isChild)
+          return createDefaultTitle(child)
         })
 
         const createNext = Effect.fn("Session.createNext")(function* (input: {
@@ -720,7 +720,12 @@ export namespace Session {
       }),
     )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Bus.layer),
+    Layer.provide(Storage.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+  )
 
   export function* list(input?: {
     directory?: string
