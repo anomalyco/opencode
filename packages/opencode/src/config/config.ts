@@ -93,6 +93,7 @@ export const Info = z
       .describe(
         "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
       ),
+    // User-facing plugin config is stored as Specs; provenance gets attached later while configs are merged.
     plugin: ConfigPlugin.Spec.array().optional(),
     share: z
       .enum(["manual", "auto", "disabled"])
@@ -267,6 +268,8 @@ export const Info = z
   })
 
 export type Info = z.output<typeof Info> & {
+  // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
+  // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
@@ -420,6 +423,8 @@ export const layer = Layer.effect(
         if (data.plugin && isFile) {
           const list = data.plugin
           for (let i = 0; i < list.length; i++) {
+            // Normalize path-like plugin specs while we still know which config file declared them.
+            // This prevents `./plugin.ts` from being reinterpreted relative to some later merge location.
             list[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(list[i], options.path))
           }
         }
@@ -505,20 +510,26 @@ export const layer = Layer.effect(
       const consoleManagedProviders = new Set<string>()
       let activeOrgName: string | undefined
 
-      const scope = Effect.fnUntraced(function* (source: string) {
+      const pluginScopeForSource = Effect.fnUntraced(function* (source: string) {
         if (source.startsWith("http://") || source.startsWith("https://")) return "global"
         if (source === "OPENCODE_CONFIG_CONTENT") return "local"
         if (yield* InstanceRef.use((ctx) => Effect.succeed(Instance.containsPath(source, ctx)))) return "local"
         return "global"
       })
 
-      const track = Effect.fnUntraced(function* (
+      const mergePluginOrigins = Effect.fnUntraced(function* (
         source: string,
+        // mergePluginOrigins receives raw Specs from one config source, before provenance for this merge step
+        // is attached.
         list: ConfigPlugin.Spec[] | undefined,
+        // Scope can be inferred from the source path, but some callers already know whether the config should
+        // behave as global or local and can pass that explicitly.
         kind?: ConfigPlugin.Scope,
       ) {
         if (!list?.length) return
-        const hit = kind ?? (yield* scope(source))
+        const hit = kind ?? (yield* pluginScopeForSource(source))
+        // Merge newly seen plugin origins with previously collected ones, then dedupe by plugin identity while
+        // keeping the winning source/scope metadata for downstream installs, writes, and diagnostics.
         const plugins = ConfigPlugin.deduplicatePluginOrigins([
           ...(result.plugin_origins ?? []),
           ...list.map((spec) => ({ spec, source, scope: hit })),
@@ -529,7 +540,7 @@ export const layer = Layer.effect(
 
       const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
         result = mergeConfigConcatArrays(result, next)
-        return track(source, next.plugin, kind)
+        return mergePluginOrigins(source, next.plugin, kind)
       }
 
       for (const [key, value] of Object.entries(auth)) {
@@ -617,8 +628,10 @@ export const layer = Layer.effect(
         result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
         result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
         result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
+        // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
+        // returns normalized Specs and we only need to attach origin metadata here.
         const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
-        yield* track(dir, list)
+        yield* mergePluginOrigins(dir, list)
       }
 
       if (process.env.OPENCODE_CONFIG_CONTENT) {
