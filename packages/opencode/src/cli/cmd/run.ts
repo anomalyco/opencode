@@ -25,7 +25,7 @@ import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
-import { Locale } from "../../util/locale"
+import { Locale } from "../../util"
 import { AppRuntime } from "@/effect/app-runtime"
 
 type ToolProps<T> = {
