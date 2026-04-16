@@ -101,83 +101,83 @@ const app = (upgrade: UpgradeWebSocket) =>
     }),
   )
 
-export namespace ServerProxy {
-  const log = Log.Default.clone().tag("service", "server-proxy")
+const log = Log.Default.clone().tag("service", "server-proxy")
 
-  export async function http(
-    url: string | URL,
-    extra: HeadersInit | undefined,
-    req: Request,
-    workspaceID: WorkspaceID,
-  ) {
-    if (!Workspace.isSyncing(workspaceID)) {
-      return new Response(`broken sync connection for workspace: ${workspaceID}`, {
-        status: 503,
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-        },
-      })
-    }
-
-    return fetch(
-      new Request(url, {
-        method: req.method,
-        headers: headers(req, extra),
-        body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
-        redirect: "manual",
-        signal: req.signal,
-      }),
-    ).then((res) => {
-      const sync = Fence.parse(res.headers)
-      const next = new Headers(res.headers)
-      next.delete("content-encoding")
-      next.delete("content-length")
-
-      const done = sync ? Fence.wait(workspaceID, sync, req.signal) : Promise.resolve()
-
-      return done.then(async () => {
-        console.log("proxy http response", {
-          method: req.method,
-          request: req.url,
-          url: String(url),
-          status: res.status,
-          statusText: res.statusText,
-        })
-        return new Response(res.body, {
-          status: res.status,
-          statusText: res.statusText,
-          headers: next,
-        })
-      })
+export async function http(
+  url: string | URL,
+  extra: HeadersInit | undefined,
+  req: Request,
+  workspaceID: WorkspaceID,
+) {
+  if (!Workspace.isSyncing(workspaceID)) {
+    return new Response(`broken sync connection for workspace: ${workspaceID}`, {
+      status: 503,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+      },
     })
   }
 
-  export function websocket(
-    upgrade: UpgradeWebSocket,
-    target: string | URL,
-    extra: HeadersInit | undefined,
-    req: Request,
-    env: unknown,
-  ) {
-    const proxy = new URL(req.url)
-    proxy.pathname = "/__workspace_ws"
-    proxy.search = ""
-    const next = new Headers(req.headers)
-    next.set("x-opencode-proxy-url", socket(target))
-    for (const [key, value] of new Headers(extra).entries()) {
-      next.set(key, value)
-    }
-    log.info("proxy websocket", {
-      request: req.url,
-      target: String(target),
-    })
-    return app(upgrade).fetch(
-      new Request(proxy, {
+  return fetch(
+    new Request(url, {
+      method: req.method,
+      headers: headers(req, extra),
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
+      redirect: "manual",
+      signal: req.signal,
+    }),
+  ).then((res) => {
+    const sync = Fence.parse(res.headers)
+    const next = new Headers(res.headers)
+    next.delete("content-encoding")
+    next.delete("content-length")
+
+    const done = sync ? Fence.wait(workspaceID, sync, req.signal) : Promise.resolve()
+
+    return done.then(async () => {
+      console.log("proxy http response", {
         method: req.method,
+        request: req.url,
+        url: String(url),
+        status: res.status,
+        statusText: res.statusText,
+      })
+      return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
         headers: next,
-        signal: req.signal,
-      }),
-      env as never,
-    )
-  }
+      })
+    })
+  })
 }
+
+export function websocket(
+  upgrade: UpgradeWebSocket,
+  target: string | URL,
+  extra: HeadersInit | undefined,
+  req: Request,
+  env: unknown,
+) {
+  const proxy = new URL(req.url)
+  proxy.pathname = "/__workspace_ws"
+  proxy.search = ""
+  const next = new Headers(req.headers)
+  next.set("x-opencode-proxy-url", socket(target))
+  for (const [key, value] of new Headers(extra).entries()) {
+    next.set(key, value)
+  }
+  log.info("proxy websocket", {
+    request: req.url,
+    target: String(target),
+  })
+  return app(upgrade).fetch(
+    new Request(proxy, {
+      method: req.method,
+      headers: next,
+      signal: req.signal,
+    }),
+    env as never,
+  )
+}
+
+export * as ServerProxy from "./proxy"
