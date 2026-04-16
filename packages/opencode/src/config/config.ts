@@ -20,8 +20,7 @@ import {
 } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
 import * as LSPServer from "../lsp/server"
-import { Installation } from "@/installation"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationLocal, InstallationVersion } from "@/installation/version"
 import * as ConfigMarkdown from "./markdown"
 import { existsSync } from "fs"
 import { Bus } from "@/bus"
@@ -38,8 +37,8 @@ import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
-import { Npm } from "../npm"
 import { InstanceRef } from "@/effect/instance-ref"
+import { Npm } from "@opencode-ai/shared/npm"
 
 const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
 const PluginOptions = z.record(z.string(), z.unknown())
@@ -139,10 +138,6 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
 
 export type InstallInput = {
   waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
-}
-
-type Package = {
-  dependencies?: Record<string, string>
 }
 
 function rel(item: string, patterns: string[]) {
@@ -1059,7 +1054,6 @@ export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
-  readonly installDependencies: (dir: string, input?: InstallInput) => Effect.Effect<void, AppFileSystem.Error>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<Info>
   readonly invalidate: (wait?: boolean) => Effect.Effect<void>
@@ -1146,18 +1140,14 @@ export const ConfigDirectoryTypoError = NamedError.create(
   }),
 )
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  AppFileSystem.Service | Auth.Service | Account.Service | Env.Service | EffectFlock.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const authSvc = yield* Auth.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
-    const flock = yield* EffectFlock.Service
+    const npmSvc = yield* Npm.Service
 
     const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
       return yield* fs.readFileString(filepath).pipe(
@@ -1263,53 +1253,18 @@ export const layer: Layer.Layer<
       return yield* cachedGlobal
     })
 
-    const install = Effect.fn("Config.install")(function* (dir: string) {
-      const pkg = path.join(dir, "package.json")
+    const setupConfigDir = Effect.fnUntraced(function* (dir: string) {
       const gitignore = path.join(dir, ".gitignore")
-      const plugin = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
-      const target = Installation.isLocal() ? "*" : InstallationVersion
-      const json = yield* fs.readJson(pkg).pipe(
-        Effect.catch(() => Effect.succeed({} satisfies Package)),
-        Effect.map((x): Package => (isRecord(x) ? (x as Package) : {})),
-      )
-      const hasDep = json.dependencies?.["@opencode-ai/plugin"] === target
       const hasIgnore = yield* fs.existsSafe(gitignore)
-      const hasPkg = yield* fs.existsSafe(plugin)
-
-      if (!hasDep) {
-        yield* fs.writeJson(pkg, {
-          ...json,
-          dependencies: {
-            ...json.dependencies,
-            "@opencode-ai/plugin": target,
-          },
-        })
-      }
-
       if (!hasIgnore) {
         yield* fs.writeFileString(
           gitignore,
           ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
         )
       }
-
-      if (hasDep && hasIgnore && hasPkg) return
-
-      yield* Effect.promise(() => Npm.install(dir))
-    })
-
-    const installDependencies = Effect.fn("Config.installDependencies")(function* (dir: string, _input?: InstallInput) {
-      if (
-        !(yield* fs.access(dir, { writable: true }).pipe(
-          Effect.as(true),
-          Effect.orElseSucceed(() => false),
-        ))
-      )
-        return
-
-      const key = process.platform === "win32" ? "config-install:win32" : `config-install:${AppFileSystem.resolve(dir)}`
-
-      yield* flock.withLock(install(dir), key).pipe(Effect.orDie)
+      yield* npmSvc.install(dir, {
+        add: ["@opencode-ai/plugin" + (InstallationLocal ? "" : "@" + InstallationVersion)],
+      })
     })
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(function* (ctx: InstanceContext) {
@@ -1404,7 +1359,7 @@ export const layer: Layer.Layer<
           }
         }
 
-        const dep = yield* installDependencies(dir).pipe(
+        const dep = yield* setupConfigDir(dir).pipe(
           Effect.exit,
           Effect.tap((exit) =>
             Exit.isFailure(exit)
@@ -1611,7 +1566,6 @@ export const layer: Layer.Layer<
       get,
       getGlobal,
       getConsoleState,
-      installDependencies,
       update,
       updateGlobal,
       invalidate,
@@ -1627,4 +1581,5 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Env.defaultLayer),
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Account.defaultLayer),
+  Layer.provide(Npm.defaultLayer),
 )
