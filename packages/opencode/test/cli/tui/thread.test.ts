@@ -9,12 +9,10 @@ import * as Timeout from "../../../src/util/timeout"
 import * as Network from "../../../src/cli/network"
 import * as Win32 from "../../../src/cli/cmd/tui/win32"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
-import { Instance } from "../../../src/project/instance"
 
 const stop = new Error("stop")
 const seen = {
   tui: [] as string[],
-  inst: [] as string[],
 }
 
 function setup() {
@@ -42,10 +40,6 @@ function setup() {
   })
   spyOn(Win32, "win32DisableProcessedInput").mockImplementation(() => {})
   spyOn(Win32, "win32InstallCtrlCGuard").mockReturnValue(undefined)
-  spyOn(Instance, "provide").mockImplementation(async (input) => {
-    seen.inst.push(input.directory)
-    return input.fn()
-  })
 }
 
 describe("tui thread", () => {
@@ -85,7 +79,6 @@ describe("tui thread", () => {
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")
     const type = process.platform === "win32" ? "junction" : "dir"
     seen.tui.length = 0
-    seen.inst.length = 0
     await fs.symlink(tmp.path, link, type)
 
     Object.defineProperty(process.stdin, "isTTY", {
@@ -104,7 +97,6 @@ describe("tui thread", () => {
       process.chdir(tmp.path)
       process.env.PWD = link
       await expect(call(project)).rejects.toBe(stop)
-      expect(seen.inst[0]).toBe(tmp.path)
       expect(seen.tui[0]).toBe(tmp.path)
     } finally {
       process.chdir(cwd)

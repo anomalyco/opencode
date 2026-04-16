@@ -1046,7 +1046,7 @@ export function Prompt(props: PromptProps) {
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
-                    const mime = Filesystem.mimeType(filepath)
+                    const mime = await Filesystem.mimeType(filepath)
                     const filename = path.basename(filepath)
                     // Handle SVG as raw text content, not as base64 image
                     if (mime === "image/svg+xml") {

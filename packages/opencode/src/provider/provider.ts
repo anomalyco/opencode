@@ -25,37 +25,6 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 
-// Direct imports for bundled providers
-import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
-import { createAnthropic } from "@ai-sdk/anthropic"
-import { createAzure } from "@ai-sdk/azure"
-import { createGoogleGenerativeAI } from "@ai-sdk/google"
-import { createVertex } from "@ai-sdk/google-vertex"
-import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
-import { createOpenAI } from "@ai-sdk/openai"
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
-import { createXai } from "@ai-sdk/xai"
-import { createMistral } from "@ai-sdk/mistral"
-import { createGroq } from "@ai-sdk/groq"
-import { createDeepInfra } from "@ai-sdk/deepinfra"
-import { createCerebras } from "@ai-sdk/cerebras"
-import { createCohere } from "@ai-sdk/cohere"
-import { createGateway } from "@ai-sdk/gateway"
-import { createTogetherAI } from "@ai-sdk/togetherai"
-import { createPerplexity } from "@ai-sdk/perplexity"
-import { createVercel } from "@ai-sdk/vercel"
-import { createVenice } from "venice-ai-sdk-provider"
-import { createAlibaba } from "@ai-sdk/alibaba"
-import {
-  createGitLab,
-  VERSION as GITLAB_PROVIDER_VERSION,
-  isWorkflowModel,
-  discoverWorkflowModels,
-} from "gitlab-ai-provider"
-import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
-import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
@@ -120,30 +89,31 @@ type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
 }
 
-const BUNDLED_PROVIDERS: Record<string, (options: any) => BundledSDK> = {
-  "@ai-sdk/amazon-bedrock": createAmazonBedrock,
-  "@ai-sdk/anthropic": createAnthropic,
-  "@ai-sdk/azure": createAzure,
-  "@ai-sdk/google": createGoogleGenerativeAI,
-  "@ai-sdk/google-vertex": createVertex,
-  "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
-  "@ai-sdk/openai": createOpenAI,
-  "@ai-sdk/openai-compatible": createOpenAICompatible,
-  "@openrouter/ai-sdk-provider": createOpenRouter,
-  "@ai-sdk/xai": createXai,
-  "@ai-sdk/mistral": createMistral,
-  "@ai-sdk/groq": createGroq,
-  "@ai-sdk/deepinfra": createDeepInfra,
-  "@ai-sdk/cerebras": createCerebras,
-  "@ai-sdk/cohere": createCohere,
-  "@ai-sdk/gateway": createGateway,
-  "@ai-sdk/togetherai": createTogetherAI,
-  "@ai-sdk/perplexity": createPerplexity,
-  "@ai-sdk/vercel": createVercel,
-  "@ai-sdk/alibaba": createAlibaba,
-  "gitlab-ai-provider": createGitLab,
-  "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
-  "venice-ai-sdk-provider": createVenice,
+const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
+  "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
+  "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
+  "@ai-sdk/azure": () => import("@ai-sdk/azure").then((m) => m.createAzure),
+  "@ai-sdk/google": () => import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI),
+  "@ai-sdk/google-vertex": () => import("@ai-sdk/google-vertex").then((m) => m.createVertex),
+  "@ai-sdk/google-vertex/anthropic": () =>
+    import("@ai-sdk/google-vertex/anthropic").then((m) => m.createVertexAnthropic),
+  "@ai-sdk/openai": () => import("@ai-sdk/openai").then((m) => m.createOpenAI),
+  "@ai-sdk/openai-compatible": () => import("@ai-sdk/openai-compatible").then((m) => m.createOpenAICompatible),
+  "@openrouter/ai-sdk-provider": () => import("@openrouter/ai-sdk-provider").then((m) => m.createOpenRouter),
+  "@ai-sdk/xai": () => import("@ai-sdk/xai").then((m) => m.createXai),
+  "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((m) => m.createMistral),
+  "@ai-sdk/groq": () => import("@ai-sdk/groq").then((m) => m.createGroq),
+  "@ai-sdk/deepinfra": () => import("@ai-sdk/deepinfra").then((m) => m.createDeepInfra),
+  "@ai-sdk/cerebras": () => import("@ai-sdk/cerebras").then((m) => m.createCerebras),
+  "@ai-sdk/cohere": () => import("@ai-sdk/cohere").then((m) => m.createCohere),
+  "@ai-sdk/gateway": () => import("@ai-sdk/gateway").then((m) => m.createGateway),
+  "@ai-sdk/togetherai": () => import("@ai-sdk/togetherai").then((m) => m.createTogetherAI),
+  "@ai-sdk/perplexity": () => import("@ai-sdk/perplexity").then((m) => m.createPerplexity),
+  "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((m) => m.createVercel),
+  "@ai-sdk/alibaba": () => import("@ai-sdk/alibaba").then((m) => m.createAlibaba),
+  "gitlab-ai-provider": () => import("gitlab-ai-provider").then((m) => m.createGitLab),
+  "@ai-sdk/github-copilot": () => import("./sdk/copilot").then((m) => m.createOpenaiCompatible),
+  "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -308,7 +278,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
         return { autoload: false }
 
-      const providerOptions: AmazonBedrockProviderSettings = {
+      const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
+
+      const providerOptions: Record<string, any> = {
         region: defaultRegion,
       }
 
@@ -466,6 +438,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           project,
           location,
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const { GoogleAuth } = await import("google-auth-library")
             const auth = new GoogleAuth()
             const client = await auth.getApplicationDefault()
             const token = await client.credential.getAccessToken()
@@ -535,6 +508,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }),
     gitlab: Effect.fnUntraced(function* (input: Info) {
+      const {
+        VERSION: GITLAB_PROVIDER_VERSION,
+        isWorkflowModel,
+        discoverWorkflowModels,
+      } = yield* Effect.promise(() => import("gitlab-ai-provider"))
+
       const instanceUrl = (yield* dep.get("GITLAB_INSTANCE_URL")) || "https://gitlab.com"
 
       const auth = yield* dep.auth(input.id)
@@ -567,7 +546,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           aiGatewayHeaders,
           featureFlags,
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (modelID.startsWith("duo-workflow-")) {
             const workflowRef = options?.workflowRef as string | undefined
             // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
@@ -1455,13 +1434,14 @@ const layer: Layer.Layer<
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
         }
 
-        const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
-        if (bundledFn) {
+        const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
+        if (bundledLoader) {
           log.info("using bundled provider", {
             providerID: model.providerID,
             pkg: model.api.npm,
           })
-          const loaded = bundledFn({
+          const factory = await bundledLoader()
+          const loaded = factory({
             name: model.providerID,
             ...options,
           })
