@@ -1076,10 +1076,14 @@ export default function Page() {
     void loadVcs(mode)
   })
 
+  const DEFAULT_TITLE = "OpenCode"
+  const THINKING_TITLE = DEFAULT_TITLE + " 🔵"
+
   createEffect(
     on(
       () => sync.data.session_status[params.id ?? ""]?.type,
       (next, prev) => {
+        document.title = next === "busy" ? THINKING_TITLE : DEFAULT_TITLE
         const mode = vcsMode()
         if (!mode) return
         if (!wantsReview()) return
@@ -1089,19 +1093,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  const DEFAULT_TITLE = "OpenCode"
-  const THINKING_TITLE = DEFAULT_TITLE + "🔵 Thinking..."
-
-  createEffect(() => {
-    const id = params.id
-    if (!id) {
-      document.title = DEFAULT_TITLE
-      return
-    }
-    const status = sync.data.session_status[id]?.type ?? "idle"
-    document.title = status === "idle" ? DEFAULT_TITLE : THINKING_TITLE
-  })
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
