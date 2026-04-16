@@ -19,7 +19,7 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
-import { LSPServer } from "../lsp/server"
+import { LSPServer } from "../lsp"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "."
 import { existsSync } from "fs"
