@@ -536,7 +536,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const { task: taskTool } = yield* registry.named()
       const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
       const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
-        id: MessageID.ascending(),
+        id: MessageID.ascendingAfter(lastUser.id),
         role: "assistant",
         parentID: lastUser.id,
         sessionID,
@@ -751,7 +751,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       yield* sessions.updatePart(userPart)
 
       const msg: MessageV2.Assistant = {
-        id: MessageID.ascending(),
+        id: MessageID.ascendingAfter(userMsg.id),
         sessionID: input.sessionID,
         parentID: userMsg.id,
         mode: input.agent,
@@ -1403,7 +1403,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           msgs = yield* insertReminders({ messages: msgs, agent, session })
 
           const msg: MessageV2.Assistant = {
-            id: MessageID.ascending(),
+            id: MessageID.ascendingAfter(lastUser.id),
             parentID: lastUser.id,
             role: "assistant",
             mode: agent.name,
