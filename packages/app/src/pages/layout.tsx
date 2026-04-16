@@ -87,7 +87,9 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
-export default function Layout(props: ParentProps & { isMinimal?: boolean }) {
+const MINIMAL_MODE: boolean = true
+
+export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
@@ -2391,7 +2393,7 @@ export default function Layout(props: ParentProps & { isMinimal?: boolean }) {
     />
   )
 
-  if (props.isMinimal) {
+  if (MINIMAL_MODE) {
     return (
       <div class="h-dvh w-screen overflow-hidden bg-background-base">
         <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>

@@ -95,7 +95,7 @@ function AppShellProviders(props: ParentProps) {
             <ModelsProvider>
               <CommandProvider>
                 <HighlightsProvider>
-                  <Layout isMinimal>{props.children}</Layout>
+                  <Layout>{props.children}</Layout>
                 </HighlightsProvider>
               </CommandProvider>
             </ModelsProvider>
