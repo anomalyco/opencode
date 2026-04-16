@@ -986,6 +986,16 @@ export function Session() {
     },
   ])
 
+  const firstUserMessage = createMemo(() => {
+    const msgs = messages()
+    const first = msgs.find((x) => x.role === "user")
+    if (!first) return undefined
+    const parts = sync.data.part[first.id] ?? []
+    const textPart = parts.find((x) => x.type === "text" && !x.synthetic)
+    if (!textPart || textPart.type !== "text") return undefined
+    return textPart.text
+  })
+
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
 
@@ -1057,6 +1067,11 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
+            <Show when={firstUserMessage()}>
+              <box flexShrink={0} paddingLeft={3} paddingTop={1}>
+                <text fg={theme.textMuted}>{Locale.truncate(firstUserMessage()!, 120)}</text>
+              </box>
+            </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
               viewportOptions={{
