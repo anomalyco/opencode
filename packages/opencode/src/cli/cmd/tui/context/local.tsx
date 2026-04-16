@@ -1,4 +1,5 @@
 import { createStore } from "solid-js/store"
+import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -6,13 +7,19 @@ import { uniqueBy } from "remeda"
 import path from "path"
 import { Global } from "@/global"
 import { iife } from "@/util/iife"
-import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
-import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
+
+export function parseModel(model: string) {
+  const [providerID, ...rest] = model.split("/")
+  return {
+    providerID: providerID,
+    modelID: rest.join("/"),
+  }
+}
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -151,7 +158,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const args = useArgs()
       const fallbackModel = createMemo(() => {
         if (args.model) {
-          const { providerID, modelID } = Provider.parseModel(args.model)
+          const { providerID, modelID } = parseModel(args.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
@@ -161,7 +168,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
 
         if (sync.data.config.model) {
-          const { providerID, modelID } = Provider.parseModel(sync.data.config.model)
+          const { providerID, modelID } = parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,

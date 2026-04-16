@@ -9,13 +9,13 @@ import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Npm } from "@opencode-ai/shared/npm"
-import { Installation } from "@/installation"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
+import { InstallationLocal, InstallationVersion } from "@/installation/version"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -145,7 +145,7 @@ export namespace TuiConfig {
         (dir) =>
           npm
             .install(dir, {
-              add: ["@opencode-ai/plugin" + (Installation.isLocal() ? "" : "@" + Installation.VERSION)],
+              add: ["@opencode-ai/plugin" + (InstallationLocal ? "" : "@" + InstallationVersion)],
             })
             .pipe(Effect.forkScoped),
         {

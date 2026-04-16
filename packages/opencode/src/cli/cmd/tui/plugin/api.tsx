@@ -18,7 +18,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { Installation } from "@/installation"
+import { InstallationVersion } from "@/installation/version"
 
 type RouteEntry = {
   key: symbol
@@ -189,7 +189,7 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
 function appApi(): TuiPluginApi["app"] {
   return {
     get version() {
-      return Installation.VERSION
+      return InstallationVersion
     },
   }
 }
