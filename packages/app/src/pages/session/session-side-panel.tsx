@@ -24,11 +24,6 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import {
-  SessionPreviewTabContent,
-  SessionPreviewTabTrigger,
-  createSessionPreview,
-} from "@/pages/session/session-preview"
 
 export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
@@ -74,8 +69,6 @@ export function SessionSidePanel(props: {
     if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
     return "session.review.noChanges"
   })
-
-  const { previewSrc } = createSessionPreview()
 
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
@@ -257,7 +250,6 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
-                      <SessionPreviewTabTrigger src={previewSrc()} />
                       <Show when={contextOpen()}>
                         <Tabs.Trigger
                           value="context"
@@ -330,8 +322,6 @@ export function SessionSidePanel(props: {
                       </div>
                     </Show>
                   </Tabs.Content>
-
-                  <SessionPreviewTabContent src={previewSrc()} active={activeTab() === "preview"} />
 
                   <Show when={contextOpen()}>
                     <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
