@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Global } from "../../src/global"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
 const log = Global.Path.log

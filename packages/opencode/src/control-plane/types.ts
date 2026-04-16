@@ -5,8 +5,8 @@ import { WorkspaceID } from "./schema"
 export const WorkspaceInfo = z.object({
   id: WorkspaceID.zod,
   type: z.string(),
+  name: z.string(),
   branch: z.string().nullable(),
-  name: z.string().nullable(),
   directory: z.string().nullable(),
   extra: z.unknown().nullable(),
   projectID: ProjectID.zod,
@@ -24,9 +24,11 @@ export type Target =
       headers?: HeadersInit
     }
 
-export type Adaptor = {
-  configure(input: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(config: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
-  remove(config: WorkspaceInfo): Promise<void>
-  target(config: WorkspaceInfo): Target | Promise<Target>
+export type WorkspaceAdaptor = {
+  name: string
+  description: string
+  configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
+  create(info: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
+  remove(info: WorkspaceInfo): Promise<void>
+  target(info: WorkspaceInfo): Target | Promise<Target>
 }

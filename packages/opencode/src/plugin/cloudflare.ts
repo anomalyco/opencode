@@ -1,18 +1,16 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 
 export async function CloudflareWorkersAuthPlugin(_input: PluginInput): Promise<Hooks> {
-  const prompts = [
-    ...(!process.env.CLOUDFLARE_ACCOUNT_ID
-      ? [
-          {
-            type: "text" as const,
-            key: "accountId",
-            message: "Enter your Cloudflare Account ID",
-            placeholder: "e.g. 1234567890abcdef1234567890abcdef",
-          },
-        ]
-      : []),
-  ]
+  const prompts = !process.env.CLOUDFLARE_ACCOUNT_ID
+    ? [
+        {
+          type: "text" as const,
+          key: "accountId",
+          message: "Enter your Cloudflare Account ID",
+          placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+        },
+      ]
+    : []
 
   return {
     auth: {

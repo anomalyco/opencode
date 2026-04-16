@@ -6,7 +6,7 @@
 import z from "zod"
 import * as path from "path"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
@@ -15,11 +15,10 @@ import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { Format } from "../format"
 import { FileTime } from "../file/time"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "../filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -169,7 +168,7 @@ export const EditTool = Tool.define(
           let output = "Edit applied successfully."
           yield* lsp.touchFile(filePath, true)
           const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = Filesystem.normalizePath(filePath)
+          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
 
@@ -417,7 +416,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
             if (match) {
               yield match[0]
             }
-          } catch (e) {
+          } catch {
             // Invalid regex pattern, skip
           }
         }
