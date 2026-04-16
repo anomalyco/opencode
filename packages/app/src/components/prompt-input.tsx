@@ -56,6 +56,7 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQuery } from "@tanstack/solid-query"
 import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
+import { EmojiPicker } from "@/components/emoji-picker"
 
 interface PromptInputProps {
   class?: string
@@ -1479,6 +1480,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant="ghost"
                       />
                     </TooltipKeybind>
+                  </div>
+                  <div data-component="prompt-emoji-picker">
+                    <EmojiPicker
+                      style={control()}
+                      onSelect={(emoji) => {
+                        editorRef.focus()
+                        const selection = window.getSelection()
+                        if (selection && selection.rangeCount > 0) {
+                          const range = selection.getRangeAt(0)
+                          range.deleteContents()
+                          range.insertNode(document.createTextNode(emoji))
+                          range.collapse(false)
+                        } else {
+                          editorRef.textContent = (editorRef.textContent || "") + emoji
+                        }
+                        const inputEvent = new InputEvent("input", { bubbles: true, data: emoji })
+                        editorRef.dispatchEvent(inputEvent)
+                        reconcile(prompt.current().filter((part) => part.type !== "image"))
+                        restoreFocus()
+                      }}
+                    />
                   </div>
                 </Show>
                 <Show when={!providersLoading()}>
