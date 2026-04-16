@@ -474,6 +474,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (match.found) return store.session[match.index]
           return undefined
         },
+        async refresh() {
+          const start = Date.now() - 30 * 24 * 60 * 60 * 1000
+          const list = await sdk.client.session
+            .list({ start })
+            .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+          setStore("session", reconcile(list))
+        },
         status(sessionID: string) {
           const session = result.session.get(sessionID)
           if (!session) return "idle"
@@ -486,12 +493,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const workspace = project.workspace.current()
           const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID, workspace }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100, workspace }),
-            sdk.client.session.todo({ sessionID, workspace }),
-            sdk.client.session.diff({ sessionID, workspace }),
+            sdk.client.session.get({ sessionID }, { throwOnError: true }),
+            sdk.client.session.messages({ sessionID, limit: 100 }),
+            sdk.client.session.todo({ sessionID }),
+            sdk.client.session.diff({ sessionID }),
           ])
           setStore(
             produce((draft) => {
