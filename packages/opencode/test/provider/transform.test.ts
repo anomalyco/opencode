@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ProviderTransform } from "../../src/provider/transform"
+import { ProviderTransform } from "../../src/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 
 describe("ProviderTransform.options - setCacheKey", () => {

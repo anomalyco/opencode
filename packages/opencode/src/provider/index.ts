@@ -1,1 +1,5 @@
 export * as Provider from "./provider"
+export * as ProviderAuth from "./auth"
+export * as ProviderError from "./error"
+export * as ModelsDev from "./models"
+export * as ProviderTransform from "./transform"
