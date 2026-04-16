@@ -45,10 +45,10 @@ import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
-import { EffectBridge } from "@/effect/bridge"
+import { EffectBridge } from "@/effect"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false

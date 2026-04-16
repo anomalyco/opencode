@@ -1,7 +1,7 @@
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { SessionID, MessageID } from "@/session/schema"
 import { zod } from "@/util/effect-zod"
 import { Log } from "@/util/log"

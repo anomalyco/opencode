@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { Instance } from "@/project/instance"
 import type { Proc } from "#pty"
 import z from "zod"
@@ -10,7 +10,7 @@ import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context } from "effect"
-import { EffectBridge } from "@/effect/bridge"
+import { EffectBridge } from "@/effect"
 
 const log = Log.create({ service: "pty" })
 

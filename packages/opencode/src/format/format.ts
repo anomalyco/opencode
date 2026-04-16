@@ -1,7 +1,7 @@
 import { Effect, Layer, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"

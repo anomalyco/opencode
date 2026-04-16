@@ -3,7 +3,7 @@ import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "eff
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session"
@@ -142,7 +142,7 @@ export namespace ShareNext {
         })
       }
 
-      const state: InstanceState<State> = yield* InstanceState.make<State>(
+      const state: InstanceState.InstanceState<State> = yield* InstanceState.make<State>(
         Effect.fn("ShareNext.state")(function* (_ctx) {
           const cache: State = { queue: new Map(), scope: yield* Scope.make() }
 

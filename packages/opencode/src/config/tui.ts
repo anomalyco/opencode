@@ -10,7 +10,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 

@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 
 type State = Record<string, string | undefined>
 

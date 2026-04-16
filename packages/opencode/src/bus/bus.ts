@@ -1,10 +1,10 @@
 import z from "zod"
 import { Effect, Exit, Layer, PubSub, Scope, Context, Stream } from "effect"
-import { EffectBridge } from "@/effect/bridge"
+import { EffectBridge } from "@/effect"
 import { Log } from "../util/log"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "bus" })

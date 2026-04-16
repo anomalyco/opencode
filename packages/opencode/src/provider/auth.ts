@@ -1,7 +1,7 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Auth } from "@/auth"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import { Plugin } from "../plugin"

@@ -12,7 +12,7 @@ import { Flag } from "@/flag/flag"
 import { Process } from "../util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context } from "effect"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })

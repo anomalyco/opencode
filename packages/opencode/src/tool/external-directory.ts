@@ -1,7 +1,7 @@
 import path from "path"
 import { Effect } from "effect"
 import { EffectLogger } from "@/effect/logger"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"

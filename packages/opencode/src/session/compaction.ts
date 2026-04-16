@@ -14,7 +14,7 @@ import { Config } from "@/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context } from "effect"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {

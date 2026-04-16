@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Context, Effect, Layer, Logger } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
-import { EffectBridge } from "../../src/effect/bridge"
+import { EffectBridge } from "../../src/effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { EffectLogger } from "../../src/effect/logger"
 import { makeRuntime } from "../../src/effect/run-service"

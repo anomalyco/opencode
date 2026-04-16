@@ -19,7 +19,7 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 
 const log = Log.create({ service: "worktree" })
 

@@ -12,7 +12,7 @@ import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "../flag/flag"
 import { CHANNEL } from "../installation/meta"
-import { InstanceState } from "@/effect/instance-state"
+import { InstanceState } from "@/effect"
 import { iife } from "@/util/iife"
 import { init } from "#db"
 
