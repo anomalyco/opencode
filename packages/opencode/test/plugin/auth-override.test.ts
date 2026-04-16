@@ -63,7 +63,7 @@ describe("plugin.auth-override", () => {
   }, 30000) // Increased timeout for plugin installation
 })
 
-const file = path.join(import.meta.dir, "../../src/plugin/index.ts")
+const file = path.join(import.meta.dir, "../../src/plugin/plugin.ts")
 
 describe("plugin.config-hook-error-isolation", () => {
   test("config hooks are individually error-isolated in the layer factory", async () => {
