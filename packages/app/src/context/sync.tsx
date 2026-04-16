@@ -295,9 +295,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       if (meta.loading[key]) return
 
       setMeta("loading", key, true)
-      console.debug(
-        `[loadMessages] start: sessionID=${input.sessionID} mode=${input.mode ?? "replace"} limit=${input.limit} before=${input.before ?? "none"} existingLength=${current()[0].message[input.sessionID]?.length ?? 0} metaShow=${meta.show[key] ?? "none"} metaCursor=${meta.cursor[key] ?? "none"} metaComplete=${meta.complete[key] ?? false}`,
-      )
       await fetchMessages(input)
         .then((next) => {
           if (!tracked(input.directory, input.sessionID)) return
@@ -320,9 +317,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               complete: next.complete,
             })
           })
-          console.debug(
-            `[loadMessages] done: sessionID=${input.sessionID} mode=${input.mode ?? "replace"} pageLength=${next.session.length} mergedLength=${message.length} nextCursor=${next.cursor ?? "none"} nextComplete=${next.complete}`,
-          )
         })
         .finally(() => {
           setMeta(
@@ -427,13 +421,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const cached = store.message[sessionID] !== undefined && meta.complete[key] !== undefined
             const currentLength = store.message[sessionID]?.length ?? 0
             const currentShow = view(directory, sessionID)
-            const currentCursor = meta.cursor[key]
-            const currentComplete = meta.complete[key]
-            console.debug(
-              `[syncSession] start: sessionID=${sessionID} cached=${cached} hasSession=${hasSession} force=${!!opts?.force} length=${currentLength} show=${currentShow} cursor=${currentCursor ?? "none"} complete=${currentComplete ?? false} seededCount=${seeded?.count ?? "none"} seededCursor=${seeded?.cursor ?? "none"} seededComplete=${seeded?.complete ?? false}`,
-            )
             if (cached && hasSession && !opts?.force) {
-              console.debug(`[syncSession] skip fetch: sessionID=${sessionID} using cached data length=${currentLength}`)
               return
             }
 
@@ -470,10 +458,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   })
 
             await Promise.all([sessionReq, messagesReq])
-            const nextLength = current()[0].message[sessionID]?.length ?? 0
-            console.debug(
-              `[syncSession] done: sessionID=${sessionID} force=${!!opts?.force} requestedLimit=${limit} nextLength=${nextLength} nextShow=${view(directory, sessionID)} nextCursor=${meta.cursor[key] ?? "none"} nextComplete=${meta.complete[key] ?? false}`,
-            )
           })
         },
         async diff(sessionID: string, opts?: { force?: boolean }) {
@@ -558,9 +542,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const before = meta.cursor[key]
             if (!before) return
 
-            console.debug(
-              `[historyLoadMore] start: sessionID=${sessionID} step=${step} before=${before} existingLength=${cached}`,
-            )
             await loadMessages({
               directory,
               client,
@@ -571,9 +552,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               mode: "prepend",
             })
             setMeta("show", key, reveal({ cached: current()[0].message[sessionID]?.length ?? 0, show, step, page: initialMessagePageSize }))
-            console.debug(
-              `[historyLoadMore] done: sessionID=${sessionID} nextLength=${current()[0].message[sessionID]?.length ?? 0} nextShow=${view(directory, sessionID)} nextCursor=${meta.cursor[key] ?? "none"} nextComplete=${meta.complete[key] ?? false}`,
-            )
           },
         },
         evict(sessionID: string, directory = sdk.directory) {
