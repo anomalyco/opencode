@@ -723,10 +723,10 @@ describe("session.message-v2.toModelMessage", () => {
     const assistantID = "m-assistant-reasoning"
     const adaptiveModel: Provider.Model = {
       ...model,
-      id: ModelID.make("anthropic/claude-sonnet-4-6"),
+      id: ModelID.make("anthropic/claude-opus-4-7"),
       providerID: ProviderID.make("anthropic"),
       api: {
-        id: "claude-sonnet-4-6-20260301",
+        id: "claude-opus-4-7-20260401",
         url: "https://api.anthropic.com",
         npm: "@ai-sdk/anthropic",
       },

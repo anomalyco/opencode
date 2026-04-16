@@ -51,9 +51,7 @@ function normalizeMessages(
   _options: Record<string, unknown>,
 ): ModelMessage[] {
   const modelID = `${model.id} ${model.api.id}`.toLowerCase()
-  const preserveAdaptiveAnthropicReasoning = ["sonnet-4-6", "sonnet-4.6", "opus-4-6", "opus-4.6"].some(
-    (variant) => modelID.includes(variant),
-  )
+  const preserveAdaptiveAnthropicReasoning = !!anthropicAdaptiveEfforts(modelID)
 
   // Many providers (Anthropic, Bedrock, and proxies like openai-compatible
   // forwarding to Bedrock) reject messages with empty text content blocks.
@@ -409,10 +407,12 @@ const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
+  const normalized = apiId.toLowerCase()
+
+  if (["opus-4-7", "opus-4.7"].some((v) => normalized.includes(v))) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
-  if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
+  if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => normalized.includes(v))) {
     return ["low", "medium", "high", "max"]
   }
   return null

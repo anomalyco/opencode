@@ -1233,10 +1233,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   test("preserves whitespace text separators in assistant reasoning messages", () => {
     const adaptiveAnthropicModel = {
       ...anthropicModel,
-      id: "anthropic/claude-sonnet-4-6",
+      id: "anthropic/claude-opus-4-7",
       api: {
         ...anthropicModel.api,
-        id: "claude-sonnet-4-6-20260301",
+        id: "claude-opus-4-7-20260401",
       },
       capabilities: {
         ...anthropicModel.capabilities,
