@@ -751,7 +751,10 @@ export const layer = Layer.effect(
         auth,
       )
 
-      const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), { authProvider })
+      const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
+        authProvider,
+        requestInit: mcpConfig.headers ? { headers: mcpConfig.headers } : undefined,
+      })
 
       return yield* Effect.tryPromise({
         try: () => {

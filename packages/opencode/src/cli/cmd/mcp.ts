@@ -692,6 +692,7 @@ export const McpDebugCommand = cmd({
             headers: {
               "Content-Type": "application/json",
               Accept: "application/json, text/event-stream",
+              ...serverConfig.headers,
             },
             body: JSON.stringify({
               jsonrpc: "2.0",
@@ -743,6 +744,7 @@ export const McpDebugCommand = cmd({
             // Try creating transport with auth provider to trigger discovery
             const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
               authProvider,
+              requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
             })
 
             try {
