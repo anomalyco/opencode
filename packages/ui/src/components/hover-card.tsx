@@ -20,7 +20,7 @@ export function HoverCard(props: HoverCardProps) {
         <Kobalte.Content
           data-component="hover-card-content"
           classList={{
-            ...(local.classList ?? {}),
+            ...local.classList,
             [local.class ?? ""]: !!local.class,
           }}
         >
