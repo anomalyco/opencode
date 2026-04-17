@@ -131,14 +131,11 @@ describe("Format", () => {
       const a = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
         config: { formatter: false },
       })
-      const b = yield* provideTmpdirInstance(
-        () => Format.Service.use((fmt) => fmt.status()),
-        {
-          config: {
-            formatter: true,
-          },
+      const b = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
+        config: {
+          formatter: true,
         },
-      )
+      })
 
       expect(a).toEqual([])
       expect(b.find((item) => item.name === "gofmt")).toBeDefined()

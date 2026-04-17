@@ -5,7 +5,7 @@ import { streamSSE } from "hono/streaming"
 import { Log } from "@/util"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { AsyncQueue } from "../../util/queue"
+import { AsyncQueue } from "@/util/queue"
 
 const log = Log.create({ service: "server" })
 

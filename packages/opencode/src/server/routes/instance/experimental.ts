@@ -1,22 +1,21 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { ProviderID, ModelID } from "../../provider/schema"
-import { ToolRegistry } from "../../tool"
-import { Worktree } from "../../worktree"
-import { Instance } from "../../project/instance"
-import { Project } from "../../project"
-import { MCP } from "../../mcp"
-import { Session } from "../../session"
-import { Config } from "../../config"
-import { ConsoleState } from "../../config/console-state"
-import { Account } from "../../account/account"
-import { AccountID, OrgID } from "../../account/schema"
-import { AppRuntime } from "../../effect/app-runtime"
-import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { ProviderID, ModelID } from "@/provider/schema"
+import { ToolRegistry } from "@/tool"
+import { Worktree } from "@/worktree"
+import { Instance } from "@/project/instance"
+import { Project } from "@/project"
+import { MCP } from "@/mcp"
+import { Session } from "@/session"
+import { Config } from "@/config"
+import { ConsoleState } from "@/config/console-state"
+import { Account } from "@/account/account"
+import { AccountID, OrgID } from "@/account/schema"
+import { AppRuntime } from "@/effect/app-runtime"
+import { errors } from "../../error"
+import { lazy } from "@/util/lazy"
 import { Effect, Option } from "effect"
-import { WorkspaceRoutes } from "./workspace"
 import { Agent } from "@/agent/agent"
 
 const ConsoleOrgOption = z.object({
@@ -231,7 +230,6 @@ export const ExperimentalRoutes = lazy(() =>
         )
       },
     )
-    .route("/workspace", WorkspaceRoutes())
     .post(
       "/worktree",
       describeRoute({

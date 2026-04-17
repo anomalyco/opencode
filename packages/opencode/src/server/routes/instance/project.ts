@@ -1,13 +1,13 @@
 import { Hono } from "hono"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
-import { Instance } from "../../project/instance"
-import { Project } from "../../project"
+import { Instance } from "@/project/instance"
+import { Project } from "@/project"
 import z from "zod"
-import { ProjectID } from "../../project/schema"
-import { errors } from "../error"
-import { lazy } from "../../util/lazy"
-import { InstanceBootstrap } from "../../project/bootstrap"
+import { ProjectID } from "@/project/schema"
+import { errors } from "../../error"
+import { lazy } from "@/util/lazy"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { AppRuntime } from "@/effect/app-runtime"
 
 export const ProjectRoutes = lazy(() =>
@@ -23,7 +23,7 @@ export const ProjectRoutes = lazy(() =>
             description: "List of projects",
             content: {
               "application/json": {
-                schema: resolver(Project.Info.array()),
+                schema: resolver(Project.Info.zod.array()),
               },
             },
           },
@@ -45,7 +45,7 @@ export const ProjectRoutes = lazy(() =>
             description: "Current project information",
             content: {
               "application/json": {
-                schema: resolver(Project.Info),
+                schema: resolver(Project.Info.zod),
               },
             },
           },
@@ -66,7 +66,7 @@ export const ProjectRoutes = lazy(() =>
             description: "Project information after git initialization",
             content: {
               "application/json": {
-                schema: resolver(Project.Info),
+                schema: resolver(Project.Info.zod),
               },
             },
           },
@@ -99,7 +99,7 @@ export const ProjectRoutes = lazy(() =>
             description: "Updated project information",
             content: {
               "application/json": {
-                schema: resolver(Project.Info),
+                schema: resolver(Project.Info.zod),
               },
             },
           },

@@ -204,7 +204,7 @@ function createGlobalSync() {
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
-      .ensureQueryData({
+      .fetchQuery({
         ...loadSessionsQuery(directory),
         queryFn: () =>
           loadRootSessionsWithFallback({
