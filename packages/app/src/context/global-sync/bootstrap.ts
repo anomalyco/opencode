@@ -19,7 +19,6 @@ import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions, skipToken } from "@tanstack/solid-query"
-import { loadSessionsQuery } from "../global-sync"
 
 type GlobalStore = {
   ready: boolean
@@ -349,7 +348,7 @@ export async function bootstrapDirectory(input: {
     const rev = (providerRev.get(input.directory) ?? 0) + 1
     providerRev.set(input.directory, rev)
     void input.queryClient.ensureQueryData({
-      ...loadSessionsQuery(input.directory),
+      ...loadProvidersQuery(input.directory),
       queryFn: () =>
         retry(() => input.sdk.provider.list())
           .then((x) => {
