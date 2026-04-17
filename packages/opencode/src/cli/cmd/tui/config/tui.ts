@@ -89,15 +89,13 @@ async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
   acc.result.plugin_origins = plugins
 }
 
-async function loadState(ctx: { directory: string }) {
+const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
   // Every config dir we may read from: global config dir, any `.opencode`
   // folders between cwd and home, and OPENCODE_CONFIG_DIR.
-  const directories = await ConfigPaths.directories(ctx.directory)
-  // One-time migration: extract tui keys (theme/keybinds/tui) from existing
-  // opencode.json files into sibling tui.json files.
-  await migrateTuiConfig({ directories, cwd: ctx.directory })
+  const directories = yield* ConfigPaths.directories(ctx.directory)
+  yield* Effect.promise(() => migrateTuiConfig({ directories, cwd: ctx.directory }))
 
-  const projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
+  const projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : yield* ConfigPaths.files("tui", ctx.directory)
 
   const acc: Acc = {
     result: {},
@@ -105,18 +103,19 @@ async function loadState(ctx: { directory: string }) {
 
   // 1. Global tui config (lowest precedence).
   for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
-    await mergeFile(acc, file, ctx)
+    yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
   }
 
   // 2. Explicit OPENCODE_TUI_CONFIG override, if set.
   if (Flag.OPENCODE_TUI_CONFIG) {
-    await mergeFile(acc, Flag.OPENCODE_TUI_CONFIG, ctx)
-    log.debug("loaded custom tui config", { path: Flag.OPENCODE_TUI_CONFIG })
+    const configFile = Flag.OPENCODE_TUI_CONFIG
+    yield* Effect.promise(() => mergeFile(acc, configFile, ctx)).pipe(Effect.orDie)
+    log.debug("loaded custom tui config", { path: configFile })
   }
 
   // 3. Project tui files, applied root-first so the closest file wins.
   for (const file of projectFiles) {
-    await mergeFile(acc, file, ctx)
+    yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
   }
 
   // 4. `.opencode` directories (and OPENCODE_CONFIG_DIR) discovered while
@@ -127,7 +126,7 @@ async function loadState(ctx: { directory: string }) {
   for (const dir of dirs) {
     if (!dir.endsWith(".opencode") && dir !== Flag.OPENCODE_CONFIG_DIR) continue
     for (const file of ConfigPaths.fileInDirectory(dir, "tui")) {
-      await mergeFile(acc, file, ctx)
+      yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
     }
   }
 
@@ -146,14 +145,14 @@ async function loadState(ctx: { directory: string }) {
     config: acc.result,
     dirs: acc.result.plugin?.length ? dirs : [],
   }
-}
+})
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const directory = yield* CurrentWorkingDirectory
     const npm = yield* Npm.Service
-    const data = yield* Effect.promise(() => loadState({ directory }))
+    const data = yield* loadState({ directory })
     const deps = yield* Effect.forEach(
       data.dirs,
       (dir) =>
@@ -176,7 +175,7 @@ export const layer = Layer.effect(
   }).pipe(Effect.withSpan("TuiConfig.layer")),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Npm.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Npm.defaultLayer), Layer.provide(AppFileSystem.defaultLayer))
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 
