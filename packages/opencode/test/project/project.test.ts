@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Project } from "../../src/project/project"
-import { Log } from "../../src/util/log"
+import { Project } from "../../src/project"
+import { Log } from "../../src/util"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
@@ -9,10 +9,10 @@ import { ProjectID } from "../../src/project/schema"
 import { Effect, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 const encoder = new TextEncoder()
 

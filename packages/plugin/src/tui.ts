@@ -13,7 +13,6 @@ import type {
   QuestionRequest,
   SessionStatus,
   TextPart,
-  Workspace,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
@@ -30,7 +29,7 @@ export type TuiRouteCurrent =
       name: "session"
       params: {
         sessionID: string
-        initialPrompt?: unknown
+        prompt?: unknown
       }
     }
   | {

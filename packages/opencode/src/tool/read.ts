@@ -4,10 +4,9 @@ import { createReadStream } from "fs"
 import { open } from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
-import { Tool } from "./tool"
-import { AppFileSystem } from "../filesystem"
+import * as Tool from "./tool"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { LSP } from "../lsp"
-import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -31,7 +30,6 @@ export const ReadTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
-    const time = yield* FileTime.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -75,9 +73,8 @@ export const ReadTool = Tool.define(
       ).pipe(Effect.map((items: string[]) => items.sort((a, b) => a.localeCompare(b))))
     })
 
-    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string, sessionID: Tool.Context["sessionID"]) {
+    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
       yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
-      yield* time.read(sessionID, filepath)
     })
 
     const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
@@ -181,7 +178,7 @@ export const ReadTool = Tool.define(
         )
       }
 
-      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>" + "\n"].join("\n")
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
       output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
 
       const last = file.offset + file.raw.length - 1
@@ -196,7 +193,7 @@ export const ReadTool = Tool.define(
       }
       output += "\n</content>"
 
-      yield* warm(filepath, ctx.sessionID)
+      yield* warm(filepath)
 
       if (loaded.length > 0) {
         output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`

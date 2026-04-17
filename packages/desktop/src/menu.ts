@@ -186,5 +186,5 @@ export async function createMenu(trigger: (id: string) => void) {
       }),
     ],
   })
-  menu.setAsAppMenu()
+  void menu.setAsAppMenu()
 }

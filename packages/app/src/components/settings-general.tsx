@@ -106,6 +106,7 @@ export const SettingsGeneral: Component = () => {
 
     permission.disableAutoAccept(params.id, value)
   }
+  const desktop = createMemo(() => platform.platform === "desktop")
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -272,6 +273,74 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.general.editToolPartsExpanded()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
+  const AdvancedSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.advanced")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.showFileTree.title")}
+          description={language.t("settings.general.row.showFileTree.description")}
+        >
+          <div data-action="settings-show-file-tree">
+            <Switch
+              checked={settings.general.showFileTree()}
+              onChange={(checked) => settings.general.setShowFileTree(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showNavigation.title")}
+          description={language.t("settings.general.row.showNavigation.description")}
+        >
+          <div data-action="settings-show-navigation">
+            <Switch
+              checked={settings.general.showNavigation()}
+              onChange={(checked) => settings.general.setShowNavigation(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showSearch.title")}
+          description={language.t("settings.general.row.showSearch.description")}
+        >
+          <div data-action="settings-show-search">
+            <Switch
+              checked={settings.general.showSearch()}
+              onChange={(checked) => settings.general.setShowSearch(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showTerminal.title")}
+          description={language.t("settings.general.row.showTerminal.description")}
+        >
+          <div data-action="settings-show-terminal">
+            <Switch
+              checked={settings.general.showTerminal()}
+              onChange={(checked) => settings.general.setShowTerminal(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showStatus.title")}
+          description={language.t("settings.general.row.showStatus.description")}
+        >
+          <div data-action="settings-show-status">
+            <Switch
+              checked={settings.general.showStatus()}
+              onChange={(checked) => settings.general.setShowStatus(checked)}
             />
           </div>
         </SettingsRow>
@@ -527,6 +596,7 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  console.log(import.meta.env)
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -608,6 +678,10 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
+        </Show>
+
+        <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"}>
+          <AdvancedSection />
         </Show>
       </div>
     </div>

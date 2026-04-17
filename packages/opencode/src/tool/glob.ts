@@ -2,12 +2,12 @@ import path from "path"
 import z from "zod"
 import { Effect, Option } from "effect"
 import * as Stream from "effect/Stream"
-import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "../filesystem"
+import { InstanceState } from "@/effect"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 
 export const GlobTool = Tool.define(
   "glob",
