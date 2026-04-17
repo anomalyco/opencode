@@ -70,12 +70,7 @@ export const ConfigRoutes = lazy(() =>
             description: "List of providers",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    providers: Provider.Info.array(),
-                    default: z.record(z.string(), z.string()),
-                  }),
-                ),
+                schema: resolver(Provider.ConfigProvidersResult.zod),
               },
             },
           },

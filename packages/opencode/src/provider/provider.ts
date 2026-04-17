@@ -16,10 +16,11 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { InstallationVersion } from "../installation/version"
 import { Flag } from "../flag/flag"
+import { zod } from "@/util/effect-zod"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -29,6 +30,14 @@ import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
+
+type Mutable<T> = T extends string | number | boolean | bigint | symbol | null | undefined
+  ? T
+  : T extends ReadonlyArray<infer U>
+    ? Mutable<U>[]
+    : T extends object
+      ? { -readonly [K in keyof T]: Mutable<T[K]> }
+      : T
 
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
@@ -796,91 +805,107 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
   }
 }
 
-export const Model = z
-  .object({
-    id: ModelID.zod,
-    providerID: ProviderID.zod,
-    api: z.object({
-      id: z.string(),
-      url: z.string(),
-      npm: z.string(),
-    }),
-    name: z.string(),
-    family: z.string().optional(),
-    capabilities: z.object({
-      temperature: z.boolean(),
-      reasoning: z.boolean(),
-      attachment: z.boolean(),
-      toolcall: z.boolean(),
-      input: z.object({
-        text: z.boolean(),
-        audio: z.boolean(),
-        image: z.boolean(),
-        video: z.boolean(),
-        pdf: z.boolean(),
-      }),
-      output: z.object({
-        text: z.boolean(),
-        audio: z.boolean(),
-        image: z.boolean(),
-        video: z.boolean(),
-        pdf: z.boolean(),
-      }),
-      interleaved: z.union([
-        z.boolean(),
-        z.object({
-          field: z.enum(["reasoning_content", "reasoning_details"]),
-        }),
-      ]),
-    }),
-    cost: z.object({
-      input: z.number(),
-      output: z.number(),
-      cache: z.object({
-        read: z.number(),
-        write: z.number(),
-      }),
-      experimentalOver200K: z
-        .object({
-          input: z.number(),
-          output: z.number(),
-          cache: z.object({
-            read: z.number(),
-            write: z.number(),
-          }),
-        })
-        .optional(),
-    }),
-    limit: z.object({
-      context: z.number(),
-      input: z.number().optional(),
-      output: z.number(),
-    }),
-    status: z.enum(["alpha", "beta", "deprecated", "active"]),
-    options: z.record(z.string(), z.any()),
-    headers: z.record(z.string(), z.string()),
-    release_date: z.string(),
-    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
-  })
-  .meta({
-    ref: "Model",
-  })
-export type Model = z.infer<typeof Model>
+const ProviderApiInfo = Schema.Struct({
+  id: Schema.String,
+  url: Schema.String,
+  npm: Schema.String,
+})
 
-export const Info = z
-  .object({
-    id: ProviderID.zod,
-    name: z.string(),
-    source: z.enum(["env", "config", "custom", "api"]),
-    env: z.string().array(),
-    key: z.string().optional(),
-    options: z.record(z.string(), z.any()),
-    models: z.record(z.string(), Model),
-  })
-  .meta({
-    ref: "Provider",
-  })
-export type Info = z.infer<typeof Info>
+const ProviderModalities = Schema.Struct({
+  text: Schema.Boolean,
+  audio: Schema.Boolean,
+  image: Schema.Boolean,
+  video: Schema.Boolean,
+  pdf: Schema.Boolean,
+})
+
+const ProviderInterleaved = Schema.Union([
+  Schema.Boolean,
+  Schema.Struct({
+    field: Schema.Literals(["reasoning_content", "reasoning_details"]),
+  }),
+])
+
+const ProviderCapabilities = Schema.Struct({
+  temperature: Schema.Boolean,
+  reasoning: Schema.Boolean,
+  attachment: Schema.Boolean,
+  toolcall: Schema.Boolean,
+  input: ProviderModalities,
+  output: ProviderModalities,
+  interleaved: ProviderInterleaved,
+})
+
+const ProviderCacheCost = Schema.Struct({
+  read: Schema.Number,
+  write: Schema.Number,
+})
+
+const ProviderCost = Schema.Struct({
+  input: Schema.Number,
+  output: Schema.Number,
+  cache: ProviderCacheCost,
+  experimentalOver200K: Schema.optional(
+    Schema.Struct({
+      input: Schema.Number,
+      output: Schema.Number,
+      cache: ProviderCacheCost,
+    }),
+  ),
+})
+
+const ProviderLimit = Schema.Struct({
+  context: Schema.Number,
+  input: Schema.optional(Schema.Number),
+  output: Schema.Number,
+})
+
+const _Model = Schema.Struct({
+  id: ModelID,
+  providerID: ProviderID,
+  api: ProviderApiInfo,
+  name: Schema.String,
+  family: Schema.optional(Schema.String),
+  capabilities: ProviderCapabilities,
+  cost: ProviderCost,
+  limit: ProviderLimit,
+  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  options: Schema.Record(Schema.String, Schema.Any),
+  headers: Schema.Record(Schema.String, Schema.String),
+  release_date: Schema.String,
+  variants: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+}).annotate({ identifier: "Model" })
+export const Model = Object.assign(_Model, { zod: zod(_Model) })
+export type Model = Mutable<Schema.Schema.Type<typeof _Model>>
+
+const _Info = Schema.Struct({
+  id: ProviderID,
+  name: Schema.String,
+  source: Schema.Literals(["env", "config", "custom", "api"]),
+  env: Schema.Array(Schema.String),
+  key: Schema.optional(Schema.String),
+  options: Schema.Record(Schema.String, Schema.Any),
+  models: Schema.Record(Schema.String, Model),
+}).annotate({ identifier: "Provider" })
+export const Info = Object.assign(_Info, { zod: zod(_Info) })
+export type Info = Mutable<Schema.Schema.Type<typeof _Info>>
+
+const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
+
+const _ListResult = Schema.Struct({
+  all: Schema.Array(Info),
+  default: DefaultModelIDs,
+  connected: Schema.Array(Schema.String),
+})
+export const ListResult = Object.assign(_ListResult, { zod: zod(_ListResult) })
+export type ListResult = Mutable<Schema.Schema.Type<typeof _ListResult>>
+
+const _ConfigProvidersResult = Schema.Struct({
+  providers: Schema.Array(Info),
+  default: DefaultModelIDs,
+})
+export const ConfigProvidersResult = Object.assign(_ConfigProvidersResult, { zod: zod(_ConfigProvidersResult) })
+export type ConfigProvidersResult = Mutable<Schema.Schema.Type<typeof _ConfigProvidersResult>>
 
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
