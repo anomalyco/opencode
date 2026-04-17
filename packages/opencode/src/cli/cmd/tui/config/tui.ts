@@ -11,14 +11,14 @@ import { Flag } from "@/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Npm } from "@opencode-ai/shared/npm"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
-import { makeRuntime } from "@/cli/effect/runtime"
+import { makeRuntime } from "@/effect/runtime"
 import { Filesystem, Log } from "@/util"
 import { ConfigVariable } from "@/config/variable"
+import { Npm } from "@/npm/effect"
 
 const log = Log.create({ service: "tui.config" })
 

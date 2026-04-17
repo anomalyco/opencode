@@ -24,7 +24,6 @@ import { InstanceState } from "@/effect"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 import { InstanceRef } from "@/effect/instance-ref"
-import { Npm } from "@opencode-ai/shared/npm"
 import { ConfigAgent } from "./agent"
 import { ConfigMCP } from "./mcp"
 import { ConfigModelID } from "./model-id"
@@ -39,6 +38,7 @@ import { ConfigPaths } from "./paths"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLSP } from "./lsp"
 import { ConfigVariable } from "./variable"
+import { Npm } from "@/npm/effect"
 
 const log = Log.create({ service: "config" })
 
