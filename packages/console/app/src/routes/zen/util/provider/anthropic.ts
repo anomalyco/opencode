@@ -153,7 +153,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
           let json
           try {
             json = JSON.parse(data.slice(6))
-          } catch (e) {
+          } catch {
             return
           }
 

@@ -11,6 +11,11 @@ import pkg from "electron-updater"
 import contextMenu from "electron-context-menu"
 contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
 
+// on macOS apps run in `/` which can cause issues with ripgrep
+try {
+  process.chdir(homedir())
+} catch {}
+
 process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
 const APP_NAMES: Record<string, string> = {

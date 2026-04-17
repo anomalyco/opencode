@@ -151,23 +151,6 @@ Trazi datoteke koristeci glob obrasce kao `**/*.js` ili `src/**/*.ts`. Vraca put
 
 ---
 
-### list
-
-Ispisuje datoteke i direktorije na zadanoj putanji.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Ovaj alat ispisuje sadrzaj direktorija. Prihvata glob obrasce za filtriranje rezultata.
-
----
-
 ### lsp (eksperimentalno)
 
 Komunicira sa konfigurisanim LSP serverima za funkcije inteligencije koda kao definicije, reference, hover info i hijerarhija poziva.
@@ -341,7 +324,7 @@ MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i s
 
 ## Interno
 
-Interno, alati kao `grep`, `glob` i `list` koriste [ripgrep](https://github.com/BurntSushi/ripgrep). Po defaultu, ripgrep postuje `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
+Interno, alati kao `grep` i `glob` koriste [ripgrep](https://github.com/BurntSushi/ripgrep). Po defaultu, ripgrep postuje `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
 
 ---
 
