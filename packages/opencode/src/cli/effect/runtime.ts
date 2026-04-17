@@ -6,7 +6,7 @@ export const memoMap = Layer.makeMemoMapUnsafe()
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
   const getRuntime = () =>
-    (rt ??= ManagedRuntime.make(Layer.merge(layer, Observability.layer) as Layer.Layer<I, E>, { memoMap }))
+    (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer) as Layer.Layer<I, E>, { memoMap }))
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(service.use(fn)),
