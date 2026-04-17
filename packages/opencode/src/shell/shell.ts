@@ -9,7 +9,6 @@ import { setTimeout as sleep } from "node:timers/promises"
 const SIGKILL_TIMEOUT_MS = 200
 
 export namespace Shell {
-  const BLACKLIST = new Set(["fish", "nu"])
   const LOGIN = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"])
   const POSIX = new Set(["bash", "dash", "ksh", "sh", "zsh"])
 
@@ -61,8 +60,8 @@ export namespace Shell {
     if (powershell) return powershell
   }
 
-  function select(file: string | undefined, opts?: { acceptable?: boolean }) {
-    if (file && (!opts?.acceptable || !BLACKLIST.has(name(file)))) return full(file)
+  function select(file: string | undefined) {
+    if (file) return full(file)
     if (process.platform === "win32") {
       const shell = pick()
       if (shell) return shell
@@ -106,5 +105,5 @@ export namespace Shell {
 
   export const preferred = lazy(() => select(process.env.SHELL))
 
-  export const acceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
+  export const acceptable = lazy(() => select(process.env.SHELL))
 }

@@ -158,11 +158,10 @@ describe("tool.bash", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
-        expect(bash.description).toContain("**Shell**:")
-        expect(bash.description).toContain("Ensure your command syntax is compatible with this shell")
-        // Should contain a shell name (bash, zsh, fish, etc.)
-        const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
+        const bash = await initBash()
+        expect(bash.description).toContain("Be aware: OS:")
+        expect(bash.description).toContain("Shell:")
+        const shellMatch = bash.description.match(/Shell: ([^\n]+)/)
         expect(shellMatch).toBeTruthy()
         expect(shellMatch?.[1]).toBeTruthy()
       },
@@ -173,9 +172,8 @@ describe("tool.bash", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
-        const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
-        const detectedShell = shellMatch?.[1]
+        const bash = await initBash()
+        const detectedShell = bash.description.match(/Shell: ([^\n]+)/)?.[1]?.trim()
 
         expect(detectedShell).toBeTruthy()
 
@@ -193,9 +191,8 @@ describe("tool.bash", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        const bash = await BashTool.init()
-        const shellMatch = bash.description.match(/You are executing commands in `([^`]+)`/)
-        const detectedShell = shellMatch?.[1]
+        const bash = await initBash()
+        const detectedShell = bash.description.match(/Shell: ([^\n]+)/)?.[1]?.trim()
 
         expect(detectedShell).toBeTruthy()
 
@@ -205,8 +202,7 @@ describe("tool.bash", () => {
           expect(bash.description).toContain(`${detectedShell} commands`)
         }
 
-        // Should still contain "Bash tool" references (tool name)
-        expect(bash.description).toContain("Bash tool")
+        expect(bash.description).toContain("persistent shell session")
       },
     })
   })
@@ -221,27 +217,42 @@ describe("tool.bash", () => {
         try {
           // Mock zsh shell environment
           process.env.SHELL = "/bin/zsh"
-          const bashZsh = await BashTool.init()
+          Shell.acceptable.reset()
+          Shell.preferred.reset()
+          const bashZsh = await initBash()
           expect(bashZsh.description).toContain("zsh command")
           expect(bashZsh.description).toContain("zsh commands")
 
           // Mock bash shell environment
           process.env.SHELL = "/bin/bash"
-          const bashBash = await BashTool.init()
+          Shell.acceptable.reset()
+          Shell.preferred.reset()
+          const bashBash = await initBash()
           expect(bashBash.description).toContain("bash command")
           expect(bashBash.description).toContain("bash commands")
 
           // Mock ksh shell environment
           process.env.SHELL = "/bin/ksh"
-          const bashKsh = await BashTool.init()
+          Shell.acceptable.reset()
+          Shell.preferred.reset()
+          const bashKsh = await initBash()
           expect(bashKsh.description).toContain("ksh command")
           expect(bashKsh.description).toContain("ksh commands")
 
           // Mock fish shell environment (fish is now supported, not blacklisted)
           process.env.SHELL = "/usr/bin/fish"
-          const bashFish = await BashTool.init()
+          Shell.acceptable.reset()
+          Shell.preferred.reset()
+          const bashFish = await initBash()
           expect(bashFish.description).toContain("fish command")
           expect(bashFish.description).toContain("fish commands")
+
+          process.env.SHELL = "/usr/bin/nu"
+          Shell.acceptable.reset()
+          Shell.preferred.reset()
+          const bashNu = await initBash()
+          expect(bashNu.description).toContain("nu command")
+          expect(bashNu.description).toContain("nu commands")
         } finally {
           // Restore original shell
           if (originalShell) {
