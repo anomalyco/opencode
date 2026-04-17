@@ -23,6 +23,10 @@ See `specs/effect/migration.md` for the compact pattern reference and examples.
 - Use `Effect.callback` for callback-based APIs.
 - Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
 
+## Module conventions
+
+- In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
+
 ## Schemas and errors
 
 - Use `Schema.Class` for multi-field data.
