@@ -180,3 +180,99 @@ If you want to validate the UX cheap before committing:
 - Hide the sidebar behind a settings toggle (`settings.general.sessionTabs`).
 
 That lets you ship to internal testers in days, see how it feels with real session counts, and then commit to the full refactor.
+
+## Ten levels of speed vs. quality
+
+Each level is cumulative — it includes everything from the levels above it.
+
+### Level 1 — Hack (~4 hours)
+- Hardcode a `<div>` across the top of `layout.tsx` that `.map`s over `currentSessions()` and renders a button per session that calls `navigateToSession`
+- No styling beyond `flex gap-2 border-b`
+- Sidebar stays (you're just adding, not replacing)
+- Current project only
+- Use case: screenshot for a design review, internal demo
+
+### Level 2 — Proof-of-concept (~1 day)
+- Extract into a real `SessionTabBar` component with proper typing
+- Active-tab highlight, basic hover states
+- Truncate long titles with CSS
+- Wire `⌘W` to close (archive) the active tab
+- Still current-project-only, sidebar still present, no DnD, no overflow handling (tabs just overflow the viewport)
+- Use case: internal dogfooding to see if the idea feels right
+
+### Level 3 — MVP behind a flag (~3 days)
+- Everything from the "quick prototype" alternative above
+- Add horizontal scroll container so overflow doesn't break the page
+- New-session `+` button at the right of the strip
+- Plain rectangular tabs with close `X` on hover
+- Hidden behind `settings.general.sessionTabs` toggle; sidebar still default
+- Use case: opt-in beta for power users, gather feedback before committing
+
+### Level 4 — Feature-complete single-project (~6 days)
+- Proper tab states: working spinner, unseen dot, permission pulse (reuse `SessionItem` indicators)
+- Middle-click close, context menu (rename, archive, close-others)
+- Inline rename on double-click
+- Overflow menu (dropdown of clipped tabs) — no fancy IntersectionObserver, just "hide after N tabs and put rest in menu"
+- Still current-project-only, sidebar still toggleable
+- Use case: stable opt-in; most single-project users would be happy here
+
+### Level 5 — Multi-project, sidebar optional (~9 days)
+- Global tab bar: tabs from all open projects, grouped visually
+- Project-colored stripe on top of each tab
+- Project switcher dropdown on the far-left (replaces need for rail, rail still available)
+- DnD reorder within a project group
+- `⌘1..9` keybinds to jump to tab
+- Sidebar still exists as a setting; default depends on user preference
+- Use case: public release candidate; users who prefer old layout can keep it
+
+### Level 6 — Sidebar removed, full plan baseline (~11 days)
+- Everything in the main plan above: delete sidebar entirely, `layout.v7` persist migration, rip out hover-preview / peek / AIM-triangle logic
+- Proper Chrome-trapezoid tab shape with CSS masks
+- IntersectionObserver-based overflow detection (tabs shrink to 32 px, then overflow)
+- Refactored `layout.tsx` hooks (`use-project-actions`, etc.)
+- i18n across ~24 locales
+- Basic test coverage
+- Use case: shippable v1 — what the plan estimates
+
+### Level 7 — Production-polished (~15 days)
+- Tab animations: open/close slide, drag-reorder ghost, project group color transition
+- Drag a tab **out of** the window to detach it (new window) — uses Electron `BrowserWindow`, Tauri `WebviewWindow`
+- Drag a tab **between** windows to merge — requires IPC protocol for tab handoff
+- "Reopen closed tab" (`⌘⇧T`) with history ring buffer
+- Pinned tabs (icon-only, persist across launches)
+- Full e2e test suite (Playwright) covering 10+ scenarios
+- Use case: flagship feature launch
+
+### Level 8 — Designed-for-the-long-haul (~22 days, adds a designer)
+- Dedicated design pass with Figma prototype reviewed by 3+ users
+- Motion design spec (easing curves, reduced-motion support)
+- Accessibility audit: full keyboard nav, screen-reader labels, focus trapping, WCAG AA contrast on every tab state
+- Settings for tab width, tab shape (trapezoid vs. rectangle), group-by-project toggle, show-icon toggle
+- Analytics instrumentation: tab-switch latency, overflow-menu usage, close-vs-archive ratio
+- Migration UI: one-time onboarding popover explaining the change
+- Use case: a feature you're confident won't need a redesign in 12 months
+
+### Level 9 — Enterprise-grade (~30 days)
+- Tab sync across devices (if the app has cloud-synced settings, which this one tracks via `Persist.global`)
+- Tab grouping by something other than project (custom user-defined groups, Chrome-style)
+- Vertical-tabs mode as an alternate layout (power-user request, common on wide-but-short monitors)
+- Tab search (`⌘⇧A`) with fuzzy match over session titles
+- Full i18n QA with native-speaker review per locale
+- Performance budget: 200+ tabs without jank (virtualized rendering)
+- Telemetry dashboard + a/b test infra to measure impact on retention
+- Use case: a primary surface of a product with millions of users
+
+### Level 10 — Research-grade (~45+ days)
+- User research phase: 10+ interviews, diary studies, preference testing against the current sidebar
+- Multiple design candidates A/B tested with real users before committing
+- Academic-level accessibility: tested with actual screen-reader users, voice-control users, low-vision users
+- Localization partner review for RTL languages (Arabic, Hebrew) including tab-order reversal
+- Performance: 60fps on a 5-year-old laptop with 500 tabs across 20 projects
+- Failure modes: offline behavior, corrupt persist state recovery, migration-failure fallback, out-of-memory graceful degradation
+- Formal rollout plan: 1% → 10% → 50% → 100% with rollback criteria
+- Post-launch six-month observation period with iteration
+- Use case: you're Google Chrome and this is literally your product
+
+### Recommendation
+
+Level 3 or Level 4 first (3–6 days), see if the team and users actually like it, then commit to Level 6 (the full plan, 11 days) if the feedback is positive. Skipping straight to Level 6 without validation is the common trap — you burn 2+ weeks, then discover users want vertical tabs or hate losing the hover-preview.
