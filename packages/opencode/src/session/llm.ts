@@ -454,6 +454,46 @@ function repairToolCallJson(input: string, log: ReturnType<typeof Log.create>, t
 
   let repaired = input
 
+  // Strategy 1: Handle duplicated/overlapping JSON objects (specific case we observed)
+  // Look for valid JSON at the beginning and use only that part
+  let firstValidEnd = 0
+  for (let i = 1; i <= repaired.length; i++) {
+    try {
+      JSON.parse(repaired.substring(0, i))
+      firstValidEnd = i
+    } catch {
+      // Continue searching
+    }
+  }
+  
+  if (firstValidEnd > 0 && firstValidEnd < repaired.length) {
+    const firstObject = repaired.substring(0, firstValidEnd)
+    try {
+      JSON.parse(firstObject)
+      log.info("repaired duplicated JSON by taking first valid object", { tool: toolName })
+      return firstObject
+    } catch {
+      // If first object isn't valid, continue with other strategies
+    }
+  }
+
+  // Strategy 2: Fix overlapping objects pattern
+  // Pattern: {"key": "value","key2": value{... -> {"key": "value","key2": value}{...
+  const patternMatch = repaired.match(/^(\{[^}]*\}?)\{(.*)$/)
+  if (patternMatch) {
+    const firstPart = patternMatch[1] + '}'
+    try {
+      JSON.parse(firstPart)
+      log.info("repaired overlapping JSON objects", { tool: toolName })
+      return firstPart
+    } catch {
+      // Fall through to other strategies
+    }
+  }
+
+  // Strategy 3: Insert missing commas that might be causing issues
+  repaired = repaired.replace(/"(\s*)(\{|$$)/g, '"$1,$2')
+
   // Try closing unterminated strings
   if (!repaired.endsWith('"') && repaired.split('"').length % 2 === 0) {
     repaired += '"'
