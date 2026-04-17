@@ -9,6 +9,63 @@
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
 
+# Module shape
+
+Do not use `export namespace Foo { ... }` for module organization. It is not
+standard ESM, it prevents tree-shaking, and it breaks Node's native TypeScript
+runner. Use flat top-level exports combined with a self-reexport at the bottom
+of the file:
+
+```ts
+// src/foo/foo.ts
+export interface Interface { ... }
+export class Service extends Context.Service<Service, Interface>()("@opencode/Foo") {}
+export const layer = Layer.effect(Service, ...)
+export const defaultLayer = layer.pipe(...)
+
+export * as Foo from "./foo"
+```
+
+Consumers import the namespace projection:
+
+```ts
+import { Foo } from "@/foo/foo"
+
+yield * Foo.Service
+Foo.layer
+Foo.defaultLayer
+```
+
+Namespace-private helpers stay as non-exported top-level declarations in the
+same file — they remain inaccessible to consumers (they are not projected by
+`export * as`) but are usable by the file's own code.
+
+## When the file is an `index.ts`
+
+If the module is `foo/index.ts` (single-namespace directory), use `"."` for
+the self-reexport source rather than `"./index"`:
+
+```ts
+// src/foo/index.ts
+export const thing = ...
+
+export * as Foo from "."
+```
+
+## Multi-sibling directories
+
+For directories with several independent modules (e.g. `src/session/`,
+`src/config/`), keep each sibling as its own file with its own self-reexport,
+and do not add a barrel `index.ts`. Consumers import the specific sibling:
+
+```ts
+import { SessionRetry } from "@/session/retry"
+import { SessionStatus } from "@/session/status"
+```
+
+Barrels in multi-sibling directories force every import through the barrel to
+evaluate every sibling, which defeats tree-shaking and slows module load.
+
 # opencode Effect rules
 
 Use these rules when writing or migrating Effect code.
@@ -22,6 +79,10 @@ See `specs/effect/migration.md` for the compact pattern reference and examples.
 - `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary outer `.pipe()` wrappers.
 - Use `Effect.callback` for callback-based APIs.
 - Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
+
+## Module conventions
+
+- In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
 
 ## Schemas and errors
 

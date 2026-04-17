@@ -26,7 +26,6 @@ const TuiLegacy = z
 interface MigrateInput {
   cwd: string
   directories: string[]
-  custom?: string
 }
 
 /**
