@@ -47,7 +47,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           notation: "compact",
           compactDisplay: "short",
           maximumFractionDigits: 0,
-        }).format(githubData()?.stars!)
+        }).format(githubData()?.stars)
       : config.github.starsFormatted.compact,
   )
 
@@ -161,16 +161,12 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           <li>
             <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           </li>
-          <Show when={!props.zen}>
-            <li>
-              <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
-            </li>
-          </Show>
-          <Show when={!props.go}>
-            <li>
-              <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
-            </li>
-          </Show>
+          <li>
+            <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+          </li>
+          <li>
+            <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+          </li>
           <li>
             <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
           </li>

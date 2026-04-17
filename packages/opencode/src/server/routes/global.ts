@@ -1,19 +1,74 @@
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
+import { Effect } from "effect"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
+import { SyncEvent } from "@/sync"
 import { GlobalBus } from "@/bus/global"
+import { AppRuntime } from "@/effect/app-runtime"
+import { AsyncQueue } from "@/util/queue"
 import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
-import { Log } from "../../util/log"
+import { InstallationVersion } from "@/installation/version"
+import { Log } from "../../util"
 import { lazy } from "../../util/lazy"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
 import { errors } from "../error"
 
 const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
+
+async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
+  return streamSSE(c, async (stream) => {
+    const q = new AsyncQueue<string | null>()
+    let done = false
+
+    q.push(
+      JSON.stringify({
+        payload: {
+          type: "server.connected",
+          properties: {},
+        },
+      }),
+    )
+
+    // Send heartbeat every 10s to prevent stalled proxy streams.
+    const heartbeat = setInterval(() => {
+      q.push(
+        JSON.stringify({
+          payload: {
+            type: "server.heartbeat",
+            properties: {},
+          },
+        }),
+      )
+    }, 10_000)
+
+    const stop = () => {
+      if (done) return
+      done = true
+      clearInterval(heartbeat)
+      unsub()
+      q.push(null)
+      log.info("global event disconnected")
+    }
+
+    const unsub = subscribe(q)
+
+    stream.onAbort(stop)
+
+    try {
+      for await (const data of q) {
+        if (data === null) return
+        await stream.writeSSE({ data })
+      }
+    } finally {
+      stop()
+    }
+  })
+}
 
 export const GlobalRoutes = lazy(() =>
   new Hono()
@@ -35,7 +90,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json({ healthy: true, version: Installation.VERSION })
+        return c.json({ healthy: true, version: InstallationVersion })
       },
     )
     .get(
@@ -53,7 +108,9 @@ export const GlobalRoutes = lazy(() =>
                   z
                     .object({
                       directory: z.string(),
-                      payload: BusEvent.payloads(),
+                      project: z.string().optional(),
+                      workspace: z.string().optional(),
+                      payload: z.union([...BusEvent.payloads(), ...SyncEvent.payloads()]),
                     })
                     .meta({
                       ref: "GlobalEvent",
@@ -66,44 +123,16 @@ export const GlobalRoutes = lazy(() =>
       }),
       async (c) => {
         log.info("global event connected")
+        c.header("Cache-Control", "no-cache, no-transform")
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
-        return streamSSE(c, async (stream) => {
-          stream.writeSSE({
-            data: JSON.stringify({
-              payload: {
-                type: "server.connected",
-                properties: {},
-              },
-            }),
-          })
+
+        return streamEvents(c, (q) => {
           async function handler(event: any) {
-            await stream.writeSSE({
-              data: JSON.stringify(event),
-            })
+            q.push(JSON.stringify(event))
           }
           GlobalBus.on("event", handler)
-
-          // Send heartbeat every 10s to prevent stalled proxy streams.
-          const heartbeat = setInterval(() => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                payload: {
-                  type: "server.heartbeat",
-                  properties: {},
-                },
-              }),
-            })
-          }, 10_000)
-
-          await new Promise<void>((resolve) => {
-            stream.onAbort(() => {
-              clearInterval(heartbeat)
-              GlobalBus.off("event", handler)
-              resolve()
-              log.info("global event disconnected")
-            })
-          })
+          return () => GlobalBus.off("event", handler)
         })
       },
     )
@@ -125,7 +154,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await Config.getGlobal())
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())))
       },
     )
     .patch(
@@ -149,7 +178,7 @@ export const GlobalRoutes = lazy(() =>
       validator("json", Config.Info),
       async (c) => {
         const config = c.req.valid("json")
-        const next = await Config.updateGlobal(config)
+        const next = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.updateGlobal(config)))
         return c.json(next)
       },
     )
@@ -180,6 +209,79 @@ export const GlobalRoutes = lazy(() =>
           },
         })
         return c.json(true)
+      },
+    )
+    .post(
+      "/upgrade",
+      describeRoute({
+        summary: "Upgrade opencode",
+        description: "Upgrade opencode to the specified version or latest if not specified.",
+        operationId: "global.upgrade",
+        responses: {
+          200: {
+            description: "Upgrade result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.union([
+                    z.object({
+                      success: z.literal(true),
+                      version: z.string(),
+                    }),
+                    z.object({
+                      success: z.literal(false),
+                      error: z.string(),
+                    }),
+                  ]),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          target: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const result = await AppRuntime.runPromise(
+          Installation.Service.use((svc) =>
+            Effect.gen(function* () {
+              const method = yield* svc.method()
+              if (method === "unknown") {
+                return { success: false as const, status: 400 as const, error: "Unknown installation method" }
+              }
+
+              const target = c.req.valid("json").target || (yield* svc.latest(method))
+              const result = yield* Effect.catch(
+                svc.upgrade(method, target).pipe(Effect.as({ success: true as const, version: target })),
+                (err) =>
+                  Effect.succeed({
+                    success: false as const,
+                    status: 500 as const,
+                    error: err instanceof Error ? err.message : String(err),
+                  }),
+              )
+              if (!result.success) return result
+              return { ...result, status: 200 as const }
+            }),
+          ),
+        )
+        if (!result.success) {
+          return c.json({ success: false, error: result.error }, result.status)
+        }
+        const target = result.version
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: Installation.Event.Updated.type,
+            properties: { version: target },
+          },
+        })
+        return c.json({ success: true, version: target })
       },
     ),
 )
