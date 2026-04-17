@@ -158,7 +158,12 @@ export const layer = Layer.effect(
       (dir) =>
         npm
           .install(dir, {
-            add: ["@opencode-ai/plugin" + (InstallationLocal ? "" : "@" + InstallationVersion)],
+            add: [
+              {
+                name: "@opencode-ai/plugin",
+                version: InstallationLocal ? undefined : InstallationVersion,
+              },
+            ],
           })
           .pipe(Effect.forkScoped),
       {

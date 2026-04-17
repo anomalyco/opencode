@@ -25,7 +25,12 @@ export interface Interface {
   readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly install: (
     dir: string,
-    input?: { add: string[] },
+    input?: {
+      add: {
+        name: string
+        version?: string
+      }[]
+    },
   ) => Effect.Effect<void, EffectFlock.LockError | InstallFailedError>
   readonly outdated: (pkg: string, cachedVersion: string) => Effect.Effect<boolean>
   readonly which: (pkg: string) => Effect.Effect<Option.Option<string>>
@@ -137,17 +142,18 @@ export const layer = Layer.effect(
       return resolveEntryPoint(first.name, first.path)
     }, Effect.scoped)
 
-    const install = Effect.fn("Npm.install")(function* (dir: string, input?: { add: string[] }) {
+    const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
       const canWrite = yield* afs.access(dir, { writable: true }).pipe(
         Effect.as(true),
         Effect.orElseSucceed(() => false),
       )
       if (!canWrite) return
 
+      const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
       yield* Effect.gen(function* () {
         const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
         if (!nodeModulesExists) {
-          yield* reify({ add: input?.add, dir })
+          yield* reify({ add, dir })
           return
         }
       }).pipe(Effect.withSpan("Npm.checkNodeModules"))
@@ -163,7 +169,7 @@ export const layer = Layer.effect(
           ...Object.keys(pkgAny?.devDependencies || {}),
           ...Object.keys(pkgAny?.peerDependencies || {}),
           ...Object.keys(pkgAny?.optionalDependencies || {}),
-          ...(input?.add || []),
+          ...(input?.add || []).map((pkg) => pkg.name),
         ])
 
         const root = lockAny?.packages?.[""] || {}
@@ -176,7 +182,7 @@ export const layer = Layer.effect(
 
         for (const name of declared) {
           if (!locked.has(name)) {
-            yield* reify({ dir, add: input?.add })
+            yield* reify({ dir, add })
             return
           }
         }
