@@ -1,5 +1,6 @@
 import { PlanExitTool } from "./plan"
 import { Session } from "../session"
+import type { SessionID } from "../session/schema"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
@@ -62,7 +63,12 @@ export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
   readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
-  readonly tools: (model: { providerID: ProviderID; modelID: ModelID; agent: Agent.Info }) => Effect.Effect<Tool.Def[]>
+  readonly tools: (input: {
+    providerID: ProviderID
+    modelID: ModelID
+    agent: Agent.Info
+    sessionID?: SessionID
+  }) => Effect.Effect<Tool.Def[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -288,7 +294,16 @@ export const layer: Layer.Layer<
             description: tool.description,
             parameters: tool.parameters,
           }
-          yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          yield* plugin.trigger(
+            "tool.definition",
+            {
+              toolID: tool.id,
+              sessionID: input.sessionID,
+              model: { providerID: input.providerID, modelID: input.modelID },
+              agent: input.agent,
+            },
+            output,
+          )
           return {
             id: tool.id,
             description: [

@@ -3032,6 +3032,7 @@ export type ToolListData = {
     workspace?: string
     provider: string
     model: string
+    sessionID?: string
   }
   url: "/experimental/tool"
 }

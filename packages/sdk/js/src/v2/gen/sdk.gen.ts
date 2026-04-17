@@ -1438,6 +1438,7 @@ export class Tool extends HeyApiClient {
       workspace?: string
       provider: string
       model: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1450,6 +1451,7 @@ export class Tool extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "provider" },
             { in: "query", key: "model" },
+            { in: "query", key: "sessionID" },
           ],
         },
       ],

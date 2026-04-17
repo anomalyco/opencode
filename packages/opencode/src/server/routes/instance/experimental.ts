@@ -206,10 +206,11 @@ export const ExperimentalRoutes = lazy(() =>
         z.object({
           provider: z.string(),
           model: z.string(),
+          sessionID: z.string().optional(),
         }),
       ),
       async (c) => {
-        const { provider, model } = c.req.valid("query")
+        const { provider, model, sessionID } = c.req.valid("query")
         const tools = await AppRuntime.runPromise(
           Effect.gen(function* () {
             const agents = yield* Agent.Service
@@ -218,6 +219,7 @@ export const ExperimentalRoutes = lazy(() =>
               providerID: ProviderID.make(provider),
               modelID: ModelID.make(model),
               agent: yield* agents.get(yield* agents.defaultAgent()),
+              sessionID: sessionID as any,
             })
           }),
         )

@@ -402,6 +402,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         modelID: ModelID.make(input.model.api.id),
         providerID: input.model.providerID,
         agent: input.agent,
+        sessionID: input.session.id,
       })) {
         const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
         tools[item.id] = tool({
