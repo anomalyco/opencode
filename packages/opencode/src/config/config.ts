@@ -38,7 +38,7 @@ import { ConfigPaths } from "./paths"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLSP } from "./lsp"
 import { ConfigVariable } from "./variable"
-import { Npm } from "@/npm/effect"
+import { Npm } from "@/npm"
 
 const log = Log.create({ service: "config" })
 

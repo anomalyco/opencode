@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -13,7 +13,7 @@ const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Instance } = await import("../../src/project/instance")
-const { Npm } = await import("../../src/npm/effect")
+const { Npm } = await import("../../src/npm")
 
 afterAll(() => {
   if (disableDefault === undefined) {
@@ -239,8 +239,8 @@ describe("plugin.loader.shared", () => {
     })
 
     const add = spyOn(Npm, "add").mockImplementation(async (pkg) => {
-      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: Option.none() }
-      return { directory: tmp.extra.scope, entrypoint: Option.none() }
+      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: undefined }
+      return { directory: tmp.extra.scope, entrypoint: undefined }
     })
 
     try {
@@ -301,7 +301,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -358,7 +358,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -410,7 +410,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -455,7 +455,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -518,7 +518,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -548,7 +548,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -927,7 +927,7 @@ export default {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
     const missing: string[] = []
 
     try {
@@ -996,7 +996,7 @@ export default {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: Option.none() })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       const loaded = await PluginLoader.loadExternal({

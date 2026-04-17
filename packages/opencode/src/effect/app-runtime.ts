@@ -46,7 +46,7 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share"
 import { SessionShare } from "@/share"
-import { Npm } from "@/npm/effect"
+import { Npm } from "@/npm"
 import { memoMap } from "./memo-map"
 
 export const AppLayer = Layer.mergeAll(
