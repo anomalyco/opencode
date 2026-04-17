@@ -198,8 +198,11 @@ function createGlobalSync() {
         setStore("session", reconcile(next, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
       }
-      children.unpin(directory)
-      return
+      const rootCount = next.filter((s) => !s.parentID).length
+      if (rootCount >= store.limit || store.sessionTotal <= rootCount) {
+        children.unpin(directory)
+        return
+      }
     }
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
