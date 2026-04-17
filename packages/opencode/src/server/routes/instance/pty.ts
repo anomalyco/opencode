@@ -6,8 +6,8 @@ import z from "zod"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
-import { NotFoundError } from "../../storage"
-import { errors } from "../error"
+import { NotFoundError } from "@/storage"
+import { errors } from "../../error"
 
 export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
   return new Hono()

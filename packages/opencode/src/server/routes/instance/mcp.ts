@@ -1,12 +1,12 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { MCP } from "../../mcp"
-import { Config } from "../../config"
-import { ConfigMCP } from "../../config/mcp"
-import { AppRuntime } from "../../effect/app-runtime"
-import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { MCP } from "@/mcp"
+import { Config } from "@/config"
+import { ConfigMCP } from "@/config/mcp"
+import { AppRuntime } from "@/effect/app-runtime"
+import { errors } from "../../error"
+import { lazy } from "@/util/lazy"
 import { Effect } from "effect"
 
 export const McpRoutes = lazy(() =>

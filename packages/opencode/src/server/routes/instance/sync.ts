@@ -6,7 +6,7 @@ import { Database, asc, and, not, or, lte, eq } from "@/storage"
 import { EventTable } from "@/sync/event.sql"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util"
-import { errors } from "../error"
+import { errors } from "../../error"
 
 const ReplayEvent = z.object({
   id: z.string(),

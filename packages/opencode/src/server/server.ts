@@ -1,16 +1,25 @@
 import { generateSpecs } from "hono-openapi"
 import { Hono } from "hono"
+import type { MiddlewareHandler } from "hono"
 import { adapter } from "#hono"
-import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
-import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
-import { FenceMiddleware } from "./fence"
-import { InstanceRoutes } from "./instance"
-import { initProjectors } from "./projectors"
 import { Log } from "@/util"
 import { Flag } from "@/flag/flag"
-import { ControlPlaneRoutes } from "./control"
-import { UIRoutes } from "./ui"
+import { Instance } from "@/project/instance"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { AppRuntime } from "@/effect/app-runtime"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { WorkspaceID } from "@/control-plane/schema"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { MDNS } from "./mdns"
+import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
+import { FenceMiddleware } from "./fence"
+import { initProjectors } from "./projectors"
+import { InstanceRoutes } from "./routes/instance"
+import { ControlPlaneRoutes } from "./routes/control"
+import { UIRoutes } from "./routes/ui"
+import { GlobalRoutes } from "./routes/global"
+import { WorkspaceRouterMiddleware } from "./workspace"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -30,18 +39,48 @@ export const Default = lazy(() => create({}))
 
 function create(opts: { cors?: string[] }) {
   const app = new Hono()
+    .onError(ErrorMiddleware)
+    .use(AuthMiddleware)
+    .use(LoggerMiddleware)
+    .use(CompressionMiddleware)
+    .use(CorsMiddleware(opts))
+    .route("/global", GlobalRoutes())
+
   const runtime = adapter.create(app)
+
+  function InstanceMiddleware(workspaceID?: WorkspaceID): MiddlewareHandler {
+    return async (c, next) => {
+      const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+      const directory = AppFileSystem.resolve(
+        (() => {
+          try {
+            return decodeURIComponent(raw)
+          } catch {
+            return raw
+          }
+        })(),
+      )
+
+      return WorkspaceContext.provide({
+        workspaceID,
+        async fn() {
+          return Instance.provide({
+            directory,
+            init: () => AppRuntime.runPromise(InstanceBootstrap),
+            async fn() {
+              return next()
+            },
+          })
+        },
+      })
+    }
+  }
 
   if (Flag.OPENCODE_WORKSPACE_ID) {
     return {
       app: app
-        .onError(ErrorMiddleware)
-        .use(AuthMiddleware)
-        .use(LoggerMiddleware)
-        .use(CompressionMiddleware)
-        .use(CorsMiddleware(opts))
+        .use(InstanceMiddleware(Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined))
         .use(FenceMiddleware)
-        .route("/", ControlPlaneRoutes())
         .route("/", InstanceRoutes(runtime.upgradeWebSocket)),
       runtime,
     }
@@ -49,12 +88,9 @@ function create(opts: { cors?: string[] }) {
 
   return {
     app: app
-      .onError(ErrorMiddleware)
-      .use(AuthMiddleware)
-      .use(LoggerMiddleware)
-      .use(CompressionMiddleware)
-      .use(CorsMiddleware(opts))
+      .use(InstanceMiddleware())
       .route("/", ControlPlaneRoutes())
+      .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket))
       .route("/", InstanceRoutes(runtime.upgradeWebSocket))
       .route("/", UIRoutes()),
     runtime,

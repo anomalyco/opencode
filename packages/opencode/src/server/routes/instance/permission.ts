@@ -4,8 +4,8 @@ import z from "zod"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
-import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { errors } from "../../error"
+import { lazy } from "@/util/lazy"
 
 export const PermissionRoutes = lazy(() =>
   new Hono()
