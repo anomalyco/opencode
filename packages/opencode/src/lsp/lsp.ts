@@ -167,7 +167,7 @@ export const layer = Layer.effect(
 
         const servers: Record<string, LSPServer.Info> = {}
 
-        if (cfg.lsp === false) {
+        if (!cfg.lsp) {
           log.info("all LSPs are disabled")
         } else {
           for (const server of Object.values(LSPServer)) {
@@ -176,25 +176,27 @@ export const layer = Layer.effect(
 
           filterExperimentalServers(servers)
 
-          for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
-            const existing = servers[name]
-            if (item.disabled) {
-              log.info(`LSP server ${name} is disabled`)
-              delete servers[name]
-              continue
-            }
-            servers[name] = {
-              ...existing,
-              id: name,
-              root: existing?.root ?? (async () => Instance.directory),
-              extensions: item.extensions ?? existing?.extensions ?? [],
-              spawn: async (root) => ({
-                process: lspspawn(item.command[0], item.command.slice(1), {
-                  cwd: root,
-                  env: { ...process.env, ...item.env },
+          if (cfg.lsp !== true) {
+            for (const [name, item] of Object.entries(cfg.lsp)) {
+              const existing = servers[name]
+              if (item.disabled) {
+                log.info(`LSP server ${name} is disabled`)
+                delete servers[name]
+                continue
+              }
+              servers[name] = {
+                ...existing,
+                id: name,
+                root: existing?.root ?? (async () => Instance.directory),
+                extensions: item.extensions ?? existing?.extensions ?? [],
+                spawn: async (root) => ({
+                  process: lspspawn(item.command[0], item.command.slice(1), {
+                    cwd: root,
+                    env: { ...process.env, ...item.env },
+                  }),
+                  initialization: item.initialization,
                 }),
-                initialization: item.initialization,
-              }),
+              }
             }
           }
 

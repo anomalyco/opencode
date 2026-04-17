@@ -9,5 +9,5 @@ export const Entry = z.object({
   extensions: z.array(z.string()).optional(),
 })
 
-export const Info = z.union([z.literal(false), z.record(z.string(), Entry)])
+export const Info = z.union([z.boolean(), z.record(z.string(), Entry)])
 export type Info = z.infer<typeof Info>

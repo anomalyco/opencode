@@ -41,39 +41,6 @@ export const layer = Layer.effect(
         const commands: Record<string, string[] | false> = {}
         const formatters: Record<string, Formatter.Info> = {}
 
-        const cfg = yield* config.get()
-
-        if (cfg.formatter !== false) {
-          for (const item of Object.values(Formatter)) {
-            formatters[item.name] = item
-          }
-          for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
-            // Ruff and uv are both the same formatter, so disabling either should disable both.
-            if (["ruff", "uv"].includes(name) && (cfg.formatter?.ruff?.disabled || cfg.formatter?.uv?.disabled)) {
-              // TODO combine formatters so shared backends like Ruff/uv don't need linked disable handling here.
-              delete formatters.ruff
-              delete formatters.uv
-              continue
-            }
-            if (item.disabled) {
-              delete formatters[name]
-              continue
-            }
-            const info = mergeDeep(formatters[name] ?? {}, {
-              extensions: [],
-              ...item,
-            })
-
-            formatters[name] = {
-              ...info,
-              name,
-              enabled: async () => info.command ?? false,
-            }
-          }
-        } else {
-          log.info("all formatters are disabled")
-        }
-
         async function getCommand(item: Formatter.Info) {
           let cmd = commands[item.name]
           if (cmd === false || cmd === undefined) {
@@ -147,6 +114,48 @@ export const layer = Layer.effect(
               }
             }
           })
+        }
+
+        const cfg = yield* config.get()
+
+        if (!cfg.formatter) {
+          log.info("all formatters are disabled")
+          log.info("init")
+          return {
+            formatters,
+            isEnabled,
+            formatFile,
+          }
+        }
+
+        for (const item of Object.values(Formatter)) {
+          formatters[item.name] = item
+        }
+
+        if (cfg.formatter !== true) {
+          for (const [name, item] of Object.entries(cfg.formatter)) {
+            const builtIn = Formatter[name as keyof typeof Formatter]
+
+            // Ruff and uv are both the same formatter, so disabling either should disable both.
+            if (["ruff", "uv"].includes(name) && (cfg.formatter.ruff?.disabled || cfg.formatter.uv?.disabled)) {
+              // TODO combine formatters so shared backends like Ruff/uv don't need linked disable handling here.
+              delete formatters.ruff
+              delete formatters.uv
+              continue
+            }
+            if (item.disabled) {
+              delete formatters[name]
+              continue
+            }
+            const info = mergeDeep(builtIn ?? { extensions: [] }, item)
+
+            formatters[name] = {
+              ...info,
+              name,
+              extensions: info.extensions ?? [],
+              enabled: builtIn && !info.command ? builtIn.enabled : async () => info.command ?? false,
+            }
+          }
         }
 
         log.info("init")

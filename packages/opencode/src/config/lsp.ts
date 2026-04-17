@@ -18,7 +18,7 @@ export const Entry = z.union([
   }),
 ])
 
-export const Info = z.union([z.literal(false), z.record(z.string(), Entry)]).refine(
+export const Info = z.union([z.boolean(), z.record(z.string(), Entry)]).refine(
   (data) => {
     if (typeof data === "boolean") return true
     const serverIds = new Set(Object.values(LSPServer).map((server) => server.id))
