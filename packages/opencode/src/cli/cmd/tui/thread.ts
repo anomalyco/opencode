@@ -131,9 +131,13 @@ export const TuiThreadCommand = cmd({
       const cwd = Filesystem.resolve(process.cwd())
 
       const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          ),
+          OPENCODE_PROCESS_ROLE: "worker",
+          OPENCODE_RUN_ID: process.env.OPENCODE_RUN_ID ?? crypto.randomUUID(),
+        },
       })
       worker.onerror = (e) => {
         Log.Default.error("thread error", {

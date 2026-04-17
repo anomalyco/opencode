@@ -12,6 +12,9 @@ import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 
+process.env.OPENCODE_RUN_ID ??= crypto.randomUUID()
+process.env.OPENCODE_PROCESS_ROLE ??= "worker"
+
 await Log.init({
   print: process.argv.includes("--print-logs"),
   dev: Installation.isLocal(),

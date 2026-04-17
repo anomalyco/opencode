@@ -7,6 +7,9 @@ import { InstallationChannel, InstallationVersion } from "@/installation/version
 
 const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 export const enabled = !!base
+const runID = process.env.OPENCODE_RUN_ID ??= crypto.randomUUID()
+const processRole = process.env.OPENCODE_PROCESS_ROLE ??= "main"
+const processID = crypto.randomUUID()
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -25,6 +28,9 @@ const resource = {
   attributes: {
     "deployment.environment.name": InstallationChannel,
     "opencode.client": Flag.OPENCODE_CLIENT,
+    "opencode.process_role": processRole,
+    "opencode.run_id": runID,
+    "service.instance.id": processID,
   },
 }
 
