@@ -35,8 +35,9 @@ export function SubagentFooter() {
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
 
+    const cached = last.tokens.cache.read + last.tokens.cache.write
     const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + cached
     if (tokens <= 0) return
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
@@ -48,8 +49,9 @@ export function SubagentFooter() {
       currency: "USD",
     })
 
+    const tokenText = cached > 0 ? `${Locale.number(tokens)} (${Locale.number(cached)} cached)` : Locale.number(tokens)
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
+      context: pct ? `${tokenText} (${pct})` : tokenText,
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
