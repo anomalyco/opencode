@@ -4,8 +4,7 @@ import path from "path"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
-const appPkgPath = path.resolve(import.meta.dir, "../../opencode/package.json")
-const appPkg = await Bun.file(appPkgPath).json()
+const versionPath = path.resolve(import.meta.dir, "../../../VERSION")
 const expectedBunVersion = rootPkg.packageManager?.split("@")[1]
 
 if (!expectedBunVersion) {
@@ -26,9 +25,12 @@ const env = {
   OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
 }
 const base = (() => {
-  const value = typeof appPkg.version === "string" ? appPkg.version.trim() : ""
-  return semver.valid(value) ?? "0.0.0"
+  const value = Bun.file(versionPath).text().then((x) => x.trim())
+  return value
 })()
+const baseVersion = await base.then((value) => {
+  return semver.valid(value) ?? "0.0.0"
+})
 const explicit = (() => {
   const value = env.OPENCODE_VERSION?.trim()
   if (!value) return
@@ -60,18 +62,13 @@ const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
   if (explicit) return explicit
-  if (IS_PREVIEW) return preview(base, CHANNEL)
-  const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
-    .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
-      return res.json()
-    })
-    .then((data: any) => data.version)
-  const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
+  if (IS_PREVIEW) return preview(baseVersion, CHANNEL)
+  const [major, minor, patch] = baseVersion.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
-  return `${major}.${minor}.${patch + 1}`
+  if (t === "patch") return `${major}.${minor}.${patch + 1}`
+  return baseVersion
 })()
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
