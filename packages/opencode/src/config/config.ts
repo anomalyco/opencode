@@ -97,7 +97,7 @@ export const Info = z
     logLevel: Log.Level.optional().describe("Log level"),
     server: Server.optional().describe("Server configuration for opencode serve and web commands"),
     command: z
-      .record(z.string(), ConfigCommand.Info)
+      .record(z.string(), ConfigCommand.Info.zod)
       .optional()
       .describe("Command configuration, see https://opencode.ai/docs/commands"),
     skills: ConfigSkills.Info.zod.optional().describe("Additional skill folder paths"),
@@ -135,8 +135,10 @@ export const Info = z
       .array(z.string())
       .optional()
       .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-    model: ConfigModelID.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
-    small_model: ConfigModelID.describe(
+    model: ConfigModelID.zod
+      .describe("Model to use in the format of provider/model, eg anthropic/claude-2")
+      .optional(),
+    small_model: ConfigModelID.zod.describe(
       "Small model to use for tasks like title generation in the format of provider/model",
     ).optional(),
     default_agent: z
