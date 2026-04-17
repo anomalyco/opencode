@@ -40,6 +40,7 @@ export type Share = typeof ShareSchema.Type
 type State = {
   queue: Map<string, { data: Map<string, Data> }>
   scope: Scope.Closeable
+  shared: Set<SessionID>
 }
 
 type Data =
@@ -118,10 +119,9 @@ export const layer = Layer.effect(
     function sync(sessionID: SessionID, data: Data[]): Effect.Effect<void> {
       return Effect.gen(function* () {
         if (disabled) return
-        const share = yield* get(sessionID)
-        if (!share) return
-
         const s = yield* InstanceState.get(state)
+        if (!s.shared.has(sessionID)) return
+
         const existing = s.queue.get(sessionID)
         if (existing) {
           for (const item of data) {
@@ -146,7 +146,7 @@ export const layer = Layer.effect(
 
     const state: InstanceState.InstanceState<State> = yield* InstanceState.make<State>(
       Effect.fn("ShareNext.state")(function* (_ctx) {
-        const cache: State = { queue: new Map(), scope: yield* Scope.make() }
+        const cache: State = { queue: new Map(), scope: yield* Scope.make(), shared: new Set() }
 
         yield* Effect.addFinalizer(() =>
           Scope.close(cache.scope, Exit.void).pipe(
@@ -159,6 +159,11 @@ export const layer = Layer.effect(
         )
 
         if (disabled) return cache
+
+        const existingShares = yield* db((db) => db.select({ sessionID: SessionShareTable.session_id }).from(SessionShareTable).all())
+        for (const row of existingShares) {
+          cache.shared.add(row.sessionID as SessionID)
+        }
 
         const watch = <D extends { type: string }>(
           def: D,
@@ -239,7 +244,10 @@ export const layer = Layer.effect(
       s.queue.delete(sessionID)
 
       const share = yield* get(sessionID)
-      if (!share) return
+      if (!share) {
+        s.shared.delete(sessionID)
+        return
+      }
 
       const req = yield* request()
       const res = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.sync(share.id)}`).pipe(
@@ -310,6 +318,7 @@ export const layer = Layer.effect(
           .run(),
       )
       const s = yield* InstanceState.get(state)
+      s.shared.add(sessionID)
       yield* full(sessionID).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
@@ -335,6 +344,9 @@ export const layer = Layer.effect(
       )
 
       yield* db((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
+      const s = yield* InstanceState.get(state)
+      s.shared.delete(sessionID)
+      s.queue.delete(sessionID)
     })
 
     return Service.of({ init, url, request, create, remove })
