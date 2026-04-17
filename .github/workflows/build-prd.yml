@@ -1,0 +1,28 @@
+name: Build Prd
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build:
+    uses: team-monolith-product/tmn-gh-actions/.github/workflows/build_v2.yml@main
+    with:
+      env: prd
+      target: main
+      dockerTarget: dev
+      helmRepository: enk-opencode-hub-helm
+      propertyPath: jupyterhub.singleuser.image.tag
+      updateTargets: |
+        {
+          "aws": {
+            "imageName": "enk-ecr-opencode-all-prd",
+            "valueFilePath": ["aws-apne2-prd-hackathon.yaml"]
+          }
+        }
+    secrets:
+      MACHINE_TOKEN: ${{ secrets.MACHINE_TOKEN }}
