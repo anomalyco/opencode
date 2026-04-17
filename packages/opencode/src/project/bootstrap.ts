@@ -1,3 +1,4 @@
+import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "../lsp"
 import { File } from "../file"
@@ -7,7 +8,6 @@ import * as Vcs from "./vcs"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
-import { Plugin } from "../plugin"
 import { Log } from "@/util"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
@@ -16,20 +16,20 @@ import { Config } from "@/config"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
+  // everything depends on config so eager load it for nice traces
+  yield* Config.Service.use((svc) => svc.get())
+  // Plugin can mutate config so it has to be initialized before anything else.
+  yield* Plugin.Service.use((svc) => svc.init())
   yield* Effect.all(
     [
-      Config.Service.use((i) => i.get()),
-      ...[
-        Plugin.Service,
-        LSP.Service,
-        ShareNext.Service,
-        Format.Service,
-        File.Service,
-        FileWatcher.Service,
-        Vcs.Service,
-        Snapshot.Service,
-      ].map((s) => s.use((i) => i.init())),
-    ].map((e) => Effect.forkDetach(e)),
+      LSP.Service,
+      ShareNext.Service,
+      Format.Service,
+      File.Service,
+      FileWatcher.Service,
+      Vcs.Service,
+      Snapshot.Service,
+    ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
   ).pipe(Effect.withSpan("InstanceBootstrap.init"))
 
   yield* Bus.Service.use((svc) =>

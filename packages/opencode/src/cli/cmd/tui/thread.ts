@@ -8,7 +8,6 @@ import { UI } from "@/cli/ui"
 import { Log } from "@/util"
 import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
-import { Instance } from "@/project/instance"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
@@ -182,11 +181,7 @@ export const TuiThreadCommand = cmd({
       const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
 
-      const network = await Instance.provide({
-        directory: cwd,
-        fn: () => resolveNetworkOptionsNoConfig(args),
-      })
-
+      const network = resolveNetworkOptionsNoConfig(args)
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
