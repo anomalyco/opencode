@@ -186,4 +186,65 @@ describe("util.effect-zod", () => {
     const schema = json(zod(Parent)) as any
     expect(schema.properties.sessionID).toEqual({ type: "string", pattern: "^ses.*" })
   })
+
+  describe("Schema.check translation", () => {
+    test("filter returning string triggers refinement with that message", () => {
+      const isEven = Schema.makeFilter((n: number) =>
+        n % 2 === 0 ? undefined : "expected an even number",
+      )
+      const schema = zod(Schema.Number.check(isEven))
+
+      expect(schema.parse(4)).toBe(4)
+      const result = schema.safeParse(3)
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toBe("expected an even number")
+    })
+
+    test("filter returning false triggers refinement with fallback message", () => {
+      const nonEmpty = Schema.makeFilter((s: string) => s.length > 0)
+      const schema = zod(Schema.String.check(nonEmpty))
+
+      expect(schema.parse("hi")).toBe("hi")
+      const result = schema.safeParse("")
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toMatch(/./)
+    })
+
+    test("filter returning undefined passes validation", () => {
+      const alwaysOk = Schema.makeFilter(() => undefined)
+      const schema = zod(Schema.Number.check(alwaysOk))
+
+      expect(schema.parse(42)).toBe(42)
+    })
+
+    test("annotations.message on the filter is used when filter returns false", () => {
+      const positive = Schema.makeFilter(
+        (n: number) => n > 0,
+        { message: "must be positive" },
+      )
+      const schema = zod(Schema.Number.check(positive))
+
+      const result = schema.safeParse(-1)
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toBe("must be positive")
+    })
+
+    test("cross-field check on a record flags missing key", () => {
+      const hasKey = Schema.makeFilter(
+        (data: Record<string, { enabled: boolean }>) =>
+          "required" in data ? undefined : "missing 'required' key",
+      )
+      const schema = zod(
+        Schema.Record(Schema.String, Schema.Struct({ enabled: Schema.Boolean })).check(hasKey),
+      )
+
+      expect(schema.parse({ required: { enabled: true } })).toEqual({
+        required: { enabled: true },
+      })
+
+      const result = schema.safeParse({ other: { enabled: true } })
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toBe("missing 'required' key")
+    })
+  })
 })

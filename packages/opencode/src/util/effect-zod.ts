@@ -16,11 +16,32 @@ function walk(ast: SchemaAST.AST): z.ZodTypeAny {
   const override = (ast.annotations as any)?.[ZodOverride] as z.ZodTypeAny | undefined
   if (override) return override
 
-  const out = body(ast)
+  let out = body(ast)
+  for (const check of ast.checks ?? []) {
+    out = applyCheck(out, check, ast)
+  }
   const desc = SchemaAST.resolveDescription(ast)
   const ref = SchemaAST.resolveIdentifier(ast)
   const next = desc ? out.describe(desc) : out
   return ref ? next.meta({ ref }) : next
+}
+
+function applyCheck(out: z.ZodTypeAny, check: SchemaAST.Check<any>, ast: SchemaAST.AST): z.ZodTypeAny {
+  if (check._tag === "FilterGroup") {
+    return check.checks.reduce((acc, sub) => applyCheck(acc, sub, ast), out)
+  }
+  return out.superRefine((value, ctx) => {
+    const issue = check.run(value, ast, {} as any)
+    if (!issue) return
+    const message = issueMessage(issue) ?? (check.annotations as any)?.message ?? "Validation failed"
+    ctx.addIssue({ code: "custom", message })
+  })
+}
+
+function issueMessage(issue: any): string | undefined {
+  if (typeof issue?.annotations?.message === "string") return issue.annotations.message
+  if (typeof issue?.message === "string") return issue.message
+  return undefined
 }
 
 function body(ast: SchemaAST.AST): z.ZodTypeAny {
