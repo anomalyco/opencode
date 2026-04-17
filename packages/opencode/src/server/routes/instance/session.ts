@@ -702,6 +702,41 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .get(
+      "/:sessionID/usage",
+      describeRoute({
+        summary: "Get session usage",
+        description:
+          "Return an aggregated usage snapshot for a session without loading the full message list into memory. Returns the latest assistant message (tokens, model/provider) and the total cost summed across all assistant messages.",
+        operationId: "session.usage",
+        responses: {
+          200: {
+            description: "Usage snapshot",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    last: MessageV2.Assistant.optional(),
+                    totalCost: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        return c.json(MessageV2.usage(sessionID))
+      },
+    )
+    .get(
       "/:sessionID/message/:messageID",
       describeRoute({
         summary: "Get message",

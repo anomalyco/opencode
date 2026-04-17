@@ -84,24 +84,19 @@ async function sendUsageUpdate(
   sessionID: string,
   directory: string,
 ): Promise<void> {
-  const messages = await sdk.session
-    .messages({ sessionID, directory }, { throwOnError: true })
+  const snapshot = await sdk.session
+    .usage({ sessionID, directory }, { throwOnError: true })
     .then((x) => x.data)
     .catch((error) => {
-      log.error("failed to fetch messages for usage update", { error })
+      log.error("failed to fetch usage snapshot", { error })
       return undefined
     })
 
-  if (!messages) return
+  if (!snapshot) return
 
-  const assistantMessages = messages.filter(
-    (m): m is { info: AssistantMessage; parts: SessionMessageResponse["parts"] } => m.info.role === "assistant",
-  )
+  const msg = snapshot.last
+  if (!msg) return
 
-  const lastAssistant = assistantMessages[assistantMessages.length - 1]
-  if (!lastAssistant) return
-
-  const msg = lastAssistant.info
   if (!msg.providerID || !msg.modelID) return
   const size = await getContextLimit(sdk, ProviderID.make(msg.providerID), ModelID.make(msg.modelID), directory)
 
@@ -111,7 +106,6 @@ async function sendUsageUpdate(
   }
 
   const used = msg.tokens.input + (msg.tokens.cache?.read ?? 0)
-  const totalCost = assistantMessages.reduce((sum, m) => sum + m.info.cost, 0)
 
   await connection
     .sessionUpdate({
@@ -120,7 +114,7 @@ async function sendUsageUpdate(
         sessionUpdate: "usage_update",
         used,
         size,
-        cost: { amount: totalCost, currency: "USD" },
+        cost: { amount: snapshot.totalCost, currency: "USD" },
       },
     })
     .catch((error) => {

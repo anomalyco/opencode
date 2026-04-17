@@ -6,7 +6,7 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "../sync"
-import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage"
+import { Database, NotFoundError, and, desc, eq, inArray, lt, or, sql } from "@/storage"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderError } from "@/provider"
 import { iife } from "@/util/iife"
@@ -890,6 +890,44 @@ export function* stream(sessionID: SessionID) {
     if (!next.more || !next.cursor) break
     before = next.cursor
   }
+}
+
+/**
+ * Aggregated usage snapshot for a single session, computed in SQL.
+ *
+ * Returns only the fields `sendUsageUpdate` actually needs: the latest
+ * assistant message (for tokens / providerID / modelID) and the total cost
+ * summed over all assistant messages. Keeps heap allocation O(1) instead of
+ * O(messages) that loading the full session message list would incur.
+ */
+export function usage(sessionID: SessionID): {
+  last: Assistant | undefined
+  totalCost: number
+} {
+  return Database.use((db) => {
+    const assistantPredicate = and(
+      eq(MessageTable.session_id, sessionID),
+      sql`json_extract(${MessageTable.data}, '$.role') = 'assistant'`,
+    )
+    const lastRow = db
+      .select()
+      .from(MessageTable)
+      .where(assistantPredicate)
+      .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+      .limit(1)
+      .get()
+    const costRow = db
+      .select({
+        total: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.cost'), 0)), 0)`,
+      })
+      .from(MessageTable)
+      .where(assistantPredicate)
+      .get()
+    return {
+      last: lastRow ? (info(lastRow) as Assistant) : undefined,
+      totalCost: costRow?.total ?? 0,
+    }
+  })
 }
 
 export function parts(message_id: MessageID) {
