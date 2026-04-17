@@ -766,7 +766,7 @@ export default function Spotlight(props: SpotlightProps) {
       }
     }
 
-    initializeWebGPU()
+    void initializeWebGPU()
 
     onCleanup(() => {
       if (cleanupFunctionRef) {
