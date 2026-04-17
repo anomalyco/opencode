@@ -859,6 +859,20 @@ export default function Page() {
   })
   onCleanup(stopVcs)
 
+  // Fallback polling for desktop where SSE events may not arrive reliably
+  // Ensures changes panel updates when file watcher events don't trigger refresh
+  let pollInterval: ReturnType<typeof setInterval> | undefined
+  onMount(() => {
+    if (sync.project?.vcs === "git") {
+      pollInterval = setInterval(() => {
+        refreshVcs()
+      }, 5000)
+      onCleanup(() => {
+        if (pollInterval) clearInterval(pollInterval)
+      })
+    }
+  })
+
   createEffect(
     on(
       () => params.dir,

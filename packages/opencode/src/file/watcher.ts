@@ -85,7 +85,10 @@ export const layer = Layer.effect(
           }
 
           const w = watcher()
-          if (!w) return
+          if (!w) {
+            log.error("watcher factory returned undefined", { directory: Instance.directory })
+            return
+          }
 
           log.info("watcher backend", { directory: Instance.directory, platform: process.platform, backend })
 
@@ -95,7 +98,10 @@ export const layer = Layer.effect(
           )
 
           const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
-            if (err) return
+            if (err) {
+              log.error("watcher callback error", { cause: err })
+              return
+            }
             for (const evt of evts) {
               if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
               if (evt.type === "update") void Bus.publish(Event.Updated, { file: evt.path, event: "change" })
