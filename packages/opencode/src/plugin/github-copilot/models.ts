@@ -10,6 +10,11 @@ export const schema = z.object({
       // every version looks like: `{model.id}-YYYY-MM-DD`
       version: z.string(),
       supported_endpoints: z.array(z.string()).optional(),
+      policy: z
+        .object({
+          state: z.string().optional(),
+        })
+        .optional(),
       capabilities: z.object({
         family: z.string(),
         limits: z.object({
@@ -68,11 +73,6 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
       input: remote.capabilities.limits.max_prompt_tokens,
       output: remote.capabilities.limits.max_output_tokens,
     },
-    policy: z
-      .object({
-        state: z.string().optional(),
-      })
-      .optional(),
     capabilities: {
       temperature: prev?.capabilities.temperature ?? true,
       reasoning: prev?.capabilities.reasoning ?? reasoning,
