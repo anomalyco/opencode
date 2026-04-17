@@ -25,7 +25,10 @@ kommander
 -opencodeengineer bot that spams issues
 r44vc0rp
 rekram1-node
+-ricardo-m-l
 -robinmordasiewicz
+shantur
+simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
 -toastythebot

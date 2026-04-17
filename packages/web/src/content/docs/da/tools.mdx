@@ -151,23 +151,6 @@ Søk etter filer ved at bruge glob-mønstre som `**/*.js` eller `src/**/*.ts`. R
 
 ---
 
-### list
-
-List filer og kataloger i en gitt bane.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for at filtrere resultater.
-
----
-
 ### lsp (experimental)
 
 Samhandle med dine konfigurerte LSP-servere for at få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
@@ -341,7 +324,7 @@ MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjen
 
 ## Interne
 
-Internt bruger verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og lister.
+Internt bruger verktøy som `grep` og `glob` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og lister.
 
 ---
 

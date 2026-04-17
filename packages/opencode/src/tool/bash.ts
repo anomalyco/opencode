@@ -1,20 +1,21 @@
 import z from "zod"
 import os from "os"
-import { Tool } from "./tool"
+import { createWriteStream } from "node:fs"
+import * as Tool from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
-import { Truncate } from "./truncate"
+import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -74,6 +75,11 @@ type Scan = {
   dirs: Set<string>
   patterns: Set<string>
   always: Set<string>
+}
+
+type Chunk = {
+  text: string
+  size: number
 }
 
 export const log = Log.create({ service: "bash-tool" })
@@ -176,7 +182,7 @@ function dynamic(text: string, ps: boolean) {
 }
 
 function prefix(text: string) {
-  const match = /[?*\[]/.exec(text)
+  const match = /[?*[]/.exec(text)
   if (!match) return text
   if (match.index === 0) return
   return text.slice(0, match.index)
@@ -211,7 +217,39 @@ function pathArgs(list: Part[], ps: boolean) {
 
 function preview(text: string) {
   if (text.length <= MAX_METADATA_LENGTH) return text
-  return text.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
+  return "...\n\n" + text.slice(-MAX_METADATA_LENGTH)
+}
+
+function tail(text: string, maxLines: number, maxBytes: number) {
+  const lines = text.split("\n")
+  if (lines.length <= maxLines && Buffer.byteLength(text, "utf-8") <= maxBytes) {
+    return {
+      text,
+      cut: false,
+    }
+  }
+
+  const out: string[] = []
+  let bytes = 0
+  for (let i = lines.length - 1; i >= 0 && out.length < maxLines; i--) {
+    const size = Buffer.byteLength(lines[i], "utf-8") + (out.length > 0 ? 1 : 0)
+    if (bytes + size > maxBytes) {
+      if (out.length === 0) {
+        const buf = Buffer.from(lines[i], "utf-8")
+        let start = buf.length - maxBytes
+        if (start < 0) start = 0
+        while (start < buf.length && (buf[start] & 0xc0) === 0x80) start++
+        out.unshift(buf.subarray(start).toString("utf-8"))
+      }
+      break
+    }
+    out.unshift(lines[i])
+    bytes += size
+  }
+  return {
+    text: out.join("\n"),
+    cut: true,
+  }
 }
 
 const parse = Effect.fn("BashTool.parse")(function* (command: string, ps: boolean) {
@@ -295,6 +333,7 @@ export const BashTool = Tool.define(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
     const fs = yield* AppFileSystem.Service
+    const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
 
     const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
@@ -381,7 +420,16 @@ export const BashTool = Tool.define(
       },
       ctx: Tool.Context,
     ) {
-      let output = ""
+      const bytes = Truncate.MAX_BYTES
+      const lines = Truncate.MAX_LINES
+      const keep = bytes * 2
+      let full = ""
+      let last = ""
+      const list: Chunk[] = []
+      let used = 0
+      let file = ""
+      let sink: ReturnType<typeof createWriteStream> | undefined
+      let cut = false
       let expired = false
       let aborted = false
 
@@ -398,10 +446,47 @@ export const BashTool = Tool.define(
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
-              output += chunk
+              const size = Buffer.byteLength(chunk, "utf-8")
+              list.push({ text: chunk, size })
+              used += size
+              while (used > keep && list.length > 1) {
+                const item = list.shift()
+                if (!item) break
+                used -= item.size
+                cut = true
+              }
+
+              last = preview(last + chunk)
+
+              if (file) {
+                sink?.write(chunk)
+              } else {
+                full += chunk
+                if (Buffer.byteLength(full, "utf-8") > bytes) {
+                  return trunc.write(full).pipe(
+                    Effect.andThen((next) =>
+                      Effect.sync(() => {
+                        file = next
+                        cut = true
+                        sink = createWriteStream(next, { flags: "a" })
+                        full = ""
+                      }),
+                    ),
+                    Effect.andThen(
+                      ctx.metadata({
+                        metadata: {
+                          output: last,
+                          description: input.description,
+                        },
+                      }),
+                    ),
+                  )
+                }
+              }
+
               return ctx.metadata({
                 metadata: {
-                  output: preview(output),
+                  output: last,
                   description: input.description,
                 },
               })
@@ -437,18 +522,48 @@ export const BashTool = Tool.define(
       ).pipe(Effect.orDie)
 
       const meta: string[] = []
-      if (expired) meta.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
+      if (expired) {
+        meta.push(
+          `bash tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
+        )
+      }
       if (aborted) meta.push("User aborted the command")
+      const raw = list.map((item) => item.text).join("")
+      const end = tail(raw, lines, bytes)
+      if (end.cut) cut = true
+      if (!file && end.cut) {
+        file = yield* trunc.write(raw)
+      }
+
+      let output = end.text
+      if (!output) output = "(no output)"
+
+      if (cut && file) {
+        output = `...output truncated...\n\nFull output saved to: ${file}\n\n` + output
+      }
+
       if (meta.length > 0) {
         output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
+      }
+      if (sink) {
+        const stream = sink
+        yield* Effect.promise(
+          () =>
+            new Promise<void>((resolve) => {
+              stream.end(() => resolve())
+              stream.on("error", () => resolve())
+            }),
+        )
       }
 
       return {
         title: input.description,
         metadata: {
-          output: preview(output),
+          output: last || preview(output),
           exit: code,
           description: input.description,
+          truncated: cut,
+          ...(cut && file ? { outputPath: file } : {}),
         },
         output,
       }

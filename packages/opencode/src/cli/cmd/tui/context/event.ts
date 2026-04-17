@@ -8,6 +8,10 @@ export function useEvent() {
 
   function subscribe(handler: (event: Event) => void) {
     return sdk.event.on("event", (event) => {
+      if (event.payload.type === "sync") {
+        return
+      }
+
       // Special hack for truly global events
       if (event.directory === "global") {
         handler(event.payload)

@@ -1,13 +1,47 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
+import { listAdaptors } from "../../control-plane/adaptors"
 import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Log } from "@/util"
+import { errorData } from "@/util/error"
+
+const log = Log.create({ service: "server.workspace" })
 
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/adaptor",
+      describeRoute({
+        summary: "List workspace adaptors",
+        description: "List all available workspace adaptors for the current project.",
+        operationId: "experimental.workspace.adaptor.list",
+        responses: {
+          200: {
+            description: "Workspace adaptors",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      type: z.string(),
+                      name: z.string(),
+                      description: z.string(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await listAdaptors(Instance.project.id))
+      },
+    )
     .post(
       "/",
       describeRoute({
@@ -111,6 +145,59 @@ export const WorkspaceRoutes = lazy(() =>
       async (c) => {
         const { id } = c.req.valid("param")
         return c.json(await Workspace.remove(id))
+      },
+    )
+    .post(
+      "/:id/session-restore",
+      describeRoute({
+        summary: "Restore session into workspace",
+        description: "Replay a session's sync events into the target workspace in batches.",
+        operationId: "experimental.workspace.sessionRestore",
+        responses: {
+          200: {
+            description: "Session replay started",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    total: z.number().int().min(0),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ id: Workspace.Info.shape.id })),
+      validator("json", Workspace.sessionRestore.schema.omit({ workspaceID: true })),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const body = c.req.valid("json")
+        log.info("session restore route requested", {
+          workspaceID: id,
+          sessionID: body.sessionID,
+          directory: Instance.directory,
+        })
+        try {
+          const result = await Workspace.sessionRestore({
+            workspaceID: id,
+            ...body,
+          })
+          log.info("session restore route complete", {
+            workspaceID: id,
+            sessionID: body.sessionID,
+            total: result.total,
+          })
+          return c.json(result)
+        } catch (err) {
+          log.error("session restore route failed", {
+            workspaceID: id,
+            sessionID: body.sessionID,
+            error: errorData(err),
+          })
+          throw err
+        }
       },
     ),
 )

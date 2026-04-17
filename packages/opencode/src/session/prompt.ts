@@ -3,23 +3,24 @@ import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
-import { Log } from "../util/log"
+import { Log } from "../util"
 import { SessionRevert } from "./revert"
-import { Session } from "."
+import * as Session from "./session"
 import { Agent } from "../agent/agent"
-import { Provider } from "../provider/provider"
+import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
-import { ProviderTransform } from "../provider/transform"
+import { ProviderTransform } from "../provider"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
-import { ToolRegistry } from "../tool/registry"
+import { ToolRegistry } from "../tool"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
@@ -30,25 +31,25 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
-import { ConfigMarkdown } from "../config/markdown"
+import { ConfigMarkdown } from "../config"
 import { SessionSummary } from "./summary"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { SessionProcessor } from "./processor"
-import { Tool } from "@/tool/tool"
+import { Tool } from "@/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
-import { AppFileSystem } from "@/filesystem"
-import { Truncate } from "@/tool/truncate"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Truncate } from "@/tool"
 import { decodeDataUrl } from "@/util/data-url"
-import { Process } from "@/util/process"
+import { Process } from "@/util"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
-import { EffectLogger } from "@/effect/logger"
-import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
+import { EffectLogger } from "@/effect"
+import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { EffectBridge } from "@/effect"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -102,14 +103,20 @@ export namespace SessionPrompt {
       const instruction = yield* Instruction.Service
       const state = yield* SessionRunState.Service
       const revert = yield* SessionRevert.Service
+      const summary = yield* SessionSummary.Service
       const sys = yield* SystemPrompt.Service
       const llm = yield* LLM.Service
-
-      const run = {
-        promise: <A, E>(effect: Effect.Effect<A, E>) =>
-          Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
-        fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
-      }
+      const runner = Effect.fn("SessionPrompt.runner")(function* () {
+        return yield* EffectBridge.make()
+      })
+      const ops = Effect.fn("SessionPrompt.ops")(function* () {
+        const run = yield* runner()
+        return {
+          cancel: (sessionID: SessionID) => run.fork(cancel(sessionID)),
+          resolvePromptParts: (template: string) => resolvePromptParts(template),
+          prompt: (input: PromptInput) => prompt(input),
+        } satisfies TaskPromptOps
+      })
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         yield* elog.info("cancel", { sessionID })
@@ -254,8 +261,7 @@ export namespace SessionPrompt {
             messageID: userMessage.info.id,
             sessionID: userMessage.info.sessionID,
             type: "text",
-            text:
-              BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+            text: `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`,
             synthetic: true,
           })
           userMessage.parts.push(part)
@@ -359,6 +365,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         using _ = log.time("resolveTools")
         const tools: Record<string, AITool> = {}
+        const run = yield* runner()
+        const promptOps = yield* ops()
 
         const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
           sessionID: input.session.id,
@@ -400,9 +408,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })) {
           const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
           tools[item.id] = tool({
-            id: item.id as any,
             description: item.description,
-            inputSchema: jsonSchema(schema as any),
+            inputSchema: jsonSchema(schema),
             execute(args, options) {
               return run.promise(
                 Effect.gen(function* () {
@@ -489,7 +496,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
                 const metadata = {
-                  ...(result.metadata ?? {}),
+                  ...result.metadata,
                   truncated: truncated.truncated,
                   ...(truncated.truncated && { outputPath: truncated.outputPath }),
                 }
@@ -528,6 +535,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
+        const promptOps = yield* ops()
         const { task: taskTool } = yield* registry.named()
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
@@ -712,6 +720,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput) {
         const ctx = yield* InstanceState.context
+        const run = yield* runner()
         const session = yield* sessions.get(input.sessionID)
         if (session.revert) {
           yield* revert.cleanup(session)
@@ -1444,7 +1453,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 })
               }
 
-              if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
+              if (step === 1)
+                yield* summary
+                  .summarize({ sessionID, messageID: lastUser.id })
+                  .pipe(Effect.ignore, Effect.forkIn(scope))
 
               if (step > 1 && lastFinished) {
                 for (const m of msgs) {
@@ -1656,12 +1668,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return result
       })
 
-      const promptOps: TaskPromptOps = {
-        cancel: (sessionID) => run.fork(cancel(sessionID)),
-        resolvePromptParts: (template) => resolvePromptParts(template),
-        prompt: (input) => prompt(input),
-      }
-
       return Service.of({
         cancel,
         prompt,
@@ -1692,6 +1698,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(SessionSummary.defaultLayer),
       Layer.provide(
         Layer.mergeAll(
           Agent.defaultLayer,
@@ -1703,8 +1710,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ),
     ),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod.optional(),
@@ -1772,25 +1777,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
-  export async function prompt(input: PromptInput) {
-    return runPromise((svc) => svc.prompt(PromptInput.parse(input)))
-  }
-
-  export async function resolvePromptParts(template: string) {
-    return runPromise((svc) => svc.resolvePromptParts(z.string().parse(template)))
-  }
-
-  export async function cancel(sessionID: SessionID) {
-    return runPromise((svc) => svc.cancel(SessionID.zod.parse(sessionID)))
-  }
-
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
   })
-
-  export async function loop(input: z.infer<typeof LoopInput>) {
-    return runPromise((svc) => svc.loop(LoopInput.parse(input)))
-  }
 
   export const ShellInput = z.object({
     sessionID: SessionID.zod,
@@ -1805,10 +1794,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     command: z.string(),
   })
   export type ShellInput = z.infer<typeof ShellInput>
-
-  export async function shell(input: ShellInput) {
-    return runPromise((svc) => svc.shell(ShellInput.parse(input)))
-  }
 
   export const CommandInput = z.object({
     messageID: MessageID.zod.optional(),
@@ -1833,22 +1818,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type CommandInput = z.infer<typeof CommandInput>
 
-  export async function command(input: CommandInput) {
-    return runPromise((svc) => svc.command(CommandInput.parse(input)))
-  }
-
   /** @internal Exported for testing */
   export function createStructuredOutputTool(input: {
     schema: Record<string, any>
     onSuccess: (output: unknown) => void
   }): AITool {
     // Remove $schema property if present (not needed for tool input)
-    const { $schema, ...toolSchema } = input.schema
+    const { $schema: _, ...toolSchema } = input.schema
 
     return tool({
-      id: "StructuredOutput" as any,
       description: STRUCTURED_OUTPUT_DESCRIPTION,
-      inputSchema: jsonSchema(toolSchema as any),
+      inputSchema: jsonSchema(toolSchema as JSONSchema7),
       async execute(args) {
         // AI SDK validates args against inputSchema before calling execute()
         input.onSuccess(args)

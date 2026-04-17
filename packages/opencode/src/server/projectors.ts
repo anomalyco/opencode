@@ -3,7 +3,7 @@ import sessionProjectors from "../session/projectors"
 import { SyncEvent } from "@/sync"
 import { Session } from "@/session"
 import { SessionTable } from "@/session/session.sql"
-import { Database, eq } from "@/storage/db"
+import { Database, eq } from "@/storage"
 
 export function initProjectors() {
   SyncEvent.init({

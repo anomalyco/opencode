@@ -1,14 +1,13 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "../../config/config"
-import { Provider } from "../../provider/provider"
+import { Config } from "../../config"
+import { Provider } from "../../provider"
 import { mapValues } from "remeda"
 import { errors } from "../error"
-import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
-
-const log = Log.create({ service: "server" })
+import { AppRuntime } from "../../effect/app-runtime"
+import { jsonRequest } from "./trace"
 
 export const ConfigRoutes = lazy(() =>
   new Hono()
@@ -29,9 +28,11 @@ export const ConfigRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        return c.json(await Config.get())
-      },
+      async (c) =>
+        jsonRequest("ConfigRoutes.get", c, function* () {
+          const cfg = yield* Config.Service
+          return yield* cfg.get()
+        }),
     )
     .patch(
       "/",
@@ -54,7 +55,7 @@ export const ConfigRoutes = lazy(() =>
       validator("json", Config.Info),
       async (c) => {
         const config = c.req.valid("json")
-        await Config.update(config)
+        await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.update(config)))
         return c.json(config)
       },
     )
@@ -80,13 +81,14 @@ export const ConfigRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        using _ = log.time("providers")
-        const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
-        return c.json({
-          providers: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-        })
-      },
+      async (c) =>
+        jsonRequest("ConfigRoutes.providers", c, function* () {
+          const svc = yield* Provider.Service
+          const providers = mapValues(yield* svc.list(), (item) => item)
+          return {
+            providers: Object.values(providers),
+            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          }
+        }),
     ),
 )
