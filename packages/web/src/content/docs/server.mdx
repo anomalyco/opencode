@@ -1,0 +1,287 @@
+---
+title: Server
+description: Interact with opencode server over HTTP.
+---
+
+import config from "../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an opencode client can use.
+
+---
+
+### Usage
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Options
+
+| Flag            | Description                         | Default          |
+| --------------- | ----------------------------------- | ---------------- |
+| `--port`        | Port to listen on                   | `4096`           |
+| `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
+| `--mdns`        | Enable mDNS discovery               | `false`          |
+| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--cors`        | Additional browser origins to allow | `[]`             |
+
+`--cors` can be passed multiple times:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Authentication
+
+Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### How it works
+
+When you run `opencode` it starts a TUI and a server. Where the TUI is the
+client that talks to the server. The server exposes an OpenAPI 3.1 spec
+endpoint. This endpoint is also used to generate an [SDK](/docs/sdk).
+
+:::tip
+Use the opencode server to interact with opencode programmatically.
+:::
+
+This architecture lets opencode support multiple clients and allows you to interact with opencode programmatically.
+
+You can run `opencode serve` to start a standalone server. If you have the
+opencode TUI running, `opencode serve` will start a new server.
+
+---
+
+#### Connect to an existing server
+
+When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](/docs/cli). Then use this to connect to its server.
+
+The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](/docs/ide) plugins.
+
+---
+
+## Spec
+
+The server publishes an OpenAPI 3.1 spec that can be viewed at:
+
+```
+http://<hostname>:<port>/doc
+```
+
+For example, `http://localhost:4096/doc`. Use the spec to generate clients or inspect request and response types. Or view it in a Swagger explorer.
+
+---
+
+## APIs
+
+The opencode server exposes the following APIs.
+
+---
+
+### Global
+
+| Method | Path             | Description                    | Response                             |
+| ------ | ---------------- | ------------------------------ | ------------------------------------ |
+| `GET`  | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
+
+---
+
+### Project
+
+| Method | Path               | Description             | Response                                      |
+| ------ | ------------------ | ----------------------- | --------------------------------------------- |
+| `GET`  | `/project`         | List all projects       | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Get the current project | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Path & VCS
+
+| Method | Path    | Description                          | Response                                    |
+| ------ | ------- | ------------------------------------ | ------------------------------------------- |
+| `GET`  | `/path` | Get the current path                 | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Get VCS info for the current project | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instance
+
+| Method | Path                | Description                  | Response  |
+| ------ | ------------------- | ---------------------------- | --------- |
+| `POST` | `/instance/dispose` | Dispose the current instance | `boolean` |
+
+---
+
+### Config
+
+| Method  | Path                | Description                       | Response                                                                                 |
+| ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Update config                     | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | List providers and default models | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Provider
+
+| Method | Path                             | Description                          | Response                                                                            |
+| ------ | -------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | List all providers                   | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Get provider authentication methods  | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | Authorize a provider using OAuth     | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Handle OAuth callback for a provider | `boolean`                                                                           |
+
+---
+
+### Sessions
+
+| Method   | Path                                     | Description                           | Notes                                                                              |
+| -------- | ---------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | List all sessions                     | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
+| `POST`   | `/session`                               | Create a new session                  | body: `{ parentID?, title? }`, returns <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Get session status for all sessions   | Returns `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | Get session details                   | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id`                           | Delete a session and all its data     | Returns `boolean`                                                                  |
+| `PATCH`  | `/session/:id`                           | Update session properties             | body: `{ title? }`, returns <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | Get a session's child sessions        | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | Get the todo list for a session       | Returns <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `POST`   | `/session/:id/init`                      | Analyze app and create `AGENTS.md`    | body: `{ messageID, providerID, modelID }`, returns `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | Fork an existing session at a message | body: `{ messageID? }`, returns <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | Abort a running session               | Returns `boolean`                                                                  |
+| `POST`   | `/session/:id/share`                     | Share a session                       | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id/share`                     | Unshare a session                     | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/:id/diff`                      | Get the diff for this session         | query: `messageID?`, returns <a href={typesUrl}><code>FileDiff[]</code></a>        |
+| `POST`   | `/session/:id/summarize`                 | Summarize the session                 | body: `{ providerID, modelID }`, returns `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | Revert a message                      | body: `{ messageID, partID? }`, returns `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | Restore all reverted messages         | Returns `boolean`                                                                  |
+| `POST`   | `/session/:id/permissions/:permissionID` | Respond to a permission request       | body: `{ response, remember? }`, returns `boolean`                                 |
+
+---
+
+### Messages
+
+| Method | Path                              | Description                             | Notes                                                                                                                                                                 |
+| ------ | --------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`            | List messages in a session              | query: `limit?`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                        |
+| `POST` | `/session/:id/message`            | Send a message and wait for response    | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | Get message details                     | Returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
+| `POST` | `/session/:id/prompt_async`       | Send a message asynchronously (no wait) | body: same as `/session/:id/message`, returns `204 No Content`                                                                                                        |
+| `POST` | `/session/:id/command`            | Execute a slash command                 | body: `{ messageID?, agent?, model?, command, arguments }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | Run a shell command                     | body: `{ agent, model?, command }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+### Commands
+
+| Method | Path       | Description       | Response                                      |
+| ------ | ---------- | ----------------- | --------------------------------------------- |
+| `GET`  | `/command` | List all commands | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Files
+
+| Method | Path                     | Description                        | Response                                                                                    |
+| ------ | ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET`  | `/find?pattern=<pat>`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `GET`  | `/find/file?query=<q>`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `GET`  | `/find/symbol?query=<q>` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `GET`  | `/file?path=<path>`      | List files and directories         | <a href={typesUrl}><code>FileNode[]</code></a>                                              |
+| `GET`  | `/file/content?path=<p>` | Read a file                        | <a href={typesUrl}><code>FileContent</code></a>                                             |
+| `GET`  | `/file/status`           | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+#### `/find/file` query parameters
+
+- `query` (required) — search string (fuzzy match)
+- `type` (optional) — limit results to `"file"` or `"directory"`
+- `directory` (optional) — override the project root for the search
+- `limit` (optional) — max results (1–200)
+- `dirs` (optional) — legacy flag (`"false"` returns only files)
+
+---
+
+### Tools (Experimental)
+
+| Method | Path                                        | Description                              | Response                                     |
+| ------ | ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                    | List all tool IDs                        | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | List tools with JSON schemas for a model | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, Formatters & MCP
+
+| Method | Path         | Description                | Response                                                 |
+| ------ | ------------ | -------------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | Get LSP server status      | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | Get formatter status       | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | Get MCP server status      | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | Add MCP server dynamically | body: `{ name, config }`, returns MCP status object      |
+
+---
+
+### Agents
+
+| Method | Path     | Description               | Response                                    |
+| ------ | -------- | ------------------------- | ------------------------------------------- |
+| `GET`  | `/agent` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Logging
+
+| Method | Path   | Description                                                  | Response  |
+| ------ | ------ | ------------------------------------------------------------ | --------- |
+| `POST` | `/log` | Write log entry. Body: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| Method | Path                    | Description                                 | Response               |
+| ------ | ----------------------- | ------------------------------------------- | ---------------------- |
+| `POST` | `/tui/append-prompt`    | Append text to the prompt                   | `boolean`              |
+| `POST` | `/tui/open-help`        | Open the help dialog                        | `boolean`              |
+| `POST` | `/tui/open-sessions`    | Open the session selector                   | `boolean`              |
+| `POST` | `/tui/open-themes`      | Open the theme selector                     | `boolean`              |
+| `POST` | `/tui/open-models`      | Open the model selector                     | `boolean`              |
+| `POST` | `/tui/submit-prompt`    | Submit the current prompt                   | `boolean`              |
+| `POST` | `/tui/clear-prompt`     | Clear the prompt                            | `boolean`              |
+| `POST` | `/tui/execute-command`  | Execute a command (`{ command }`)           | `boolean`              |
+| `POST` | `/tui/show-toast`       | Show toast (`{ title?, message, variant }`) | `boolean`              |
+| `GET`  | `/tui/control/next`     | Wait for the next control request           | Control request object |
+| `POST` | `/tui/control/response` | Respond to a control request (`{ body }`)   | `boolean`              |
+
+---
+
+### Auth
+
+| Method | Path        | Description                                                     | Response  |
+| ------ | ----------- | --------------------------------------------------------------- | --------- |
+| `PUT`  | `/auth/:id` | Set authentication credentials. Body must match provider schema | `boolean` |
+
+---
+
+### Events
+
+| Method | Path     | Description                                                                   | Response                  |
+| ------ | -------- | ----------------------------------------------------------------------------- | ------------------------- |
+| `GET`  | `/event` | Server-sent events stream. First event is `server.connected`, then bus events | Server-sent events stream |
+
+---
+
+### Docs
+
+| Method | Path   | Description               | Response                    |
+| ------ | ------ | ------------------------- | --------------------------- |
+| `GET`  | `/doc` | OpenAPI 3.1 specification | HTML page with OpenAPI spec |

@@ -1,0 +1,284 @@
+---
+title: Server
+description: Komunicirajte s opencode serverom preko HTTP-a.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+Komanda `opencode serve` pokrece headless HTTP server koji izlaže OpenAPI endpoint koji opencode klijent moze koristiti.
+
+---
+
+### Korištenje
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Opcije
+
+| Zastava         | Opis                                | Default          |
+| --------------- | ----------------------------------- | ---------------- |
+| `--port`        | Port na kojem slusa                 | `4096`           |
+| `--hostname`    | Hostname na kojem slusa             | `127.0.0.1`      |
+| `--mdns`        | Ukljuci mDNS otkrivanje             | `false`          |
+| `--mdns-domain` | Prilagodeni domen za mDNS servis    | `opencode.local` |
+| `--cors`        | Dodatni browser origin-i koje dozv. | `[]`             |
+
+`--cors` mozete navesti vise puta:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Autentifikacija
+
+Postavite `OPENCODE_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `opencode`, ili postavite `OPENCODE_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `opencode serve` i za `opencode web`.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### Kako radi
+
+Kada pokrenete `opencode`, pokrecu se TUI i server. TUI je klijent koji komunicira sa serverom. Server izlaže OpenAPI 3.1 spec endpoint koji se koristi i za generisanje [SDK-a](/docs/sdk).
+
+:::tip
+Koristite opencode server za programsku interakciju sa opencode-om.
+:::
+
+Ova arhitektura omogucava opencode podrsku za vise klijenata i programsku interakciju.
+
+Mozete pokrenuti `opencode serve` da startate standalone server. Ako je opencode TUI vec pokrenut, `opencode serve` ce pokrenuti novi server.
+
+---
+
+#### Povezivanje na postojeći server
+
+Kada pokrenete TUI, port i hostname se nasumicno dodijele. Umjesto toga, mozete zadati `--hostname` i `--port` [zastave](/docs/cli), pa se povezati na taj server.
+
+Endpoint [`/tui`](#tui) mozete koristiti za upravljanje TUI-jem kroz server. Na primjer, mozete unaprijed popuniti ili pokrenuti prompt. Ovaj setup koriste OpenCode [IDE](/docs/ide) pluginovi.
+
+---
+
+## Specifikacija
+
+Server objavljuje OpenAPI 3.1 specifikaciju koju mozete vidjeti na:
+
+```
+http://<hostname>:<port>/doc
+```
+
+Na primjer, `http://localhost:4096/doc`. Koristite specifikaciju da generisete klijente ili pregledate tipove zahtjeva i odgovora. Mozete je otvoriti i u Swagger exploreru.
+
+---
+
+## API-ji
+
+opencode server izlaže sljedece API-je.
+
+---
+
+### Globalno
+
+| Metoda | Putanja          | Opis                                | Odgovor                              |
+| ------ | ---------------- | ----------------------------------- | ------------------------------------ |
+| `GET`  | `/global/health` | Dohvati zdravlje i verziju servera  | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Dohvati globalne događaje (SSE tok) | Event stream                         |
+
+---
+
+### Projekt
+
+| Metoda | Putanja            | Opis                     | Odgovor                                       |
+| ------ | ------------------ | ------------------------ | --------------------------------------------- |
+| `GET`  | `/project`         | Izlistaj sve projekte    | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Dohvati trenutni projekt | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Putanja i VCS
+
+| Metoda | Putanja | Opis                                        | Odgovor                                     |
+| ------ | ------- | ------------------------------------------- | ------------------------------------------- |
+| `GET`  | `/path` | Dohvati trenutnu putanju                    | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Dohvati VCS informacije za trenutni projekt | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instanca
+
+| Metoda | Putanja             | Opis                    | Odgovor   |
+| ------ | ------------------- | ----------------------- | --------- |
+| `POST` | `/instance/dispose` | Ugasi trenutnu instancu | `boolean` |
+
+---
+
+### Konfiguracija
+
+| Metoda  | Putanja             | Opis                                | Odgovor                                                                                  |
+| ------- | ------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | Dohvati informacije o konfiguraciji | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Ažuriraj konfiguraciju              | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | Izlistaj provajdere i zadane modele | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Provajder
+
+| Metoda | Putanja                          | Opis                                      | Odgovor                                                                             |
+| ------ | -------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | Izlistaj sve provajdere                   | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Dohvati metode autentifikacije provajdera | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | Autoriziraj provajdera koristeći OAuth    | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Obradi OAuth povratni poziv za provajdera | `boolean`                                                                           |
+
+---
+
+### Sesije
+
+| Metoda   | Putanja                                  | Opis                                        | Napomene                                                                           |
+| -------- | ---------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | Izlistaj sve sesije                         | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
+| `POST`   | `/session`                               | Kreiraj novu sesiju                         | body: `{ parentID?, title? }`, returns <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Dohvati status sesije za sve sesije         | Returns `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | Dohvati detalje sesije                      | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id`                           | Obriši sesiju i sve njene podatke           | Returns `boolean`                                                                  |
+| `PATCH`  | `/session/:id`                           | Ažuriraj svojstva sesije                    | body: `{ title? }`, returns <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | Dohvati pod-sesije sesije                   | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | Dohvati listu zadataka za sesiju            | Returns <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `POST`   | `/session/:id/init`                      | Analiziraj aplikaciju i kreiraj `AGENTS.md` | body: `{ messageID, providerID, modelID }`, returns `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | Granaj postojeću sesiju na poruci           | body: `{ messageID? }`, returns <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | Prekini sesiju u toku                       | Returns `boolean`                                                                  |
+| `POST`   | `/session/:id/share`                     | Podijeli sesiju                             | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id/share`                     | Prestani dijeliti sesiju                    | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/:id/diff`                      | Dohvati razlike za ovu sesiju               | query: `messageID?`, returns <a href={typesUrl}><code>FileDiff[]</code></a>        |
+| `POST`   | `/session/:id/summarize`                 | Rezimiraj sesiju                            | body: `{ providerID, modelID }`, returns `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | Vrati poruku                                | body: `{ messageID, partID? }`, returns `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | Vrati sve vraćene poruke                    | Returns `boolean`                                                                  |
+| `POST`   | `/session/:id/permissions/:permissionID` | Odgovori na zahtjev za dozvolu              | body: `{ response, remember? }`, returns `boolean`                                 |
+
+---
+
+### Poruke
+
+| Metoda | Putanja                           | Opis                                   | Napomene                                                                                                                                                              |
+| ------ | --------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`            | Izlistaj poruke u sesiji               | query: `limit?`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                        |
+| `POST` | `/session/:id/message`            | Pošalji poruku i čekaj odgovor         | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | Dohvati detalje poruke                 | Returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
+| `POST` | `/session/:id/prompt_async`       | Pošalji poruku asinkrono (bez čekanja) | body: same as `/session/:id/message`, returns `204 No Content`                                                                                                        |
+| `POST` | `/session/:id/command`            | Izvrši slash naredbu                   | body: `{ messageID?, agent?, model?, command, arguments }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | Pokreni shell naredbu                  | body: `{ agent, model?, command }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+### Naredbe
+
+| Metoda | Putanja    | Opis                 | Odgovor                                       |
+| ------ | ---------- | -------------------- | --------------------------------------------- |
+| `GET`  | `/command` | Izlistaj sve naredbe | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Datoteke
+
+| Metoda | Putanja                  | Opis                                    | Odgovor                                                                                     |
+| ------ | ------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET`  | `/find?pattern=<pat>`    | Traži tekst u datotekama                | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `GET`  | `/find/file?query=<q>`   | Pronađi datoteke i direktorije po imenu | `string[]` (paths)                                                                          |
+| `GET`  | `/find/symbol?query=<q>` | Pronađi simbole radnog prostora         | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `GET`  | `/file?path=<path>`      | Izlistaj datoteke i direktorije         | <a href={typesUrl}><code>FileNode[]</code></a>                                              |
+| `GET`  | `/file/content?path=<p>` | Pročitaj datoteku                       | <a href={typesUrl}><code>FileContent</code></a>                                             |
+| `GET`  | `/file/status`           | Dohvati status za praćene datoteke      | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+#### `/find/file` parametri upita
+
+- `query` (obavezno) — niz za pretragu (fuzzy podudaranje)
+- `type` (opcionalno) — ograniči rezultate na `"file"` ili `"directory"`
+- `directory` (opcionalno) — nadjačaj korijen projekta za pretragu
+- `limit` (opcionalno) — maksimalni rezultati (1–200)
+- `dirs` (opcionalno) — zastarjela zastavica (`"false"` vraća samo datoteke)
+
+---
+
+### Alati (Eksperimentalno)
+
+| Metoda | Putanja                                     | Opis                                   | Odgovor                                      |
+| ------ | ------------------------------------------- | -------------------------------------- | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                    | Izlistaj sve ID-ove alata              | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Izlistaj alate sa JSON šemama za model | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, Formateri & MCP
+
+| Metoda | Putanja      | Opis                       | Odgovor                                                  |
+| ------ | ------------ | -------------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | Dohvati status LSP servera | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | Dohvati status formatera   | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | Dohvati status MCP servera | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | Dodaj MCP server dinamički | body: `{ name, config }`, returns MCP status object      |
+
+---
+
+### Agenti
+
+| Metoda | Putanja  | Opis                         | Odgovor                                     |
+| ------ | -------- | ---------------------------- | ------------------------------------------- |
+| `GET`  | `/agent` | Izlistaj sve dostupne agente | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Bilježenje
+
+| Metoda | Putanja | Opis                                                                | Odgovor   |
+| ------ | ------- | ------------------------------------------------------------------- | --------- |
+| `POST` | `/log`  | Upiši zapis dnevnika. Tijelo: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| Metoda | Putanja                 | Opis                                                     | Odgovor                |
+| ------ | ----------------------- | -------------------------------------------------------- | ---------------------- |
+| `POST` | `/tui/append-prompt`    | Dodaj tekst na prompt                                    | `boolean`              |
+| `POST` | `/tui/open-help`        | Otvori dijalog za pomoć                                  | `boolean`              |
+| `POST` | `/tui/open-sessions`    | Otvori selektor sesija                                   | `boolean`              |
+| `POST` | `/tui/open-themes`      | Otvori selektor tema                                     | `boolean`              |
+| `POST` | `/tui/open-models`      | Otvori selektor modela                                   | `boolean`              |
+| `POST` | `/tui/submit-prompt`    | Pošalji trenutni prompt                                  | `boolean`              |
+| `POST` | `/tui/clear-prompt`     | Očisti prompt                                            | `boolean`              |
+| `POST` | `/tui/execute-command`  | Izvrši naredbu (`{ command }`)                           | `boolean`              |
+| `POST` | `/tui/show-toast`       | Prikaži toast obavijest (`{ title?, message, variant }`) | `boolean`              |
+| `GET`  | `/tui/control/next`     | Čekaj sljedeći kontrolni zahtjev                         | Control request object |
+| `POST` | `/tui/control/response` | Odgovori na kontrolni zahtjev (`{ body }`)               | `boolean`              |
+
+---
+
+### Autentifikacija
+
+| Metoda | Putanja     | Opis                                                                            | Odgovor   |
+| ------ | ----------- | ------------------------------------------------------------------------------- | --------- |
+| `PUT`  | `/auth/:id` | Postavi autentifikacijske vjerodajnice. Tijelo mora odgovarati shemi provajdera | `boolean` |
+
+---
+
+### Događaji
+
+| Metoda | Putanja  | Opis                                                                                   | Odgovor                   |
+| ------ | -------- | -------------------------------------------------------------------------------------- | ------------------------- |
+| `GET`  | `/event` | Tok događaja koje šalje server. Prvi događaj je `server.connected`, zatim bus događaji | Server-sent events stream |
+
+---
+
+### Dokumentacija
+
+| Metoda | Putanja | Opis                      | Odgovor                                 |
+| ------ | ------- | ------------------------- | --------------------------------------- |
+| `GET`  | `/doc`  | OpenAPI 3.1 specifikacija | HTML stranica sa OpenAPI specifikacijom |

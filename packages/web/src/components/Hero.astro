@@ -1,0 +1,11 @@
+---
+import Default from '@astrojs/starlight/components/Hero.astro';
+import Lander from './Lander.astro';
+
+const { slug } = Astro.locals.starlightRoute.entry;
+---
+
+{ slug === ""
+  ? <Lander {...Astro.props} />
+  : <Default {...Astro.props}><slot /></Default>
+}

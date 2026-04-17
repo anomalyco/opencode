@@ -1,0 +1,54 @@
+[data-component="card"][data-kind="tool-error-card"] {
+  --card-pad-y: 8px;
+  --card-line-pad: 12px;
+
+  > [data-component="collapsible"].tool-collapsible {
+    gap: 0px;
+  }
+
+  > [data-component="collapsible"].tool-collapsible[data-open="true"] {
+    gap: 4px;
+  }
+
+  [data-component="tool-error-card-icon"] [data-component="icon"] {
+    color: var(--card-accent);
+  }
+
+  [data-slot="tool-error-card-content"] {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 8px;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  > [data-component="collapsible"].tool-collapsible[data-open="true"] [data-slot="tool-error-card-content"] {
+    padding-right: 40px;
+  }
+
+  [data-slot="tool-error-card-copy"] {
+    position: absolute;
+    top: 0;
+    right: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    will-change: opacity;
+  }
+
+  &:hover [data-slot="tool-error-card-copy"],
+  &:focus-within [data-slot="tool-error-card-copy"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-slot="tool-error-card-content"] :where(*)::selection {
+    background: var(--surface-critical-base);
+    color: var(--text-on-critical-base);
+  }
+
+  [data-slot="tool-error-card-content"] :where(*)::-moz-selection {
+    background: var(--surface-critical-base);
+    color: var(--text-on-critical-base);
+  }
+}

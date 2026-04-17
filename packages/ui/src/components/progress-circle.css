@@ -1,0 +1,12 @@
+[data-component="progress-circle"] {
+  transform: rotate(-90deg);
+
+  [data-slot="progress-circle-background"] {
+    stroke: var(--border-weak-base);
+  }
+
+  [data-slot="progress-circle-progress"] {
+    stroke: var(--border-active);
+    transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+  }
+}

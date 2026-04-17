@@ -1,0 +1,30 @@
+name: publish-github-action
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "github-v*.*.*"
+      - "!github-v1"
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - run: git fetch --force --tags
+
+      - name: Publish
+        run: |
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          ./script/publish
+        working-directory: ./github

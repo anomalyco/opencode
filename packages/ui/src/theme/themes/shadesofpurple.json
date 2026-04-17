@@ -1,0 +1,51 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Shades of Purple",
+  "id": "shadesofpurple",
+  "light": {
+    "palette": {
+      "neutral": "#f7ebff",
+      "ink": "#3b2c59",
+      "primary": "#7a5af8",
+      "accent": "#ff6bd5",
+      "success": "#3dd598",
+      "warning": "#f7c948",
+      "error": "#ff6bd5",
+      "info": "#62d4ff",
+      "diffAdd": "#c8f8da",
+      "diffDelete": "#ffc3ef"
+    },
+    "overrides": {
+      "syntax-comment": "#8e4be3",
+      "syntax-keyword": "#c45f00",
+      "syntax-string": "#2f8b32",
+      "syntax-primitive": "#a13bd6",
+      "syntax-property": "#008fb8",
+      "syntax-type": "#9d7a00",
+      "syntax-constant": "#e04d7a"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1a102b",
+      "ink": "#f5f0ff",
+      "primary": "#c792ff",
+      "accent": "#ff7ac6",
+      "success": "#7be0b0",
+      "warning": "#ffd580",
+      "error": "#ff7ac6",
+      "info": "#7dd4ff",
+      "diffAdd": "#53c39f",
+      "diffDelete": "#d85aa0"
+    },
+    "overrides": {
+      "syntax-comment": "#b362ff",
+      "syntax-keyword": "#ff9d00",
+      "syntax-string": "#a5ff90",
+      "syntax-primitive": "#fb94ff",
+      "syntax-property": "#9effff",
+      "syntax-type": "#fad000",
+      "syntax-constant": "#ff628c"
+    }
+  }
+}

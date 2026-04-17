@@ -1,0 +1,20 @@
+name: 🚀 Feature Request
+description: Suggest an idea, feature, or enhancement
+labels: [discussion]
+title: "[FEATURE]:"
+
+body:
+  - type: checkboxes
+    id: verified
+    attributes:
+      label: Feature hasn't been suggested before.
+      options:
+        - label: I have verified this feature I'm about to request hasn't been suggested before.
+          required: true
+
+  - type: textarea
+    attributes:
+      label: Describe the enhancement you want to request
+      description: What do you want to change or add? What are the benefits of implementing this? Try to be detailed so we can understand your request better :)
+    validations:
+      required: true

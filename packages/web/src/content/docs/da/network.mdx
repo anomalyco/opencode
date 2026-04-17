@@ -1,0 +1,57 @@
+---
+title: Netværk
+description: Konfigurer proxyer og brugerdefinerede certifikater.
+---
+
+OpenCode understøtter standard proxymiljøvariabler og brugerdefinerede certifikater til virksomhedsnetværksmiljøer.
+
+---
+
+## Proxy
+
+OpenCode respekterer standard proxy-miljøvariabler.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI kommunikerer med en lokal HTTP-server. Du skal omgå proxyen for denne forbindelse for at forhindre routingsløjfer.
+:::
+
+Du kan konfigurere serverens port og værtsnavn ved hjælp af [CLI flags](/docs/cli#run).
+
+---
+
+### Godkendelse
+
+Hvis din proxy kræver grundlæggende godkendelse, skal du inkludere legitimationsoplysninger i URL.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+Undgå hardkodning af adgangskoder. Brug miljøvariabler eller sikker lagring af legitimationsoplysninger.
+:::
+
+For proxyer, der kræver avanceret godkendelse som NTLM eller Kerberos, kan du overveje at bruge en LLM Gateway, der understøtter din godkendelsesmetode.
+
+---
+
+## Brugerdefinerede certifikater
+
+Hvis din virksomhed bruger tilpassede CA'er til HTTPS-forbindelser, skal du konfigurere OpenCode til at stole på dem.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+Dette virker for både proxy-forbindelser og direkte API-adgang.

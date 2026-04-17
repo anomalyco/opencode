@@ -1,0 +1,746 @@
+---
+title: Agents
+description: Configure and use specialized agents.
+---
+
+agent는 특정 작업과 워크플로에 맞게 설정할 수 있는 전문 AI assistant입니다. custom prompt, model, tool 접근 권한을 조합해 목적에 맞는 agent를 만들 수 있습니다.
+
+:::tip
+코드를 수정하지 않고 분석과 제안 검토만 하고 싶다면 plan agent를 사용하세요.
+:::
+
+세션 중에 agent를 전환하거나 `@` mention으로 호출할 수 있습니다.
+
+---
+
+## 유형
+
+OpenCode의 agent는 primary agent와 subagent, 두 가지 유형으로 나뉩니다.
+
+---
+
+### Primary agents
+
+primary agent는 사용자가 직접 상호작용하는 메인 assistant입니다. **Tab** 키 또는 설정한 `switch_agent` keybind로 순환 전환할 수 있습니다. primary agent는 메인 대화를 처리하며, tool 접근은 permission으로 제어합니다. 예를 들어 Build는 모든 tool이 활성화되어 있고 Plan은 제한되어 있습니다.
+
+:::tip
+세션 중 **Tab** 키로 primary agent를 빠르게 전환할 수 있습니다.
+:::
+
+OpenCode에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되어 있습니다. 아래에서 각각 살펴보겠습니다.
+
+---
+
+### Subagents
+
+subagent는 primary agent가 특정 작업을 위해 호출하는 전문 assistant입니다. 메시지에서 **@ mention**으로 직접 호출할 수도 있습니다.
+
+OpenCode에는 기본 제공 subagent인 **General**과 **Explore**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
+
+---
+
+## 기본 제공
+
+OpenCode는 기본적으로 primary agent 2개와 subagent 2개를 제공합니다.
+
+---
+
+### Use build
+
+_Mode_: `primary`
+
+Build는 모든 tool이 활성화된 **default** primary agent입니다. 파일 작업과 시스템 명령에 대한 전체 접근이 필요한 일반적인 개발 작업에 사용하는 표준 agent입니다.
+
+---
+
+### Use plan
+
+_Mode_: `primary`
+
+Plan은 계획과 분석에 특화된 제한형 agent입니다. 더 높은 제어력과 의도치 않은 변경 방지를 위해 permission 시스템을 사용합니다.
+기본값으로 아래 항목은 모두 `ask`로 설정됩니다.
+
+- `file edits`: 모든 write, patch, edit
+- `bash`: 모든 bash 명령
+
+코드베이스를 실제로 수정하지 않고 LLM 분석, 변경 제안, 계획 수립만 진행하고 싶을 때 유용합니다.
+
+---
+
+### Use general
+
+_Mode_: `subagent`
+
+복잡한 질문을 조사하고 다단계 작업을 수행하기 위한 범용 agent입니다. todo를 제외한 모든 tool 접근이 가능하므로 필요하면 파일 수정도 할 수 있습니다. 여러 작업 단위를 병렬로 처리할 때 사용하세요.
+
+---
+
+### Use explore
+
+_Mode_: `subagent`
+
+코드베이스 탐색에 최적화된 빠른 읽기 전용 agent입니다. 파일을 수정할 수 없습니다. 패턴 기반 파일 탐색, 키워드 검색, 코드베이스 관련 질의 응답을 빠르게 처리할 때 사용하세요.
+
+---
+
+### Use compaction
+
+_Mode_: `primary`
+
+긴 context를 더 짧은 요약으로 압축하는 숨겨진 시스템 agent입니다. 필요할 때 자동으로 실행되며 UI에서 직접 선택할 수 없습니다.
+
+---
+
+### Use title
+
+_Mode_: `primary`
+
+짧은 세션 제목을 생성하는 숨겨진 시스템 agent입니다. 자동으로 실행되며 UI에서 직접 선택할 수 없습니다.
+
+---
+
+### Use summary
+
+_Mode_: `primary`
+
+세션 요약을 생성하는 숨겨진 시스템 agent입니다. 자동으로 실행되며 UI에서 직접 선택할 수 없습니다.
+
+---
+
+## 사용법
+
+1. primary agent는 세션 중 **Tab** 키로 순환 전환할 수 있습니다. 설정한 `switch_agent` keybind를 사용할 수도 있습니다.
+
+2. subagent 호출 방법:
+   - **Automatically**: primary agent가 설명(description)을 바탕으로 특화 작업에 자동 호출합니다.
+   - 수동 호출: 메시지에서 subagent를 **@ mention**하여 호출합니다. 예:
+
+     ```txt frame="none"
+     @general help me search for this function
+     ```
+
+3. **세션 간 이동**: subagent가 child session을 만들면 아래 키로 parent session과 child session 사이를 이동할 수 있습니다.
+   - **\<Leader>+Right** (또는 설정한 `session_child_cycle` keybind): parent → child1 → child2 → ... → parent 순방향 순환
+   - **\<Leader>+Left** (또는 설정한 `session_child_cycle_reverse` keybind): parent ← child1 ← child2 ← ... ← parent 역방향 순환
+
+   이를 통해 메인 대화와 특화 subagent 작업 사이를 자연스럽게 오갈 수 있습니다.
+
+---
+
+## 구성
+
+기본 제공 agent를 커스터마이즈하거나 config를 통해 직접 agent를 만들 수 있습니다. agent는 두 가지 방식으로 설정합니다.
+
+---
+
+### JSON
+
+`opencode.json` config 파일에서 agent를 설정합니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+Markdown 파일로도 agent를 정의할 수 있습니다. 다음 위치에 두세요.
+
+- Global: `~/.config/opencode/agents/`
+- Per-project: `.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Markdown 파일명은 agent 이름이 됩니다. 예를 들어 `review.md`는 `review` agent를 만듭니다.
+
+---
+
+## 옵션
+
+각 config 옵션을 자세히 살펴보겠습니다.
+
+---
+
+### Description
+
+`description` 옵션으로 agent의 역할과 사용 시점을 간단히 설명하세요.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  }
+}
+```
+
+이 옵션은 **필수** config 항목입니다.
+
+---
+
+### Temperature
+
+`temperature` config로 LLM 응답의 무작위성과 창의성을 제어합니다.
+
+값이 낮을수록 응답이 더 집중되고 결정적이며, 값이 높을수록 창의성과 다양성이 커집니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Temperature 값은 일반적으로 0.0~1.0 범위를 사용합니다.
+
+- **0.0-0.2**: 매우 집중되고 결정적인 응답, 코드 분석/계획에 적합
+- **0.3-0.5**: 적당한 창의성이 섞인 균형형 응답, 일반 개발 작업에 적합
+- **0.6-1.0**: 더 창의적이고 다양한 응답, 브레인스토밍/탐색에 유용
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+temperature를 지정하지 않으면 OpenCode는 model별 기본값을 사용합니다. 일반적으로 대부분의 model은 0, Qwen model은 0.55를 사용합니다.
+
+---
+
+### Max steps
+
+agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있는 agentic iteration의 최대 횟수를 제어합니다. 비용을 관리하려는 사용자에게 agentic action 제한을 제공하기 위한 옵션입니다.
+
+이 값을 설정하지 않으면 model이 중단을 선택하거나 사용자가 세션을 중단할 때까지 agent는 계속 반복합니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "steps": 5
+    }
+  }
+}
+```
+
+제한에 도달하면 agent는 작업 요약과 남은 권장 작업을 응답하도록 지시하는 특수 시스템 prompt를 받습니다.
+
+:::caution
+레거시 `maxSteps` 필드는 deprecated입니다. 대신 `steps`를 사용하세요.
+:::
+
+---
+
+### Disable
+
+`true`로 설정하면 agent를 비활성화합니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### Prompt
+
+`prompt` config로 해당 agent의 custom 시스템 prompt 파일을 지정합니다. prompt 파일에는 agent 목적에 맞는 지시사항을 작성하세요.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+이 경로는 config 파일 위치 기준의 상대 경로입니다. 따라서 전역 OpenCode config와 프로젝트별 config 모두에서 동일하게 동작합니다.
+
+---
+
+### Model
+
+`model` config로 해당 agent의 model을 override할 수 있습니다. 작업 특성에 맞춰 model을 달리 쓸 때 유용합니다. 예를 들어 계획에는 더 빠른 model, 구현에는 더 강력한 model을 사용할 수 있습니다.
+
+:::tip
+model을 지정하지 않으면 primary agent는 [전역으로 설정한 model](/docs/config#models)을 사용하고, subagent는 해당 subagent를 호출한 primary agent의 model을 사용합니다.
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+OpenCode config의 model ID는 `provider/model-id` 형식을 사용합니다. 예를 들어 [OpenCode Zen](/docs/zen)을 사용한다면 GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용합니다.
+
+---
+
+### Tools
+
+`tools` config로 agent에서 사용할 tool을 제어합니다. 각 tool을 `true` 또는 `false`로 설정해 활성화/비활성화할 수 있습니다.
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+agent별 config는 전역 config를 override합니다.
+:::
+
+와일드카드를 사용하면 여러 tool을 한 번에 제어할 수 있습니다. 예를 들어 MCP 서버의 모든 tool을 비활성화하려면 다음과 같이 설정합니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[tool에 대해 더 알아보기](/docs/tools).
+
+---
+
+### Permissions
+
+permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 있습니다. 현재 `edit`, `bash`, `webfetch` tool의 permission은 다음 값으로 설정할 수 있습니다.
+
+- `"ask"` — tool 실행 전에 승인 요청
+- `"allow"` — 승인 없이 모든 작업 허용
+- `"deny"` — tool 비활성화
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+이 permission은 agent별로 override할 수 있습니다.
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+Markdown agent에서도 permission을 설정할 수 있습니다.
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+특정 bash 명령에 대해서도 permission을 설정할 수 있습니다.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+여기에는 glob 패턴을 사용할 수 있습니다.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+또한 `*` 와일드카드로 모든 명령의 permission을 제어할 수 있습니다.
+마지막으로 일치한 규칙이 우선하므로 `*` 와일드카드를 먼저 두고, 구체적인 규칙을 뒤에 두세요.
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[permission에 대해 더 알아보기](/docs/permissions).
+
+---
+
+### Mode
+
+`mode` config로 agent 모드를 제어합니다. `mode` 옵션은 agent를 어떤 방식으로 사용할지 결정합니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+`mode`는 `primary`, `subagent`, `all` 중 하나로 설정할 수 있습니다. 설정하지 않으면 기본값은 `all`입니다.
+
+---
+
+### Hidden
+
+`hidden: true`를 설정하면 `@` 자동완성 메뉴에서 subagent를 숨길 수 있습니다. 다른 agent가 Task tool을 통해 programmatic으로만 호출해야 하는 내부 subagent에 유용합니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+이 설정은 자동완성 메뉴에서의 사용자 가시성에만 영향을 줍니다. permission이 허용되면 hidden agent도 모델이 Task tool을 통해 호출할 수 있습니다.
+
+:::note
+`mode: subagent` agent에만 적용됩니다.
+:::
+
+---
+
+### Task permissions
+
+`permission.task`로 Task tool을 통해 해당 agent가 호출할 수 있는 subagent 범위를 제어합니다. 유연한 매칭을 위해 glob 패턴을 사용합니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+`deny`로 설정되면 해당 subagent는 Task tool 설명에서 완전히 제거되므로 모델이 호출을 시도하지 않습니다.
+
+:::tip
+규칙은 선언 순서대로 평가되며, **마지막으로 일치한 규칙이 승리합니다**. 위 예시에서 `orchestrator-planner`는 `*`(deny)와 `orchestrator-*`(allow) 모두에 일치하지만, `orchestrator-*`가 뒤에 있으므로 결과는 `allow`입니다.
+:::
+
+:::tip
+사용자는 agent의 task permission이 deny여도 `@` 자동완성 메뉴를 통해 어떤 subagent든 직접 호출할 수 있습니다.
+:::
+
+---
+
+### Color
+
+`color` 옵션으로 UI에서 agent의 시각 스타일을 지정할 수 있습니다. 인터페이스에서 agent가 표시되는 방식에 영향을 줍니다.
+
+유효한 hex 색상(예: `#FF5733`) 또는 theme 색상(`primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`)을 사용하세요.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+`top_p` 옵션으로 응답 다양성을 제어합니다. 무작위성을 제어하는 Temperature의 대안입니다.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+값 범위는 0.0~1.0입니다. 값이 낮을수록 집중되고, 높을수록 다양해집니다.
+
+---
+
+### Additional
+
+agent config에 지정한 나머지 옵션은 모델 옵션으로 provider에 **그대로 전달(pass through)** 됩니다. 이를 통해 provider별 기능과 파라미터를 활용할 수 있습니다.
+
+예를 들어 OpenAI reasoning model에서는 reasoning effort를 제어할 수 있습니다.
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+이 추가 옵션은 model 및 provider마다 다릅니다. 사용 가능한 파라미터는 provider 문서를 확인하세요.
+
+:::tip
+사용 가능한 model 목록은 `opencode models` 명령으로 확인할 수 있습니다.
+:::
+
+---
+
+## 에이전트 생성
+
+아래 명령으로 새 agent를 만들 수 있습니다.
+
+```bash
+opencode agent create
+```
+
+이 인터랙티브 명령은 다음을 수행합니다.
+
+1. agent 저장 위치를 묻습니다(전역/프로젝트).
+2. agent가 수행할 작업의 설명을 받습니다.
+3. 적절한 시스템 prompt와 식별자를 생성합니다.
+4. agent가 접근할 tool을 선택하게 합니다.
+5. 마지막으로 agent config가 담긴 Markdown 파일을 생성합니다.
+
+---
+
+## 사용 사례
+
+서로 다른 agent의 대표적인 사용 사례는 다음과 같습니다.
+
+- **Build agent**: 모든 tool을 활성화한 전체 개발 작업
+- **Plan agent**: 코드 변경 없이 분석과 계획 수행
+- **Review agent**: 읽기 전용 접근 + 문서화 tool 기반 코드 리뷰
+- **Debug agent**: bash/read tool 중심의 조사 작업
+- **Docs agent**: 파일 작업은 가능하지만 시스템 명령은 없는 문서 작성 작업
+
+---
+
+## 예시
+
+실제로 유용하게 쓸 수 있는 예시 agent를 소개합니다.
+
+:::tip
+공유하고 싶은 agent가 있나요? [PR 제출하기](https://github.com/anomalyco/opencode).
+:::
+
+---
+
+### Documentation agent
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+---
+
+### Security auditor
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```

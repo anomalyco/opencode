@@ -1,0 +1,1 @@
+ALTER TABLE `workspace` MODIFY COLUMN `name` varchar(255) NOT NULL;

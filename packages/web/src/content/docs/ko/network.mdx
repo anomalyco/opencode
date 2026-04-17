@@ -1,0 +1,57 @@
+---
+title: 네트워크
+description: 프록시 및 사용자 정의 인증서 구성.
+---
+
+opencode는 엔터프라이즈 네트워크 환경을 위한 표준 프록시 환경 변수 및 사용자 지정 인증서를 지원합니다.
+
+---
+
+## 프록시
+
+opencode는 표준 프록시 환경 변수를 존중합니다.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI는 로컬 HTTP 서버와 통신합니다. routing 루프를 방지하기 위해이 연결에 대한 프록시를 우회해야합니다.
+:::
+
+[CLI 플래그](/docs/cli#run)을 사용하여 서버 포트와 호스트명을 구성할 수 있습니다.
+
+---
+
+### 인증
+
+프록시가 기본 인증을 필요로 하는 경우 URL에서 자격 증명이 포함되어 있습니다.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+암호를 해독하지 마십시오. 환경 변수를 사용하거나 자격 증명 스토리지를 확보하십시오.
+:::
+
+NTLM 또는 Kerberos와 같은 고급 인증을 요구하는 프록시는 인증 방법을 지원하는 LLM Gateway를 사용하여 고려합니다.
+
+---
+
+## 사용자 정의 인증서
+
+엔터프라이즈가 HTTPS 연결을 위해 사용자 정의 CA를 사용한다면, opencode를 사용하여 신뢰합니다.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+프록시 연결과 직접 API 액세스를 위한 이 작업.

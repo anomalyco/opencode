@@ -1,0 +1,7 @@
+button.decorum-tb-btn,
+button#decorum-tb-minimize,
+button#decorum-tb-maximize,
+button#decorum-tb-close,
+div[data-tauri-decorum-tb] {
+  height: calc(var(--spacing) * 10) !important;
+}

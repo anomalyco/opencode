@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <g fill="#4dd0e1">
+    <path
+      d="M10.575 1.695c-2.634 0-4.756 2.453-4.756 5.502v4.6l-.027-.003v4.71c0 3.05 2.122 5.502 4.756 5.502h2.287c2.634 0 4.756-2.453 4.756-5.502v-4.6l.027.003v-4.71c0-3.049-2.122-5.502-4.756-5.502z" />
+    <rect width="2.289" height="3.335" x="-1.177" y="6.093" ry="1.125"
+      transform="matrix(.48489 -.87457 .85979 .51065 0 0)" />
+    <rect width="2.297" height="3.39" x="10.261" y="-15.076" ry="1.143"
+      transform="matrix(.44646 .8948 -.89204 .45195 0 0)" />
+  </g>
+  <g data-mit-no-recolor="true" transform="translate(.282 -.134)">
+    <circle cx="9.267" cy="5.13" r="2.054" fill="#fafafa" stroke="#616161" stroke-width=".1" />
+    <circle cx="14.214" cy="5.116" r="2.054" fill="#fafafa" stroke="#616161" stroke-width=".1" />
+    <ellipse cx="8.039" cy="5.051" fill="#212121" rx=".792" ry=".901" />
+    <path fill="#fafafa" stroke="#fafafa" stroke-width=".155"
+      d="m11.792 9.556.763.138a.403.689 0 0 1 .008.138.403.689 0 0 1-.403.69.403.689 0 0 1-.403-.69.403.689 0 0 1 .035-.276z" />
+    <ellipse cx="8.51" cy="5.365" fill="#fafafa" rx=".138" ry=".166" />
+    <ellipse cx="12.945" cy="5.189" fill="#212121" rx=".792" ry=".901" />
+    <ellipse cx="13.414" cy="5.446" fill="#fafafa" rx=".138" ry=".166" />
+    <ellipse cx="-12.982" cy="-3.409" fill="#ffe0b2" rx=".708" ry="1.026"
+      transform="rotate(-129.403)" />
+    <path fill="#fafafa" stroke="#fafafa" stroke-width=".153"
+      d="m11.772 9.553-.757.135a.4.672 0 0 0-.008.134.4.672 0 0 0 .4.673.4.672 0 0 0 .4-.672.4.672 0 0 0-.035-.27z" />
+    <g fill="#ffe0b2">
+      <ellipse cx="1.841" cy="-21.563" rx=".707" ry="1.026" transform="rotate(-50.597)scale(1 -1)" />
+      <ellipse cx="-17.281" cy="-21.784" rx=".864" ry="1.27"
+        transform="matrix(.3054 -.95222 -.97065 -.24051 0 0)" />
+      <ellipse cx="22.885" cy="2.587" rx=".864" ry="1.27"
+        transform="matrix(.22652 .97401 .95652 -.29167 0 0)" />
+      <path stroke="currentColor" stroke-width=".1"
+        d="M10.708 8.392a.594.594 0 0 0-.594.597v.115c0 .331.265.598.594.598h.386a.973.772 0 0 1 .697-.235.973.772 0 0 1 .698.235h.334c.33 0 .595-.267.595-.598V8.99a.595.595 0 0 0-.595-.597h-2.115z" />
+    </g>
+    <ellipse cx="11.734" cy="8.203" fill="#212121" stroke="#fafafa" stroke-width=".162" rx="1.208"
+      ry=".68" />
+  </g>
+</svg>
