@@ -119,9 +119,16 @@ function object(ast: SchemaAST.Objects): z.ZodTypeAny {
 }
 
 function array(ast: SchemaAST.Arrays): z.ZodTypeAny {
-  if (ast.elements.length > 0) return fail(ast)
-  if (ast.rest.length !== 1) return fail(ast)
-  return z.array(walk(ast.rest[0]))
+  // Pure variadic arrays: { elements: [], rest: [item] }
+  if (ast.elements.length === 0) {
+    if (ast.rest.length !== 1) return fail(ast)
+    return z.array(walk(ast.rest[0]))
+  }
+  // Fixed-length tuples: { elements: [a, b, ...], rest: [] }
+  // Tuples with a variadic tail (...rest) are not yet supported.
+  if (ast.rest.length > 0) return fail(ast)
+  const items = ast.elements.map(walk)
+  return z.tuple(items as [z.ZodTypeAny, ...Array<z.ZodTypeAny>])
 }
 
 function decl(ast: SchemaAST.Declaration): z.ZodTypeAny {

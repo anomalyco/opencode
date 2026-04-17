@@ -61,8 +61,32 @@ describe("util.effect-zod", () => {
     })
   })
 
-  test("throws for unsupported tuple schemas", () => {
-    expect(() => zod(Schema.Tuple([Schema.String, Schema.Number]))).toThrow("unsupported effect schema")
+  describe("Tuples", () => {
+    test("fixed-length tuple parses matching array", () => {
+      const out = zod(Schema.Tuple([Schema.String, Schema.Number]))
+      expect(out.parse(["a", 1])).toEqual(["a", 1])
+      expect(out.safeParse(["a"]).success).toBe(false)
+      expect(out.safeParse(["a", "b"]).success).toBe(false)
+    })
+
+    test("single-element tuple parses a one-element array", () => {
+      const out = zod(Schema.Tuple([Schema.Boolean]))
+      expect(out.parse([true])).toEqual([true])
+      expect(out.safeParse([true, false]).success).toBe(false)
+    })
+
+    test("tuple inside a union picks the right branch", () => {
+      const out = zod(Schema.Union([Schema.String, Schema.Tuple([Schema.String, Schema.Number])]))
+      expect(out.parse("hello")).toBe("hello")
+      expect(out.parse(["foo", 42])).toEqual(["foo", 42])
+      expect(out.safeParse(["foo"]).success).toBe(false)
+    })
+
+    test("plain arrays still work (no element positions)", () => {
+      const out = zod(Schema.Array(Schema.String))
+      expect(out.parse(["a", "b", "c"])).toEqual(["a", "b", "c"])
+      expect(out.parse([])).toEqual([])
+    })
   })
 
   test("string literal unions produce z.enum with enum in JSON Schema", () => {

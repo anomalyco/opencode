@@ -113,7 +113,7 @@ export const Info = z
         "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
       ),
     // User-facing plugin config is stored as Specs; provenance gets attached later while configs are merged.
-    plugin: ConfigPlugin.Spec.array().optional(),
+    plugin: ConfigPlugin.Spec.zod.array().optional(),
     share: z
       .enum(["manual", "auto", "disabled"])
       .optional()
