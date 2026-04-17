@@ -440,12 +440,11 @@ export const layer = Layer.effect(
     const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string) {
       const results = yield* runAll((client) =>
         client.connection
-          .sendRequest("workspace/symbol", { query })
-          .then((result: any) => result.filter((x: Symbol) => kinds.includes(x.kind)))
-          .then((result: any) => result.slice(0, 10))
-          .catch(() => []),
+          .sendRequest<Symbol[]>("workspace/symbol", { query })
+          .then((result) => result.filter((x) => kinds.includes(x.kind)).slice(0, 10))
+          .catch(() => [] as Symbol[]),
       )
-      return results.flat() as Symbol[]
+      return results.flat()
     })
 
     const prepareCallHierarchy = Effect.fn("LSP.prepareCallHierarchy")(function* (input: LocInput) {

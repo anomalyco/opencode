@@ -17,37 +17,22 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 initProjectors()
 
-export namespace Server {
-  const log = Log.create({ service: "server" })
+const log = Log.create({ service: "server" })
 
-  export type Listener = {
-    hostname: string
-    port: number
-    url: URL
-    stop: (close?: boolean) => Promise<void>
-  }
+export type Listener = {
+  hostname: string
+  port: number
+  url: URL
+  stop: (close?: boolean) => Promise<void>
+}
 
-  export const Default = lazy(() => create({}))
+export const Default = lazy(() => create({}))
 
-  function create(opts: { cors?: string[] }) {
-    const app = new Hono()
-    const runtime = adapter.create(app)
+function create(opts: { cors?: string[] }) {
+  const app = new Hono()
+  const runtime = adapter.create(app)
 
-    if (Flag.OPENCODE_WORKSPACE_ID) {
-      return {
-        app: app
-          .onError(ErrorMiddleware)
-          .use(AuthMiddleware)
-          .use(LoggerMiddleware)
-          .use(CompressionMiddleware)
-          .use(CorsMiddleware(opts))
-          .use(FenceMiddleware)
-          .route("/", ControlPlaneRoutes())
-          .route("/", InstanceRoutes(runtime.upgradeWebSocket)),
-        runtime,
-      }
-    }
-
+  if (Flag.OPENCODE_WORKSPACE_ID) {
     return {
       app: app
         .onError(ErrorMiddleware)
@@ -55,73 +40,88 @@ export namespace Server {
         .use(LoggerMiddleware)
         .use(CompressionMiddleware)
         .use(CorsMiddleware(opts))
+        .use(FenceMiddleware)
         .route("/", ControlPlaneRoutes())
-        .route("/", InstanceRoutes(runtime.upgradeWebSocket))
-        .route("/", UIRoutes()),
+        .route("/", InstanceRoutes(runtime.upgradeWebSocket)),
       runtime,
     }
   }
 
-  export async function openapi() {
-    // Build a fresh app with all routes registered directly so
-    // hono-openapi can see describeRoute metadata (`.route()` wraps
-    // handlers when the sub-app has a custom errorHandler, which
-    // strips the metadata symbol).
-    const { app } = create({})
-    const result = await generateSpecs(app, {
-      documentation: {
-        info: {
-          title: "opencode",
-          version: "1.0.0",
-          description: "opencode api",
-        },
-        openapi: "3.1.1",
-      },
-    })
-    return result
-  }
-
-  export let url: URL
-
-  export async function listen(opts: {
-    port: number
-    hostname: string
-    mdns?: boolean
-    mdnsDomain?: string
-    cors?: string[]
-  }): Promise<Listener> {
-    const built = create(opts)
-    const server = await built.runtime.listen(opts)
-
-    const next = new URL("http://localhost")
-    next.hostname = opts.hostname
-    next.port = String(server.port)
-    url = next
-
-    const mdns =
-      opts.mdns &&
-      server.port &&
-      opts.hostname !== "127.0.0.1" &&
-      opts.hostname !== "localhost" &&
-      opts.hostname !== "::1"
-    if (mdns) {
-      MDNS.publish(server.port, opts.mdnsDomain)
-    } else if (opts.mdns) {
-      log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
-    }
-
-    let closing: Promise<void> | undefined
-    return {
-      hostname: opts.hostname,
-      port: server.port,
-      url: next,
-      stop(close?: boolean) {
-        closing ??= (async () => {
-          if (mdns) MDNS.unpublish()
-          await server.stop(close)
-        })()
-        return closing
-      },
-    }
+  return {
+    app: app
+      .onError(ErrorMiddleware)
+      .use(AuthMiddleware)
+      .use(LoggerMiddleware)
+      .use(CompressionMiddleware)
+      .use(CorsMiddleware(opts))
+      .route("/", ControlPlaneRoutes())
+      .route("/", InstanceRoutes(runtime.upgradeWebSocket))
+      .route("/", UIRoutes()),
+    runtime,
   }
 }
+
+export async function openapi() {
+  // Build a fresh app with all routes registered directly so
+  // hono-openapi can see describeRoute metadata (`.route()` wraps
+  // handlers when the sub-app has a custom errorHandler, which
+  // strips the metadata symbol).
+  const { app } = create({})
+  const result = await generateSpecs(app, {
+    documentation: {
+      info: {
+        title: "opencode",
+        version: "1.0.0",
+        description: "opencode api",
+      },
+      openapi: "3.1.1",
+    },
+  })
+  return result
+}
+
+export let url: URL
+
+export async function listen(opts: {
+  port: number
+  hostname: string
+  mdns?: boolean
+  mdnsDomain?: string
+  cors?: string[]
+}): Promise<Listener> {
+  const built = create(opts)
+  const server = await built.runtime.listen(opts)
+
+  const next = new URL("http://localhost")
+  next.hostname = opts.hostname
+  next.port = String(server.port)
+  url = next
+
+  const mdns =
+    opts.mdns &&
+    server.port &&
+    opts.hostname !== "127.0.0.1" &&
+    opts.hostname !== "localhost" &&
+    opts.hostname !== "::1"
+  if (mdns) {
+    MDNS.publish(server.port, opts.mdnsDomain)
+  } else if (opts.mdns) {
+    log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
+  }
+
+  let closing: Promise<void> | undefined
+  return {
+    hostname: opts.hostname,
+    port: server.port,
+    url: next,
+    stop(close?: boolean) {
+      closing ??= (async () => {
+        if (mdns) MDNS.unpublish()
+        await server.stop(close)
+      })()
+      return closing
+    },
+  }
+}
+
+export * as Server from "./server"
