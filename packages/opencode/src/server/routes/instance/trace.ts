@@ -1,6 +1,6 @@
 import type { Context } from "hono"
 import { Effect } from "effect"
-import { AppRuntime } from "../../effect/app-runtime"
+import { AppRuntime } from "@/effect/app-runtime"
 
 type AppEnv = Parameters<typeof AppRuntime.runPromise>[0] extends Effect.Effect<any, any, infer R> ? R : never
 

@@ -3,15 +3,15 @@ import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Context, Effect } from "effect"
 import z from "zod"
-import { Format } from "../../format"
+import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
-import { Instance } from "../../project/instance"
-import { Vcs } from "../../project"
-import { Agent } from "../../agent/agent"
-import { Skill } from "../../skill"
-import { Global } from "../../global"
-import { LSP } from "../../lsp"
-import { Command } from "../../command"
+import { Instance } from "@/project/instance"
+import { Vcs } from "@/project"
+import { Agent } from "@/agent/agent"
+import { Skill } from "@/skill"
+import { Global } from "@/global"
+import { LSP } from "@/lsp"
+import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@/flag/flag"
@@ -26,11 +26,10 @@ import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
-import { WorkspaceRouterMiddleware } from "./middleware"
 import { AppRuntime } from "@/effect/app-runtime"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
-  const app = new Hono().use(WorkspaceRouterMiddleware(upgrade))
+  const app = new Hono()
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
     const handler = ExperimentalHttpApiServer.webHandler().handler

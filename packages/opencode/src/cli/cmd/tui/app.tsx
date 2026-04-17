@@ -135,7 +135,9 @@ export function tui(input: {
       await TuiPluginRuntime.dispose()
     }
 
+    console.log("starting renderer")
     const renderer = await createCliRenderer(rendererConfig(input.config))
+    console.log("renderer started")
 
     await render(() => {
       return (
@@ -148,7 +150,16 @@ export function tui(input: {
             <ExitProvider onBeforeExit={onBeforeExit} onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
-                  <RouteProvider>
+                  <RouteProvider
+                    initialRoute={
+                      (input.args.sessionID || input.args.continue) && !input.args.fork
+                        ? {
+                            type: "session",
+                            sessionID: "dummy",
+                          }
+                        : undefined
+                    }
+                  >
                     <TuiConfigProvider config={input.config}>
                       <SDKProvider
                         url={input.url}
@@ -332,13 +343,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
-      }
-      // Handle --session without --fork immediately (fork is handled in createEffect below)
-      if (args.sessionID && !args.fork) {
-        route.navigate({
-          type: "session",
-          sessionID: args.sessionID,
-        })
       }
     })
   })

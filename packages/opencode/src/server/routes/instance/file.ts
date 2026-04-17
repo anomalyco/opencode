@@ -2,12 +2,12 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { Effect } from "effect"
 import z from "zod"
-import { AppRuntime } from "../../effect/app-runtime"
-import { File } from "../../file"
-import { Ripgrep } from "../../file/ripgrep"
-import { LSP } from "../../lsp"
-import { Instance } from "../../project/instance"
-import { lazy } from "../../util/lazy"
+import { AppRuntime } from "@/effect/app-runtime"
+import { File } from "@/file"
+import { Ripgrep } from "@/file/ripgrep"
+import { LSP } from "@/lsp"
+import { Instance } from "@/project/instance"
+import { lazy } from "@/util/lazy"
 
 export const FileRoutes = lazy(() =>
   new Hono()

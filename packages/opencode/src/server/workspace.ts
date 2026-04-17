@@ -2,17 +2,16 @@ import type { MiddlewareHandler } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
 import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Workspace } from "@/control-plane/workspace"
-import { ServerProxy } from "../proxy"
-import { Instance } from "@/project/instance"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { Flag } from "@/flag/flag"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
-import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Log } from "@/util"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { ServerProxy } from "./proxy"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -51,45 +50,13 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
   const log = Log.create({ service: "workspace-router" })
 
   return async (c, next) => {
-    const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-    const directory = AppFileSystem.resolve(
-      (() => {
-        try {
-          return decodeURIComponent(raw)
-        } catch {
-          return raw
-        }
-      })(),
-    )
-
     const url = new URL(c.req.url)
 
     const sessionWorkspaceID = await getSessionWorkspace(url)
     const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
 
     if (!workspaceID || url.pathname.startsWith("/console") || Flag.OPENCODE_WORKSPACE_ID) {
-      if (Flag.OPENCODE_WORKSPACE_ID) {
-        return WorkspaceContext.provide({
-          workspaceID: WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID),
-          async fn() {
-            return Instance.provide({
-              directory,
-              init: () => AppRuntime.runPromise(InstanceBootstrap),
-              async fn() {
-                return next()
-              },
-            })
-          },
-        })
-      }
-
-      return Instance.provide({
-        directory,
-        init: () => AppRuntime.runPromise(InstanceBootstrap),
-        async fn() {
-          return next()
-        },
-      })
+      return next()
     }
 
     const workspace = await Workspace.get(WorkspaceID.make(workspaceID))

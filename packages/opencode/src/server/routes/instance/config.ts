@@ -1,11 +1,11 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "../../config"
-import { Provider } from "../../provider"
-import { errors } from "../error"
-import { lazy } from "../../util/lazy"
-import { AppRuntime } from "../../effect/app-runtime"
+import { Config } from "@/config"
+import { Provider } from "@/provider"
+import { errors } from "../../error"
+import { lazy } from "@/util/lazy"
+import { AppRuntime } from "@/effect/app-runtime"
 import { jsonRequest } from "./trace"
 
 export const ConfigRoutes = lazy(() =>

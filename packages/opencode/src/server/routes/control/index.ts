@@ -6,13 +6,12 @@ import { ProviderID } from "@/provider/schema"
 import { Hono } from "hono"
 import { describeRoute, resolver, validator, openAPIRouteHandler } from "hono-openapi"
 import z from "zod"
-import { errors } from "../error"
-import { GlobalRoutes } from "../instance/global"
+import { errors } from "../../error"
+import { WorkspaceRoutes } from "./workspace"
 
 export function ControlPlaneRoutes(): Hono {
   const app = new Hono()
   return app
-    .route("/global", GlobalRoutes())
     .put(
       "/auth/:providerID",
       describeRoute({
@@ -159,4 +158,5 @@ export function ControlPlaneRoutes(): Hono {
         return c.json(true)
       },
     )
+    .route("/experimental/workspace", WorkspaceRoutes())
 }
