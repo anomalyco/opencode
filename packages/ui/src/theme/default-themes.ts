@@ -2,7 +2,9 @@ import type { DesktopTheme } from "./types"
 import oc2ThemeJson from "./themes/oc-2.json"
 import amoledThemeJson from "./themes/amoled.json"
 import auraThemeJson from "./themes/aura.json"
+import auroraThemeJson from "./themes/aurora.json"
 import ayuThemeJson from "./themes/ayu.json"
+import borealisThemeJson from "./themes/borealis.json"
 import carbonfoxThemeJson from "./themes/carbonfox.json"
 import catppuccinThemeJson from "./themes/catppuccin.json"
 import catppuccinFrappeThemeJson from "./themes/catppuccin-frappe.json"
@@ -40,7 +42,9 @@ import zenburnThemeJson from "./themes/zenburn.json"
 export const oc2Theme = oc2ThemeJson as DesktopTheme
 export const amoledTheme = amoledThemeJson as DesktopTheme
 export const auraTheme = auraThemeJson as DesktopTheme
+export const auroraTheme = auroraThemeJson as DesktopTheme
 export const ayuTheme = ayuThemeJson as DesktopTheme
+export const borealisTheme = borealisThemeJson as DesktopTheme
 export const carbonfoxTheme = carbonfoxThemeJson as DesktopTheme
 export const catppuccinTheme = catppuccinThemeJson as DesktopTheme
 export const catppuccinFrappeTheme = catppuccinFrappeThemeJson as DesktopTheme
@@ -79,7 +83,9 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   "oc-2": oc2Theme,
   amoled: amoledTheme,
   aura: auraTheme,
+  aurora: auroraTheme,
   ayu: ayuTheme,
+  borealis: borealisTheme,
   carbonfox: carbonfoxTheme,
   catppuccin: catppuccinTheme,
   "catppuccin-frappe": catppuccinFrappeTheme,
