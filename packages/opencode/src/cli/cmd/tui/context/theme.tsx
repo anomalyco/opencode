@@ -375,8 +375,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     }
 
-    function apply(mode: "dark" | "light", persist = store.lock !== undefined) {
-      if (persist) kv.set("theme_mode", mode)
+    function apply(mode: "dark" | "light") {
+      if (store.lock !== undefined) kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
       renderer.clearPaletteCache()
