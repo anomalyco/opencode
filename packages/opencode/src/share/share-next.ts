@@ -118,6 +118,9 @@ export const layer = Layer.effect(
     function sync(sessionID: SessionID, data: Data[]): Effect.Effect<void> {
       return Effect.gen(function* () {
         if (disabled) return
+        const share = yield* get(sessionID)
+        if (!share) return
+
         const s = yield* InstanceState.get(state)
         const existing = s.queue.get(sessionID)
         if (existing) {
