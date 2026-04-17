@@ -639,9 +639,6 @@
                       "status": {
                         "type": "string",
                         "enum": ["connected", "connecting", "disconnected", "error"]
-                      },
-                      "error": {
-                        "type": "string"
                       }
                     },
                     "required": ["workspaceID", "status"]
@@ -8852,9 +8849,6 @@
               "status": {
                 "type": "string",
                 "enum": ["connected", "connecting", "disconnected", "error"]
-              },
-              "error": {
-                "type": "string"
               }
             },
             "required": ["workspaceID", "status"]
