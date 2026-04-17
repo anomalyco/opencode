@@ -40,11 +40,15 @@ export const layer = Layer.effect(
       Effect.fn("Format.state")(function* (_ctx) {
         const commands: Record<string, string[] | false> = {}
         const formatters: Record<string, Formatter.Info> = {}
+        const context = {
+          directory: _ctx.directory,
+          worktree: _ctx.worktree,
+        }
 
         async function getCommand(item: Formatter.Info) {
           let cmd = commands[item.name]
           if (cmd === false || cmd === undefined) {
-            cmd = await item.enabled()
+            cmd = await item.enabled(context)
             commands[item.name] = cmd
           }
           return cmd
@@ -153,7 +157,7 @@ export const layer = Layer.effect(
               ...info,
               name,
               extensions: info.extensions ?? [],
-              enabled: builtIn && !info.command ? builtIn.enabled : async () => info.command ?? false,
+              enabled: builtIn && !info.command ? builtIn.enabled : async (_context) => info.command ?? false,
             }
           }
         }
