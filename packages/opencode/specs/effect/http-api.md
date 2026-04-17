@@ -189,10 +189,46 @@ Ordering for a route-group migration:
 
 SDK shape rule:
 
-- every schema migration must preserve the generated SDK output byte-for-byte
-- `Schema.Class` emits a named `$ref` in OpenAPI via its identifier — use it only for types that already had `.meta({ ref })` in the old Zod schema
-- inner / nested types that were anonymous in the old Zod schema should stay as `Schema.Struct` (not `Schema.Class`) to avoid introducing new named components in the OpenAPI spec
-- if a diff appears in `packages/sdk/js/src/v2/gen/types.gen.ts`, the migration introduced an unintended API surface change — fix it before merging
+- every schema migration must preserve the generated SDK output byte-for-byte **unless the new ref is intentional** (see Schema.Class vs Schema.Struct below)
+- if an unintended diff appears in `packages/sdk/js/src/v2/gen/types.gen.ts`, the migration introduced an unintended API surface change — fix it before merging
+
+### Schema.Class vs Schema.Struct
+
+The pattern choice determines whether a schema becomes a **named** export in the SDK or stays **anonymous inline**.
+
+**Schema.Class** emits a named `$ref` in OpenAPI via its identifier → produces a named `export type Foo = ...` in `types.gen.ts`:
+
+```ts
+export class Info extends Schema.Class<Info>("FooConfig")({ ... }) {
+  static readonly zod = zod(this)
+}
+```
+
+**Schema.Struct** stays anonymous and is inlined everywhere it is referenced:
+
+```ts
+export const Info = Schema.Struct({ ... }).pipe(
+  withStatics((s) => ({ zod: zod(s) })),
+)
+export type Info = Schema.Schema.Type<typeof Info>
+```
+
+When to use each:
+
+- Use **Schema.Class** when:
+  - the original Zod had `.meta({ ref: ... })` (preserve the existing named SDK type byte-for-byte)
+  - the schema is a top-level endpoint request or response (SDK consumers benefit from a stable importable name)
+- Use **Schema.Struct** when:
+  - the type is only used as a nested field inside another named schema
+  - the original Zod was anonymous and promoting it would bloat SDK types with no import value
+
+Promoting a previously-anonymous schema to Schema.Class is acceptable when it is top-level or endpoint-facing, but call it out in the PR — it is an additive SDK change (`export type Foo = ...` newly appears) even if it preserves the JSON shape.
+
+Schemas that are **not** pure objects (enums, unions, records, tuples) cannot use Schema.Class. For those, add `.annotate({ identifier: "FooName" })` to get the same named-ref behavior:
+
+```ts
+export const Action = Schema.Literals(["ask", "allow", "deny"]).annotate({ identifier: "PermissionActionConfig" })
+```
 
 Temporary exception:
 
@@ -365,17 +401,16 @@ Current instance route inventory:
   endpoints: `GET /question`, `POST /question/:requestID/reply`, `POST /question/:requestID/reject`
 - `permission` - `bridged`
   endpoints: `GET /permission`, `POST /permission/:requestID/reply`
-- `provider` - `bridged` (partial)
-  bridged endpoint: `GET /provider/auth`
-  not yet ported: `GET /provider`, OAuth mutations
-- `config` - `next`
-  best next endpoint: `GET /config/providers`
+- `provider` - `bridged`
+  endpoints: `GET /provider`, `GET /provider/auth`, `POST /provider/:providerID/oauth/authorize`, `POST /provider/:providerID/oauth/callback`
+- `config` - `bridged` (partial)
+  bridged endpoint: `GET /config/providers`
   later endpoint: `GET /config`
   defer `PATCH /config` for now
-- `project` - `later`
-  best small reads: `GET /project`, `GET /project/current`
+- `project` - `bridged` (partial)
+  bridged endpoints: `GET /project`, `GET /project/current`
   defer git-init mutation first
-- `workspace` - `later`
+- `workspace` - `next`
   best small reads: `GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`
   defer create/remove mutations first
 - `file` - `later`
@@ -393,12 +428,12 @@ Current instance route inventory:
 - `tui` - `defer`
   queue-style UI bridge, weak early `HttpApi` fit
 
-Recommended near-term sequence after the first spike:
+Recommended near-term sequence:
 
-1. `provider` auth read endpoint
-2. `config` providers read endpoint
-3. `project` read endpoints
-4. `workspace` read endpoints
+1. `workspace` read endpoints (`GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`)
+2. `config` full read endpoint (`GET /config`)
+3. `file` JSON read endpoints
+4. `mcp` JSON read endpoints
 
 ## Checklist
 
@@ -411,8 +446,12 @@ Recommended near-term sequence after the first spike:
 - [x] gate behind `OPENCODE_EXPERIMENTAL_HTTPAPI` flag
 - [x] verify OTEL spans and HTTP logs flow to motel
 - [x] bridge question, permission, and provider auth routes
-- [ ] port remaining provider endpoints (`GET /provider`, OAuth mutations)
-- [ ] port `config` read endpoints
+- [x] port remaining provider endpoints (`GET /provider`, OAuth mutations)
+- [x] port `config` providers read endpoint
+- [x] port `project` read endpoints (`GET /project`, `GET /project/current`)
+- [ ] port `workspace` read endpoints
+- [ ] port `GET /config` full read endpoint
+- [ ] port `file` JSON read endpoints
 - [ ] decide when to remove the flag and make Effect routes the default
 
 ## Rule of thumb

@@ -16,11 +16,32 @@ function walk(ast: SchemaAST.AST): z.ZodTypeAny {
   const override = (ast.annotations as any)?.[ZodOverride] as z.ZodTypeAny | undefined
   if (override) return override
 
-  const out = body(ast)
+  let out = body(ast)
+  for (const check of ast.checks ?? []) {
+    out = applyCheck(out, check, ast)
+  }
   const desc = SchemaAST.resolveDescription(ast)
   const ref = SchemaAST.resolveIdentifier(ast)
   const next = desc ? out.describe(desc) : out
   return ref ? next.meta({ ref }) : next
+}
+
+function applyCheck(out: z.ZodTypeAny, check: SchemaAST.Check<any>, ast: SchemaAST.AST): z.ZodTypeAny {
+  if (check._tag === "FilterGroup") {
+    return check.checks.reduce((acc, sub) => applyCheck(acc, sub, ast), out)
+  }
+  return out.superRefine((value, ctx) => {
+    const issue = check.run(value, ast, {} as any)
+    if (!issue) return
+    const message = issueMessage(issue) ?? (check.annotations as any)?.message ?? "Validation failed"
+    ctx.addIssue({ code: "custom", message })
+  })
+}
+
+function issueMessage(issue: any): string | undefined {
+  if (typeof issue?.annotations?.message === "string") return issue.annotations.message
+  if (typeof issue?.message === "string") return issue.message
+  return undefined
 }
 
 function body(ast: SchemaAST.AST): z.ZodTypeAny {
@@ -77,8 +98,8 @@ function union(ast: SchemaAST.Union): z.ZodTypeAny {
   if (items.length === 1) return items[0]
   if (items.length < 2) return fail(ast)
 
-  const discriminator = (ast as any).annotations?.discriminator
-  if (discriminator) {
+  const discriminator = ast.annotations?.discriminator
+  if (typeof discriminator === "string") {
     return z.discriminatedUnion(discriminator, items as [z.ZodObject<any>, z.ZodObject<any>, ...z.ZodObject<any>[]])
   }
 
@@ -98,9 +119,16 @@ function object(ast: SchemaAST.Objects): z.ZodTypeAny {
 }
 
 function array(ast: SchemaAST.Arrays): z.ZodTypeAny {
-  if (ast.elements.length > 0) return fail(ast)
-  if (ast.rest.length !== 1) return fail(ast)
-  return z.array(walk(ast.rest[0]))
+  // Pure variadic arrays: { elements: [], rest: [item] }
+  if (ast.elements.length === 0) {
+    if (ast.rest.length !== 1) return fail(ast)
+    return z.array(walk(ast.rest[0]))
+  }
+  // Fixed-length tuples: { elements: [a, b, ...], rest: [] }
+  // Tuples with a variadic tail (...rest) are not yet supported.
+  if (ast.rest.length > 0) return fail(ast)
+  const items = ast.elements.map(walk)
+  return z.tuple(items as [z.ZodTypeAny, ...Array<z.ZodTypeAny>])
 }
 
 function decl(ast: SchemaAST.Declaration): z.ZodTypeAny {

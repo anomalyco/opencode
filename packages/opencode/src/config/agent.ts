@@ -15,7 +15,7 @@ const log = Log.create({ service: "config" })
 
 export const Info = z
   .object({
-    model: ConfigModelID.optional(),
+    model: ConfigModelID.zod.optional(),
     variant: z
       .string()
       .optional()

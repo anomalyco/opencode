@@ -61,8 +61,32 @@ describe("util.effect-zod", () => {
     })
   })
 
-  test("throws for unsupported tuple schemas", () => {
-    expect(() => zod(Schema.Tuple([Schema.String, Schema.Number]))).toThrow("unsupported effect schema")
+  describe("Tuples", () => {
+    test("fixed-length tuple parses matching array", () => {
+      const out = zod(Schema.Tuple([Schema.String, Schema.Number]))
+      expect(out.parse(["a", 1])).toEqual(["a", 1])
+      expect(out.safeParse(["a"]).success).toBe(false)
+      expect(out.safeParse(["a", "b"]).success).toBe(false)
+    })
+
+    test("single-element tuple parses a one-element array", () => {
+      const out = zod(Schema.Tuple([Schema.Boolean]))
+      expect(out.parse([true])).toEqual([true])
+      expect(out.safeParse([true, false]).success).toBe(false)
+    })
+
+    test("tuple inside a union picks the right branch", () => {
+      const out = zod(Schema.Union([Schema.String, Schema.Tuple([Schema.String, Schema.Number])]))
+      expect(out.parse("hello")).toBe("hello")
+      expect(out.parse(["foo", 42])).toEqual(["foo", 42])
+      expect(out.safeParse(["foo"]).success).toBe(false)
+    })
+
+    test("plain arrays still work (no element positions)", () => {
+      const out = zod(Schema.Array(Schema.String))
+      expect(out.parse(["a", "b", "c"])).toEqual(["a", "b", "c"])
+      expect(out.parse([])).toEqual([])
+    })
   })
 
   test("string literal unions produce z.enum with enum in JSON Schema", () => {
@@ -185,5 +209,58 @@ describe("util.effect-zod", () => {
 
     const schema = json(zod(Parent)) as any
     expect(schema.properties.sessionID).toEqual({ type: "string", pattern: "^ses.*" })
+  })
+
+  describe("Schema.check translation", () => {
+    test("filter returning string triggers refinement with that message", () => {
+      const isEven = Schema.makeFilter((n: number) => (n % 2 === 0 ? undefined : "expected an even number"))
+      const schema = zod(Schema.Number.check(isEven))
+
+      expect(schema.parse(4)).toBe(4)
+      const result = schema.safeParse(3)
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toBe("expected an even number")
+    })
+
+    test("filter returning false triggers refinement with fallback message", () => {
+      const nonEmpty = Schema.makeFilter((s: string) => s.length > 0)
+      const schema = zod(Schema.String.check(nonEmpty))
+
+      expect(schema.parse("hi")).toBe("hi")
+      const result = schema.safeParse("")
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toMatch(/./)
+    })
+
+    test("filter returning undefined passes validation", () => {
+      const alwaysOk = Schema.makeFilter(() => undefined)
+      const schema = zod(Schema.Number.check(alwaysOk))
+
+      expect(schema.parse(42)).toBe(42)
+    })
+
+    test("annotations.message on the filter is used when filter returns false", () => {
+      const positive = Schema.makeFilter((n: number) => n > 0, { message: "must be positive" })
+      const schema = zod(Schema.Number.check(positive))
+
+      const result = schema.safeParse(-1)
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toBe("must be positive")
+    })
+
+    test("cross-field check on a record flags missing key", () => {
+      const hasKey = Schema.makeFilter((data: Record<string, { enabled: boolean }>) =>
+        "required" in data ? undefined : "missing 'required' key",
+      )
+      const schema = zod(Schema.Record(Schema.String, Schema.Struct({ enabled: Schema.Boolean })).check(hasKey))
+
+      expect(schema.parse({ required: { enabled: true } })).toEqual({
+        required: { enabled: true },
+      })
+
+      const result = schema.safeParse({ other: { enabled: true } })
+      expect(result.success).toBe(false)
+      expect(result.error!.issues[0].message).toBe("missing 'required' key")
+    })
   })
 })

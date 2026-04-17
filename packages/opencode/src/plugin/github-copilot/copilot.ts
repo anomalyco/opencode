@@ -1,6 +1,5 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
-import { Installation } from "@/installation"
 import { InstallationVersion } from "@/installation/version"
 import { iife } from "@/util/iife"
 import { Log } from "../../util"

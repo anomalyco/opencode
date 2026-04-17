@@ -41,9 +41,7 @@ export async function openWorkspaceSession(input: {
     workspaceID: input.workspaceID,
   })
 
-  console.log("opening!")
   while (true) {
-    console.log("creating")
     const result = await client.session.create({ workspace: input.workspaceID }).catch((err) => {
       log.error("workspace session create request failed", {
         workspaceID: input.workspaceID,
@@ -141,7 +139,13 @@ export async function restoreWorkspaceSession(input: {
     total: result.data.total,
   })
 
-  await Promise.all([input.project.workspace.sync(), input.sync.session.refresh()]).catch((err) => {
+  input.project.workspace.set(input.workspaceID)
+
+  try {
+    await input.sync.bootstrap({ fatal: false })
+  } catch (e) {}
+
+  await Promise.all([input.project.workspace.sync(), input.sync.session.sync(input.sessionID)]).catch((err) => {
     log.error("session restore refresh failed", {
       workspaceID: input.workspaceID,
       sessionID: input.sessionID,
@@ -231,6 +235,10 @@ export function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) =
     })
 
     const result = await sdk.client.experimental.workspace.create({ type, branch: null }).catch((err) => {
+      toast.show({
+        message: "Creating workspace failed",
+        variant: "error",
+      })
       log.error("workspace create request failed", {
         type,
         error: errorData(err),
