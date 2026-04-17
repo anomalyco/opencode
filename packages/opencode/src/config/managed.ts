@@ -1,8 +1,10 @@
+export * as ConfigManaged from "./managed"
+
 import { existsSync } from "fs"
 import os from "os"
 import path from "path"
-import { type Info, parseConfig } from "./config"
 import { Log, Process } from "../util"
+import { warn } from "console"
 
 const log = Log.create({ service: "config" })
 
@@ -29,20 +31,20 @@ function systemManagedConfigDir(): string {
   }
 }
 
-function managedConfigDir() {
+export function managedConfigDir() {
   return process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || systemManagedConfigDir()
 }
 
-function parseManagedPlist(json: string, source: string): Info {
+export function parseManagedPlist(json: string): string {
   const raw = JSON.parse(json)
   for (const key of Object.keys(raw)) {
     if (PLIST_META.has(key)) delete raw[key]
   }
-  return parseConfig(JSON.stringify(raw), source)
+  return JSON.stringify(raw)
 }
 
-async function readManagedPreferences(): Promise<Info> {
-  if (process.platform !== "darwin") return {}
+export async function readManagedPreferences() {
+  if (process.platform !== "darwin") return
 
   const user = os.userInfo().username
   const paths = [
@@ -58,14 +60,11 @@ async function readManagedPreferences(): Promise<Info> {
       log.warn("failed to convert managed preferences plist", { path: plist })
       continue
     }
-    return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    return {
+      source: `mobileconfig:${plist}`,
+      text: parseManagedPlist(result.stdout.toString()),
+    }
   }
 
-  return {}
-}
-
-export const ConfigManaged = {
-  managedConfigDir,
-  parseManagedPlist,
-  readManagedPreferences,
+  return
 }

@@ -9,7 +9,7 @@ Use `InstanceState` (from `src/effect/instance-state.ts`) for services that need
 Use `makeRuntime` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`. Returns `{ runPromise, runFork, runCallback }`.
 
 - Global services (no per-directory state): Account, Auth, AppFileSystem, Installation, Truncate, Worktree
-- Instance-scoped (per-directory state via InstanceState): Agent, Bus, Command, Config, File, FileTime, FileWatcher, Format, LSP, MCP, Permission, Plugin, ProviderAuth, Pty, Question, SessionStatus, Skill, Snapshot, ToolRegistry, Vcs
+- Instance-scoped (per-directory state via InstanceState): Agent, Bus, Command, Config, File, FileWatcher, Format, LSP, MCP, Permission, Plugin, ProviderAuth, Pty, Question, SessionStatus, Skill, Snapshot, ToolRegistry, Vcs
 
 Rule of thumb: if two open directories should not share one copy of the service, it needs `InstanceState`.
 
@@ -195,7 +195,6 @@ This checklist is only about the service shape migration. Many of these services
 - [x] `Config` — `config/config.ts`
 - [x] `Discovery` — `skill/discovery.ts` (dependency-only layer, no standalone runtime)
 - [x] `File` — `file/index.ts`
-- [x] `FileTime` — `file/time.ts`
 - [x] `FileWatcher` — `file/watcher.ts`
 - [x] `Format` — `format/index.ts`
 - [x] `Installation` — `installation/index.ts`
@@ -301,7 +300,6 @@ For each service, the migration is roughly:
 - `SessionRunState` — migrated 2026-04-11. Single caller in `server/instance/session.ts` converted; facade removed.
 - `Account` — migrated 2026-04-11. Callers in `server/instance/experimental.ts` and `cli/cmd/account.ts` converted; facade removed.
 - `Instruction` — migrated 2026-04-11. Test-only callers converted; facade removed.
-- `FileTime` — migrated 2026-04-11. Test-only callers converted; facade removed.
 - `FileWatcher` — migrated 2026-04-11. Callers in `project/bootstrap.ts` and test converted; facade removed.
 - `Question` — migrated 2026-04-11. Callers in `server/instance/question.ts` and test converted; facade removed.
 - `Truncate` — migrated 2026-04-11. Caller in `tool/tool.ts` and test converted; facade removed.

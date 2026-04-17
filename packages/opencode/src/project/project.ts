@@ -8,46 +8,52 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "project" })
 
-export const Info = z
-  .object({
-    id: ProjectID.zod,
-    worktree: z.string(),
-    vcs: z.literal("git").optional(),
-    name: z.string().optional(),
-    icon: z
-      .object({
-        url: z.string().optional(),
-        override: z.string().optional(),
-        color: z.string().optional(),
-      })
-      .optional(),
-    commands: z
-      .object({
-        start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
-      })
-      .optional(),
-    time: z.object({
-      created: z.number(),
-      updated: z.number(),
-      initialized: z.number().optional(),
-    }),
-    sandboxes: z.array(z.string()),
-  })
-  .meta({
-    ref: "Project",
-  })
-export type Info = z.infer<typeof Info>
+const ProjectVcs = Schema.Literal("git")
+
+const ProjectIcon = Schema.Struct({
+  url: Schema.optional(Schema.String),
+  override: Schema.optional(Schema.String),
+  color: Schema.optional(Schema.String),
+})
+
+const ProjectCommands = Schema.Struct({
+  start: Schema.optional(
+    Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),
+  ),
+})
+
+const ProjectTime = Schema.Struct({
+  created: Schema.Number,
+  updated: Schema.Number,
+  initialized: Schema.optional(Schema.Number),
+})
+
+export const Info = Schema.Struct({
+  id: ProjectID,
+  worktree: Schema.String,
+  vcs: Schema.optional(ProjectVcs),
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
+  time: ProjectTime,
+  sandboxes: Schema.Array(Schema.String),
+})
+  .annotate({ identifier: "Project" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
-  Updated: BusEvent.define("project.updated", Info),
+  Updated: BusEvent.define("project.updated", Info.zod),
 }
 
 type Row = typeof ProjectTable.$inferSelect
@@ -58,7 +64,7 @@ export function fromRow(row: Row): Info {
   return {
     id: row.id,
     worktree: row.worktree,
-    vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
+    vcs: row.vcs ? Schema.decodeUnknownSync(ProjectVcs)(row.vcs) : undefined,
     name: row.name ?? undefined,
     icon,
     time: {
@@ -74,8 +80,8 @@ export function fromRow(row: Row): Info {
 export const UpdateInput = z.object({
   projectID: ProjectID.zod,
   name: z.string().optional(),
-  icon: Info.shape.icon.optional(),
-  commands: Info.shape.commands.optional(),
+  icon: zod(ProjectIcon).optional(),
+  commands: zod(ProjectCommands).optional(),
 })
 export type UpdateInput = z.infer<typeof UpdateInput>
 
@@ -139,7 +145,7 @@ export const layer: Layer.Layer<
         }),
       )
 
-    const fakeVcs = Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS)
+    const fakeVcs = Schema.decodeUnknownSync(Schema.optional(ProjectVcs))(Flag.OPENCODE_FAKE_VCS)
 
     const resolveGitPath = (cwd: string, name: string) => {
       if (!name) return cwd

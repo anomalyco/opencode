@@ -72,7 +72,6 @@ export type State = {
   part: {
     [messageID: string]: Part[]
   }
-  bootstrapPromise: Promise<void>
 }
 
 export type VcsCache = {
