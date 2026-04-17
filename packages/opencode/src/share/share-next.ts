@@ -40,7 +40,7 @@ export type Share = typeof ShareSchema.Type
 type State = {
   queue: Map<string, { data: Map<string, Data> }>
   scope: Scope.Closeable
-  shared: Set<SessionID>
+  shared: Map<SessionID, boolean>
 }
 
 type Data =
@@ -120,7 +120,14 @@ export const layer = Layer.effect(
       return Effect.gen(function* () {
         if (disabled) return
         const s = yield* InstanceState.get(state)
-        if (!s.shared.has(sessionID)) return
+	        const cached = s.shared.get(sessionID)
+	        if (cached === false) return
+	        if (cached === undefined) {
+	          const share = yield* get(sessionID)
+	          const isShared = share !== undefined
+	          s.shared.set(sessionID, isShared)
+	          if (!isShared) return
+	        }
 
         const existing = s.queue.get(sessionID)
         if (existing) {
@@ -146,7 +153,7 @@ export const layer = Layer.effect(
 
     const state: InstanceState.InstanceState<State> = yield* InstanceState.make<State>(
       Effect.fn("ShareNext.state")(function* (_ctx) {
-        const cache: State = { queue: new Map(), scope: yield* Scope.make(), shared: new Set() }
+	        const cache: State = { queue: new Map(), scope: yield* Scope.make(), shared: new Map() }
 
         yield* Effect.addFinalizer(() =>
           Scope.close(cache.scope, Exit.void).pipe(
@@ -158,12 +165,7 @@ export const layer = Layer.effect(
           ),
         )
 
-        if (disabled) return cache
-
-        const existingShares = yield* db((db) => db.select({ sessionID: SessionShareTable.session_id }).from(SessionShareTable).all())
-        for (const row of existingShares) {
-          cache.shared.add(row.sessionID as SessionID)
-        }
+	        if (disabled) return cache
 
         const watch = <D extends { type: string }>(
           def: D,
@@ -245,7 +247,7 @@ export const layer = Layer.effect(
 
       const share = yield* get(sessionID)
       if (!share) {
-        s.shared.delete(sessionID)
+	        s.shared.set(sessionID, false)
         return
       }
 
@@ -318,7 +320,7 @@ export const layer = Layer.effect(
           .run(),
       )
       const s = yield* InstanceState.get(state)
-      s.shared.add(sessionID)
+	      s.shared.set(sessionID, true)
       yield* full(sessionID).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
@@ -345,7 +347,7 @@ export const layer = Layer.effect(
 
       yield* db((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
       const s = yield* InstanceState.get(state)
-      s.shared.delete(sessionID)
+	      s.shared.set(sessionID, false)
       s.queue.delete(sessionID)
     })
 
