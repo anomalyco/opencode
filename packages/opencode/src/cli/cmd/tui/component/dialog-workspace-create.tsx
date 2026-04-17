@@ -41,9 +41,7 @@ export async function openWorkspaceSession(input: {
     workspaceID: input.workspaceID,
   })
 
-  console.log("opening!")
   while (true) {
-    console.log("creating")
     const result = await client.session.create({ workspace: input.workspaceID }).catch((err) => {
       log.error("workspace session create request failed", {
         workspaceID: input.workspaceID,
