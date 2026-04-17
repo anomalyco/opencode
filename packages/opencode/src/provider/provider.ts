@@ -26,6 +26,7 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
+import { customRelayProvider } from "@opencode-custom/relay/provider"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -925,6 +926,8 @@ interface State {
   varsLoaders: Record<string, CustomVarsLoader>
 }
 
+type RelayInfo = Info & { extends?: string }
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
@@ -1076,7 +1079,18 @@ const layer: Layer.Layer<
 
         log.info("init")
 
-        function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
+        function mergeProvider(providerID: ProviderID, provider: Partial<RelayInfo>) {
+          const extended = customRelayProvider.onMergeProvider({
+            providerID,
+            provider,
+            database: database as Record<string, RelayInfo>,
+            providers: providers as Record<string, RelayInfo>,
+          })
+          if (extended) {
+            providers[providerID] = extended
+            return
+          }
+
           const existing = providers[providerID]
           if (existing) {
             // @ts-expect-error
@@ -1106,14 +1120,21 @@ const layer: Layer.Layer<
         // extend database from config
         for (const [providerID, provider] of configProviders) {
           const existing = database[providerID]
-          const parsed: Info = {
+          const extended = customRelayProvider.onConfigProvider({
+            providerID,
+            provider,
+            database: database as Record<string, RelayInfo>,
+          })
+          const parsed: RelayInfo = {
+            ...extended,
             id: ProviderID.make(providerID),
-            name: provider.name ?? existing?.name ?? providerID,
-            env: provider.env ?? existing?.env ?? [],
-            options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+            name: provider.name ?? extended?.name ?? existing?.name ?? providerID,
+            env: provider.env ?? extended?.env ?? existing?.env ?? [],
+            options: mergeDeep(extended?.options ?? existing?.options ?? {}, provider.options ?? {}),
             source: "config",
-            models: existing?.models ?? {},
+            models: extended?.models ?? existing?.models ?? {},
           }
+          if (provider.extends) parsed.extends = provider.extends
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
             const existingModel = parsed.models[model.id ?? modelID]
@@ -1259,7 +1280,8 @@ const layer: Layer.Layer<
         // load config - re-apply with updated data
         for (const [id, provider] of configProviders) {
           const providerID = ProviderID.make(id)
-          const partial: Partial<Info> = { source: "config" }
+          const partial: Partial<RelayInfo> = { source: "config" }
+          if (provider.extends) partial.extends = provider.extends
           if (provider.env) partial.env = provider.env
           if (provider.name) partial.name = provider.name
           if (provider.options) partial.options = provider.options

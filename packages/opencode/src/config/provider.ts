@@ -69,6 +69,7 @@ export const Model = z
 export const Info = z
   .object({
     api: z.string().optional(),
+    extends: z.string().optional().describe("Inherit settings and models from another provider ID"),
     name: z.string(),
     env: z.array(z.string()),
     id: z.string(),
