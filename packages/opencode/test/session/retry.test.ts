@@ -1,8 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import type { NamedError } from "@opencode-ai/util/error"
+import type { NamedError } from "@opencode-ai/shared/util/error"
 import { APICallError } from "ai"
+import { setTimeout as sleep } from "node:timers/promises"
+import { Effect, Schedule } from "effect"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
+import { ProviderID } from "../../src/provider/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { SessionID } from "../../src/session/schema"
+import { SessionStatus } from "../../src/session/status"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
+
+const providerID = ProviderID.make("test")
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
   return new MessageV2.APIError({
@@ -65,24 +75,51 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, longError)).toBe(700000)
   })
 
-  test("sleep caps delay to max 32-bit signed integer to avoid TimeoutOverflowWarning", async () => {
-    const controller = new AbortController()
+  test("caps oversized header delays to the runtime timer limit", () => {
+    const error = apiError({ "retry-after-ms": "999999999999" })
+    expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
+  })
 
-    const warnings: string[] = []
-    const originalWarn = process.emitWarning
-    process.emitWarning = (warning: string | Error) => {
-      warnings.push(typeof warning === "string" ? warning : warning.message)
-    }
+  test("policy updates retry status and increments attempts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sessionID = SessionID.make("session-retry-test")
+        const error = apiError({ "retry-after-ms": "0" })
 
-    const promise = SessionRetry.sleep(2_560_914_000, controller.signal)
-    controller.abort()
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const step = yield* Schedule.toStepWithMetadata(
+              SessionRetry.policy({
+                parse: (err) => err as MessageV2.APIError,
+                set: (info) =>
+                  Effect.promise(() =>
+                    AppRuntime.runPromise(
+                      SessionStatus.Service.use((svc) =>
+                        svc.set(sessionID, {
+                          type: "retry",
+                          attempt: info.attempt,
+                          message: info.message,
+                          next: info.next,
+                        }),
+                      ),
+                    ),
+                  ),
+              }),
+            )
+            yield* step(error)
+            yield* step(error)
+          }),
+        )
 
-    try {
-      await promise
-    } catch {}
-
-    process.emitWarning = originalWarn
-    expect(warnings.some((w) => w.includes("TimeoutOverflowWarning"))).toBe(false)
+        expect(await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(sessionID)))).toMatchObject({
+          type: "retry",
+          attempt: 2,
+          message: "boom",
+        })
+      },
+    })
   })
 })
 
@@ -97,9 +134,9 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
   })
 
-  test("handles json messages without code", () => {
+  test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
-    expect(SessionRetry.retryable(error)).toBe(`{"error":{"message":"no_kv_space"}}`)
+    expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
   test("does not throw on numeric error codes", () => {
@@ -113,6 +150,25 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
+  test("retries plain text rate limit errors from Alibaba", () => {
+    const msg =
+      "Upstream error from Alibaba: Request rate increased too quickly. To ensure system stability, please adjust your client logic to scale requests more smoothly over time."
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries plain text rate limit errors", () => {
+    const msg = "Rate limit exceeded, please try again later"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries too many requests in plain text", () => {
+    const msg = "Too many requests, please slow down"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
@@ -120,6 +176,59 @@ describe("session.retry.retryable", () => {
     }).toObject() as ReturnType<NamedError["toObject"]>
 
     expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("retries 500 errors even when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Internal server error",
+      isRetryable: false,
+      statusCode: 500,
+      responseBody: '{"type":"api_error","message":"Internal server error"}',
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Internal server error")
+  })
+
+  test("retries 502 bad gateway errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad gateway",
+      isRetryable: false,
+      statusCode: 502,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Bad gateway")
+  })
+
+  test("retries 503 service unavailable errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Service unavailable",
+      isRetryable: false,
+      statusCode: 503,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Service unavailable")
+  })
+
+  test("does not retry 4xx errors when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad request",
+      isRetryable: false,
+      statusCode: 400,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("retries ZlibError decompression failures", () => {
+    const error = new MessageV2.APIError({
+      message: "Response decompression failed",
+      isRetryable: true,
+      metadata: { code: "ZlibError" },
+    }).toObject() as MessageV2.APIError
+
+    const retryable = SessionRetry.retryable(error)
+    expect(retryable).toBeDefined()
+    expect(retryable).toBe("Response decompression failed")
   })
 })
 
@@ -130,12 +239,12 @@ describe("session.message-v2.fromError", () => {
       using server = Bun.serve({
         port: 0,
         idleTimeout: 8,
-        async fetch(req) {
+        async fetch(_req) {
           return new Response(
             new ReadableStream({
               async pull(controller) {
                 controller.enqueue("Hello,")
-                await Bun.sleep(10000)
+                await sleep(10000)
                 controller.enqueue(" World!")
                 controller.close()
               },
@@ -149,7 +258,7 @@ describe("session.message-v2.fromError", () => {
         .then((res) => res.text())
         .catch((e) => e)
 
-      const result = MessageV2.fromError(error, { providerID: "test" })
+      const result = MessageV2.fromError(error, { providerID })
 
       expect(MessageV2.APIError.isInstance(result)).toBe(true)
       expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
@@ -182,7 +291,7 @@ describe("session.message-v2.fromError", () => {
       responseBody: '{"error":"boom"}',
       isRetryable: false,
     })
-    const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
   })
 })

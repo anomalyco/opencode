@@ -2,11 +2,12 @@ import { createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { strip } from "@tui/component/prompt/part"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
   const sync = useSync()
@@ -42,7 +43,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
               if (part.type === "text") {
                 if (!part.synthetic) agg.input += part.text
               }
-              if (part.type === "file") agg.parts.push(part)
+              if (part.type === "file") agg.parts.push(strip(part))
               return agg
             },
             { input: "", parts: [] as PromptInfo["parts"] },

@@ -21,6 +21,7 @@ export function createChildStoreManager(input: {
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
+  translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
@@ -129,7 +130,7 @@ export function createChildStoreManager(input: {
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )
-      if (!vcs) throw new Error("Failed to create persisted cache")
+      if (!vcs) throw new Error(input.translate("error.childStore.persistedCacheCreateFailed"))
       const vcsStore = vcs[0]
       vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
@@ -139,7 +140,7 @@ export function createChildStoreManager(input: {
           createStore({ value: undefined as ProjectMeta | undefined }),
         ),
       )
-      if (!meta) throw new Error("Failed to create persisted project metadata")
+      if (!meta) throw new Error(input.translate("error.childStore.persistedProjectMetadataCreateFailed"))
       metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
@@ -148,7 +149,7 @@ export function createChildStoreManager(input: {
           createStore({ value: undefined as string | undefined }),
         ),
       )
-      if (!icon) throw new Error("Failed to create persisted project icon")
+      if (!icon) throw new Error(input.translate("error.childStore.persistedProjectIconCreateFailed"))
       iconCache.set(directory, { store: icon[0], setStore: icon[1], ready: icon[3] })
 
       const init = () =>
@@ -159,6 +160,7 @@ export function createChildStoreManager(input: {
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
+            provider_ready: false,
             provider: { all: [], connected: [], default: {} },
             config: {},
             path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -172,12 +174,15 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
+            mcp_ready: false,
             mcp: {},
+            lsp_ready: false,
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
             message: {},
             part: {},
+            bootstrapPromise: Promise.resolve(),
           })
           children[directory] = child
           disposers.set(directory, dispose)
@@ -211,7 +216,7 @@ export function createChildStoreManager(input: {
     }
     mark(directory)
     const childStore = children[directory]
-    if (!childStore) throw new Error("Failed to create store")
+    if (!childStore) throw new Error(input.translate("error.childStore.storeCreateFailed"))
     return childStore
   }
 
@@ -225,13 +230,22 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
+  function peek(directory: string, options: ChildOptions = {}) {
+    const childStore = ensureChild(directory)
+    const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap && childStore[0].status === "loading") {
+      input.onBootstrap(directory)
+    }
+    return childStore
+  }
+
   function projectMeta(directory: string, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,
@@ -255,6 +269,7 @@ export function createChildStoreManager(input: {
     children,
     ensureChild,
     child,
+    peek,
     projectMeta,
     projectIcon,
     mark,

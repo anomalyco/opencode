@@ -1,22 +1,25 @@
-import { Context } from "../util/context"
+import { LocalContext } from "../util"
+import type { WorkspaceID } from "../control-plane/schema"
 
-interface Context {
-  workspaceID?: string
+export interface WorkspaceContext {
+  workspaceID: WorkspaceID
 }
 
-const context = Context.create<Context>("workspace")
+const context = LocalContext.create<WorkspaceContext>("instance")
 
 export const WorkspaceContext = {
-  async provide<R>(input: { workspaceID?: string; fn: () => R }): Promise<R> {
-    return context.provide({ workspaceID: input.workspaceID }, async () => {
-      return input.fn()
-    })
+  async provide<R>(input: { workspaceID: WorkspaceID; fn: () => R }): Promise<R> {
+    return context.provide({ workspaceID: input.workspaceID }, () => input.fn())
+  },
+
+  restore<R>(workspaceID: WorkspaceID, fn: () => R): R {
+    return context.provide({ workspaceID }, fn)
   },
 
   get workspaceID() {
     try {
       return context.use().workspaceID
-    } catch (e) {
+    } catch {
       return undefined
     }
   },

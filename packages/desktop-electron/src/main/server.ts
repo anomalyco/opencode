@@ -1,7 +1,6 @@
-import { dialog } from "electron"
-
-import { getConfig, serve, type CommandChild, type Config } from "./cli"
+import { app } from "electron"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
+import { getUserShell, loadShellEnv } from "./shell-env"
 import { store } from "./store"
 
 export type WslConfig = { enabled: boolean }
@@ -31,17 +30,16 @@ export function setWslConfig(config: WslConfig) {
   store.set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export async function getSavedServerUrl(): Promise<string | null> {
-  const direct = getDefaultServerUrl()
-  if (direct) return direct
-
-  const config = await getConfig().catch(() => null)
-  if (!config) return null
-  return getServerUrlFromConfig(config)
-}
-
-export function spawnLocalServer(hostname: string, port: number, password: string) {
-  const { child, exit, events } = serve(hostname, port, password)
+export async function spawnLocalServer(hostname: string, port: number, password: string) {
+  prepareServerEnv(password)
+  const { Log, Server } = await import("virtual:opencode-server")
+  await Log.init({ level: "WARN" })
+  const listener = await Server.listen({
+    port,
+    hostname,
+    username: "opencode",
+    password,
+  })
 
   const wait = (async () => {
     const url = `http://${hostname}:${port}`
@@ -53,19 +51,26 @@ export function spawnLocalServer(hostname: string, port: number, password: strin
       }
     }
 
-    const terminated = async () => {
-      const payload = await exit
-      throw new Error(
-        `Sidecar terminated before becoming healthy (code=${payload.code ?? "unknown"} signal=${
-          payload.signal ?? "unknown"
-        })`,
-      )
-    }
-
-    await Promise.race([ready(), terminated()])
+    await ready()
   })()
 
-  return { child, health: { wait }, events }
+  return { listener, health: { wait } }
+}
+
+function prepareServerEnv(password: string) {
+  const shell = process.platform === "win32" ? null : getUserShell()
+  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
+  const env = {
+    ...process.env,
+    ...shellEnv,
+    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_CLIENT: "desktop",
+    OPENCODE_SERVER_USERNAME: "opencode",
+    OPENCODE_SERVER_PASSWORD: password,
+    XDG_STATE_HOME: app.getPath("userData"),
+  }
+  Object.assign(process.env, env)
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
@@ -93,37 +98,3 @@ export async function checkHealth(url: string, password?: string | null): Promis
     return false
   }
 }
-
-export async function checkHealthOrAskRetry(url: string): Promise<boolean> {
-  while (true) {
-    if (await checkHealth(url)) return true
-
-    const result = await dialog.showMessageBox({
-      type: "warning",
-      message: `Could not connect to configured server:\n${url}\n\nWould you like to retry or start a local server instead?`,
-      title: "Connection Failed",
-      buttons: ["Retry", "Start Local"],
-      defaultId: 0,
-      cancelId: 1,
-    })
-
-    if (result.response === 0) continue
-    return false
-  }
-}
-
-export function normalizeHostnameForUrl(hostname: string) {
-  if (hostname === "0.0.0.0") return "127.0.0.1"
-  if (hostname === "::") return "[::1]"
-  if (hostname.includes(":") && !hostname.startsWith("[")) return `[${hostname}]`
-  return hostname
-}
-
-export function getServerUrlFromConfig(config: Config) {
-  const server = config.server
-  if (!server?.port) return null
-  const host = server.hostname ? normalizeHostnameForUrl(server.hostname) : "127.0.0.1"
-  return `http://${host}:${server.port}`
-}
-
-export type { CommandChild }

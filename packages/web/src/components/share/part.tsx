@@ -90,9 +90,6 @@ export function Part(props: PartProps) {
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
               </Match>
-              <Match when={props.part.type === "tool" && props.part.tool === "todoread"}>
-                <IconQueueList width={18} height={18} />
-              </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "bash"}>
                 <IconCommandLine width={18} height={18} />
               </Match>
@@ -733,7 +730,13 @@ export function FallbackTool(props: ToolProps) {
             <>
               <div></div>
               <div>{arg[0]}</div>
-              <div>{String(arg[1] ?? "")}</div>
+              <div>
+                {typeof arg[1] === "string" || typeof arg[1] === "number" || typeof arg[1] === "boolean"
+                  ? String(arg[1])
+                  : arg[1] == null
+                    ? ""
+                    : JSON.stringify(arg[1])}
+              </div>
             </>
           )}
         </For>

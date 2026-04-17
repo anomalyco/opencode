@@ -9,25 +9,24 @@ import { IconButton } from "./icon-button"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
-import { FileSearchBar } from "./file-search"
-import type { FileSearchHandle } from "./file"
-import { buildSessionSearchHits, stepSessionSearchIndex, type SessionSearchHit } from "./session-review-search"
 import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
-import { onCleanup } from "solid-js"
+import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
+import { checksum } from "@opencode-ai/shared/util/encode"
+import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
+import { type FileContent, type SnapshotFileDiff, type VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
+import type { LineCommentEditorProps } from "./line-comment"
+import { normalize, text, type ViewDiff } from "./session-diff"
 
 const MAX_DIFF_CHANGED_LINES = 500
+const REVIEW_MOUNT_MARGIN = 300
 
 export type SessionReviewDiffStyle = "unified" | "split"
 
@@ -63,13 +62,36 @@ export type SessionReviewCommentActions = {
 
 export type SessionReviewFocus = { file: string; id: string }
 
+type ReviewDiff = (SnapshotFileDiff | VcsFileDiff) & { preloaded?: PreloadMultiFileDiffResult<any> }
+type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
+
+function diff(value: unknown): value is ReviewDiff {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  if (!("file" in value) || typeof value.file !== "string") return false
+  if (!("additions" in value) || typeof value.additions !== "number") return false
+  if (!("deletions" in value) || typeof value.deletions !== "number") return false
+  if ("patch" in value && value.patch !== undefined && typeof value.patch !== "string") return false
+  if ("before" in value && value.before !== undefined && typeof value.before !== "string") return false
+  if ("after" in value && value.after !== undefined && typeof value.after !== "string") return false
+  if (!("status" in value) || value.status === undefined) return true
+  return value.status === "added" || value.status === "deleted" || value.status === "modified"
+}
+
+function list(value: unknown): ReviewDiff[] {
+  if (Array.isArray(value) && value.every(diff)) return value
+  if (Array.isArray(value)) return value.filter(diff)
+  if (diff(value)) return [value]
+  if (!value || typeof value !== "object") return []
+  return Object.values(value).filter(diff)
+}
+
 export interface SessionReviewProps {
   title?: JSX.Element
   empty?: JSX.Element
   split?: boolean
   diffStyle?: SessionReviewDiffStyle
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
-  onDiffRendered?: () => void
+  onDiffRendered?: VoidFunction
   onLineComment?: (comment: SessionReviewLineComment) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
@@ -86,9 +108,10 @@ export interface SessionReviewProps {
   classList?: Record<string, boolean | undefined>
   classes?: { root?: string; header?: string; container?: string }
   actions?: JSX.Element
-  diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
+  diffs: ReviewDiff[]
   onViewFile?: (file: string) => void
   readFile?: (path: string) => Promise<FileContent | undefined>
+  lineCommentMention?: LineCommentEditorProps["mention"]
 }
 
 function ReviewCommentMenu(props: {
@@ -135,40 +158,107 @@ type SessionReviewSelection = {
 
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
-  let searchInput: HTMLInputElement | undefined
   let focusToken = 0
-  let revealToken = 0
-  let highlightedFile: string | undefined
+  let frame: number | undefined
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
-  const searchHandles = new Map<string, FileSearchHandle>()
-  const readyFiles = new Set<string>()
-  const [store, setStore] = createStore<{ open: string[]; force: Record<string, boolean> }>({
-    open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
-    force: {},
+  const nodes = new Map<string, HTMLDivElement>()
+  const [store, setStore] = createStore({
+    open: [] as string[],
+    visible: {} as Record<string, boolean>,
+    force: {} as Record<string, boolean>,
+    selection: null as SessionReviewSelection | null,
+    commenting: null as SessionReviewSelection | null,
+    opened: null as SessionReviewFocus | null,
   })
-
-  const [selection, setSelection] = createSignal<SessionReviewSelection | null>(null)
-  const [commenting, setCommenting] = createSignal<SessionReviewSelection | null>(null)
-  const [opened, setOpened] = createSignal<SessionReviewFocus | null>(null)
-  const [searchOpen, setSearchOpen] = createSignal(false)
-  const [searchQuery, setSearchQuery] = createSignal("")
-  const [searchActive, setSearchActive] = createSignal(0)
-  const [searchPos, setSearchPos] = createSignal({ top: 8, right: 8 })
+  const selection = () => store.selection
+  const commenting = () => store.commenting
+  const opened = () => store.opened
 
   const open = () => props.open ?? store.open
-  const files = createMemo(() => props.diffs.map((d) => d.file))
-  const diffs = createMemo(() => new Map(props.diffs.map((d) => [d.file, d] as const)))
+  const items = createMemo<Item[]>(() =>
+    list(props.diffs).map((diff) => ({ ...normalize(diff), preloaded: diff.preloaded })),
+  )
+  const files = createMemo(() => items().map((diff) => diff.file))
+  const grouped = createMemo(() => {
+    const next = new Map<string, SessionReviewComment[]>()
+    for (const comment of props.comments ?? []) {
+      const list = next.get(comment.file)
+      if (list) {
+        list.push(comment)
+        continue
+      }
+      next.set(comment.file, [comment])
+    }
+    return next
+  })
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
-  const searchValue = createMemo(() => searchQuery().trim())
-  const searchExpanded = createMemo(() => searchValue().length > 0)
 
-  const handleChange = (open: string[]) => {
-    props.onOpenChange?.(open)
-    if (props.open !== undefined) return
-    setStore("open", open)
+  const syncVisible = () => {
+    frame = undefined
+    if (!scroll) return
+
+    const root = scroll.getBoundingClientRect()
+    const top = root.top - REVIEW_MOUNT_MARGIN
+    const bottom = root.bottom + REVIEW_MOUNT_MARGIN
+    const openSet = new Set(open())
+    const next: Record<string, boolean> = {}
+
+    for (const [file, el] of nodes) {
+      if (!openSet.has(file)) continue
+      const rect = el.getBoundingClientRect()
+      if (rect.bottom < top || rect.top > bottom) continue
+      next[file] = true
+    }
+
+    const prev = untrack(() => store.visible)
+    const prevKeys = Object.keys(prev)
+    const nextKeys = Object.keys(next)
+    if (prevKeys.length === nextKeys.length && nextKeys.every((file) => prev[file])) return
+    setStore("visible", next)
+  }
+
+  const queue = () => {
+    if (frame !== undefined) return
+    frame = requestAnimationFrame(syncVisible)
+  }
+
+  const pinned = (file: string) =>
+    props.focusedComment?.file === file ||
+    props.focusedFile === file ||
+    selection()?.file === file ||
+    commenting()?.file === file ||
+    opened()?.file === file
+
+  const handleScroll: JSX.EventHandler<HTMLDivElement, Event> = (event) => {
+    queue()
+    const next = props.onScroll
+    if (!next) return
+    if (Array.isArray(next)) {
+      const [fn, data] = next as [(data: unknown, event: Event) => void, unknown]
+      fn(data, event)
+      return
+    }
+    ;(next as JSX.EventHandler<HTMLDivElement, Event>)(event)
+  }
+
+  onCleanup(() => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+  })
+
+  createEffect(() => {
+    props.open
+    files()
+    queue()
+  })
+
+  const handleChange = (next: string[]) => {
+    props.onOpenChange?.(next)
+    if (props.open === undefined) setStore("open", next)
+    queue()
   }
 
   const handleExpandOrCollapseAll = () => {
@@ -176,274 +266,14 @@ export const SessionReview = (props: SessionReviewProps) => {
     handleChange(next)
   }
 
-  const clearViewerSearch = () => {
-    for (const handle of searchHandles.values()) handle.clear()
-    highlightedFile = undefined
-  }
-
   const openFileLabel = () => i18n.t("ui.sessionReview.openFile")
-
-  const selectionLabel = (range: SelectedLineRange) => {
-    const start = Math.min(range.start, range.end)
-    const end = Math.max(range.start, range.end)
-    if (start === end) return i18n.t("ui.sessionReview.selection.line", { line: start })
-    return i18n.t("ui.sessionReview.selection.lines", { start, end })
-  }
-
-  const focusSearch = () => {
-    if (!hasDiffs()) return
-    setSearchOpen(true)
-    requestAnimationFrame(() => {
-      searchInput?.focus()
-      searchInput?.select()
-    })
-  }
-
-  const closeSearch = () => {
-    revealToken++
-    setSearchOpen(false)
-    setSearchQuery("")
-    setSearchActive(0)
-    clearViewerSearch()
-  }
-
-  const positionSearchBar = () => {
-    if (typeof window === "undefined") return
-    if (!scroll) return
-
-    const rect = scroll.getBoundingClientRect()
-    const title = parseFloat(getComputedStyle(scroll).getPropertyValue("--session-title-height"))
-    const header = Number.isNaN(title) ? 0 : title
-    setSearchPos({
-      top: Math.round(rect.top) + header - 4,
-      right: Math.round(window.innerWidth - rect.right) + 8,
-    })
-  }
-
-  const searchHits = createMemo(() =>
-    buildSessionSearchHits({
-      query: searchQuery(),
-      files: props.diffs.flatMap((diff) => {
-        if (mediaKindFromPath(diff.file)) return []
-
-        return [
-          {
-            file: diff.file,
-            before: typeof diff.before === "string" ? diff.before : undefined,
-            after: typeof diff.after === "string" ? diff.after : undefined,
-          },
-        ]
-      }),
-    }),
-  )
-
-  const waitForViewer = (file: string, token: number) =>
-    new Promise<FileSearchHandle | undefined>((resolve) => {
-      let attempt = 0
-
-      const tick = () => {
-        if (token !== revealToken) {
-          resolve(undefined)
-          return
-        }
-
-        const handle = searchHandles.get(file)
-        if (handle && readyFiles.has(file)) {
-          resolve(handle)
-          return
-        }
-
-        if (attempt >= 180) {
-          resolve(undefined)
-          return
-        }
-
-        attempt++
-        requestAnimationFrame(tick)
-      }
-
-      tick()
-    })
-
-  const waitForFrames = (count: number, token: number) =>
-    new Promise<boolean>((resolve) => {
-      const tick = (left: number) => {
-        if (token !== revealToken) {
-          resolve(false)
-          return
-        }
-
-        if (left <= 0) {
-          resolve(true)
-          return
-        }
-
-        requestAnimationFrame(() => tick(left - 1))
-      }
-
-      tick(count)
-    })
-
-  const revealSearchHit = async (token: number, hit: SessionSearchHit, query: string) => {
-    const diff = diffs().get(hit.file)
-    if (!diff) return
-
-    if (!open().includes(hit.file)) {
-      handleChange([...open(), hit.file])
-    }
-
-    if (!mediaKindFromPath(hit.file) && diff.additions + diff.deletions > MAX_DIFF_CHANGED_LINES) {
-      setStore("force", hit.file, true)
-    }
-
-    const handle = await waitForViewer(hit.file, token)
-    if (!handle || token !== revealToken) return
-    if (searchValue() !== query) return
-    if (!(await waitForFrames(2, token))) return
-
-    if (highlightedFile && highlightedFile !== hit.file) {
-      searchHandles.get(highlightedFile)?.clear()
-      highlightedFile = undefined
-    }
-
-    anchors.get(hit.file)?.scrollIntoView({ block: "nearest" })
-
-    let done = false
-    for (let i = 0; i < 4; i++) {
-      if (token !== revealToken) return
-      if (searchValue() !== query) return
-
-      handle.setQuery(query)
-      if (handle.reveal(hit)) {
-        done = true
-        break
-      }
-
-      const expanded = handle.expand(hit)
-      handle.refresh()
-      if (!(await waitForFrames(expanded ? 2 : 1, token))) return
-    }
-
-    if (!done) return
-
-    if (!(await waitForFrames(1, token))) return
-    handle.reveal(hit)
-
-    highlightedFile = hit.file
-  }
-
-  const navigateSearch = (dir: 1 | -1) => {
-    const total = searchHits().length
-    if (total <= 0) return
-    setSearchActive((value) => stepSessionSearchIndex(total, value, dir))
-  }
-
-  const inReview = (node: unknown, path?: unknown[]) => {
-    if (node === searchInput) return true
-    if (path?.some((item) => item === scroll || item === searchInput)) return true
-    if (path?.some((item) => item instanceof HTMLElement && item.dataset.component === "session-review")) {
-      return true
-    }
-    if (!(node instanceof Node)) return false
-    if (searchInput?.contains(node)) return true
-    if (node instanceof HTMLElement && node.closest("[data-component='session-review']")) return true
-    if (!scroll) return false
-    return scroll.contains(node)
-  }
-
-  createEffect(() => {
-    if (typeof window === "undefined") return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return
-
-      const mod = event.metaKey || event.ctrlKey
-      if (!mod) return
-
-      const key = event.key.toLowerCase()
-      if (key !== "f" && key !== "g") return
-
-      if (key === "f") {
-        if (!hasDiffs()) return
-        event.preventDefault()
-        event.stopPropagation()
-        focusSearch()
-        return
-      }
-
-      const path = typeof event.composedPath === "function" ? event.composedPath() : undefined
-      if (!inReview(event.target, path) && !inReview(document.activeElement, path)) return
-      if (!searchOpen()) return
-      event.preventDefault()
-      event.stopPropagation()
-      navigateSearch(event.shiftKey ? -1 : 1)
-    }
-
-    window.addEventListener("keydown", onKeyDown, { capture: true })
-    onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
-  })
-
-  createEffect(() => {
-    diffStyle()
-    searchExpanded()
-    readyFiles.clear()
-  })
-
-  createEffect(() => {
-    if (!searchOpen()) return
-    if (!scroll) return
-
-    const root = scroll
-
-    requestAnimationFrame(positionSearchBar)
-    window.addEventListener("resize", positionSearchBar, { passive: true })
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(positionSearchBar)
-    observer?.observe(root)
-
-    onCleanup(() => {
-      window.removeEventListener("resize", positionSearchBar)
-      observer?.disconnect()
-    })
-  })
-
-  createEffect(() => {
-    const total = searchHits().length
-    if (total === 0) {
-      if (searchActive() !== 0) setSearchActive(0)
-      return
-    }
-
-    if (searchActive() >= total) setSearchActive(total - 1)
-  })
-
-  createEffect(() => {
-    diffStyle()
-    const query = searchValue()
-    const hits = searchHits()
-    const token = ++revealToken
-    if (!query || hits.length === 0) {
-      clearViewerSearch()
-      return
-    }
-
-    const hit = hits[Math.min(searchActive(), hits.length - 1)]
-    if (!hit) return
-    void revealSearchHit(token, hit, query)
-  })
-
-  onCleanup(() => {
-    revealToken++
-    clearViewerSearch()
-    readyFiles.clear()
-    searchHandles.clear()
-  })
 
   const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
-  const selectionPreview = (diff: FileDiff, range: SelectedLineRange) => {
+  const selectionPreview = (diff: ViewDiff, range: SelectedLineRange) => {
     const side = selectionSide(range)
-    const contents = side === "deletions" ? diff.before : diff.after
-    if (typeof contents !== "string" || contents.length === 0) return undefined
+    const contents = text(diff, side)
+    if (contents.length === 0) return undefined
 
     return previewSelectedLines(contents, range)
   }
@@ -456,10 +286,10 @@ export const SessionReview = (props: SessionReviewProps) => {
       focusToken++
       const token = focusToken
 
-      setOpened(focus)
+      setStore("opened", focus)
 
       const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
-      if (comment) setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
+      if (comment) setStore("selection", { file: comment.file, range: cloneSelectedLineRange(comment.selection) })
 
       const current = open()
       if (!current.includes(focus.file)) {
@@ -501,62 +331,12 @@ export const SessionReview = (props: SessionReviewProps) => {
     })
   })
 
-  const handleReviewKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented) return
-
-    const mod = event.metaKey || event.ctrlKey
-    const key = event.key.toLowerCase()
-    const target = event.target
-    if (mod && key === "f") {
-      event.preventDefault()
-      event.stopPropagation()
-      focusSearch()
-      return
-    }
-
-    if (mod && key === "g") {
-      if (!searchOpen()) return
-      event.preventDefault()
-      event.stopPropagation()
-      navigateSearch(event.shiftKey ? -1 : 1)
-    }
-  }
-
-  const handleSearchInputKeyDown = (event: KeyboardEvent) => {
-    const mod = event.metaKey || event.ctrlKey
-    const key = event.key.toLowerCase()
-
-    if (mod && key === "g") {
-      event.preventDefault()
-      event.stopPropagation()
-      navigateSearch(event.shiftKey ? -1 : 1)
-      return
-    }
-
-    if (mod && key === "f") {
-      event.preventDefault()
-      event.stopPropagation()
-      focusSearch()
-      return
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault()
-      event.stopPropagation()
-      closeSearch()
-      return
-    }
-
-    if (event.key !== "Enter") return
-    event.preventDefault()
-    event.stopPropagation()
-    navigateSearch(event.shiftKey ? -1 : 1)
-  }
-
   return (
     <div data-component="session-review" class={props.class} classList={props.classList}>
       <div data-slot="session-review-header" class={props.classes?.header}>
-        <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
+        <div data-slot="session-review-title">
+          {props.title === undefined ? i18n.t("ui.sessionReview.title") : props.title}
+        </div>
         <div data-slot="session-review-actions">
           <Show when={hasDiffs() && props.onDiffStyleChange}>
             <RadioGroup
@@ -592,53 +372,34 @@ export const SessionReview = (props: SessionReviewProps) => {
         viewportRef={(el) => {
           scroll = el
           props.scrollRef?.(el)
+          queue()
         }}
-        onScroll={props.onScroll as any}
-        onKeyDown={handleReviewKeyDown}
+        onScroll={handleScroll}
         classList={{
           [props.classes?.root ?? ""]: !!props.classes?.root,
         }}
       >
-        <Show when={searchOpen()}>
-          <FileSearchBar
-            pos={searchPos}
-            query={searchQuery}
-            index={() => (searchHits().length ? Math.min(searchActive(), searchHits().length - 1) : 0)}
-            count={() => searchHits().length}
-            setInput={(el) => {
-              searchInput = el
-            }}
-            onInput={(value) => {
-              setSearchQuery(value)
-              setSearchActive(0)
-            }}
-            onKeyDown={(event) => handleSearchInputKeyDown(event)}
-            onClose={closeSearch}
-            onPrev={() => navigateSearch(-1)}
-            onNext={() => navigateSearch(1)}
-          />
-        </Show>
-
         <div data-slot="session-review-container" class={props.classes?.container}>
           <Show when={hasDiffs()} fallback={props.empty}>
             <div class="pb-6">
               <Accordion multiple value={open()} onChange={handleChange}>
-                <For each={files()}>
-                  {(file) => {
-                    let wrapper: HTMLDivElement | undefined
+                <For each={items()}>
+                  {(diff) => {
+                    const file = diff.file
 
-                    const diff = createMemo(() => diffs().get(file))
-                    const item = () => diff()!
+                    // binary files have empty diffs that we can't render
+                    const diffCanRender = () => diff.additions !== 0 && diff.deletions !== 0
 
                     const expanded = createMemo(() => open().includes(file))
+                    const mounted = createMemo(() => expanded() && (!!store.visible[file] || pinned(file)))
                     const force = () => !!store.force[file]
 
-                    const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === file))
+                    const comments = createMemo(() => grouped().get(file) ?? [])
                     const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
-                    const beforeText = () => (typeof item().before === "string" ? item().before : "")
-                    const afterText = () => (typeof item().after === "string" ? item().after : "")
-                    const changedLines = () => item().additions + item().deletions
+                    const beforeText = () => text(diff, "deletions")
+                    const afterText = () => text(diff, "additions")
+                    const changedLines = () => diff.additions + diff.deletions
                     const mediaKind = createMemo(() => mediaKindFromPath(file))
 
                     const tooLarge = createMemo(() => {
@@ -649,9 +410,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     })
 
                     const isAdded = () =>
-                      item().status === "added" || (beforeText().length === 0 && afterText().length > 0)
+                      diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
                     const isDeleted = () =>
-                      item().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
+                      diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
 
                     const selectedLines = createMemo(() => {
                       const current = selection()
@@ -669,17 +430,18 @@ export const SessionReview = (props: SessionReviewProps) => {
                       comments,
                       label: i18n.t("ui.lineComment.submit"),
                       draftKey: () => file,
+                      mention: props.lineCommentMention,
                       state: {
                         opened: () => {
                           const current = opened()
                           if (!current || current.file !== file) return null
                           return current.id
                         },
-                        setOpened: (id) => setOpened(id ? { file, id } : null),
+                        setOpened: (id) => setStore("opened", id ? { file, id } : null),
                         selected: selectedLines,
-                        setSelected: (range) => setSelection(range ? { file, range } : null),
+                        setSelected: (range) => setStore("selection", range ? { file, range } : null),
                         commenting: draftRange,
-                        setCommenting: (range) => setCommenting(range ? { file, range } : null),
+                        setCommenting: (range) => setStore("commenting", range ? { file, range } : null),
                       },
                       getSide: selectionSide,
                       clearSelectionOnSelectionEndNull: false,
@@ -688,7 +450,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           file,
                           selection,
                           comment,
-                          preview: selectionPreview(item(), selection),
+                          preview: selectionPreview(diff, selection),
                         })
                       },
                       onUpdate: ({ id, comment, selection }) => {
@@ -697,7 +459,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           file,
                           selection,
                           comment,
-                          preview: selectionPreview(item(), selection),
+                          preview: selectionPreview(diff, selection),
                         })
                       },
                       onDelete: (comment) => {
@@ -720,9 +482,8 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                     onCleanup(() => {
                       anchors.delete(file)
-                      readyFiles.delete(file)
-                      searchHandles.delete(file)
-                      if (highlightedFile === file) highlightedFile = undefined
+                      nodes.delete(file)
+                      queue()
                     })
 
                     const handleLineSelected = (range: SelectedLineRange | null) => {
@@ -737,14 +498,14 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                     return (
                       <Accordion.Item
-                        value={file}
+                        value={diffCanRender() ? file : null!}
                         id={diffId(file)}
                         data-file={file}
                         data-slot="session-review-accordion-item"
                         data-selected={props.focusedFile === file ? "" : undefined}
                       >
                         <StickyAccordionHeader>
-                          <Accordion.Trigger>
+                          <Accordion.Trigger disabled={!diffCanRender()} class="cursor-default">
                             <div data-slot="session-review-trigger-content">
                               <div data-slot="session-review-file-info">
                                 <FileIcon node={{ path: file, type: "file" }} />
@@ -753,7 +514,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
-                                  <Show when={props.onViewFile}>
+                                  <Show when={props.onViewFile && diffCanRender()}>
                                     <Tooltip value={openFileLabel()} placement="top" gutter={4}>
                                       <button
                                         data-slot="session-review-view-button"
@@ -777,7 +538,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                       <span data-slot="session-review-change" data-type="added">
                                         {i18n.t("ui.sessionReview.change.added")}
                                       </span>
-                                      <DiffChanges changes={item()} />
+                                      <DiffChanges changes={diff} />
                                     </div>
                                   </Match>
                                   <Match when={isDeleted()}>
@@ -791,12 +552,14 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     </span>
                                   </Match>
                                   <Match when={true}>
-                                    <DiffChanges changes={item()} />
+                                    <DiffChanges changes={diff} />
                                   </Match>
                                 </Switch>
-                                <span data-slot="session-review-diff-chevron">
-                                  <Icon name="chevron-down" size="small" />
-                                </span>
+                                <Show when={diffCanRender()}>
+                                  <span data-slot="session-review-diff-chevron">
+                                    <Icon name="chevron-down" size="small" />
+                                  </span>
+                                </Show>
                               </div>
                             </div>
                           </Accordion.Trigger>
@@ -805,12 +568,20 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <div
                             data-slot="session-review-diff-wrapper"
                             ref={(el) => {
-                              wrapper = el
                               anchors.set(file, el)
+                              nodes.set(file, el)
+                              queue()
                             }}
                           >
                             <Show when={expanded()}>
                               <Switch>
+                                <Match when={!mounted() && !tooLarge()}>
+                                  <div
+                                    data-slot="session-review-diff-placeholder"
+                                    class="rounded-lg border border-border-weak-base bg-background-stronger/40"
+                                    style={{ height: "160px" }}
+                                  />
+                                </Match>
                                 <Match when={tooLarge()}>
                                   <div data-slot="session-review-large-diff">
                                     <div data-slot="session-review-large-diff-title">
@@ -837,11 +608,10 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Dynamic
                                     component={fileComponent}
                                     mode="diff"
-                                    preloadedDiff={item().preloaded}
+                                    fileDiff={diff.fileDiff}
+                                    preloadedDiff={diff.preloaded}
                                     diffStyle={diffStyle()}
-                                    expansionLineCount={searchExpanded() ? Number.MAX_SAFE_INTEGER : 20}
                                     onRendered={() => {
-                                      readyFiles.add(file)
                                       props.onDiffRendered?.()
                                     }}
                                     enableLineSelection={props.onLineComment != null}
@@ -854,35 +624,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
                                     selectedLines={selectedLines()}
                                     commentedLines={commentedLines()}
-                                    search={{
-                                      shortcuts: "disabled",
-                                      showBar: false,
-                                      disableVirtualization: searchExpanded(),
-                                      register: (handle: FileSearchHandle | null) => {
-                                        if (!handle) {
-                                          searchHandles.delete(file)
-                                          readyFiles.delete(file)
-                                          if (highlightedFile === file) highlightedFile = undefined
-                                          return
-                                        }
-
-                                        searchHandles.set(file, handle)
-                                      },
-                                    }}
-                                    before={{
-                                      name: file,
-                                      contents: typeof item().before === "string" ? item().before : "",
-                                    }}
-                                    after={{
-                                      name: file,
-                                      contents: typeof item().after === "string" ? item().after : "",
-                                    }}
                                     media={{
                                       mode: "auto",
                                       path: file,
-                                      before: item().before,
-                                      after: item().after,
-                                      readFile: props.readFile,
+                                      deleted: diff.status === "deleted",
+                                      readFile: diff.status === "deleted" ? undefined : props.readFile,
                                     }}
                                   />
                                 </Match>
