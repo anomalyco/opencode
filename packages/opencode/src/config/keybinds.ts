@@ -106,7 +106,12 @@ export const Keybinds = z
     input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
     input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
     input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
-    input_undo: z.string().optional().default("ctrl+-,super+z").describe("Undo in input"),
+    input_undo: z
+      .string()
+      .optional()
+      // On Windows prepend ctrl+z since terminal_suspend releases the binding.
+      .default(process.platform === "win32" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z")
+      .describe("Undo in input"),
     input_redo: z.string().optional().default("ctrl+.,super+shift+z").describe("Redo in input"),
     input_word_forward: z
       .string()
@@ -144,7 +149,12 @@ export const Keybinds = z
     session_child_cycle: z.string().optional().default("right").describe("Go to next child session"),
     session_child_cycle_reverse: z.string().optional().default("left").describe("Go to previous child session"),
     session_parent: z.string().optional().default("up").describe("Go to parent session"),
-    terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
+    terminal_suspend: z
+      .string()
+      .optional()
+      .default("ctrl+z")
+      .transform((v) => (process.platform === "win32" ? "none" : v))
+      .describe("Suspend terminal"),
     terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
     tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
     plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
