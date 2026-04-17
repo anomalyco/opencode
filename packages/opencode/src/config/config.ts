@@ -100,7 +100,7 @@ export const Info = z
       .record(z.string(), ConfigCommand.Info)
       .optional()
       .describe("Command configuration, see https://opencode.ai/docs/commands"),
-    skills: ConfigSkills.Info.optional().describe("Additional skill folder paths"),
+    skills: ConfigSkills.Info.zod.optional().describe("Additional skill folder paths"),
     watcher: z
       .object({
         ignore: z.array(z.string()).optional(),
@@ -188,7 +188,7 @@ export const Info = z
       )
       .optional()
       .describe("MCP (Model Context Protocol) server configurations"),
-    formatter: ConfigFormatter.Info.optional(),
+    formatter: ConfigFormatter.Info.zod.optional(),
     lsp: ConfigLSP.Info.zod.optional(),
     instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
     layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
