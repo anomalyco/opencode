@@ -10,6 +10,9 @@ import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util"
+import { SessionTable } from "@/session/session.sql"
+import { SessionID } from "@/session/schema"
+import { Database, eq } from "@/storage"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
@@ -129,6 +132,29 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+
+      if (args.session) {
+        const sessionID = args.session
+        const exists = (() => {
+          try {
+            return !!Database.use((db) =>
+              db
+                .select({ id: SessionTable.id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, SessionID.make(sessionID)))
+                .get(),
+            )
+          } catch {
+            return false
+          }
+        })()
+
+        if (!exists) {
+          process.stderr.write(`session ${sessionID} does not exist in ${path.basename(Database.Path)} for ${cwd}\n`)
+          process.exitCode = 1
+          return
+        }
+      }
 
       const worker = new Worker(file, {
         env: Object.fromEntries(

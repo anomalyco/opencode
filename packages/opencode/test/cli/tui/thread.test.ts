@@ -1,19 +1,23 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import type { TuiThreadCommand } from "../../../src/cli/cmd/tui/thread"
 import { tmpdir } from "../../fixture/fixture"
 import * as App from "../../../src/cli/cmd/tui/app"
+import { SessionID } from "../../../src/session/schema"
+import { Database } from "../../../src/storage"
 import { Rpc } from "../../../src/util"
 import { UI } from "../../../src/cli/ui"
 import * as Timeout from "../../../src/util/timeout"
 import * as Network from "../../../src/cli/network"
 import * as Win32 from "../../../src/cli/cmd/tui/win32"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const stop = new Error("stop")
 const seen = {
   tui: [] as string[],
 }
+
+type ThreadArgs = Parameters<typeof TuiThreadCommand.handler>[0]
 
 function setup() {
   // Intentionally avoid mock.module() here: Bun keeps module overrides in cache
@@ -47,12 +51,12 @@ describe("tui thread", () => {
     mock.restore()
   })
 
-  async function call(project?: string) {
+  async function call(input: Partial<ThreadArgs> = {}) {
     const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
-    const args: Parameters<NonNullable<typeof TuiThreadCommand.handler>>[0] = {
+    const args: ThreadArgs = {
       _: [],
       $0: "opencode",
-      project,
+      project: undefined,
       prompt: "hi",
       model: undefined,
       agent: undefined,
@@ -65,6 +69,7 @@ describe("tui thread", () => {
       "mdns-domain": "opencode.local",
       mdnsDomain: "opencode.local",
       cors: [],
+      ...input,
     }
     return TuiThreadCommand.handler(args)
   }
@@ -96,7 +101,7 @@ describe("tui thread", () => {
     try {
       process.chdir(tmp.path)
       process.env.PWD = link
-      await expect(call(project)).rejects.toBe(stop)
+      await expect(call({ project })).rejects.toBe(stop)
       expect(seen.tui[0]).toBe(tmp.path)
     } finally {
       process.chdir(cwd)
@@ -115,5 +120,55 @@ describe("tui thread", () => {
 
   test("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
+  })
+
+  test("fails fast when the requested session does not exist", async () => {
+    setup()
+    await using tmp = await tmpdir()
+    const cwd = process.cwd()
+    const pwd = process.env.PWD
+    const worker = globalThis.Worker
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
+    const exitCode = process.exitCode
+    const stderr = spyOn(process.stderr, "write").mockImplementation(() => true)
+    const sessionID = SessionID.descending()
+    let workerCreated = false
+    seen.tui.length = 0
+
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: true,
+    })
+    globalThis.Worker = class extends EventTarget {
+      constructor() {
+        super()
+        workerCreated = true
+      }
+      onerror = null
+      onmessage = null
+      onmessageerror = null
+      postMessage() {}
+      terminate() {}
+    } as unknown as typeof Worker
+
+    try {
+      process.chdir(tmp.path)
+      process.env.PWD = tmp.path
+      await expect(call({ session: sessionID })).resolves.toBeUndefined()
+      expect(process.exitCode).toBe(1)
+      expect(stderr).toHaveBeenCalledWith(
+        `session ${sessionID} does not exist in ${path.basename(Database.Path)} for ${tmp.path}\n`,
+      )
+      expect(workerCreated).toBe(false)
+      expect(seen.tui).toEqual([])
+    } finally {
+      process.chdir(cwd)
+      process.exitCode = exitCode ?? 0
+      if (pwd === undefined) delete process.env.PWD
+      else process.env.PWD = pwd
+      if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
+      else delete (process.stdin as { isTTY?: boolean }).isTTY
+      globalThis.Worker = worker
+    }
   })
 })
