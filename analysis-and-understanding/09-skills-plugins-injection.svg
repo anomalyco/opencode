@@ -1,0 +1,281 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2690.5959821428564 2517.8" width="2690.5959821428564" height="2517.8" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Sources" data-label="Skill Sources (discovery)">
+  <rect x="1196.689982142857" y="1503.6000000000004" width="1435.9059999999995" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1196.689982142857" y="1503.6000000000004" width="1435.9059999999995" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1208.689982142857" y="1517.6000000000004" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Skill Sources (discovery)</text>
+</g>
+<g class="subgraph" data-id="Plugins" data-label="Plugin Sources (plugin/index.ts)">
+  <rect x="927.3861856060605" y="40" width="395.84" height="147.60000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="927.3861856060605" y="40" width="395.84" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="939.3861856060605" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Plugin Sources (plugin/index.ts)</text>
+</g>
+<g class="subgraph" data-id="SkillSvc" data-label="Skill.Service (InstanceState layer)">
+  <rect x="1408.7084285714284" y="1701.4" width="327.5438214285714" height="436.1" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1408.7084285714284" y="1701.4" width="327.5438214285714" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1420.7084285714284" y="1715.4" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Skill.Service (InstanceState layer)</text>
+</g>
+<g class="subgraph" data-id="PluginSvc" data-label="Plugin.Service (InstanceState layer)">
+  <rect x="867.9746856060605" y="247.60000000000002" width="431.8179999999999" height="508.1000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="867.9746856060605" y="247.60000000000002" width="431.8179999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="879.9746856060605" y="261.6" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Plugin.Service (InstanceState layer)</text>
+</g>
+<g class="subgraph" data-id="SessionStart" data-label="Session start / each turn">
+  <rect x="743.3019583333333" y="2185.5" width="478.2338571428571" height="266.3" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="743.3019583333333" y="2185.5" width="478.2338571428571" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="755.3019583333333" y="2199.5" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Session start / each turn</text>
+</g>
+<g class="subgraph" data-id="ToolCall" data-label="When LLM calls skill tool">
+  <rect x="866.9859821428571" y="1013.5000000000002" width="342.5300833333333" height="436.1" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="866.9859821428571" y="1013.5000000000002" width="342.5300833333333" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="878.9859821428571" y="1027.5000000000002" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">When LLM calls skill tool</text>
+</g>
+<g class="subgraph" data-id="PluginHooks" data-label="Plugin hooks fired during turn">
+  <rect x="40" y="839.7000000000002" width="1960.681" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="839.7000000000002" width="1960.681" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="853.7000000000002" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Plugin hooks fired during turn</text>
+</g>
+<polyline class="edge" data-from="EXT1" data-to="SCAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1572.5979821428568,1592.9500000000005 1572.5979821428568,1840.1000000000001 1597.7602499999998,1840.1000000000001 1597.7602499999998,1864.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="EXT2" data-to="SCAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2019.2719821428566,1592.9500000000005 2019.2719821428566,1840.1000000000001 1597.7602499999998,1840.1000000000001 1597.7602499999998,1864.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="EXT3" data-to="SCAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1315.5454821428568,1609.8500000000004 1315.5454821428568,1840.1000000000001 1597.7602499999998,1840.1000000000001 1597.7602499999998,1864.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OC_DIR" data-to="SCAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2287.8099821428564,1609.8500000000004 2287.8099821428564,1840.1000000000001 1597.7602499999998,1840.1000000000001 1597.7602499999998,1864.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CFG_PATH" data-to="SCAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2523.373482142856,1609.8500000000004 2523.373482142856,1840.1000000000001 1597.7602499999998,1840.1000000000001 1597.7602499999998,1864.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CFG_URL" data-to="DISC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1795.9349821428568,1609.8500000000004 1795.9349821428568,1647.4000000000005 1549.1129999999998,1647.4000000000005 1549.1129999999998,1745.4" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="INT" data-to="APPLY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1028.8281856060605,171.60000000000002 1028.8281856060605,407.42500000000007 1070.7866856060605,407.42500000000007 1070.7866856060605,427.20000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CFG_PLUG" data-to="LOADER" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1224.7481856060604,171.60000000000002 1224.7481856060604,229.60000000000002 1182.7896856060604,229.60000000000002 1182.7896856060604,300.05" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="MAP" data-to="SYS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1531.0142499999997,2121.5 1531.0142499999997,2178.3166666666666 1105.2738154761905,2178.3166666666666 1105.2738154761905,2235.133333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="MAP" data-to="REG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1531.0142499999997,2121.5 1531.0142499999997,2178.3166666666666 903.7963154761906,2178.3166666666666 903.7963154761906,2235.133333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LLM" data-to="STOOL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="830.6649583333334,2435.8 830.6649583333334,2469.8 2642.5959821428564,2469.8 2642.5959821428564,995.5 1150.1397321428572,995.5 1150.1397321428572,1057.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LOAD" data-to="MAP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1105.2813988095238,1314.9000000000003 1105.2813988095238,1338.9000000000003 1531.0142499999997,1338.9000000000003 1531.0142499999997,2084.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OUT" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="951.7554821428571,1433.6000000000004 951.7554821428571,2343.9166666666665 830.6649583333333,2343.9166666666665 830.6649583333333,2365.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_SYS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 180.71499999999997,625.9000000000001 180.71499999999997,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="H_SYS" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="180.71499999999997,937.5000000000001 180.71499999999997,2343.9166666666665 830.6649583333333,2343.9166666666665 830.6649583333333,2365.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_MSGS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 467.77799999999996,625.9000000000001 467.77799999999996,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="H_MSGS" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="467.77799999999996,937.5000000000001 467.77799999999996,2343.9166666666665 830.6649583333333,2343.9166666666665 830.6649583333333,2365.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_PARAMS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 730.7584999999999,625.9000000000001 730.7584999999999,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="H_PARAMS" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="730.7584999999999,937.5000000000001 730.7584999999999,2343.9166666666665 830.6649583333333,2343.9166666666665 830.6649583333333,2365.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_PERM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 1101.1094999999998,625.9000000000001 1101.1094999999998,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="H_PERM" data-to="ASK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1101.1094999999998,937.5000000000001 1101.1094999999998,1135.3000000000002 1105.2813988095238,1135.3000000000002 1105.2813988095238,1159.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_TOOLDEF" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 918.1569999999999,625.9000000000001 918.1569999999999,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="H_TOOLDEF" data-to="REG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="918.1569999999999,937.5000000000001 918.1569999999999,995.5000000000002 855.9859821428572,995.5000000000002 855.9859821428572,2167.5 879.391148809524,2167.5 879.3911488095238,2235.1333333333328" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_TOOLPRE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 1302.5869999999998,625.9000000000001 1302.5869999999998,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="H_TOOLPRE" data-to="STOOL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1302.587,937.5000000000001 1302.587,983.5000000000002 1106.763398809524,983.5000000000002 1106.7633988095236,1057.5000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_SHELL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 1462.1979999999996,625.9000000000001 1462.1979999999996,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_COMP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 1677.384,625.9000000000001 1677.384,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="H_EVT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 1911.4655,625.9000000000001 1911.4655,883.7000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="DISC" data-to="SCAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1549.1129999999998,1816.1000000000001 1549.1129999999998,1840.1000000000001 1597.7602499999998,1840.1000000000001 1597.7602499999998,1864.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SCAN" data-to="PARSE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1597.7602499999998,1917.9 1597.7602499999998,1965.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PARSE" data-to="MAP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1597.7602499999998,2036.6000000000001 1597.7602499999998,2048.6 1563.4469166666665,2048.6 1563.4469166666665,2084.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LOADER" data-to="APPLY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1182.7896856060604,353.85 1182.7896856060604,407.42500000000007 1070.7866856060605,407.42500000000007 1070.7866856060605,427.20000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="APPLY" data-to="HOOKS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,481.00000000000006 1070.7866856060605,529" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="INPUT" data-to="APPLY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="972.3806856060604,387.65000000000003 972.3806856060604,407.42500000000007 1070.7866856060605,407.42500000000007 1070.7866856060605,427.20000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HOOKS" data-to="SUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1070.7866856060605,565.9 1070.7866856060605,625.9000000000001 1180.397958333333,625.9000000000001 1180.397958333333,685.9000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SYS" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1105.2738154761905,2322.733333333333 1105.2738154761905,2343.9166666666665 830.6649583333333,2343.9166666666665 830.6649583333333,2365.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="REG" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="903.7963154761906,2288.9333333333334 903.7963154761906,2343.9166666666665 830.6649583333333,2343.9166666666665 830.6649583333333,2365.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="STOOL" data-to="ASK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1128.4515654761904,1111.3000000000002 1128.4515654761904,1135.3000000000002 1105.2813988095238,1135.3000000000002 1105.2813988095238,1159.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ASK" data-to="LOAD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1105.2813988095238,1213.1000000000004 1105.2813988095238,1261.1000000000004" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LOAD" data-to="RG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1105.2813988095238,1314.9000000000003 1105.2813988095238,1338.9000000000003 1112.107482142857,1338.9000000000003 1112.107482142857,1362.9000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LOAD" data-to="OUT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1105.2813988095238,1314.9000000000003 1105.2813988095238,1338.9000000000003 951.7554821428571,1338.9000000000003 951.7554821428571,1362.9000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="node" data-id="EXT1" data-label="~/.claude/skills/&amp;ast;&amp;ast;/SKILL.md" data-shape="rectangle">
+  <rect x="1446.400982142857" y="1556.0500000000004" width="252.3939999999999" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1572.5979821428568" y="1574.5000000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">~/.claude/skills/&amp;ast;&amp;ast;/SKILL.md</text>
+</g>
+<g class="node" data-id="EXT2" data-label="~/.agents/skills/&amp;ast;&amp;ast;/SKILL.md" data-shape="rectangle">
+  <rect x="1893.0749821428567" y="1556.0500000000004" width="252.3939999999999" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="2019.2719821428566" y="1574.5000000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">~/.agents/skills/&amp;ast;&amp;ast;/SKILL.md</text>
+</g>
+<g class="node" data-id="EXT3" data-label="&lt;worktree&gt;/.claude /.agents
+walk up from cwd" data-shape="rectangle">
+  <rect x="1212.689982142857" y="1556.0500000000004" width="205.71099999999996" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1315.5454821428568" y="1582.9500000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1315.5454821428568" dy="-3.9000000000000012">&lt;worktree&gt;/.claude /.agents</tspan><tspan x="1315.5454821428568" dy="16.900000000000002">walk up from cwd</tspan></text>
+</g>
+<g class="node" data-id="OC_DIR" data-label="config.directories()
+{skill,skills}/&amp;ast;&amp;ast;/SKILL.md" data-shape="rectangle">
+  <rect x="2173.4689821428565" y="1556.0500000000004" width="228.68199999999993" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="2287.8099821428564" y="1582.9500000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="2287.8099821428564" dy="-3.9000000000000012">config.directories()</tspan><tspan x="2287.8099821428564" dy="16.900000000000002">{skill,skills}/&amp;ast;&amp;ast;/SKILL.md</tspan></text>
+</g>
+<g class="node" data-id="CFG_PATH" data-label="config.skills.paths
+user paths / ~-expansion" data-shape="rectangle">
+  <rect x="2430.1509821428563" y="1556.0500000000004" width="186.44499999999996" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="2523.373482142856" y="1582.9500000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="2523.373482142856" dy="-3.9000000000000012">config.skills.paths</tspan><tspan x="2523.373482142856" dy="16.900000000000002">user paths / ~-expansion</tspan></text>
+</g>
+<g class="node" data-id="CFG_URL" data-label="config.skills.urls
+remote bundles" data-shape="rectangle">
+  <rect x="1726.7949821428567" y="1556.0500000000004" width="138.28000000000003" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1795.9349821428568" y="1582.9500000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1795.9349821428568" dy="-3.9000000000000012">config.skills.urls</tspan><tspan x="1795.9349821428568" dy="16.900000000000002">remote bundles</tspan></text>
+</g>
+<g class="node" data-id="INT" data-label="INTERNAL_PLUGINS
+codex, copilot,
+gitlab, poe,
+cloudflare&amp;times;2" data-shape="rectangle">
+  <rect x="943.3861856060605" y="84" width="170.88399999999996" height="87.60000000000001" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1028.8281856060605" y="127.80000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1028.8281856060605" dy="-20.8">INTERNAL_PLUGINS</tspan><tspan x="1028.8281856060605" dy="16.900000000000002">codex, copilot,</tspan><tspan x="1028.8281856060605" dy="16.900000000000002">gitlab, poe,</tspan><tspan x="1028.8281856060605" dy="16.900000000000002">cloudflare&amp;times;2</tspan></text>
+</g>
+<g class="node" data-id="CFG_PLUG" data-label="config.plugin_origins
+(skipped if --pure)" data-shape="rectangle">
+  <rect x="1142.2701856060605" y="117.80000000000001" width="164.95600000000002" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1224.7481856060606" y="144.70000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1224.7481856060606" dy="-3.9000000000000012">config.plugin_origins</tspan><tspan x="1224.7481856060606" dy="16.900000000000002">(skipped if --pure)</tspan></text>
+</g>
+<g class="node" data-id="DISC" data-label="Discovery.pull
+HTTP → cache dir
+~/cache/skills/&lt;name&gt;" data-shape="rectangle">
+  <rect x="1461.8184999999999" y="1745.4" width="174.58899999999997" height="70.7" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1549.1129999999998" y="1780.75" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1549.1129999999998" dy="-12.350000000000001">Discovery.pull</tspan><tspan x="1549.1129999999998" dy="16.900000000000002">HTTP → cache dir</tspan><tspan x="1549.1129999999998" dy="16.900000000000002">~/cache/skills/&lt;name&gt;</tspan></text>
+</g>
+<g class="node" data-id="SCAN" data-label="Glob scan
+SKILL.md files" data-shape="rectangle">
+  <rect x="1534.9187499999998" y="1864.1000000000001" width="125.68300000000002" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1597.7602499999998" y="1891.0000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1597.7602499999998" dy="-3.9000000000000012">Glob scan</tspan><tspan x="1597.7602499999998" dy="16.900000000000002">SKILL.md files</tspan></text>
+</g>
+<g class="node" data-id="PARSE" data-label="ConfigMarkdown.parse
+frontmatter → Info
+{name,description,location,content}" data-shape="rectangle">
+  <rect x="1475.2682499999999" y="1965.9" width="244.98399999999995" height="70.7" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1597.7602499999998" y="2001.25" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1597.7602499999998" dy="-12.350000000000001">ConfigMarkdown.parse</tspan><tspan x="1597.7602499999998" dy="16.900000000000002">frontmatter → Info</tspan><tspan x="1597.7602499999998" dy="16.900000000000002">{name,description,location,content}</tspan></text>
+</g>
+<g class="node" data-id="MAP" data-label="skills: Record&lt;name, Info&gt;" data-shape="rectangle">
+  <rect x="1433.7162499999997" y="2084.6" width="194.59599999999995" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1531.0142499999997" y="2103.0499999999997" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">skills: Record&lt;name, Info&gt;</text>
+</g>
+<g class="node" data-id="LOADER" data-label="PluginLoader.loadExternal
+npm install + import" data-shape="rectangle">
+  <rect x="1081.7866856060605" y="300.05" width="202.00599999999994" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1182.7896856060604" y="326.95" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1182.7896856060604" dy="-3.9000000000000012">PluginLoader.loadExternal</tspan><tspan x="1182.7896856060604" dy="16.900000000000002">npm install + import</tspan></text>
+</g>
+<g class="node" data-id="APPLY" data-label="applyPlugin →
+hooks.push(plugin(input))" data-shape="rectangle">
+  <rect x="975.7116856060604" y="427.20000000000005" width="190.14999999999998" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1070.7866856060605" y="454.1" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1070.7866856060605" dy="-3.9000000000000012">applyPlugin →</tspan><tspan x="1070.7866856060605" dy="16.900000000000002">hooks.push(plugin(input))</tspan></text>
+</g>
+<g class="node" data-id="INPUT" data-label="PluginInput:
+client (SDK), project,
+directory, worktree,
+$ (BunShell), serverUrl" data-shape="rectangle">
+  <rect x="883.9746856060605" y="300.05" width="176.81199999999998" height="87.60000000000001" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="972.3806856060604" y="343.85" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="972.3806856060604" dy="-20.8">PluginInput:</tspan><tspan x="972.3806856060604" dy="16.900000000000002">client (SDK), project,</tspan><tspan x="972.3806856060604" dy="16.900000000000002">directory, worktree,</tspan><tspan x="972.3806856060604" dy="16.900000000000002">$ (BunShell), serverUrl</tspan></text>
+</g>
+<g class="node" data-id="HOOKS" data-label="&quot;hooks: Hooks[" data-shape="rectangle">
+  <rect x="1005.7221856060604" y="529" width="130.12900000000002" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1070.7866856060605" y="547.45" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">&quot;hooks: Hooks[</text>
+</g>
+<g class="node" data-id="SUB" data-label="Bus.subscribeAll →
+hook.event(&amp;hellip;)" data-shape="rectangle">
+  <rect x="1102.365958333333" y="685.9000000000001" width="156.06400000000002" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="1180.397958333333" y="712.8000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1180.397958333333" dy="-3.9000000000000012">Bus.subscribeAll →</tspan><tspan x="1180.397958333333" dy="16.900000000000002">hook.event(&amp;hellip;)</tspan></text>
+</g>
+<g class="node" data-id="SYS" data-label="SystemPrompt.skills(agent)
+Permission filter →
+Skill.fmt verbose
+&lt;available_skills&gt; block" data-shape="rectangle">
+  <rect x="1005.0118154761905" y="2235.133333333333" width="200.52399999999997" height="87.60000000000001" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="1105.2738154761905" y="2278.9333333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1105.2738154761905" dy="-20.8">SystemPrompt.skills(agent)</tspan><tspan x="1105.2738154761905" dy="16.900000000000002">Permission filter →</tspan><tspan x="1105.2738154761905" dy="16.900000000000002">Skill.fmt verbose</tspan><tspan x="1105.2738154761905" dy="16.900000000000002">&lt;available_skills&gt; block</tspan></text>
+</g>
+<g class="node" data-id="REG" data-label="ToolRegistry
+includes SkillTool" data-shape="rectangle">
+  <rect x="830.5808154761905" y="2235.133333333333" width="146.43099999999998" height="53.800000000000004" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="903.7963154761906" y="2262.0333333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="903.7963154761906" dy="-3.9000000000000012">ToolRegistry</tspan><tspan x="903.7963154761906" dy="16.900000000000002">includes SkillTool</tspan></text>
+</g>
+<g class="node" data-id="LLM" data-label="LLM streamText
+system prompt +
+tools + messages" data-shape="rectangle">
+  <rect x="759.3019583333333" y="2365.1" width="142.726" height="70.7" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="830.6649583333333" y="2400.45" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="830.6649583333333" dy="-12.350000000000001">LLM streamText</tspan><tspan x="830.6649583333333" dy="16.900000000000002">system prompt +</tspan><tspan x="830.6649583333333" dy="16.900000000000002">tools + messages</tspan></text>
+</g>
+<g class="node" data-id="STOOL" data-label="skill tool
+params: {name}" data-shape="rectangle">
+  <rect x="1063.3870654761904" y="1057.5000000000002" width="130.129" height="53.800000000000004" rx="0" ry="0" fill="#aa7030" stroke="#222" stroke-width="0.75" />
+  <text x="1128.4515654761904" y="1084.4000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1128.4515654761904" dy="-3.9000000000000012">skill tool</tspan><tspan x="1128.4515654761904" dy="16.900000000000002">params: {name}</tspan></text>
+</g>
+<g class="node" data-id="ASK" data-label="ctx.ask
+permission 'skill'" data-shape="rectangle">
+  <rect x="1035.7708988095237" y="1159.3000000000002" width="139.02100000000002" height="53.800000000000004" rx="0" ry="0" fill="#aa7030" stroke="#222" stroke-width="0.75" />
+  <text x="1105.2813988095238" y="1186.2000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1105.2813988095238" dy="-3.9000000000000012">ctx.ask</tspan><tspan x="1105.2813988095238" dy="16.900000000000002">permission &#39;skill&#39;</tspan></text>
+</g>
+<g class="node" data-id="LOAD" data-label="Skill.get(name) →
+SKILL.md content" data-shape="rectangle">
+  <rect x="1032.8068988095238" y="1261.1000000000004" width="144.949" height="53.800000000000004" rx="0" ry="0" fill="#aa7030" stroke="#222" stroke-width="0.75" />
+  <text x="1105.2813988095238" y="1288.0000000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1105.2813988095238" dy="-3.9000000000000012">Skill.get(name) →</tspan><tspan x="1105.2813988095238" dy="16.900000000000002">SKILL.md content</tspan></text>
+</g>
+<g class="node" data-id="RG" data-label="ripgrep list
+adjacent files
+(scripts/, refs/)" data-shape="rectangle">
+  <rect x="1048.524982142857" y="1362.9000000000003" width="127.16499999999999" height="70.7" rx="0" ry="0" fill="#aa7030" stroke="#222" stroke-width="0.75" />
+  <text x="1112.107482142857" y="1398.2500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1112.107482142857" dy="-12.350000000000001">ripgrep list</tspan><tspan x="1112.107482142857" dy="16.900000000000002">adjacent files</tspan><tspan x="1112.107482142857" dy="16.900000000000002">(scripts/, refs/)</tspan></text>
+</g>
+<g class="node" data-id="OUT" data-label="&lt;skill_content&gt;
++ &lt;skill_files&gt;
+returned to LLM" data-shape="rectangle">
+  <rect x="882.9859821428571" y="1362.9000000000003" width="137.539" height="70.7" rx="0" ry="0" fill="#aa7030" stroke="#222" stroke-width="0.75" />
+  <text x="951.7554821428571" y="1398.2500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="951.7554821428571" dy="-12.350000000000001">&lt;skill_content&gt;</tspan><tspan x="951.7554821428571" dy="16.900000000000002">+ &lt;skill_files&gt;</tspan><tspan x="951.7554821428571" dy="16.900000000000002">returned to LLM</tspan></text>
+</g>
+<g class="node" data-id="H_SYS" data-label="experimental.chat.system.transform
+(agent.ts)" data-shape="rectangle">
+  <rect x="56" y="883.7000000000002" width="249.42999999999995" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="180.71499999999997" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="180.71499999999997" dy="-3.9000000000000012">experimental.chat.system.transform</tspan><tspan x="180.71499999999997" dy="16.900000000000002">(agent.ts)</tspan></text>
+</g>
+<g class="node" data-id="H_MSGS" data-label="experimental.chat.messages.transform
+(compaction + prompt)" data-shape="rectangle">
+  <rect x="333.43" y="883.7000000000002" width="268.6959999999999" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="467.77799999999996" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="467.77799999999996" dy="-3.9000000000000012">experimental.chat.messages.transform</tspan><tspan x="467.77799999999996" dy="16.900000000000002">(compaction + prompt)</tspan></text>
+</g>
+<g class="node" data-id="H_PARAMS" data-label="chat.params / chat.headers
+(llm.ts)" data-shape="rectangle">
+  <rect x="630.1259999999999" y="883.7000000000002" width="201.26500000000001" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="730.7584999999999" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="730.7584999999999" dy="-3.9000000000000012">chat.params / chat.headers</tspan><tspan x="730.7584999999999" dy="16.900000000000002">(llm.ts)</tspan></text>
+</g>
+<g class="node" data-id="H_PERM" data-label="permission.ask
+(override allow/ask/deny)" data-shape="rectangle">
+  <rect x="1004.9229999999999" y="883.7000000000002" width="192.373" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="1101.1094999999998" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1101.1094999999998" dy="-3.9000000000000012">permission.ask</tspan><tspan x="1101.1094999999998" dy="16.900000000000002">(override allow/ask/deny)</tspan></text>
+</g>
+<g class="node" data-id="H_TOOLDEF" data-label="tool.definition
+(registry.ts)" data-shape="rectangle">
+  <rect x="859.391" y="883.7000000000002" width="117.53200000000001" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="918.1569999999999" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="918.1569999999999" dy="-3.9000000000000012">tool.definition</tspan><tspan x="918.1569999999999" dy="16.900000000000002">(registry.ts)</tspan></text>
+</g>
+<g class="node" data-id="H_TOOLPRE" data-label="tool.execute.before
+tool.execute.after" data-shape="rectangle">
+  <rect x="1225.2959999999998" y="883.7000000000002" width="154.582" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="1302.5869999999998" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1302.5869999999998" dy="-3.9000000000000012">tool.execute.before</tspan><tspan x="1302.5869999999998" dy="16.900000000000002">tool.execute.after</tspan></text>
+</g>
+<g class="node" data-id="H_SHELL" data-label="shell.env
+(pty + bash)" data-shape="rectangle">
+  <rect x="1407.8779999999997" y="883.7000000000002" width="108.64" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="1462.1979999999996" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1462.1979999999996" dy="-3.9000000000000012">shell.env</tspan><tspan x="1462.1979999999996" dy="16.900000000000002">(pty + bash)</tspan></text>
+</g>
+<g class="node" data-id="H_COMP" data-label="experimental.session.compacting
+experimental.compaction.autocontinue" data-shape="rectangle">
+  <rect x="1544.518" y="883.7000000000002" width="265.7319999999999" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="1677.384" y="910.6000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1677.384" dy="-3.9000000000000012">experimental.session.compacting</tspan><tspan x="1677.384" dy="16.900000000000002">experimental.compaction.autocontinue</tspan></text>
+</g>
+<g class="node" data-id="H_EVT" data-label="event(bus events)" data-shape="rectangle">
+  <rect x="1838.25" y="883.7000000000002" width="146.43099999999998" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="1911.4655" y="902.1500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">event(bus events)</text>
+</g>
+</svg>

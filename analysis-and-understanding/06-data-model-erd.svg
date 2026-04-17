@@ -1,0 +1,280 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1675.002 819.5" width="1675.002" height="819.5" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+</defs>
+<polyline class="er-relationship" data-entity1="WORKSPACE" data-entity2="PROJECT" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="contains" points="373.4,540.5 603.442,540.5" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="PROJECT" data-entity2="SESSION" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="has" points="776.642,564.5 1015.594,564.5" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="SESSION" data-entity2="PART" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="v2 messages" points="1215.194,564.5 1235.194,564.5 1235.194,403 1468.402,403" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="SESSION" data-entity2="SESSION" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="parent/child" points="1082.1273333333334,349.5 1082.1273333333334,339.5 1148.6606666666667,339.5 1148.6606666666667,349.5" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="SESSION" data-entity2="TODO" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="tracks" points="1215.194,672 1468.402,672" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="SESSION" data-entity2="PERMISSION" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="pending asks" points="1215.194,457 1225.194,457 1225.194,123 1468.402,123" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="PROJECT" data-entity2="SNAPSHOT" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="git commits" points="776.642,516.5 786.642,516.5 786.642,175.2 1015.594,175.2" fill="none" stroke="var(--_line)" stroke-width="1" />
+<g class="entity" data-id="WORKSPACE" data-label="WORKSPACE">
+  <rect x="220" y="490.5" width="153.39999999999998" height="100" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="220" y="490.5" width="153.39999999999998" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="296.7" y="507.5" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">WORKSPACE</text>
+  <line x1="220" y1="524.5" x2="373.4" y2="524.5" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="226" y="528.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="237.155" y="535.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="256.31" y="535.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="365.4" y="535.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <text x="228" y="557.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="365.4" y="557.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">name</tspan></text>
+  <text x="228" y="579.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="365.4" y="579.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">created_at</tspan></text>
+</g>
+<g class="entity" data-id="PROJECT" data-label="PROJECT">
+  <rect x="603.442" y="468.5" width="173.2" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="603.442" y="468.5" width="173.2" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="690.042" y="485.5" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">PROJECT</text>
+  <line x1="603.442" y1="502.5" x2="776.642" y2="502.5" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="609.442" y="506.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="620.597" y="513.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="639.752" y="513.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="768.642" y="513.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <rect x="609.442" y="528.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="620.597" y="535.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="639.752" y="535.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="768.642" y="535.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">workspace_id</tspan></text>
+  <text x="611.442" y="557.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="768.642" y="557.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">directory</tspan></text>
+  <text x="611.442" y="579.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="768.642" y="579.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">name</tspan></text>
+  <text x="611.442" y="601.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="768.642" y="601.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">created_at</tspan></text>
+</g>
+<g class="entity" data-id="SESSION" data-label="SESSION">
+  <rect x="1015.594" y="349.5" width="199.6" height="430" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1015.594" y="349.5" width="199.6" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1115.394" y="366.5" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">SESSION</text>
+  <line x1="1015.594" y1="383.5" x2="1215.194" y2="383.5" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="1021.594" y="387.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1032.749" y="394.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="1051.904" y="394.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="394.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <text x="1023.594" y="416.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="416.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">slug</tspan></text>
+  <rect x="1021.594" y="431.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1032.749" y="438.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1051.904" y="438.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="438.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">project_id</tspan></text>
+  <rect x="1021.594" y="453.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1032.749" y="460.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1051.904" y="460.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="460.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">workspace_id</tspan></text>
+  <rect x="1021.594" y="475.5" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1032.749" y="482.5" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1051.904" y="482.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="482.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">parent_id</tspan></text>
+  <text x="1023.594" y="504.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="504.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">title</tspan></text>
+  <text x="1023.594" y="526.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="526.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">version</tspan></text>
+  <text x="1023.594" y="548.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="548.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">directory</tspan></text>
+  <text x="1023.594" y="570.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="570.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">share_url</tspan></text>
+  <text x="1023.594" y="592.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="592.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">summary_additions</tspan></text>
+  <text x="1023.594" y="614.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="614.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">summary_deletions</tspan></text>
+  <text x="1023.594" y="636.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="636.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">summary_files</tspan></text>
+  <text x="1023.594" y="658.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="658.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">revert</tspan></text>
+  <text x="1023.594" y="680.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1207.194" y="680.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">permission</tspan></text>
+  <text x="1023.594" y="702.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="702.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">time_created</tspan></text>
+  <text x="1023.594" y="724.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="724.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">time_updated</tspan></text>
+  <text x="1023.594" y="746.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="746.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">time_compacting</tspan></text>
+  <text x="1023.594" y="768.5" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1207.194" y="768.5" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">time_archived</tspan></text>
+</g>
+<g class="entity" data-id="PART" data-label="PART">
+  <rect x="1468.402" y="276" width="166.6" height="254" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1468.402" y="276" width="166.6" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1551.702" y="293" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">PART</text>
+  <line x1="1468.402" y1="310" x2="1635.002" y2="310" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="1474.402" y="314" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1485.557" y="321" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="1504.712" y="321" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="321" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <rect x="1474.402" y="336" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1485.557" y="343" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1504.712" y="343" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="343" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">session_id</tspan></text>
+  <text x="1476.402" y="365" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="365" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">message_id</tspan></text>
+  <text x="1476.402" y="387" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="387" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">type</tspan></text>
+  <text x="1476.402" y="409" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="409" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">role</tspan></text>
+  <text x="1476.402" y="431" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="431" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">text</tspan></text>
+  <text x="1476.402" y="453" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="453" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">tool_name</tspan></text>
+  <text x="1476.402" y="475" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="475" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">tool_input</tspan></text>
+  <text x="1476.402" y="497" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1627.002" y="497" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">tool_output</tspan></text>
+  <text x="1476.402" y="519" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1627.002" y="519" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">time_created</tspan></text>
+</g>
+<g class="entity" data-id="TODO" data-label="TODO">
+  <rect x="1468.402" y="600" width="160" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1468.402" y="600" width="160" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1548.402" y="617" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">TODO</text>
+  <line x1="1468.402" y1="634" x2="1628.402" y2="634" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="1474.402" y="638" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1485.557" y="645" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="1504.712" y="645" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="645" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <rect x="1474.402" y="660" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1485.557" y="667" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1504.712" y="667" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="667" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">session_id</tspan></text>
+  <text x="1476.402" y="689" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="689" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">content</tspan></text>
+  <text x="1476.402" y="711" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="711" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">status</tspan></text>
+  <text x="1476.402" y="733" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1620.402" y="733" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">order_idx</tspan></text>
+</g>
+<g class="entity" data-id="PERMISSION" data-label="PERMISSION">
+  <rect x="1468.402" y="40" width="160" height="166" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1468.402" y="40" width="160" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1548.402" y="57" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">PERMISSION</text>
+  <line x1="1468.402" y1="74" x2="1628.402" y2="74" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="1474.402" y="78" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1485.557" y="85" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="1504.712" y="85" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="85" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <rect x="1474.402" y="100" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1485.557" y="107" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1504.712" y="107" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="107" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">session_id</tspan></text>
+  <text x="1476.402" y="129" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="129" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">tool</tspan></text>
+  <text x="1476.402" y="151" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="151" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">pattern</tspan></text>
+  <text x="1476.402" y="173" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1620.402" y="173" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">decision</tspan></text>
+  <text x="1476.402" y="195" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1620.402" y="195" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">created_at</tspan></text>
+</g>
+<g class="entity" data-id="SNAPSHOT" data-label="SNAPSHOT">
+  <rect x="1015.594" y="103.19999999999999" width="160" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1015.594" y="103.19999999999999" width="160" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1095.594" y="120.19999999999999" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">SNAPSHOT</text>
+  <line x1="1015.594" y1="137.2" x2="1175.594" y2="137.2" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="1021.594" y="141.2" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1032.749" y="148.2" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="1051.904" y="148.2" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1167.594" y="148.2" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <rect x="1021.594" y="163.2" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="1032.749" y="170.2" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="1051.904" y="170.2" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1167.594" y="170.2" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">project_id</tspan></text>
+  <text x="1023.594" y="192.2" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1167.594" y="192.2" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">commit_sha</tspan></text>
+  <text x="1023.594" y="214.2" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="1167.594" y="214.2" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">message</tspan></text>
+  <text x="1023.594" y="236.2" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">integer</tspan></text>
+  <text x="1167.594" y="236.2" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">created_at</tspan></text>
+</g>
+<g class="entity" data-id="MESSAGE" data-label="MESSAGE">
+  <rect x="40" y="40" width="160" height="100" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="40" width="160" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="120" y="57" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">MESSAGE</text>
+  <line x1="40" y1="74" x2="200" y2="74" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <rect x="46" y="78" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="57.155" y="85" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="76.31" y="85" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="192" y="85" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  <rect x="46" y="100" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="57.155" y="107" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="76.31" y="107" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="192" y="107" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">session_id</tspan></text>
+  <text x="48" y="129" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text</tspan></text>
+  <text x="192" y="129" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">role</tspan></text>
+</g>
+<line x1="377.4" y1="534.5" x2="377.4" y2="546.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="381.4" y1="534.5" x2="381.4" y2="546.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="599.442" y1="547.5" x2="587.442" y2="540.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="599.442" y1="540.5" x2="587.442" y2="540.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="599.442" y1="533.5" x2="587.442" y2="540.5" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="583.442" cy="540.5" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="780.642" y1="558.5" x2="780.642" y2="570.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="784.642" y1="558.5" x2="784.642" y2="570.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1011.594" y1="571.5" x2="999.594" y2="564.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1011.594" y1="564.5" x2="999.594" y2="564.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1011.594" y1="557.5" x2="999.594" y2="564.5" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="995.594" cy="564.5" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1219.194" y1="558.5" x2="1219.194" y2="570.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1223.194" y1="558.5" x2="1223.194" y2="570.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="410" x2="1452.402" y2="403" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="403" x2="1452.402" y2="403" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="396" x2="1452.402" y2="403" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="1448.402" cy="403" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1076.1273333333334" y1="345.5" x2="1088.1273333333334" y2="345.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1076.1273333333334" y1="341.5" x2="1088.1273333333334" y2="341.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1141.6606666666667" y1="345.5" x2="1148.6606666666667" y2="333.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1148.6606666666667" y1="345.5" x2="1148.6606666666667" y2="333.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1155.6606666666667" y1="345.5" x2="1148.6606666666667" y2="333.5" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="1148.6606666666667" cy="329.5" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1219.194" y1="666" x2="1219.194" y2="678" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1223.194" y1="666" x2="1223.194" y2="678" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="679" x2="1452.402" y2="672" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="672" x2="1452.402" y2="672" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="665" x2="1452.402" y2="672" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="1448.402" cy="672" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1219.194" y1="451" x2="1219.194" y2="463" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1223.194" y1="451" x2="1223.194" y2="463" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="130" x2="1452.402" y2="123" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="123" x2="1452.402" y2="123" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1464.402" y1="116" x2="1452.402" y2="123" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="1448.402" cy="123" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="780.642" y1="510.5" x2="780.642" y2="522.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="784.642" y1="510.5" x2="784.642" y2="522.5" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1011.594" y1="182.2" x2="999.594" y2="175.2" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1011.594" y1="175.2" x2="999.594" y2="175.2" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1011.594" y1="168.2" x2="999.594" y2="175.2" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="995.594" cy="175.2" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<rect x="463.4" y="530.35" width="50.04200000000001" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="488.421" y="540.5" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">contains</text>
+<rect x="882.383" y="554.35" width="27.47" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="896.118" y="564.5" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">has</text>
+<rect x="1225.038" y="392.85" width="72.02000000000001" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1261.048" y="403" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">v2 messages</text>
+<rect x="1082.354" y="329.35" width="66.08000000000001" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1115.394" y="339.5" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">parent/child</text>
+<rect x="1321.529" y="661.85" width="40.538000000000004" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1341.798" y="672" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tracks</text>
+<rect x="1188.59" y="163.24599999999995" width="73.208" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1225.194" y="173.39599999999996" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">pending asks</text>
+<rect x="757.166" y="226.22400000000002" width="58.952000000000005" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="786.642" y="236.37400000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">git commits</text>
+</svg>

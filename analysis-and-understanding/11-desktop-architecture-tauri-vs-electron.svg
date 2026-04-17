@@ -1,0 +1,246 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3239.48775 1377.15" width="3239.48775" height="1377.15" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Shared" data-label="Shared UI Layer (shell-agnostic)">
+  <rect x="2346.59575" y="874.9000000000001" width="502.5369999999999" height="246.3" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="2346.59575" y="874.9000000000001" width="502.5369999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="2358.59575" y="888.9000000000001" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Shared UI Layer (shell-agnostic)</text>
+</g>
+<g class="subgraph" data-id="Tauri" data-label="packages/desktop (Tauri v2 - PRIMARY)">
+  <rect x="40" y="288.7416666666668" width="1418.00725" height="673.1" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="288.7416666666668" width="1418.00725" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="302.7416666666668" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">packages/desktop (Tauri v2 - PRIMARY)</text>
+</g>
+<g class="subgraph" data-id="Electron" data-label="packages/desktop-electron (SECONDARY)">
+  <rect x="1486.00725" y="40" width="1205.565" height="774.9000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1486.00725" y="40" width="1205.565" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1498.00725" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">packages/desktop-electron (SECONDARY)</text>
+</g>
+<g class="subgraph" data-id="ServerSide" data-label="OpenCode server (same binary either way)">
+  <rect x="2949.6327499999998" y="1075.75" width="249.85499999999993" height="261.40000000000003" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="2949.6327499999998" y="1075.75" width="249.85499999999993" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="2961.6327499999998" y="1089.75" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">OpenCode server (same binary either way)</text>
+</g>
+<polyline class="edge" data-from="T_REND" data-to="APP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1338.41075,397.77083333333337 1338.41075,28 2446.18525,28 2446.18525,972.4750000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_REND" data-to="APIS" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="@tauri-apps/plugin-http" points="1338.41075,397.77083333333337 1338.41075,415.4416666666668 1383.209,415.4416666666668 1383.209,961.8416666666668 1383.209,997.8416666666668 1367.9205625,997.8416666666668 1367.9205625,1133.2 2949.6327499999998,1133.2 2977.6327499999998,1133.2 2977.6327499999998,1134.51 2989.6327499999998,1134.51" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_SIDE" data-to="APIS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1188.8435000000002,928.9416666666668 1188.8435000000002,1024.3458333333333 3086.5602499999995,1024.3458333333333 3086.5602499999995,1119.75" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_SIDE" data-to="DB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1188.8435000000002,928.9416666666668 1188.8435000000002,1024.3458333333333 3065.89475,1024.3458333333333 3065.89475,1176.65" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_HTTP" data-to="HEALTH" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="720.6805000000002,895.1416666666668 720.6805000000002,961.8416666666668 720.6805000000002,1303.2166666666667 2949.6327499999998,1303.2166666666667 2965.6327499999998,1303.2166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_REND" data-to="APP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2585.6842500000002,154.7 2585.6842500000002,28 2446.18525,28 2446.18525,972.4750000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_EMBED" data-to="APIS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2501.13975,798.9000000000001 2501.13975,862.9000000000001 3086.5602499999995,862.9000000000001 3086.5602499999995,1119.75" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_EMBED" data-to="DB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2501.13975,798.9000000000001 2501.13975,862.9000000000001 3065.89475,862.9000000000001 3065.89475,1176.65" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_REND" data-to="APIS" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Node fetch + NO_PROXY" points="2585.6842500000002,154.7 2585.6842500000002,166.7 2623.6282499999998,166.7 2623.6282499999998,814.9000000000001 2623.6282499999998,862.9000000000001 2939.6327499999998,862.9000000000001 2939.6327499999998,1123.2 2949.6327499999998,1123.2 2977.6327499999998,1123.2 2977.6327499999998,1127.13 2989.6327499999998,1127.13" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="HEALTH" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 3040.33025,565.8208333333334 3040.33025,1267.35" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="APP" data-to="PLAT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2529.77475,1007.3083333333334 2541.77475,1007.3083333333334 2541.77475,971.1500000000001 2577.77475,971.1500000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="APP" data-to="UILIB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2529.77475,1042.1416666666669 2541.77475,1042.1416666666669 2541.77475,1078.3000000000002 2577.77475,1078.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_REND" data-to="T_BIND" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1286.6125000000002,397.77083333333337 1286.6125000000002,415.4416666666668 631.2420000000001,415.4416666666668 631.2420000000001,445.77083333333337" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_BIND" data-to="T_IPC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,516.4708333333333 631.2420000000001,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_IPC" data-to="T_RUST" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,635.1708333333335 631.2420000000001,671.9416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_RUST" data-to="T_PLUGINS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,776.4416666666668 631.2420000000001,808.8916666666669 334.02750000000003,808.8916666666669 334.02750000000003,841.3416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_RUST" data-to="T_SIDE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,776.4416666666668 631.2420000000001,808.8916666666669 1188.8435000000002,808.8916666666669 1188.8435000000002,841.3416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_RUST" data-to="T_HTTP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,776.4416666666668 631.2420000000001,808.8916666666669 720.6805000000002,808.8916666666669 720.6805000000002,841.3416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_RUST" data-to="T_MD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,776.4416666666668 631.2420000000001,808.8916666666669 901.7805000000002,808.8916666666669 901.7805000000002,841.3416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_RUST" data-to="T_LOG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,776.4416666666668 631.2420000000001,808.8916666666669 541.8035000000001,808.8916666666669 541.8035000000001,841.3416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="T_RUST" data-to="T_STORE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="631.2420000000001,776.4416666666668 631.2420000000001,808.8916666666669 127.363,808.8916666666669 127.363,841.3416666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_REND" data-to="E_PRE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2540.74025,154.7 2540.74025,166.7 2032.4942500000002,166.7 2032.4942500000002,202.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_PRE" data-to="E_IPC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,273.4 2032.4942500000002,327.0708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_IPC" data-to="E_MAIN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,397.7708333333334 2032.4942500000002,445.77083333333337" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="E_VIRT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 2501.13975,565.8208333333334 2501.13975,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_VIRT" data-to="E_EMBED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2501.1397500000003,652.0708333333334 2501.1397500000003,711.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="E_PTY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 1921.12075,565.8208333333334 1921.12075,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="E_MD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 1576.70475,565.8208333333334 1576.70475,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="E_LOG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 1735.57475,565.8208333333334 1735.57475,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="E_STORE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 2106.33575,565.8208333333334 2106.33575,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="E_MAIN" data-to="E_UPD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="2032.4942500000002,550.2708333333334 2032.4942500000002,565.8208333333334 2278.91425,565.8208333333334 2278.91425,581.3708333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="T_REND" data-to="APIS" data-label="@tauri-apps/plugin-http">
+  <rect x="1305.9205625" y="1004.8416666666668" width="123.976" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1367.9085625" y="1019.9916666666668" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">@tauri-apps/plugin-http</text>
+</g>
+<g class="edge-label" data-from="E_REND" data-to="APIS" data-label="Node fetch + NO_PROXY">
+  <rect x="2873.1327499999998" y="1002.45" width="132.29199999999997" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="2939.27875" y="1017.6" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Node fetch + NO_PROXY</text>
+</g>
+<g class="node" data-id="APP" data-label="@opencode-ai/app
+SolidJS AppInterface
+AppBaseProviders
+PlatformProvider
+ServerConnection" data-shape="rectangle">
+  <rect x="2362.59575" y="972.4750000000001" width="167.179" height="104.50000000000001" rx="0" ry="0" fill="#d0bfff" stroke="#222" stroke-width="2" />
+  <text x="2446.18525" y="1024.7250000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2446.18525" dy="-29.250000000000004">@opencode-ai/app</tspan><tspan x="2446.18525" dy="16.900000000000002">SolidJS AppInterface</tspan><tspan x="2446.18525" dy="16.900000000000002">AppBaseProviders</tspan><tspan x="2446.18525" dy="16.900000000000002">PlatformProvider</tspan><tspan x="2446.18525" dy="16.900000000000002">ServerConnection</tspan></text>
+</g>
+<g class="node" data-id="UILIB" data-label="@opencode-ai/ui
+(design system)" data-shape="rectangle">
+  <rect x="2577.77475" y="1051.4" width="138.28" height="53.800000000000004" rx="0" ry="0" fill="#d0bfff" stroke="#222" stroke-width="2" />
+  <text x="2646.91475" y="1078.3000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2646.91475" dy="-3.9000000000000012">@opencode-ai/ui</tspan><tspan x="2646.91475" dy="16.900000000000002">(design system)</tspan></text>
+</g>
+<g class="node" data-id="PLAT" data-label="Platform abstraction
+file/dir pickers, openLink, openPath,
+storage(name), updater, notifications,
+fetch, WSL, webviewZoom,
+parseMarkdown, checkAppExists" data-shape="rectangle">
+  <rect x="2577.77475" y="918.9000000000001" width="255.3579999999999" height="104.50000000000001" rx="0" ry="0" fill="#d0bfff" stroke="#222" stroke-width="2" />
+  <text x="2705.45375" y="971.1500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2705.45375" dy="-29.250000000000004">Platform abstraction</tspan><tspan x="2705.45375" dy="16.900000000000002">file/dir pickers, openLink, openPath,</tspan><tspan x="2705.45375" dy="16.900000000000002">storage(name), updater, notifications,</tspan><tspan x="2705.45375" dy="16.900000000000002">fetch, WSL, webviewZoom,</tspan><tspan x="2705.45375" dy="16.900000000000002">parseMarkdown, checkAppExists</tspan></text>
+</g>
+<g class="node" data-id="T_REND" data-label="Renderer (system WebView)
+SolidJS + Vite :1420
+index.tsx, loading.tsx" data-shape="rectangle">
+  <rect x="1234.8142500000001" y="327.0708333333334" width="207.19299999999996" height="70.7" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="1338.41075" y="362.4208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="1338.41075" dy="-12.350000000000001">Renderer (system WebView)</tspan><tspan x="1338.41075" dy="16.900000000000002">SolidJS + Vite :1420</tspan><tspan x="1338.41075" dy="16.900000000000002">index.tsx, loading.tsx</tspan></text>
+</g>
+<g class="node" data-id="T_BIND" data-label="src/bindings.ts
+(GENERATED by tauri-specta)
+typed commands + events" data-shape="rectangle">
+  <rect x="521.7175000000001" y="445.77083333333337" width="219.04899999999998" height="70.7" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="631.2420000000001" y="481.1208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="631.2420000000001" dy="-12.350000000000001">src/bindings.ts</tspan><tspan x="631.2420000000001" dy="16.900000000000002">(GENERATED by tauri-specta)</tspan><tspan x="631.2420000000001" dy="16.900000000000002">typed commands + events</tspan></text>
+</g>
+<g class="node" data-id="T_IPC" data-label="Tauri IPC
+NEVER call invoke manually" data-shape="rectangle">
+  <rect x="528.3865000000001" y="581.3708333333334" width="205.71099999999998" height="53.800000000000004" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="631.2420000000001" y="608.2708333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="631.2420000000001" dy="-3.9000000000000012">Tauri IPC</tspan><tspan x="631.2420000000001" dy="16.900000000000002">NEVER call invoke manually</tspan></text>
+</g>
+<g class="node" data-id="T_RUST" data-label="Rust shell (opencode-desktop)
+src-tauri/src/
+main.rs - lib.rs
+cli.rs - server.rs - markdown.rs
+windows.rs - logging.rs" data-shape="rectangle">
+  <rect x="519.8650000000001" y="671.9416666666668" width="222.754" height="104.50000000000001" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="631.2420000000001" y="724.1916666666668" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="631.2420000000001" dy="-29.250000000000004">Rust shell (opencode-desktop)</tspan><tspan x="631.2420000000001" dy="16.900000000000002">src-tauri/src/</tspan><tspan x="631.2420000000001" dy="16.900000000000002">main.rs - lib.rs</tspan><tspan x="631.2420000000001" dy="16.900000000000002">cli.rs - server.rs - markdown.rs</tspan><tspan x="631.2420000000001" dy="16.900000000000002">windows.rs - logging.rs</tspan></text>
+</g>
+<g class="node" data-id="T_PLUGINS" data-label="Tauri plugins
+opener - deep-link - shell
+dialog - updater - store
+window-state - clipboard
+http - notification
+single-instance - os - decorum" data-shape="rectangle">
+  <rect x="226.72600000000006" y="841.3416666666668" width="214.60299999999998" height="121.4" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="334.02750000000003" y="902.0416666666669" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="334.02750000000003" dy="-37.70000000000001">Tauri plugins</tspan><tspan x="334.02750000000003" dy="16.900000000000002">opener - deep-link - shell</tspan><tspan x="334.02750000000003" dy="16.900000000000002">dialog - updater - store</tspan><tspan x="334.02750000000003" dy="16.900000000000002">window-state - clipboard</tspan><tspan x="334.02750000000003" dy="16.900000000000002">http - notification</tspan><tspan x="334.02750000000003" dy="16.900000000000002">single-instance - os - decorum</tspan></text>
+</g>
+<g class="node" data-id="T_SIDE" data-label="Sidecar: bundled opencode binary
+process-wrap (ProcessGroup / JobObject + KillOnDrop)
+opencode serve --hostname --port
+--auth-user opencode --auth-password &lt;uuid&gt;" data-shape="rectangle">
+  <rect x="1004.4780000000002" y="841.3416666666668" width="368.73099999999994" height="87.60000000000001" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="1188.8435000000002" y="885.1416666666668" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="1188.8435000000002" dy="-20.8">Sidecar: bundled opencode binary</tspan><tspan x="1188.8435000000002" dy="16.900000000000002">process-wrap (ProcessGroup / JobObject + KillOnDrop)</tspan><tspan x="1188.8435000000002" dy="16.900000000000002">opencode serve --hostname --port</tspan><tspan x="1188.8435000000002" dy="16.900000000000002">--auth-user opencode --auth-password &lt;uuid&gt;</tspan></text>
+</g>
+<g class="node" data-id="T_HTTP" data-label="reqwest (rustls)
+no_proxy loopback" data-shape="rectangle">
+  <rect x="642.2780000000001" y="841.3416666666668" width="156.805" height="53.800000000000004" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="720.6805000000002" y="868.2416666666668" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="720.6805000000002" dy="-3.9000000000000012">reqwest (rustls)</tspan><tspan x="720.6805000000002" dy="16.900000000000002">no_proxy loopback</tspan></text>
+</g>
+<g class="node" data-id="T_MD" data-label="comrak markdown" data-shape="rectangle">
+  <rect x="827.0830000000002" y="841.3416666666668" width="149.39499999999998" height="36.900000000000006" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="901.7805000000002" y="859.7916666666669" text-anchor="middle" font-size="13" font-weight="500" fill="#111" dy="4.55">comrak markdown</text>
+</g>
+<g class="node" data-id="T_LOG" data-label="tracing +
+tracing-appender" data-shape="rectangle">
+  <rect x="469.32900000000006" y="841.3416666666668" width="144.949" height="53.800000000000004" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="541.8035000000001" y="868.2416666666668" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="541.8035000000001" dy="-3.9000000000000012">tracing +</tspan><tspan x="541.8035000000001" dy="16.900000000000002">tracing-appender</tspan></text>
+</g>
+<g class="node" data-id="T_STORE" data-label="tauri-plugin-store
+(disk)" data-shape="rectangle">
+  <rect x="56" y="841.3416666666668" width="142.726" height="53.800000000000004" rx="0" ry="0" fill="#ffd8a8" stroke="#b85c20" stroke-width="2" />
+  <text x="127.363" y="868.2416666666668" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="127.363" dy="-3.9000000000000012">tauri-plugin-store</tspan><tspan x="127.363" dy="16.900000000000002">(disk)</tspan></text>
+</g>
+<g class="node" data-id="E_REND" data-label="Renderer (Chromium)
+SolidJS + electron-vite
+index.html + loading.html" data-shape="rectangle">
+  <rect x="2495.7962500000003" y="84" width="179.77599999999995" height="70.7" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2585.6842500000002" y="119.35" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2585.6842500000002" dy="-12.350000000000001">Renderer (Chromium)</tspan><tspan x="2585.6842500000002" dy="16.900000000000002">SolidJS + electron-vite</tspan><tspan x="2585.6842500000002" dy="16.900000000000002">index.html + loading.html</tspan></text>
+</g>
+<g class="node" data-id="E_PRE" data-label="preload/index.ts
+contextBridge → window.api
+(ElectronAPI, types.ts)" data-shape="rectangle">
+  <rect x="1932.23225" y="202.7" width="200.52399999999997" height="70.7" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2032.49425" y="238.04999999999998" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2032.49425" dy="-12.350000000000001">preload/index.ts</tspan><tspan x="2032.49425" dy="16.900000000000002">contextBridge → window.api</tspan><tspan x="2032.49425" dy="16.900000000000002">(ElectronAPI, types.ts)</tspan></text>
+</g>
+<g class="node" data-id="E_IPC" data-label="ipcMain.handle
+renderer only uses window.api
+main IPC lives in main/ipc.ts" data-shape="rectangle">
+  <rect x="1921.4877500000002" y="327.0708333333334" width="222.01299999999995" height="70.7" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2032.4942500000002" y="362.4208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2032.4942500000002" dy="-12.350000000000001">ipcMain.handle</tspan><tspan x="2032.4942500000002" dy="16.900000000000002">renderer only uses window.api</tspan><tspan x="2032.4942500000002" dy="16.900000000000002">main IPC lives in main/ipc.ts</tspan></text>
+</g>
+<g class="node" data-id="E_MAIN" data-label="Main process (Node)
+main/index.ts - initialize()
+server.ts - migrate.ts
+windows.ts - menu.ts - apps.ts
+shell-env.ts - store.ts" data-shape="rectangle">
+  <rect x="1927.78625" y="445.77083333333337" width="209.41599999999997" height="104.50000000000001" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2032.4942500000002" y="498.02083333333337" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2032.4942500000002" dy="-29.250000000000004">Main process (Node)</tspan><tspan x="2032.4942500000002" dy="16.900000000000002">main/index.ts - initialize()</tspan><tspan x="2032.4942500000002" dy="16.900000000000002">server.ts - migrate.ts</tspan><tspan x="2032.4942500000002" dy="16.900000000000002">windows.ts - menu.ts - apps.ts</tspan><tspan x="2032.4942500000002" dy="16.900000000000002">shell-env.ts - store.ts</tspan></text>
+</g>
+<g class="node" data-id="E_VIRT" data-label="Vite virtual module
+virtual:opencode-server
+→ ../opencode/dist/node/node.js" data-shape="rectangle">
+  <rect x="2388.65125" y="581.3708333333334" width="224.97699999999995" height="70.7" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2501.13975" y="616.7208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2501.13975" dy="-12.350000000000001">Vite virtual module</tspan><tspan x="2501.13975" dy="16.900000000000002">virtual:opencode-server</tspan><tspan x="2501.13975" dy="16.900000000000002">→ ../opencode/dist/node/node.js</tspan></text>
+</g>
+<g class="node" data-id="E_EMBED" data-label="Embedded server (in-process)
+Server.listen({port, hostname,
+username, password})
+.wasm tree-sitter blobs copied" data-shape="rectangle">
+  <rect x="2390.13325" y="711.3000000000001" width="222.013" height="87.60000000000001" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2501.13975" y="755.1" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2501.13975" dy="-20.8">Embedded server (in-process)</tspan><tspan x="2501.13975" dy="16.900000000000002">Server.listen({port, hostname,</tspan><tspan x="2501.13975" dy="16.900000000000002">username, password})</tspan><tspan x="2501.13975" dy="16.900000000000002">.wasm tree-sitter blobs copied</tspan></text>
+</g>
+<g class="node" data-id="E_PTY" data-label="@lydell/node-pty
+narrowed per platform-arch" data-shape="rectangle">
+  <rect x="1819.7472500000001" y="581.3708333333334" width="202.74699999999999" height="53.800000000000004" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="1921.12075" y="608.2708333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="1921.12075" dy="-3.9000000000000012">@lydell/node-pty</tspan><tspan x="1921.12075" dy="16.900000000000002">narrowed per platform-arch</tspan></text>
+</g>
+<g class="node" data-id="E_MD" data-label="marked markdown" data-shape="rectangle">
+  <rect x="1502.00725" y="581.3708333333334" width="149.39499999999998" height="36.900000000000006" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="1576.70475" y="599.8208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111" dy="4.55">marked markdown</text>
+</g>
+<g class="node" data-id="E_LOG" data-label="electron-log" data-shape="rectangle">
+  <rect x="1679.40225" y="581.3708333333334" width="112.345" height="36.900000000000006" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="1735.57475" y="599.8208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111" dy="4.55">electron-log</text>
+</g>
+<g class="node" data-id="E_STORE" data-label="electron-store" data-shape="rectangle">
+  <rect x="2043.4942500000002" y="581.3708333333334" width="125.68299999999999" height="36.900000000000006" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2106.33575" y="599.8208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111" dy="4.55">electron-store</text>
+</g>
+<g class="node" data-id="E_UPD" data-label="electron-updater
+autoDownload:false
+autoInstallOnAppQuit" data-shape="rectangle">
+  <rect x="2197.1772499999997" y="581.3708333333334" width="163.474" height="70.7" rx="0" ry="0" fill="#a5d8ff" stroke="#1f4e8c" stroke-width="2" />
+  <text x="2278.91425" y="616.7208333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="2278.91425" dy="-12.350000000000001">electron-updater</tspan><tspan x="2278.91425" dy="16.900000000000002">autoDownload:false</tspan><tspan x="2278.91425" dy="16.900000000000002">autoInstallOnAppQuit</tspan></text>
+</g>
+<g class="node" data-id="HEALTH" data-label="GET /global/health
+basic auth" data-shape="rectangle">
+  <rect x="2965.6327499999998" y="1267.35" width="149.395" height="53.800000000000004" rx="0" ry="0" fill="#b2f2bb" stroke="#15803d" stroke-width="2" />
+  <text x="3040.33025" y="1294.25" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="3040.33025" dy="-3.9000000000000012">GET /global/health</tspan><tspan x="3040.33025" dy="16.900000000000002">basic auth</tspan></text>
+</g>
+<g class="node" data-id="DB" data-label="~/.local/share/opencode/
+opencode.db
+(sqlite migration on first run)" data-shape="rectangle">
+  <rect x="2965.6327499999998" y="1176.65" width="200.524" height="70.7" rx="0" ry="0" fill="#b2f2bb" stroke="#15803d" stroke-width="2" />
+  <text x="3065.89475" y="1212" text-anchor="middle" font-size="13" font-weight="500" fill="#111"><tspan x="3065.89475" dy="-12.350000000000001">~/.local/share/opencode/</tspan><tspan x="3065.89475" dy="16.900000000000002">opencode.db</tspan><tspan x="3065.89475" dy="16.900000000000002">(sqlite migration on first run)</tspan></text>
+</g>
+<g class="node" data-id="APIS" data-label="opencode HTTP + WS API" data-shape="rectangle">
+  <rect x="2989.6327499999998" y="1119.75" width="193.85499999999993" height="36.900000000000006" rx="0" ry="0" fill="#b2f2bb" stroke="#15803d" stroke-width="2" />
+  <text x="3086.5602499999995" y="1138.2" text-anchor="middle" font-size="13" font-weight="500" fill="#111" dy="4.55">opencode HTTP + WS API</text>
+</g>
+</svg>

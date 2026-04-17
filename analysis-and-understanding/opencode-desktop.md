@@ -1,0 +1,262 @@
+# OpenCode Desktop — Architecture Summary
+
+OpenCode ships **two parallel desktop implementations** living side-by-side in the monorepo:
+
+- `packages/desktop` — **Tauri v2** (Rust shell + system WebView), the primary/production build
+- `packages/desktop-electron` — **Electron** (Node main + Chromium renderer), a secondary build sharing the same UI
+
+Both render the exact same SolidJS app (`@opencode-ai/app`) and follow the same lifecycle model: the native shell spawns the OpenCode server as a child ("sidecar"), waits for it to be healthy, then loads the web UI pointed at `http://127.0.0.1:<port>` with basic-auth credentials. The UI code is unaware which shell it runs inside — a `Platform` object abstracts all native calls.
+
+---
+
+## 1. Shared Design (both shells)
+
+### Packages consumed
+- `@opencode-ai/app` — the SolidJS web app (`AppInterface`, `AppBaseProviders`, `PlatformProvider`, `ServerConnection`, `useCommand`). Exposed through `@opencode-ai/app/vite` as a Vite plugin that both shells register.
+- `@opencode-ai/ui` — shared component library.
+- `solid-js`, `@solidjs/meta`, `@solid-primitives/i18n`, `@solid-primitives/storage`.
+
+### Platform abstraction
+Both renderers build a `Platform` object (see `desktop/src/index.tsx` and `desktop-electron/src/renderer/index.tsx`) implementing the same interface:
+
+- File/dir/save pickers, `openLink`, `openPath`
+- Key/value `storage(name)` with async debounced writes (250 ms flush on visibility hide/pagehide)
+- Updater: `checkUpdate`, `update`, `restart`
+- Notifications (OS-level, only when window unfocused)
+- `fetch` override (Tauri uses `@tauri-apps/plugin-http` to bypass CORS; Electron uses Node `fetch`)
+- WSL toggles + `wslPath()` translation on Windows
+- Linux display-backend (Wayland vs auto)
+- `parseMarkdown()` (server-side native markdown)
+- Clipboard image read
+- `checkAppExists`/`resolveAppPath` for "open in…" integrations
+- `webviewZoom`, `getDefaultServer`, `setDefaultServer`
+
+### Bootstrap flow (identical state machine on both)
+1. Native shell starts logging, acquires single-instance lock, registers `opencode://` deep-link handler, wires OS menu.
+2. Pick a free port (env `OPENCODE_PORT` or bind 127.0.0.1:0).
+3. Generate a UUID password; username is always `opencode`.
+4. Spawn local server; publish `ServerReadyData { url, username, password }` **immediately** (credentials known pre-health-check).
+5. Track `InitStep`: `server_waiting` → (optionally) `sqlite_waiting` → `done`.
+6. If `~/.local/share/opencode/opencode.db` (or `$XDG_DATA_HOME/opencode/opencode.db`) is missing, a one-time SQLite migration runs. Progress events (`SqliteMigrationProgress`) stream to the renderer.
+7. Main window is created **immediately**; the web app gates its own loading screen on the init channel. If migration takes > 1 s, an extra native "loading" overlay window appears for UX.
+8. Server is polled at `GET /global/health` (with basic auth) until it returns 200.
+9. On quit, the sidecar is killed in `before-quit`/`will-quit` (Electron) or `RunEvent::Exit` (Tauri).
+
+### Key environment
+- `OPENCODE_CLIENT=desktop` (Electron sets explicitly)
+- `XDG_STATE_HOME` → Electron redirects to `app.getPath("userData")` so server state lives under the app's user data dir
+- `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY=true`, `OPENCODE_EXPERIMENTAL_FILEWATCHER=true` (Electron)
+- Loopback auto-added to `NO_PROXY` so corporate proxy envs can't break the sidecar connection (both shells; Tauri uses `reqwest::Client::builder().no_proxy()` when host is loopback; Electron mutates `process.env.NO_PROXY` and Chromium's `proxy-bypass-list`)
+
+---
+
+## 2. Tauri Shell (`packages/desktop`)
+
+### Stack
+- Tauri 2.9.5 (`"macos-private-api"` feature), Rust edition 2024
+- Rust crate `opencode-desktop` → `opencode_lib` (staticlib, cdylib, rlib)
+- `tokio` runtime for async sidecar/IPC work
+- `tauri-specta` 2 + `specta` 2 — **typed IPC bridge**: Rust `#[tauri::command]` functions are auto-exported to TypeScript at `src/bindings.ts` during `cargo build`. The renderer must import `commands`/`events` from `bindings.ts` (per `AGENTS.md`: **never call `invoke` manually**).
+- Tauri plugins: `opener`, `deep-link`, `shell`, `dialog`, `updater`, `process`, `store`, `window-state`, `clipboard-manager`, `http`, `notification`, `single-instance`, `os`, `decorum`
+- `reqwest` (rustls) for sidecar health checks
+- `comrak` for native markdown parsing
+- `tracing` + `tracing-appender` for logs → `app_log_dir()`
+- `process-wrap` with `ProcessGroup` (unix) / `JobObject` + `KillOnDrop` (windows) so the sidecar dies if the parent is killed
+
+### Layout
+```
+packages/desktop/
+├── src/                         # SolidJS renderer (runs in Tauri webview)
+│   ├── entry.tsx                # routes /loading → loading.tsx, else index.tsx
+│   ├── index.tsx                # builds Platform, mounts <AppInterface>
+│   ├── loading.tsx              # splash window during sqlite migration
+│   ├── bindings.ts              # GENERATED by tauri-specta — DO NOT EDIT
+│   ├── cli.ts                   # "install CLI" UX wrapper
+│   ├── menu.ts                  # Tauri app menu registration
+│   ├── updater.ts               # Tauri updater flags
+│   ├── webview-zoom.ts          # zoom ctrl
+│   ├── i18n/                    # locale dicts, loadLocaleDict()
+│   └── styles.css
+├── src-tauri/                   # Rust shell
+│   ├── Cargo.toml
+│   ├── tauri.conf.json          # prod config
+│   ├── tauri.beta.conf.json     # beta channel overrides
+│   ├── capabilities/            # permission allowlists
+│   ├── entitlements.plist       # macOS entitlements
+│   └── src/
+│       ├── main.rs              # thin entry → lib::run()
+│       ├── lib.rs               # orchestrator: builder, plugins, initialize()
+│       ├── cli.rs               # sidecar spawn/kill (process-wrap), install_cli,
+│       │                        # sqlite_migration::SqliteMigrationProgress event
+│       ├── server.rs            # spawn_local_server + health check loop
+│       ├── markdown.rs          # parse_markdown_command (comrak)
+│       ├── windows.rs           # MainWindow / LoadingWindow creation
+│       ├── window_customizer.rs # PinchZoomDisablePlugin
+│       ├── linux_display.rs     # Wayland preference file
+│       ├── linux_windowing.rs
+│       ├── logging.rs           # tracing setup → app_log_dir
+│       ├── constants.rs         # store keys, feature flags
+│       └── os/                  # platform-specific: check_windows_app, powershell open, etc.
+└── vite.config.ts               # port 1420, strictPort, watch excludes src-tauri
+```
+
+### Rust initialization (`lib.rs::initialize`)
+1. `watch::channel(InitStep::ServerWaiting)` — single-producer state broadcast.
+2. Register deep-link handler + `tauri_plugin_window_state` (denies saving loading-window geometry).
+3. Synchronously spawn sidecar via `cli::serve()` (returns a `CommandChild` + exit `oneshot`), store under `ServerState`.
+4. Fire a `oneshot` with `ServerReadyData { url, username: "opencode", password: uuid }` **before** health check → stored in `SidecarReady` (wrapped as `Shared<oneshot::Receiver>` so many renderer awaits share one result).
+5. If sqlite file missing, listen for the `SqliteMigrationProgress` event emitted by the sidecar itself; forward to `init_tx` as `SqliteWaiting` and resolve `done_tx` on `Done`.
+6. Spawn `loading_task`: wait for (optional) sqlite done + 30-s health timeout.
+7. If migration > 1 s, create `LoadingWindow`; always create `MainWindow` immediately.
+8. On completion send `InitStep::Done`, wait for renderer-fired `LoadingWindowComplete`, close loading window.
+
+### Rust → TS commands (`make_specta_builder`)
+`kill_sidecar`, `install_cli`, `await_initialization`, `get_default_server_url`, `set_default_server_url`, `get_wsl_config`, `set_wsl_config`, `get_display_backend`, `set_display_backend`, `parse_markdown_command`, `check_app_exists`, `wsl_path`, `resolve_app_path`, `open_path`. Events: `LoadingWindowComplete`, `SqliteMigrationProgress`.
+
+### Sidecar binary discovery
+`cli::serve` locates the bundled `opencode` binary via `app.path().resolve(..., BaseDirectory::Resource)` and launches it with `opencode serve --hostname ... --port ... --auth-user opencode --auth-password <uuid>`. WSL mode wraps the command in `wsl -e`. The child is held in a `process-wrap` group for reliable kill-on-drop.
+
+### Renderer glue (`index.tsx`)
+- `void initI18n()` early.
+- `createResource(() => commands.awaitInitialization(new Channel<InitStep>()))` opens a streaming channel while awaiting credentials.
+- `storage` is backed by `@tauri-apps/plugin-store` with a `Store.load(name)` cache + memory fallback + debounced batching + auto-flush on `pagehide`/`visibilitychange` hidden.
+- `fetch` is proxied through `@tauri-apps/plugin-http` (bypasses browser CORS, respects no-proxy loopback rule on Rust side).
+- `webviewZoom.ts` manipulates the native webview directly on each OS via `objc2-web-kit` / `webkit2gtk` / platform APIs.
+
+---
+
+## 3. Electron Shell (`packages/desktop-electron`)
+
+### Stack
+- Electron 40 + `electron-vite` 5 + `electron-builder` 26
+- **No Rust**. The sidecar is not spawned as a subprocess — it is **embedded in-process** via a Vite virtual module:
+  - `electron.vite.config.ts` defines `virtual:opencode-server` → `../opencode/dist/node/node.js`. The Node build of the opencode server is imported directly into the Electron main process and started with `Server.listen()` (see `server.ts`).
+  - The corresponding `.wasm` tree-sitter blobs are copied into `out/main/chunks/` at bundle time.
+- `@lydell/node-pty` for terminal support; narrowed to the current `platform-arch` variant via a pre-resolve plugin. Listed as `optionalDependencies` per platform so the installer doesn't pull all six binaries.
+- `effect`, `electron-log`, `electron-store`, `electron-updater`, `electron-window-state`, `electron-context-menu`, `marked` (for native markdown), `@valibot/to-json-schema`, `sury`.
+- Channels (`dev` / `beta` / `prod`) selected by `OPENCODE_CHANNEL` env; app id/name/userData path differ per channel (`ai.opencode.desktop.{dev,beta,prod}`).
+
+### Layout
+```
+packages/desktop-electron/
+├── electron.vite.config.ts        # three-target build: main / preload / renderer
+├── electron-builder.config.ts     # native packaging
+├── scripts/predev.ts, prebuild.ts # asset sync, opencode server prebuild
+├── icons/, resources/
+└── src/
+    ├── main/                      # Node main process
+    │   ├── index.ts               # setupApp + initialize() state machine
+    │   ├── ipc.ts                 # registerIpcHandlers — ALL handlers live here
+    │   ├── server.ts              # spawnLocalServer — imports virtual:opencode-server
+    │   ├── store.ts               # electron-store wrapper (getStore(name))
+    │   ├── windows.ts             # createMainWindow, createLoadingWindow, titlebar
+    │   ├── menu.ts                # OS menu builder
+    │   ├── apps.ts                # checkAppExists, wslPath, resolveAppPath
+    │   ├── markdown.ts            # marked() server-side parser
+    │   ├── migrate.ts             # sqlite migration progress forwarder
+    │   ├── shell-env.ts           # loadShellEnv(shell) — pulls PATH from login shell
+    │   ├── logging.ts             # electron-log init
+    │   └── constants.ts           # channel, updater flag, store keys
+    ├── preload/                   # context-bridge
+    │   ├── index.ts               # exposes `window.api` of type ElectronAPI
+    │   └── types.ts               # ElectronAPI, InitStep, SqliteMigrationProgress, ...
+    └── renderer/                  # same SolidJS app as Tauri
+        ├── index.html             # main window
+        ├── loading.html           # loading window (separate bundle entry)
+        ├── index.tsx              # builds Platform from window.api
+        ├── loading.tsx, cli.ts, updater.ts, webview-zoom.ts, i18n/, styles.css
+        └── html.test.ts
+```
+
+### Main process init (`main/index.ts`)
+1. Set app name / userData path per `OPENCODE_CHANNEL`.
+2. `OPENCODE_DISABLE_EMBEDDED_WEB_UI=true` — renderer hits the server for API only, UI is served locally from Vite output.
+3. Single-instance lock + `open-url` + `second-instance` → collect `opencode://` URLs into `pendingDeepLinks`.
+4. `ensureLoopbackNoProxy()` + `app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")`.
+5. In `app.whenReady()` → `initialize()`:
+   - Pick port, generate UUID password.
+   - `prepareServerEnv()` loads the user's shell PATH via `loadShellEnv(getUserShell())` (so the embedded server sees `node`, `git`, etc. on macOS .app launches), sets experimental flags, injects creds.
+   - `spawnLocalServer()` dynamically imports `virtual:opencode-server`, calls `Log.init({level:"WARN"})`, then `Server.listen({port, hostname, username, password})` — **returns a `Listener` in-process**.
+   - `serverReady.resolve()` publishes credentials immediately.
+   - Sqlite migration events are forwarded from the embedded server via `initEmitter` → `sendSqliteMigrationProgress(window, progress)` IPC.
+   - Health loop polls `http://127.0.0.1:<port>/global/health` with basic auth until success or 30 s timeout.
+   - Loading window appears only if migration takes > 1 s; main window always opens; menu is wired with `createMenu({ trigger, checkForUpdates, reload, relaunch })`.
+
+### IPC surface (`main/ipc.ts`)
+Handlers (invoke):
+`kill-sidecar`, `install-cli`, `await-initialization` (streams `init-step` events via `event.sender.send`), `get-default-server-url`, `set-default-server-url`, `get-wsl-config`, `set-wsl-config`, `get-display-backend`, `set-display-backend`, `parse-markdown`, `check-app-exists`, `wsl-path`, `resolve-app-path`, `run-updater`, `check-update`, `install-update`, `set-background-color`, plus the `store-*` family (`get`/`set`/`delete`/`clear`/`keys`/`length`) and picker/shell helpers (`open-directory-picker`, `open-file-picker`, `save-file-picker`, etc.).
+
+Renderer events (sender → renderer):
+`init-step`, `sqlite-migration-progress`, `menu-command`, `deep-link`.
+
+### Preload (`preload/index.ts`)
+Exposes a single `window.api: ElectronAPI` object through `contextBridge`. `AGENTS.md`: **renderer must only touch `window.api`**, and **main must only register IPC in `main/ipc.ts`**. `onSqliteMigrationProgress`, `onMenuCommand`, `onDeepLink` return unsubscribe closures.
+
+### Renderer (`renderer/index.tsx`)
+Structurally mirrors the Tauri renderer but maps every `Platform` method onto `window.api.*`. Uses `window.api.onSqliteMigrationProgress` to forward progress into the loading UI, and `await window.api.awaitInitialization(onStep)` to get `ServerReadyData`.
+
+### Auto-updater
+Uses `electron-updater` with `channel: "latest"`, `autoDownload: false`, `autoInstallOnAppQuit: true`. `checkUpdate` downloads explicitly; dialog asks "Restart now?". `killSidecar()` is always invoked before `quitAndInstall()`.
+
+### Native helpers
+`apps.ts` reimplements the Rust `check_app_exists` / `resolve_windows_app_path` / `wslpath -w|-u` logic in Node. `markdown.ts` uses `marked` to match Tauri's `parse_markdown_command` output contract.
+
+---
+
+## 4. Key Differences at a Glance
+
+| Concern                 | Tauri (`desktop`)                                          | Electron (`desktop-electron`)                              |
+|-------------------------|------------------------------------------------------------|------------------------------------------------------------|
+| Native runtime          | Rust + Tokio, system WebView                               | Node + Chromium                                            |
+| Sidecar                 | External child process: bundled `opencode` binary          | **In-process**: imports `virtual:opencode-server` Node build |
+| IPC                     | `tauri-specta` generates typed `commands` + `events`       | Manual `ipcMain.handle` + `contextBridge` on `window.api`  |
+| Renderer contract       | Never call `invoke` — always use `bindings.ts`             | Never touch `ipcRenderer` — always use `window.api`        |
+| Typed schema source     | Rust `#[specta::specta]` → `src/bindings.ts`               | `preload/types.ts` authored manually                       |
+| Markdown                | `comrak` (Rust)                                            | `marked` (JS)                                              |
+| Storage                 | `tauri-plugin-store` on disk                               | `electron-store`                                           |
+| Secure fetch            | `@tauri-apps/plugin-http` + reqwest no-proxy loopback      | Node `fetch` + `NO_PROXY` env + Chromium bypass switch     |
+| Single-instance         | `tauri-plugin-single-instance`                             | `app.requestSingleInstanceLock()`                          |
+| Deep links              | `tauri-plugin-deep-link` + Linux/Windows registration      | `setAsDefaultProtocolClient` + `open-url`/argv scan        |
+| Terminal (pty)          | Not hosted in shell (sidecar handles pty via its own `#pty`)| `@lydell/node-pty` in main, narrowed per platform         |
+| Loading window          | Native window created after 1 s slow migration             | Same behavior via `createLoadingWindow`                    |
+| Updater                 | `tauri-plugin-updater` (optional, `UPDATER_ENABLED`)       | `electron-updater` + downloads + `quitAndInstall`          |
+| Config channels         | `tauri.conf.json` / `tauri.beta.conf.json` / `tauri.prod.conf.json` | `OPENCODE_CHANNEL` env → app id + name + userData path |
+
+Both shells target the same SolidJS `AppInterface` with a `sidecar` `ServerConnection` and emit identical `ServerReadyData`/`InitStep`/`SqliteMigrationProgress` shapes — so the Solid code is truly shell-agnostic.
+
+---
+
+## 5. Running & Building
+
+**Tauri (primary):**
+```bash
+bun install
+bun run --cwd packages/desktop tauri dev      # dev — vite 1420 + rustc
+bun run --cwd packages/desktop dev            # just vite, no native shell
+bun run --cwd packages/desktop tauri build    # bundle
+```
+Requires a Rust toolchain (`rustup`) and platform Tauri prerequisites.
+
+**Electron (secondary):**
+```bash
+bun install
+bun run --cwd packages/desktop-electron dev
+bun run --cwd packages/desktop-electron build
+bun run --cwd packages/desktop-electron package            # all platforms
+bun run --cwd packages/desktop-electron package:mac|win|linux
+```
+Pre-build/pre-dev scripts (`scripts/predev.ts`, `scripts/prebuild.ts`) build the opencode server Node bundle and sync native assets.
+
+---
+
+## 6. Conventions to Respect
+
+- **Tauri:** Never call `invoke` manually. Always import typed `commands`/`events` from `src/bindings.ts` (generated by tauri-specta; regenerated on Rust build or via the `test_export_types` unit test).
+- **Electron:** Renderer only consumes `window.api` (defined in `preload/types.ts`). Main-process IPC handlers only live in `src/main/ipc.ts`.
+- Both shells import the real UI from `@opencode-ai/app` and must stay thin — feature work goes in `packages/app` unless it truly needs native capability.
+
+---
+
+## TL;DR
+
+Two shells, one UI: `packages/desktop` is a Tauri/Rust app that spawns the `opencode` CLI as a managed sidecar (typed IPC via `tauri-specta`); `packages/desktop-electron` is an Electron app that embeds the OpenCode Node server directly in its main process through a Vite virtual module. Both wrap the same SolidJS `AppInterface` with a `Platform` abstraction and a sidecar `ServerConnection` — so identical features, different native packaging, strict separation rules enforced by per-package `AGENTS.md`.

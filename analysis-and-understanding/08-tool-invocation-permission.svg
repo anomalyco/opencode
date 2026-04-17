@@ -1,0 +1,315 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1497.567 1652.3000000000002" width="1497.567" height="1652.3000000000002" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="ExecTool" data-label="ExecTool">
+  <rect x="92.5" y="645.4000000000001" width="793.576" height="248.9" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="92.5" y="645.4000000000001" width="793.576" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="104.5" y="659.4000000000001" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">ExecTool</text>
+</g>
+<polyline class="edge" data-from="_start" data-to="LLMStream" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Provider.streamText" points="1334.014,301.65 1334.014,1281 1124.3787142857143,1281 1124.3787142857143,1293" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LLMStream" data-to="TextDelta" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="text chunk" points="1056.16925,1329.9 1056.16925,1434.2 1004.3718333333333,1434.2 1004.3718333333333,1502.5 1007.3761666666667,1502.5 1007.3761666666667,1514.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TextDelta" data-to="LLMStream" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1040.1315,1514.5 1040.1315,1502.5 1043.1358333333333,1502.5 1043.1358333333333,1502.5 1084.2555,1502.5 1084.2555,1329.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LLMStream" data-to="ToolCallDelta" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="tool-call chunk" points="1112.34175,1329.9 1112.34175,1365.9 1161.1348333333333,1365.9 1161.1348333333333,1446.2" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ToolCallDelta" data-to="BuildToolPart" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="assemble input" points="1161.1348333333333,1483.1000000000001 1161.1348333333333,1563.4 645.0749702380951,1563.4 645.0749702380951,1575.4" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="BuildToolPart" data-to="CheckPermission" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="registry.invoke" points="603.9216369047617,1575.4 603.9216369047617,1563.4 81.5,1563.4 81.5,322.4000000000001 613.7478404761904,322.4000000000001 613.7478404761904,76.90000000000006" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CheckPermission" data-to="Allowed" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="rule match (allow)" points="643.1822404761904,76.90000000000006 643.1822404761904,334.4000000000001 463.538,334.4000000000001 463.538,548.5000000000001 474.6393333333333,548.5000000000001 474.6393333333333,560.5000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CheckPermission" data-to="AskUser" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="rule match (ask)" points="672.6166404761905,76.90000000000006 672.6166404761905,112.90000000000006 702.5224404761905,112.90000000000006 702.5224404761904,193.20000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CheckPermission" data-to="Denied" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="rule match (deny)" points="702.0510404761905,76.90000000000006 702.0510404761905,100.90000000000006 978.866,100.90000000000006 978.866,901.6999999999999 971.4836666666667,901.6999999999999 971.4836666666667,913.6999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AskUser" data-to="PublishQuestion" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Bus.publish" points="702.5224404761904,230.10000000000008 702.5224404761904,346.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PublishQuestion" data-to="WaitAnswer" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="702.5224404761904,383.30000000000007 702.5224404761905,426.85" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WaitAnswer" data-to="Allowed" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="user approves" points="683.7982738095238,463.75 683.7982738095238,480.2000000000001 524.5489166666667,480.2000000000001 524.5489166666667,548.5000000000001 503.9366666666666,548.5000000000001 503.9366666666666,560.5000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WaitAnswer" data-to="Denied" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="user denies" points="721.2466071428571,463.75 721.2466071428571,565.1000000000001 922.1950833333334,565.1000000000001 922.1950833333334,901.6999999999999 943.6683333333333,901.6999999999999 943.6683333333333,913.6999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Allowed" data-to="ExecTool" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="489.288,597.4000000000001 489.288,645.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ExecTool" data-to="PersistOutput" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="write ToolPart" points="489.288,894.3000000000001 489.288,1010.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PersistOutput" data-to="PublishUpdate" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Bus.publish" points="489.288,1047.5 489.288,1163.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PublishUpdate" data-to="LLMStream" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="feed back as tool result" points="489.288,1200.7 489.288,1281 1044.1322857142857,1281 1044.1322857142857,1293" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Denied" data-to="PersistDenied" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="write denied part" points="957.576,950.5999999999999 957.576,1066.8999999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PersistDenied" data-to="LLMStream" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="957.576,1103.8 957.576,1269 1060.1815714285715,1269 1060.1815714285715,1293" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LLMStream" data-to="StopReason" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="stop/length/tool_use" points="1076.230857142857,1293 1076.230857142857,1257 1021.076,1257 1021.076,1115.8 1153.1850404761906,1115.8 1153.1850404761906,76.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="StopReason" data-to="Compact" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="needs compaction" points="1176.0986404761907,76.9 1176.0986404761907,1127.8 1147.435,1127.8 1147.435,1208.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="StopReason" data-to="Continue" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="auto continue" points="1199.0122404761905,76.9 1199.0122404761905,112.90000000000008 1268.5140000000001,112.90000000000008 1268.514,193.2" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="StopReason" data-to="Done" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="finish" points="1221.9258404761906,76.9 1221.9258404761906,100.90000000000008 1397.768,100.90000000000008 1397.768,273.65" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Compact" data-to="LLMStream" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1147.435,1245 1147.435,1257 1092.280142857143,1257 1092.280142857143,1293" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Continue" data-to="LLMStream" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1268.514,230.10000000000002 1268.514,1269 1108.3294285714285,1269 1108.3294285714285,1293" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="Done" data-to="_end9" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1397.768,310.55 1397.768,426.85" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start2" data-to="bash" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="242.40299999999996,717.4000000000001 242.40299999999996,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start3" data-to="edit" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="526.3530000000001,717.4000000000001 526.3530000000001,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start4" data-to="read" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="143.55399999999997,717.4000000000001 143.554,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start5" data-to="patch" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="744.799,717.4000000000001 744.799,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start6" data-to="lsp" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="840.076,717.4000000000001 840.076,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start7" data-to="task" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="339.77,717.4000000000001 339.77,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start8" data-to="mcp" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="434.173,717.4000000000001 434.173,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="_start9" data-to="webfetch" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="632.6120000000001,717.4000000000001 632.6120000000001,765.4000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="bash" data-to="_end" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="242.40299999999996,802.3000000000001 242.40299999999996,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="edit" data-to="_end2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="526.3530000000001,802.3000000000001 526.3530000000001,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="read" data-to="_end3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="143.554,802.3000000000001 143.55399999999997,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="patch" data-to="_end4" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="744.799,802.3000000000001 744.799,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="lsp" data-to="_end5" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="840.076,802.3000000000001 840.076,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="task" data-to="_end6" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="339.77,802.3000000000001 339.77,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="mcp" data-to="_end7" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="434.173,802.3000000000001 434.173,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="webfetch" data-to="_end8" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="632.6120000000001,802.3000000000001 632.6120000000001,850.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="_start" data-to="LLMStream" data-label="Provider.streamText">
+  <rect x="1275.514" y="349.1" width="116.25400000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1333.6409999999998" y="364.25" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Provider.streamText</text>
+</g>
+<g class="edge-label" data-from="LLMStream" data-to="TextDelta" data-label="text chunk">
+  <rect x="971.3718333333333" y="1441.2" width="65.764" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1004.2538333333332" y="1456.3500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">text chunk</text>
+</g>
+<g class="edge-label" data-from="LLMStream" data-to="ToolCallDelta" data-label="tool-call chunk">
+  <rect x="1118.1348333333333" y="1372.9" width="85.36600000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1160.8178333333333" y="1388.0500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">tool-call chunk</text>
+</g>
+<g class="edge-label" data-from="ToolCallDelta" data-to="BuildToolPart" data-label="assemble input">
+  <rect x="1117.1348333333333" y="1526.1000000000001" width="87.14800000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1160.7088333333334" y="1541.2500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">assemble input</text>
+</g>
+<g class="edge-label" data-from="BuildToolPart" data-to="CheckPermission" data-label="registry.invoke">
+  <rect x="35.99999999999999" y="1526.1000000000001" width="90.11800000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="81.059" y="1541.2500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">registry.invoke</text>
+</g>
+<g class="edge-label" data-from="CheckPermission" data-to="Allowed" data-label="rule match (allow)">
+  <rect x="414.538" y="454.9000000000001" width="97.24600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="463.161" y="470.05000000000007" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">rule match (allow)</text>
+</g>
+<g class="edge-label" data-from="CheckPermission" data-to="AskUser" data-label="rule match (ask)">
+  <rect x="656.5224404761905" y="119.90000000000006" width="91.30600000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="702.1754404761905" y="135.05000000000007" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">rule match (ask)</text>
+</g>
+<g class="edge-label" data-from="CheckPermission" data-to="Denied" data-label="rule match (deny)">
+  <rect x="929.866" y="539.8000000000001" width="97.24600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="978.489" y="554.95" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">rule match (deny)</text>
+</g>
+<g class="edge-label" data-from="AskUser" data-to="PublishQuestion" data-label="Bus.publish">
+  <rect x="665.5224404761905" y="273.1000000000001" width="73.486" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="702.2654404761905" y="288.25000000000006" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Bus.publish</text>
+</g>
+<g class="edge-label" data-from="WaitAnswer" data-to="Allowed" data-label="user approves">
+  <rect x="480.04891666666674" y="487.2000000000001" width="88.336" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="524.2169166666667" y="502.3500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">user approves</text>
+</g>
+<g class="edge-label" data-from="WaitAnswer" data-to="Denied" data-label="user denies">
+  <rect x="884.6950833333334" y="572.1000000000001" width="74.08000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="921.7350833333334" y="587.2500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">user denies</text>
+</g>
+<g class="edge-label" data-from="ExecTool" data-to="PersistOutput" data-label="write ToolPart">
+  <rect x="447.288" y="937.3000000000001" width="83.58400000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="489.08000000000004" y="952.45" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">write ToolPart</text>
+</g>
+<g class="edge-label" data-from="PersistOutput" data-to="PublishUpdate" data-label="Bus.publish">
+  <rect x="452.288" y="1090.5" width="73.486" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="489.031" y="1105.65" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Bus.publish</text>
+</g>
+<g class="edge-label" data-from="PublishUpdate" data-to="LLMStream" data-label="feed back as tool result">
+  <rect x="426.788" y="1243.7" width="124.57000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="489.07300000000004" y="1258.8500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">feed back as tool result</text>
+</g>
+<g class="edge-label" data-from="Denied" data-to="PersistDenied" data-label="write denied part">
+  <rect x="910.076" y="993.5999999999999" width="94.87000000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="957.5110000000001" y="1008.7499999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">write denied part</text>
+</g>
+<g class="edge-label" data-from="LLMStream" data-to="StopReason" data-label="stop/length/tool_use">
+  <rect x="964.576" y="1219.7" width="112.69000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1020.921" y="1234.8500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">stop/length/tool_use</text>
+</g>
+<g class="edge-label" data-from="StopReason" data-to="Compact" data-label="needs compaction">
+  <rect x="1095.935" y="1134.8" width="102.59200000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1147.231" y="1149.95" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">needs compaction</text>
+</g>
+<g class="edge-label" data-from="StopReason" data-to="Continue" data-label="auto continue">
+  <rect x="1228.0140000000001" y="119.9" width="80.02000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1268.0240000000001" y="135.05" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">auto continue</text>
+</g>
+<g class="edge-label" data-from="StopReason" data-to="Done" data-label="finish">
+  <rect x="1376.268" y="195.89999999999998" width="42.598" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1397.567" y="211.04999999999998" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">finish</text>
+</g>
+<g class="node" data-id="_start" data-label="" data-shape="state-start">
+  <circle cx="1334.014" cy="287.65" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="LLMStream" data-label="LLMStream" data-shape="rounded">
+  <rect x="1028.083" y="1293" width="112.345" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1084.2555" y="1311.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">LLMStream</text>
+</g>
+<g class="node" data-id="TextDelta" data-label="TextDelta" data-shape="rounded">
+  <rect x="974.6208333333333" y="1514.5" width="98.266" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1023.7538333333333" y="1532.95" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">TextDelta</text>
+</g>
+<g class="node" data-id="ToolCallDelta" data-label="ToolCallDelta" data-shape="rounded">
+  <rect x="1100.8868333333332" y="1446.2" width="120.49600000000001" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1161.1348333333333" y="1464.65" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">ToolCallDelta</text>
+</g>
+<g class="node" data-id="BuildToolPart" data-label="BuildToolPart" data-shape="rounded">
+  <rect x="562.7683035714284" y="1575.4" width="123.46000000000001" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="624.4983035714284" y="1593.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">BuildToolPart</text>
+</g>
+<g class="node" data-id="CheckPermission" data-label="CheckPermission" data-shape="rounded">
+  <rect x="584.3134404761904" y="40.00000000000006" width="147.17200000000003" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="657.8994404761904" y="58.45000000000006" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">CheckPermission</text>
+</g>
+<g class="node" data-id="Allowed" data-label="Allowed" data-shape="rounded">
+  <rect x="445.342" y="560.5000000000001" width="87.892" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="489.288" y="578.9500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Allowed</text>
+</g>
+<g class="node" data-id="AskUser" data-label="AskUser" data-shape="rounded">
+  <rect x="654.8714404761904" y="193.20000000000005" width="95.30199999999999" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="702.5224404761904" y="211.65000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">AskUser</text>
+</g>
+<g class="node" data-id="Denied" data-label="Denied" data-shape="rounded">
+  <rect x="915.8530000000001" y="913.6999999999999" width="83.446" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="957.576" y="932.15" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Denied</text>
+</g>
+<g class="node" data-id="PublishQuestion" data-label="PublishQuestion" data-shape="rounded">
+  <rect x="633.3824404761904" y="346.4000000000001" width="138.28" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="702.5224404761904" y="364.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">PublishQuestion</text>
+</g>
+<g class="node" data-id="WaitAnswer" data-label="WaitAnswer" data-shape="rounded">
+  <rect x="646.3499404761905" y="426.85" width="112.345" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="702.5224404761905" y="445.3" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">WaitAnswer</text>
+</g>
+<g class="node" data-id="PersistOutput" data-label="PersistOutput" data-shape="rounded">
+  <rect x="428.299" y="1010.6" width="121.978" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="489.28799999999995" y="1029.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">PersistOutput</text>
+</g>
+<g class="node" data-id="PublishUpdate" data-label="PublishUpdate" data-shape="rounded">
+  <rect x="425.33500000000004" y="1163.8" width="127.90599999999999" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="489.288" y="1182.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">PublishUpdate</text>
+</g>
+<g class="node" data-id="PersistDenied" data-label="PersistDenied" data-shape="rounded">
+  <rect x="894.364" y="1066.8999999999999" width="126.424" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="957.576" y="1085.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">PersistDenied</text>
+</g>
+<g class="node" data-id="StopReason" data-label="StopReason" data-shape="rounded">
+  <rect x="1130.2714404761905" y="40" width="114.568" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1187.5554404761906" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">StopReason</text>
+</g>
+<g class="node" data-id="Compact" data-label="Compact" data-shape="rounded">
+  <rect x="1101.266" y="1208.1" width="92.338" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1147.4350000000002" y="1226.55" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Compact</text>
+</g>
+<g class="node" data-id="Continue" data-label="Continue" data-shape="rounded">
+  <rect x="1221.604" y="193.2" width="93.82" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1268.5140000000001" y="211.64999999999998" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Continue</text>
+</g>
+<g class="node" data-id="Done" data-label="Done" data-shape="rounded">
+  <rect x="1361.232" y="273.65" width="73.072" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1397.768" y="292.09999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Done</text>
+</g>
+<g class="node" data-id="_end9" data-label="" data-shape="state-end">
+  <circle cx="1397.768" cy="440.85" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="1397.768" cy="440.85" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_start2" data-label="" data-shape="state-start">
+  <circle cx="242.40299999999996" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="bash" data-label="bash" data-shape="rounded">
+  <rect x="206.60799999999998" y="765.4000000000001" width="71.59" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="242.40299999999996" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">bash</text>
+</g>
+<g class="node" data-id="_start3" data-label="" data-shape="state-start">
+  <circle cx="526.3530000000001" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="edit" data-label="edit" data-shape="rounded">
+  <rect x="495.004" y="765.4000000000001" width="62.69799999999999" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="526.3530000000001" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">edit</text>
+</g>
+<g class="node" data-id="_start4" data-label="" data-shape="state-start">
+  <circle cx="143.55399999999997" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="read" data-label="read" data-shape="rounded">
+  <rect x="108.5" y="765.4000000000001" width="70.108" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="143.554" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">read</text>
+</g>
+<g class="node" data-id="_start5" data-label="" data-shape="state-start">
+  <circle cx="744.799" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="patch" data-label="patch" data-shape="rounded">
+  <rect x="707.5219999999999" y="765.4000000000001" width="74.554" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="744.799" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">patch</text>
+</g>
+<g class="node" data-id="_start6" data-label="" data-shape="state-start">
+  <circle cx="840.076" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="lsp" data-label="lsp" data-shape="rounded">
+  <rect x="810.076" y="765.4000000000001" width="60" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="840.076" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">lsp</text>
+</g>
+<g class="node" data-id="_start7" data-label="" data-shape="state-start">
+  <circle cx="339.77" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="task" data-label="task" data-shape="rounded">
+  <rect x="306.198" y="765.4000000000001" width="67.14399999999999" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="339.77" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">task</text>
+</g>
+<g class="node" data-id="_start8" data-label="" data-shape="state-start">
+  <circle cx="434.173" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="mcp" data-label="mcp" data-shape="rounded">
+  <rect x="401.342" y="765.4000000000001" width="65.662" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="434.173" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">mcp</text>
+</g>
+<g class="node" data-id="_start9" data-label="" data-shape="state-start">
+  <circle cx="632.6120000000001" cy="703.4000000000001" r="12" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="webfetch" data-label="webfetch" data-shape="rounded">
+  <rect x="585.702" y="765.4000000000001" width="93.82" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="632.612" y="783.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">webfetch</text>
+</g>
+<g class="node" data-id="_end" data-label="" data-shape="state-end">
+  <circle cx="242.40299999999996" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="242.40299999999996" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end2" data-label="" data-shape="state-end">
+  <circle cx="526.3530000000001" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="526.3530000000001" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end3" data-label="" data-shape="state-end">
+  <circle cx="143.55399999999997" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="143.55399999999997" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end4" data-label="" data-shape="state-end">
+  <circle cx="744.799" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="744.799" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end5" data-label="" data-shape="state-end">
+  <circle cx="840.076" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="840.076" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end6" data-label="" data-shape="state-end">
+  <circle cx="339.77" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="339.77" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end7" data-label="" data-shape="state-end">
+  <circle cx="434.173" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="434.173" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+<g class="node" data-id="_end8" data-label="" data-shape="state-end">
+  <circle cx="632.6120000000001" cy="864.3000000000001" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5" />
+  <circle cx="632.6120000000001" cy="864.3000000000001" r="8" fill="var(--_text)" stroke="none" />
+</g>
+</svg>

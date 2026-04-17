@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1661.549 602.8" width="1661.549" height="602.8" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Producers" data-label="Event Producers">
+  <rect x="40" y="40" width="190.287" height="522.8" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="40" width="190.287" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Event Producers</text>
+</g>
+<g class="subgraph" data-id="BusCore" data-label="Bus Service (Effect Layer)">
+  <rect x="302.28700000000003" y="181.87916666666666" width="435.826" height="189.70000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="302.28700000000003" y="181.87916666666666" width="435.826" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="314.28700000000003" y="195.87916666666666" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Bus Service (Effect Layer)</text>
+</g>
+<g class="subgraph" data-id="State" data-label="InstanceState (per directory)">
+  <rect x="798.113" y="256.36249999999995" width="385.45900000000006" height="130.7" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="798.113" y="256.36249999999995" width="385.45900000000006" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="810.113" y="270.36249999999995" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">InstanceState (per directory)</text>
+</g>
+<g class="subgraph" data-id="GBus" data-label="GlobalBus (cross-instance)">
+  <rect x="982.839" y="138.46249999999998" width="194.73300000000003" height="96.9" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="982.839" y="138.46249999999998" width="194.73300000000003" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="994.839" y="152.46249999999998" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">GlobalBus (cross-instance)</text>
+</g>
+<g class="subgraph" data-id="Consumers" data-label="Event Consumers">
+  <rect x="1237.5720000000001" y="152.17261904761904" width="383.977" height="271.82500000000005" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1237.5720000000001" y="152.17261904761904" width="383.977" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1249.5720000000001" y="166.17261904761904" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Event Consumers</text>
+</g>
+<polyline class="edge" data-from="SESS_P" data-to="PUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="234.294,201.15 306.2905,201.15 306.2905,255.32916666666665 378.28700000000003,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TOOLS_P" data-to="PUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="204.654,356.29999999999995 306.2905,356.29999999999995 306.2905,255.32916666666665 378.28700000000003,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PERM_P" data-to="PUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="208.359,110.9 306.2905,110.9 306.2905,255.32916666666665 378.28700000000003,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SERVER_P" data-to="PUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="226.14299999999997,438.09999999999997 306.2905,438.09999999999997 306.2905,255.32916666666665 378.28700000000003,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LSP_P" data-to="PUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="229.10700000000003,519.9 306.2905,519.9 306.2905,255.32916666666665 378.28700000000003,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PLUG_P" data-to="PUB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="194.28,282.95 306.2905,282.95 306.2905,255.32916666666665 378.28700000000003,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PUB" data-to="GEMIT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="529.164,255.32916666666665 555.634,255.32916666666665 555.634,200.91249999999997 1007.0260000000001,200.91249999999997" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WILD" data-to="ISSCOPED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="727.0530000000001,255.32916666666665 770.5830000000001,255.32916666666665 770.5830000000001,335.7124999999999 814.113,335.7124999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TYPED" data-to="ISSCOPED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="712.2330000000001,328.6791666666667 763.173,328.6791666666667 763.173,335.7124999999999 814.113,335.7124999999999" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WILD" data-to="WS_C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="727.0530000000001,255.32916666666665 770.5830000000001,255.32916666666665 770.5830000000001,344.42261904761904 1253.5720000000001,344.42261904761904" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TYPED" data-to="WS_C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="712.2330000000001,328.6791666666667 763.173,328.6791666666667 763.173,344.42261904761904 1253.5720000000001,344.42261904761904" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="GEMIT" data-to="SYNC_C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1169.759,200.91249999999997 1211.6655,200.91249999999997 1211.6655,214.62261904761903 1253.5720000000001,214.62261904761903" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="GEMIT" data-to="LOG_C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1169.759,200.91249999999997 1211.6655,200.91249999999997 1211.6655,279.522619047619 1253.5720000000001,279.522619047619" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PUB" data-to="WILD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="529.164,255.32916666666665 555.634,255.32916666666665 555.634,255.32916666666665 582.104,255.32916666666665" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PUB" data-to="TYPED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="529.164,255.32916666666665 555.634,255.32916666666665 555.634,328.6791666666667 582.104,328.6791666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ISSCOPED" data-to="FINAL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="967.2130000000001,335.7125 1007.0260000000001,335.7125" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WS_C" data-to="TUI_C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1437.794,344.42261904761904 1461.794,344.42261904761904 1461.794,307.747619047619 1485.794,307.747619047619" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WS_C" data-to="SDK_C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1437.794,344.42261904761904 1461.794,344.42261904761904 1461.794,381.097619047619 1485.794,381.097619047619" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="node" data-id="SESS_P" data-label="Session Processor
+part.updated
+message.completed" data-shape="rectangle">
+  <rect x="76.007" y="165.8" width="158.287" height="70.7" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="155.15050000000002" y="201.15" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="155.15050000000002" dy="-12.350000000000001">Session Processor</tspan><tspan x="155.15050000000002" dy="16.900000000000002">part.updated</tspan><tspan x="155.15050000000002" dy="16.900000000000002">message.completed</tspan></text>
+</g>
+<g class="node" data-id="TOOLS_P" data-label="Tool execution
+tool.start/end" data-shape="rectangle">
+  <rect x="76.007" y="329.4" width="128.647" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="140.3305" y="356.29999999999995" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="140.3305" dy="-3.9000000000000012">Tool execution</tspan><tspan x="140.3305" dy="16.900000000000002">tool.start/end</tspan></text>
+</g>
+<g class="node" data-id="PERM_P" data-label="Permission
+question.asked" data-shape="rectangle">
+  <rect x="76.007" y="84" width="132.352" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="142.183" y="110.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="142.183" dy="-3.9000000000000012">Permission</tspan><tspan x="142.183" dy="16.900000000000002">question.asked</tspan></text>
+</g>
+<g class="node" data-id="SERVER_P" data-label="Server
+instance.disposed" data-shape="rectangle">
+  <rect x="76.007" y="411.2" width="150.13599999999997" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="151.075" y="438.09999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="151.075" dy="-3.9000000000000012">Server</tspan><tspan x="151.075" dy="16.900000000000002">instance.disposed</tspan></text>
+</g>
+<g class="node" data-id="LSP_P" data-label="LSP
+diagnostic.updated" data-shape="rectangle">
+  <rect x="76.007" y="493" width="153.10000000000002" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="152.55700000000002" y="519.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="152.55700000000002" dy="-3.9000000000000012">LSP</tspan><tspan x="152.55700000000002" dy="16.900000000000002">diagnostic.updated</tspan></text>
+</g>
+<g class="node" data-id="PLUG_P" data-label="Plugin hooks" data-shape="rectangle">
+  <rect x="76.007" y="264.5" width="118.273" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="135.14350000000002" y="282.95" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Plugin hooks</text>
+</g>
+<g class="node" data-id="PUB" data-label="publish(def, props)" data-shape="rectangle">
+  <rect x="378.28700000000003" y="236.87916666666666" width="150.877" height="36.900000000000006" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="453.7255" y="255.32916666666665" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">publish(def, props)</text>
+</g>
+<g class="node" data-id="WILD" data-label="PubSub: wildcard" data-shape="rectangle">
+  <rect x="582.104" y="236.87916666666666" width="144.949" height="36.900000000000006" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="654.5785000000001" y="255.32916666666665" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">PubSub: wildcard</text>
+</g>
+<g class="node" data-id="TYPED" data-label="PubSub Map:
+type -&gt; PubSub" data-shape="rectangle">
+  <rect x="582.104" y="301.7791666666667" width="130.129" height="53.800000000000004" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="647.1685" y="328.6791666666667" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="647.1685" dy="-3.9000000000000012">PubSub Map:</tspan><tspan x="647.1685" dy="16.900000000000002">type -&gt; PubSub</tspan></text>
+</g>
+<g class="node" data-id="ISSCOPED" data-label="ScopedCache
+keyed by directory" data-shape="rectangle">
+  <rect x="814.113" y="308.81249999999994" width="153.10000000000002" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="890.663" y="335.7124999999999" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="890.663" dy="-3.9000000000000012">ScopedCache</tspan><tspan x="890.663" dy="16.900000000000002">keyed by directory</tspan></text>
+</g>
+<g class="node" data-id="FINAL" data-label="Finalizers:
+publish disposed +
+shutdown pubsubs" data-shape="rectangle">
+  <rect x="1007.0260000000001" y="300.36249999999995" width="152.359" height="70.7" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="1083.2055" y="335.7125" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1083.2055" dy="-12.350000000000001">Finalizers:</tspan><tspan x="1083.2055" dy="16.900000000000002">publish disposed +</tspan><tspan x="1083.2055" dy="16.900000000000002">shutdown pubsubs</tspan></text>
+</g>
+<g class="node" data-id="GEMIT" data-label="emit('event', payload)" data-shape="rectangle">
+  <rect x="1007.0260000000001" y="182.46249999999998" width="162.73300000000003" height="36.900000000000006" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="1088.3925000000002" y="200.91249999999997" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">emit(&#39;event&#39;, payload)</text>
+</g>
+<g class="node" data-id="WS_C" data-label="Server WS / SSE stream" data-shape="rectangle">
+  <rect x="1253.5720000000001" y="325.97261904761905" width="184.22199999999998" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1345.683" y="344.42261904761904" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Server WS / SSE stream</text>
+</g>
+<g class="node" data-id="TUI_C" data-label="TUI renderer" data-shape="rectangle">
+  <rect x="1485.794" y="289.29761904761904" width="119.755" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1545.6715000000002" y="307.747619047619" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">TUI renderer</text>
+</g>
+<g class="node" data-id="SDK_C" data-label="SDK clients
+desktop/web" data-shape="rectangle">
+  <rect x="1485.794" y="354.197619047619" width="116.79099999999998" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1544.1895000000002" y="381.097619047619" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1544.1895000000002" dy="-3.9000000000000012">SDK clients</tspan><tspan x="1544.1895000000002" dy="16.900000000000002">desktop/web</tspan></text>
+</g>
+<g class="node" data-id="SYNC_C" data-label="sync/ (share remote)" data-shape="rectangle">
+  <rect x="1253.5720000000001" y="196.17261904761904" width="162.73300000000003" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1334.9385000000002" y="214.62261904761903" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">sync/ (share remote)</text>
+</g>
+<g class="node" data-id="LOG_C" data-label="Logger" data-shape="rectangle">
+  <rect x="1253.5720000000001" y="261.072619047619" width="86.41" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1296.777" y="279.522619047619" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Logger</text>
+</g>
+</svg>

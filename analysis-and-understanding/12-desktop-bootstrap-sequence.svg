@@ -1,0 +1,255 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2435.7499999999995 1562" width="2435.7499999999995" height="1562" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" />
+  </marker>
+  <marker id="seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1" />
+  </marker>
+</defs>
+<g class="block" data-type="loop" data-label="poll up to 30 s">
+  <rect x="703.6009999999999" y="541" width="575.4639999999999" height="60" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="703.6009999999999" y="541" width="117.31000000000002" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="709.6009999999999" y="550" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">loop [poll up to 30 s]</text>
+</g>
+<g class="block" data-type="alt" data-label="migration &gt; 1 s">
+  <rect x="396.977" y="757" width="1214.4969999999998" height="60" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="396.977" y="757" width="107.41000000000001" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="402.977" y="766" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [migration &gt; 1 s]</text>
+</g>
+<g class="block" data-type="alt" data-label="opencode.db missing">
+  <rect x="396.977" y="609" width="1214.4969999999998" height="248" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="396.977" y="609" width="148.32999999999998" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="402.977" y="618" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [opencode.db missing]</text>
+</g>
+<g class="block" data-type="par" data-label="Health + migration in parallel">
+  <rect x="396.977" y="473" width="1214.4969999999998" height="384" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="396.977" y="473" width="188.59000000000003" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="402.977" y="482" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">par [Health + migration in parallel]</text>
+  <line x1="396.977" y1="621" x2="1611.4739999999997" y2="621" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+</g>
+<g class="block" data-type="opt" data-label="Loading overlay">
+  <rect x="396.977" y="1185" width="1481.848" height="100" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="396.977" y="1185" width="128.53000000000003" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="402.977" y="1194" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">opt [Loading overlay]</text>
+</g>
+<g class="block" data-type="alt" data-label="Tauri">
+  <rect x="396.977" y="1348" width="882.0879999999999" height="124" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="396.977" y="1348" width="67.15" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="402.977" y="1357" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [Tauri]</text>
+  <line x1="396.977" y1="1424" x2="1279.0649999999998" y2="1424" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+  <text x="404.977" y="1438" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">[Electron]</text>
+</g>
+<line class="lifeline" data-actor="U" x1="70" y1="70" x2="70" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="OS" x1="258.4885" y1="70" x2="258.4885" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Shell" x1="540.289" y1="70" x2="540.289" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Init" x1="806.1579999999999" y1="70" x2="806.1579999999999" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Srv" x1="1103.8899999999999" y1="70" x2="1103.8899999999999" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Migr" x1="1371.2409999999998" y1="70" x2="1371.2409999999998" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Load" x1="1537.4454999999998" y1="70" x2="1537.4454999999998" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Main" x1="1755.1494999999998" y1="70" x2="1755.1494999999998" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Plat" x1="2024.7234999999996" y1="70" x2="2024.7234999999996" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="UI" x1="2293.1859999999997" y1="70" x2="2293.1859999999997" y2="1532" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<g class="message" data-from="U" data-to="OS" data-label="launch app" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="70" y1="90" x2="258.4885" y2="90" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="164.24425" y="80" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">launch app</text>
+</g>
+<g class="message" data-from="OS" data-to="Shell" data-label="start (acquire single-instance lock)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="258.4885" y1="130" x2="540.289" y2="130" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="399.38874999999996" y="120" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">start (acquire single-instance lock)</text>
+</g>
+<g class="message" data-from="Shell" data-to="Shell" data-label="register opencode:// handler,
+wire OS menu,
+ensureLoopbackNoProxy" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="540.289,170 570.289,170 570.289,190 540.289,190" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="578.289" y="180" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)"><tspan x="578.289" dy="-10.450000000000001">register opencode:// handler,</tspan><tspan x="578.289" dy="14.3">wire OS menu,</tspan><tspan x="578.289" dy="14.3">ensureLoopbackNoProxy</tspan></text>
+</g>
+<g class="message" data-from="Shell" data-to="Init" data-label="initialize()" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="240" x2="806.1579999999999" y2="240" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="673.2235" y="230" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">initialize()</text>
+</g>
+<g class="message" data-from="Init" data-to="Init" data-label="pick free port (OPENCODE_PORT or 127.0.0.1:0)
+generate uuid password
+username = &quot;opencode&quot;" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="806.1579999999999,280 836.1579999999999,280 836.1579999999999,300 806.1579999999999,300" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="844.1579999999999" y="290" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)"><tspan x="844.1579999999999" dy="-10.450000000000001">pick free port (OPENCODE_PORT or 127.0.0.1:0)</tspan><tspan x="844.1579999999999" dy="14.3">generate uuid password</tspan><tspan x="844.1579999999999" dy="14.3">username = &quot;opencode&quot;</tspan></text>
+</g>
+<g class="message" data-from="Init" data-to="Srv" data-label="spawn sidecar / Server.listen({port,user,pass})" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="806.1579999999999" y1="350" x2="1103.8899999999999" y2="350" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="955.0239999999999" y="340" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">spawn sidecar / Server.listen({port,user,pass})</text>
+</g>
+<g class="message" data-from="Srv" data-to="Init" data-label="child handle / Listener" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1103.8899999999999" y1="390" x2="806.1579999999999" y2="390" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="955.0239999999999" y="380" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">child handle / Listener</text>
+</g>
+<g class="message" data-from="Init" data-to="Shell" data-label="publish ServerReadyData
+{url, username, password}" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="806.1579999999999" y1="430" x2="540.289" y2="430" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="673.2235" y="420" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="673.2235" dy="-3.3000000000000007">publish ServerReadyData</tspan><tspan x="673.2235" dy="14.3">{url, username, password}</tspan></text>
+</g>
+<g class="message" data-from="Init" data-to="Srv" data-label="GET /global/health (basic auth)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="806.1579999999999" y1="513" x2="1103.8899999999999" y2="513" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="955.0239999999999" y="503" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">GET /global/health (basic auth)</text>
+</g>
+<g class="message" data-from="Srv" data-to="Init" data-label="200 OK" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1103.8899999999999" y1="581" x2="806.1579999999999" y2="581" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="955.0239999999999" y="571" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">200 OK</text>
+</g>
+<g class="message" data-from="Init" data-to="Migr" data-label="listen SqliteMigrationProgress" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="806.1579999999999" y1="649" x2="1371.2409999999998" y2="649" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1088.6994999999997" y="639" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">listen SqliteMigrationProgress</text>
+</g>
+<g class="message" data-from="Migr" data-to="Init" data-label="events (current/total/label)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1371.2409999999998" y1="689" x2="806.1579999999999" y2="689" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1088.6994999999997" y="679" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">events (current/total/label)</text>
+</g>
+<g class="message" data-from="Init" data-to="Shell" data-label="forward init_tx = SqliteWaiting" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="806.1579999999999" y1="729" x2="540.289" y2="729" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="673.2235" y="719" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">forward init_tx = SqliteWaiting</text>
+</g>
+<g class="message" data-from="Shell" data-to="Load" data-label="create LoadingWindow" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="797" x2="1537.4454999999998" y2="797" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1038.8672499999998" y="787" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">create LoadingWindow</text>
+</g>
+<g class="message" data-from="Migr" data-to="Init" data-label="Done" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1371.2409999999998" y1="837" x2="806.1579999999999" y2="837" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1088.6994999999997" y="827" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Done</text>
+</g>
+<g class="message" data-from="Shell" data-to="Main" data-label="create MainWindow immediately" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="877" x2="1755.1494999999998" y2="877" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1147.7192499999999" y="867" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">create MainWindow immediately</text>
+</g>
+<g class="message" data-from="Main" data-to="Plat" data-label="build Platform
+(Tauri: commands/events
+Electron: window.api)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1755.1494999999998" y1="917" x2="2024.7234999999996" y2="917" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1889.9364999999998" y="907" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1889.9364999999998" dy="-10.450000000000001">build Platform</tspan><tspan x="1889.9364999999998" dy="14.3">(Tauri: commands/events</tspan><tspan x="1889.9364999999998" dy="14.3">Electron: window.api)</tspan></text>
+</g>
+<g class="message" data-from="Plat" data-to="Shell" data-label="commands.awaitInitialization(channel)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="2024.7234999999996" y1="957" x2="540.289" y2="957" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1282.50625" y="947" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">commands.awaitInitialization(channel)</text>
+</g>
+<g class="message" data-from="Shell" data-to="Plat" data-label="stream InitStep events
+server_waiting → sqlite_waiting → done" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="997" x2="2024.7234999999996" y2="997" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1282.50625" y="987" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1282.50625" dy="-3.3000000000000007">stream InitStep events</tspan><tspan x="1282.50625" dy="14.3">server_waiting → sqlite_waiting → done</tspan></text>
+</g>
+<g class="message" data-from="Plat" data-to="UI" data-label="ServerReadyData" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="2024.7234999999996" y1="1037" x2="2293.1859999999997" y2="1037" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="2158.95475" y="1027" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">ServerReadyData</text>
+</g>
+<g class="message" data-from="UI" data-to="Srv" data-label="connect (ServerConnection = sidecar)
+basic auth" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="2293.1859999999997" y1="1077" x2="1103.8899999999999" y2="1077" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1698.5379999999998" y="1067" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1698.5379999999998" dy="-3.3000000000000007">connect (ServerConnection = sidecar)</tspan><tspan x="1698.5379999999998" dy="14.3">basic auth</tspan></text>
+</g>
+<g class="message" data-from="Srv" data-to="UI" data-label="API + WS ready" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1103.8899999999999" y1="1117" x2="2293.1859999999997" y2="1117" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1698.5379999999998" y="1107" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">API + WS ready</text>
+</g>
+<g class="message" data-from="UI" data-to="U" data-label="ready screen" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="2293.1859999999997" y1="1157" x2="70" y2="1157" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1181.5929999999998" y="1147" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">ready screen</text>
+</g>
+<g class="message" data-from="Main" data-to="Shell" data-label="LoadingWindowComplete (Tauri) /
+ready (Electron)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1755.1494999999998" y1="1225" x2="540.289" y2="1225" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1147.7192499999999" y="1215" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1147.7192499999999" dy="-3.3000000000000007">LoadingWindowComplete (Tauri) /</tspan><tspan x="1147.7192499999999" dy="14.3">ready (Electron)</tspan></text>
+</g>
+<g class="message" data-from="Shell" data-to="Load" data-label="close LoadingWindow" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="1265" x2="1537.4454999999998" y2="1265" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1038.8672499999998" y="1255" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">close LoadingWindow</text>
+</g>
+<g class="message" data-from="U" data-to="Shell" data-label="Quit" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="70" y1="1320" x2="540.289" y2="1320" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="305.1445" y="1310" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Quit</text>
+</g>
+<g class="message" data-from="Shell" data-to="Srv" data-label="kill sidecar (process-wrap drop)
+on RunEvent::Exit" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="1388" x2="1103.8899999999999" y2="1388" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="822.0894999999999" y="1378" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="822.0894999999999" dy="-3.3000000000000007">kill sidecar (process-wrap drop)</tspan><tspan x="822.0894999999999" dy="14.3">on RunEvent::Exit</tspan></text>
+</g>
+<g class="message" data-from="Shell" data-to="Srv" data-label="killSidecar() on before-quit/will-quit" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="1452" x2="1103.8899999999999" y2="1452" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="822.0894999999999" y="1442" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">killSidecar() on before-quit/will-quit</text>
+</g>
+<g class="message" data-from="Shell" data-to="OS" data-label="exit" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="540.289" y1="1492" x2="258.4885" y2="1492" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="399.38874999999996" y="1482" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">exit</text>
+</g>
+<g class="note" data-position="over" data-actors="Init">
+  <polygon points="735.7149999999999,438 870.6009999999999,438 876.6009999999999,444 876.6009999999999,461 735.7149999999999,461" fill="var(--bg)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <polygon points="870.6009999999999,438 876.6009999999999,444 870.6009999999999,444" fill="var(--_inner-stroke)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="806.1579999999999" y="449.5" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">InitStep = server_waiting</text>
+</g>
+<g class="note" data-position="over" data-actors="U,UI">
+  <polygon points="981.064,1273 1376.1219999999998,1273 1382.1219999999998,1279 1382.1219999999998,1296 981.064,1296" fill="var(--bg)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <polygon points="1376.1219999999998,1273 1382.1219999999998,1279 1376.1219999999998,1279" fill="var(--_inner-stroke)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1181.5929999999998" y="1284.5" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1181.5929999999998" dy="-3.3000000000000007">Runtime: Platform proxies OS calls</tspan><tspan x="1181.5929999999998" dy="14.3">(pickers, storage, fetch, updater, notifications)</tspan></text>
+</g>
+<g class="actor" data-id="U" data-label="User" data-type="participant">
+  <rect x="30" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="70" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">User</text>
+</g>
+<g class="actor" data-id="OS" data-label="OS (single-instance + deep-link)" data-type="participant">
+  <rect x="150" y="30" width="216.97699999999995" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="258.4885" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">OS (single-instance + deep-link)</text>
+</g>
+<g class="actor" data-id="Shell" data-label="Native Shell
+(Tauri Rust / Electron main)" data-type="participant">
+  <rect x="406.977" y="30" width="266.62399999999997" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="540.289" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)"><tspan x="540.289" dy="-3.9000000000000012">Native Shell</tspan><tspan x="540.289" dy="16.900000000000002">(Tauri Rust / Electron main)</tspan></text>
+</g>
+<g class="actor" data-id="Init" data-label="initialize() /
+lib.rs::initialize" data-type="participant">
+  <rect x="713.6009999999999" y="30" width="185.11399999999998" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="806.1579999999999" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)"><tspan x="806.1579999999999" dy="-3.9000000000000012">initialize() /</tspan><tspan x="806.1579999999999" dy="16.900000000000002">lib.rs::initialize</tspan></text>
+</g>
+<g class="actor" data-id="Srv" data-label="Server
+(sidecar binary | virtual:opencode-server)" data-type="participant">
+  <rect x="938.7149999999999" y="30" width="330.3499999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1103.8899999999999" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)"><tspan x="1103.8899999999999" dy="-3.9000000000000012">Server</tspan><tspan x="1103.8899999999999" dy="16.900000000000002">(sidecar binary | virtual:opencode-server)</tspan></text>
+</g>
+<g class="actor" data-id="Migr" data-label="Sqlite Migration" data-type="participant">
+  <rect x="1309.0649999999998" y="30" width="124.352" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1371.2409999999998" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Sqlite Migration</text>
+</g>
+<g class="actor" data-id="Load" data-label="LoadingWindow" data-type="participant">
+  <rect x="1473.417" y="30" width="128.05700000000002" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1537.4454999999998" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">LoadingWindow</text>
+</g>
+<g class="actor" data-id="Main" data-label="MainWindow
+(SolidJS renderer)" data-type="participant">
+  <rect x="1641.4739999999997" y="30" width="227.35099999999997" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1755.1494999999998" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)"><tspan x="1755.1494999999998" dy="-3.9000000000000012">MainWindow</tspan><tspan x="1755.1494999999998" dy="16.900000000000002">(SolidJS renderer)</tspan></text>
+</g>
+<g class="actor" data-id="Plat" data-label="Platform
+(bindings.ts / window.api)" data-type="participant">
+  <rect x="1908.8249999999996" y="30" width="231.79699999999994" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="2024.7234999999996" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)"><tspan x="2024.7234999999996" dy="-3.9000000000000012">Platform</tspan><tspan x="2024.7234999999996" dy="16.900000000000002">(bindings.ts / window.api)</tspan></text>
+</g>
+<g class="actor" data-id="UI" data-label="@opencode-ai/app
+AppInterface" data-type="participant">
+  <rect x="2180.622" y="30" width="225.12799999999996" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="2293.1859999999997" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)"><tspan x="2293.1859999999997" dy="-3.9000000000000012">@opencode-ai/app</tspan><tspan x="2293.1859999999997" dy="16.900000000000002">AppInterface</tspan></text>
+</g>
+</svg>

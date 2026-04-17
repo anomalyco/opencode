@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2091.3005000000003 1702" width="2091.3005000000003" height="1702" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" />
+  </marker>
+  <marker id="seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1" />
+  </marker>
+</defs>
+<g class="block" data-type="loop" data-label="Streaming chunks">
+  <rect x="165.2375" y="558" width="1896.0630000000003" height="260" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="165.2375" y="558" width="143.05" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="171.2375" y="567" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">loop [Streaming chunks]</text>
+</g>
+<g class="block" data-type="alt" data-label="Permission required">
+  <rect x="30" y="934" width="2031.3005000000003" height="220" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="30" y="934" width="145.69000000000003" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="36" y="943" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [Permission required]</text>
+</g>
+<g class="block" data-type="alt" data-label="Tool call requested">
+  <rect x="30" y="826" width="2031.3005000000003" height="518" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="30" y="826" width="138.43" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="36" y="835" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [Tool call requested]</text>
+</g>
+<g class="block" data-type="alt" data-label="Needs compaction">
+  <rect x="707.1995" y="1392" width="759.6780000000001" height="100" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="707.1995" y="1392" width="133.81" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="713.1995" y="1401" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [Needs compaction]</text>
+</g>
+<line class="lifeline" data-actor="User" x1="80" y1="70" x2="80" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="TUI" x1="220" y1="70" x2="220" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="HTTP" x1="382.4995" y1="70" x2="382.4995" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="WS" x1="588.718" y1="70" x2="588.718" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="SESS" x1="783.4509999999999" y1="70" x2="783.4509999999999" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="PROC" x1="964.8459999999999" y1="70" x2="964.8459999999999" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="AGENT" x1="1119.9895" y1="70" x2="1119.9895" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="PROV" x1="1259.9895" y1="70" x2="1259.9895" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="LLM" x1="1400.259" y1="70" x2="1400.259" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="TOOL" x1="1553.496" y1="70" x2="1553.496" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="PERM" x1="1700.4345" y1="70" x2="1700.4345" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="DB" x1="1854.0420000000001" y1="70" x2="1854.0420000000001" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="BUS" x1="2004.315" y1="70" x2="2004.315" y2="1672" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<g class="message" data-from="User" data-to="TUI" data-label="Type message + Enter" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="80" y1="90" x2="220" y2="90" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="150" y="80" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Type message + Enter</text>
+</g>
+<g class="message" data-from="TUI" data-to="HTTP" data-label="POST /session/:id/message" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="220" y1="130" x2="382.4995" y2="130" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="301.24975" y="120" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">POST /session/:id/message</text>
+</g>
+<g class="message" data-from="HTTP" data-to="SESS" data-label="append user message" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="382.4995" y1="170" x2="783.4509999999999" y2="170" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="582.97525" y="160" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">append user message</text>
+</g>
+<g class="message" data-from="SESS" data-to="DB" data-label="INSERT into part (user text)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="783.4509999999999" y1="210" x2="1854.0420000000001" y2="210" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1318.7465" y="200" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">INSERT into part (user text)</text>
+</g>
+<g class="message" data-from="SESS" data-to="BUS" data-label="publish message.part.updated" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="783.4509999999999" y1="250" x2="2004.315" y2="250" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1393.883" y="240" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">publish message.part.updated</text>
+</g>
+<g class="message" data-from="BUS" data-to="WS" data-label="stream event" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="2004.315" y1="290" x2="588.718" y2="290" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1296.5165" y="280" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">stream event</text>
+</g>
+<g class="message" data-from="WS" data-to="TUI" data-label="render user msg" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="588.718" y1="330" x2="220" y2="330" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="404.359" y="320" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">render user msg</text>
+</g>
+<g class="message" data-from="SESS" data-to="PROC" data-label="create(assistantMessage)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="783.4509999999999" y1="370" x2="964.8459999999999" y2="370" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="874.1484999999999" y="360" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">create(assistantMessage)</text>
+</g>
+<g class="message" data-from="PROC" data-to="AGENT" data-label="resolve agent + system prompt" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="410" x2="1119.9895" y2="410" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1042.4177499999998" y="400" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">resolve agent + system prompt</text>
+</g>
+<g class="message" data-from="AGENT" data-to="PROV" data-label="get model + tools" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1119.9895" y1="450" x2="1259.9895" y2="450" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1189.9895" y="440" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">get model + tools</text>
+</g>
+<g class="message" data-from="PROC" data-to="PROV" data-label="streamText(messages, tools)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="490" x2="1259.9895" y2="490" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1112.4177499999998" y="480" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">streamText(messages, tools)</text>
+</g>
+<g class="message" data-from="PROV" data-to="LLM" data-label="HTTP stream call" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1259.9895" y1="530" x2="1400.259" y2="530" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1330.1242499999998" y="520" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">HTTP stream call</text>
+</g>
+<g class="message" data-from="LLM" data-to="PROV" data-label="text / tool-call delta" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1400.259" y1="598" x2="1259.9895" y2="598" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1330.1242499999998" y="588" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">text / tool-call delta</text>
+</g>
+<g class="message" data-from="PROV" data-to="PROC" data-label="StreamEvent" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1259.9895" y1="638" x2="964.8459999999999" y2="638" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1112.4177499999998" y="628" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">StreamEvent</text>
+</g>
+<g class="message" data-from="PROC" data-to="DB" data-label="upsert part (text/tool)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="678" x2="1854.0420000000001" y2="678" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1409.444" y="668" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">upsert part (text/tool)</text>
+</g>
+<g class="message" data-from="PROC" data-to="BUS" data-label="publish part.updated" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="718" x2="2004.315" y2="718" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1484.5805" y="708" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">publish part.updated</text>
+</g>
+<g class="message" data-from="BUS" data-to="WS" data-label="stream event" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="2004.315" y1="758" x2="588.718" y2="758" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1296.5165" y="748" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">stream event</text>
+</g>
+<g class="message" data-from="WS" data-to="TUI" data-label="incremental render" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="588.718" y1="798" x2="220" y2="798" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="404.359" y="788" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">incremental render</text>
+</g>
+<g class="message" data-from="PROC" data-to="TOOL" data-label="invoke(name, input)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="866" x2="1553.496" y2="866" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1259.171" y="856" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">invoke(name, input)</text>
+</g>
+<g class="message" data-from="TOOL" data-to="PERM" data-label="check permission" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1553.496" y1="906" x2="1700.4345" y2="906" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1626.9652500000002" y="896" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">check permission</text>
+</g>
+<g class="message" data-from="PERM" data-to="BUS" data-label="publish question" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1700.4345" y1="974" x2="2004.315" y2="974" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1852.37475" y="964" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">publish question</text>
+</g>
+<g class="message" data-from="BUS" data-to="TUI" data-label="show permission dialog" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="2004.315" y1="1014" x2="220" y2="1014" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1112.1575" y="1004" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">show permission dialog</text>
+</g>
+<g class="message" data-from="User" data-to="TUI" data-label="allow / deny" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="80" y1="1054" x2="220" y2="1054" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="150" y="1044" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">allow / deny</text>
+</g>
+<g class="message" data-from="TUI" data-to="HTTP" data-label="answer" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="220" y1="1094" x2="382.4995" y2="1094" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="301.24975" y="1084" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">answer</text>
+</g>
+<g class="message" data-from="HTTP" data-to="PERM" data-label="resolve" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="382.4995" y1="1134" x2="1700.4345" y2="1134" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1041.467" y="1124" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">resolve</text>
+</g>
+<g class="message" data-from="TOOL" data-to="TOOL" data-label="execute (bash/edit/read/...)" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="1553.496,1174 1583.496,1174 1583.496,1194 1553.496,1194" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1591.496" y="1184" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">execute (bash/edit/read/...)</text>
+</g>
+<g class="message" data-from="TOOL" data-to="PROC" data-label="ToolPart result" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1553.496" y1="1244" x2="964.8459999999999" y2="1244" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1259.171" y="1234" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">ToolPart result</text>
+</g>
+<g class="message" data-from="PROC" data-to="DB" data-label="persist result" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="1284" x2="1854.0420000000001" y2="1284" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1409.444" y="1274" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">persist result</text>
+</g>
+<g class="message" data-from="PROC" data-to="BUS" data-label="publish tool.updated" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="1324" x2="2004.315" y2="1324" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1484.5805" y="1314" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">publish tool.updated</text>
+</g>
+<g class="message" data-from="PROC" data-to="SESS" data-label="Result (stop/continue/compact)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="1364" x2="783.4509999999999" y2="1364" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="874.1484999999999" y="1354" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Result (stop/continue/compact)</text>
+</g>
+<g class="message" data-from="SESS" data-to="PROC" data-label="run compaction" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="783.4509999999999" y1="1432" x2="964.8459999999999" y2="1432" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="874.1484999999999" y="1422" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">run compaction</text>
+</g>
+<g class="message" data-from="PROC" data-to="LLM" data-label="summarize history" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="964.8459999999999" y1="1472" x2="1400.259" y2="1472" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1182.5525" y="1462" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">summarize history</text>
+</g>
+<g class="message" data-from="SESS" data-to="DB" data-label="update session.time_updated" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="783.4509999999999" y1="1512" x2="1854.0420000000001" y2="1512" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1318.7465" y="1502" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">update session.time_updated</text>
+</g>
+<g class="message" data-from="SESS" data-to="BUS" data-label="publish message.completed" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="783.4509999999999" y1="1552" x2="2004.315" y2="1552" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1393.883" y="1542" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">publish message.completed</text>
+</g>
+<g class="message" data-from="BUS" data-to="WS" data-label="final event" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="2004.315" y1="1592" x2="588.718" y2="1592" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1296.5165" y="1582" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">final event</text>
+</g>
+<g class="message" data-from="WS" data-to="TUI" data-label="render complete" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="588.718" y1="1632" x2="220" y2="1632" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="404.359" y="1622" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">render complete</text>
+</g>
+<g class="actor" data-id="User" data-label="User" data-type="actor">
+  <g transform="translate(62,32) scale(1.5)">
+    <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" fill="none" stroke="var(--_line)" stroke-width="0.6666666666666666" />
+    <path d="M15 10C15 11.6569 13.6569 13 12 13C10.3431 13 9 11.6569 9 10C9 8.34315 10.3431 7 12 7C13.6569 7 15 8.34315 15 10Z" fill="none" stroke="var(--_line)" stroke-width="0.6666666666666666" />
+    <path d="M5.62842 18.3563C7.08963 17.0398 9.39997 16 12 16C14.6 16 16.9104 17.0398 18.3716 18.3563" fill="none" stroke="var(--_line)" stroke-width="0.6666666666666666" />
+  </g>
+  <text x="80" y="84" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">User</text>
+</g>
+<g class="actor" data-id="TUI" data-label="TUI Client" data-type="participant">
+  <rect x="175.2375" y="30" width="89.525" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="220" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">TUI Client</text>
+</g>
+<g class="actor" data-id="HTTP" data-label="HTTP Server (Hono)" data-type="participant">
+  <rect x="304.76250000000005" y="30" width="155.474" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="382.4995" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">HTTP Server (Hono)</text>
+</g>
+<g class="actor" data-id="WS" data-label="WebSocket (Bus stream)" data-type="participant">
+  <rect x="500.2365" y="30" width="176.96299999999997" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="588.718" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">WebSocket (Bus stream)</text>
+</g>
+<g class="actor" data-id="SESS" data-label="Session Service" data-type="participant">
+  <rect x="717.1995" y="30" width="132.503" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="783.4509999999999" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Session Service</text>
+</g>
+<g class="actor" data-id="PROC" data-label="Session Processor" data-type="participant">
+  <rect x="889.7024999999999" y="30" width="150.287" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="964.8459999999999" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Session Processor</text>
+</g>
+<g class="actor" data-id="AGENT" data-label="Agent" data-type="participant">
+  <rect x="1079.9895" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1119.9895" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Agent</text>
+</g>
+<g class="actor" data-id="PROV" data-label="Provider" data-type="participant">
+  <rect x="1216.3384999999998" y="30" width="87.30199999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1259.9895" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Provider</text>
+</g>
+<g class="actor" data-id="LLM" data-label="LLM (AI SDK)" data-type="participant">
+  <rect x="1343.6405" y="30" width="113.237" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1400.259" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">LLM (AI SDK)</text>
+</g>
+<g class="actor" data-id="TOOL" data-label="Tool Registry" data-type="participant">
+  <rect x="1496.8775" y="30" width="113.23700000000001" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1553.496" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Tool Registry</text>
+</g>
+<g class="actor" data-id="PERM" data-label="Permission" data-type="participant">
+  <rect x="1650.1145000000001" y="30" width="100.64" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1700.4345" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Permission</text>
+</g>
+<g class="actor" data-id="DB" data-label="SQLite (Drizzle)" data-type="participant">
+  <rect x="1790.7545000000002" y="30" width="126.57499999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1854.0420000000001" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">SQLite (Drizzle)</text>
+</g>
+<g class="actor" data-id="BUS" data-label="Event Bus" data-type="participant">
+  <rect x="1957.3295" y="30" width="93.971" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="2004.315" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Event Bus</text>
+</g>
+</svg>

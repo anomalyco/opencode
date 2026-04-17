@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1699.358 869.6958333333333" width="1699.358" height="869.6958333333333" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Runtime" data-label="Runtime Packages">
+  <rect x="526.0419999999999" y="106.30000000000001" width="533.207" height="198.0375" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="526.0419999999999" y="106.30000000000001" width="533.207" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="538.0419999999999" y="120.30000000000001" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Runtime Packages</text>
+</g>
+<g class="subgraph" data-id="SDKPkgs" data-label="SDK / Public API">
+  <rect x="1201.607" y="367.8625" width="431.75100000000003" height="185.9" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1201.607" y="367.8625" width="431.75100000000003" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1213.607" y="381.8625" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">SDK / Public API</text>
+</g>
+<g class="subgraph" data-id="UI" data-label="Client / UI Packages">
+  <rect x="738.961" y="332.3208333333333" width="390.646" height="318.40000000000003" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="738.961" y="332.3208333333333" width="390.646" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="750.961" y="346.3208333333333" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Client / UI Packages</text>
+</g>
+<g class="subgraph" data-id="Platform" data-label="Platform / Services">
+  <rect x="70" y="326.4958333333333" width="185.841" height="503.20000000000005" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="70" y="326.4958333333333" width="185.841" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="82" y="340.4958333333333" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Platform / Services</text>
+</g>
+<g class="subgraph" data-id="Tooling" data-label="Tooling">
+  <rect x="309.841" y="301.1125" width="156.20099999999996" height="178.70000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="309.841" y="301.1125" width="156.20099999999996" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="321.841" y="315.1125" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Tooling</text>
+</g>
+<polyline class="edge" data-from="OC" data-to="OPENAPI" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="generates" points="692.1779999999999,255.37083333333334 704.1779999999999,255.37083333333334 704.1779999999999,287.33750000000003 1183.607,287.3375 1183.607,430.3125 1217.607,430.31250000000006" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SDK" data-to="SHARED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1617.358,491.26250000000005 1651.358,491.26250000000005 1651.358,96.30000000000001 508.04200000000003,96.30000000000001 508.04200000000003,150.3 880.0839999999998,150.3 880.0839999999998,191.97500000000002 916.0839999999998,191.97500000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="DESKTOP" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="938.0715,394.7708333333333 954.84675,394.7708333333333 954.84675,491.2625 1481.301,491.2625" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="DESKELE" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="1113.607,424.87083333333334 1147.607,424.87083333333334 1147.607,484.7625 1433.301,484.7625 1433.301,488.2736111111111 1481.301,488.2736111111111" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CONSOLE" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="926.2155,607.8208333333333 948.91875,607.8208333333333 948.91875,491.2625 1481.301,491.2625" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OC" data-to="IDENT" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="talks to" points="692.1779999999999,246.40416666666667 716.1779999999999,246.40416666666667 716.1779999999999,274.33750000000003 1101.2489999999998,274.3375 1101.2489999999998,51 39.99999999999994,51 39.99999999999994,795.2458333333333 110.08249999999995,795.2458333333333" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OC" data-to="FUNC" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="talks to" points="692.1779999999999,219.50416666666666 704.1779999999999,219.50416666666666 704.1779999999999,163.3 1089.2489999999998,163.3 1089.2489999999998,84.30000000000001 51.99999999999994,84.30000000000001 51.99999999999994,656.9958333333333 110.08249999999995,656.9958333333333" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SLACK" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="245.028,730.3458333333333 1183.607,730.3458333333332 1183.607,779.5208333333333 1183.607,779.5208333333333 1183.607,536.7625 1469.301,536.7624999999999 1469.301,512.1847222222221 1481.301,512.1847222222221" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="IDE" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="239.841,583.6458333333333 708.961,583.6458333333333 708.961,699.6708333333332 1171.607,699.6708333333332 1171.607,523.7625 1457.301,523.7624999999999 1457.301,506.2069444444444 1481.301,506.2069444444444" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="EXT" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="217.24050000000003,518.7458333333332 720.961,518.7458333333333 720.961,660.7208333333333 1159.607,660.7208333333333 1159.607,510.7625 1445.301,510.76249999999993 1445.301,500.22916666666663 1481.301,500.22916666666663" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CONT" data-to="OC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="215.75850000000003,388.94583333333327 388.34799999999996,388.94583333333327 388.34799999999996,237.43750000000003 542.0419999999999,237.43750000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="APP" data-to="OC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="234.654,453.84583333333325 388.34799999999996,453.84583333333325 388.34799999999996,237.43750000000003 542.0419999999999,237.43750000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SCRIPT" data-to="OC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="450.042,372.0125 496.0419999999999,372.0125 496.0419999999999,237.43750000000003 542.0419999999999,237.43750000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SCRIPT" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="450.042,372.0125 496.0419999999999,372.0125 496.0419999999999,491.2625 1481.301,491.2625" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="DOCS" data-to="UIPKG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="450.04200000000003,445.3625 943.92625,445.3625 943.92625,505.0208333333333 971.6220000000001,505.0208333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OC" data-to="SHARED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="692.1779999999999,237.43750000000003 895.7797499999999,237.43750000000003 895.7797499999999,209.65 916.0839999999998,209.65" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OC" data-to="PLUGIN" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="692.1779999999999,237.4375 747.5695,237.4375" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PLUGIN" data-to="SHARED" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="875.4754999999999,237.43750000000003 895.7797499999999,237.43750000000003 895.7797499999999,209.65 916.0839999999998,209.65" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OPENAPI" data-to="SDK" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="builds" points="1335.139,430.3125 1469.301,430.3125 1469.301,470.3402777777778 1481.301,470.3402777777778" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="DESKTOP" data-to="UIPKG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="938.0715,394.7708333333333 954.84675,394.7708333333333 954.84675,505.0208333333333 971.6220000000001,505.0208333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WEB" data-to="UIPKG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="916.2304999999999,468.1208333333333 943.92625,468.1208333333333 943.92625,505.0208333333333 971.6220000000001,505.0208333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CONSOLE" data-to="UIPKG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="926.2155,607.8208333333333 948.91875,607.8208333333333 948.91875,505.0208333333333 971.6220000000001,505.0208333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="STORY" data-to="UIPKG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="909.1725,534.4708333333334 943.92625,534.4708333333334 943.92625,505.0208333333333 971.6220000000001,505.0208333333333" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="OC" data-to="OPENAPI" data-label="generates">
+  <rect x="1109.249" y="271.3375" width="66.358" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1142.428" y="286.48749999999995" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">generates</text>
+</g>
+<g class="edge-label" data-from="OC" data-to="IDENT" data-label="talks to">
+  <rect x="1042.9289999999999" y="35" width="50.32" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1068.089" y="50.15" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">talks to</text>
+</g>
+<g class="edge-label" data-from="OC" data-to="FUNC" data-label="talks to">
+  <rect x="449.7219999999999" y="68.30000000000001" width="50.32" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="474.88199999999995" y="83.45000000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">talks to</text>
+</g>
+<g class="edge-label" data-from="OPENAPI" data-to="SDK" data-label="builds">
+  <rect x="1379.1390000000001" y="414.31250000000006" width="46.162" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1402.22" y="429.46250000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">builds</text>
+</g>
+<g class="node" data-id="OC" data-label="opencode
+CLI + Server + TUI" data-shape="rectangle">
+  <rect x="542.0419999999999" y="210.53750000000002" width="150.13599999999997" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="617.1099999999999" y="237.43750000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="617.1099999999999" dy="-3.9000000000000012">opencode</tspan><tspan x="617.1099999999999" dy="16.900000000000002">CLI + Server + TUI</tspan></text>
+</g>
+<g class="node" data-id="PLUGIN" data-label="plugin
+plugin host API" data-shape="rectangle">
+  <rect x="747.5695" y="210.53750000000002" width="127.90599999999999" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="811.5224999999999" y="237.43750000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="811.5224999999999" dy="-3.9000000000000012">plugin</tspan><tspan x="811.5224999999999" dy="16.900000000000002">plugin host API</tspan></text>
+</g>
+<g class="node" data-id="SHARED" data-label="shared
+utils, schemas,
+error, hash" data-shape="rectangle">
+  <rect x="916.0839999999998" y="174.3" width="127.16499999999999" height="70.7" rx="0" ry="0" fill="#40a85c" stroke="#222" stroke-width="0.75" />
+  <text x="979.6664999999998" y="209.65" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="979.6664999999998" dy="-12.350000000000001">shared</tspan><tspan x="979.6664999999998" dy="16.900000000000002">utils, schemas,</tspan><tspan x="979.6664999999998" dy="16.900000000000002">error, hash</tspan></text>
+</g>
+<g class="node" data-id="SDK" data-label="sdk/js
+generated client" data-shape="rectangle">
+  <rect x="1481.301" y="464.3625" width="136.05700000000002" height="53.800000000000004" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="1549.3294999999998" y="491.2625" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1549.3294999999998" dy="-3.9000000000000012">sdk/js</tspan><tspan x="1549.3294999999998" dy="16.900000000000002">generated client</tspan></text>
+</g>
+<g class="node" data-id="OPENAPI" data-label="openapi.json" data-shape="rectangle">
+  <rect x="1217.607" y="411.8625" width="117.53200000000001" height="36.900000000000006" rx="0" ry="0" fill="#d98040" stroke="#222" stroke-width="0.75" />
+  <text x="1276.373" y="430.3125" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">openapi.json</text>
+</g>
+<g class="node" data-id="UIPKG" data-label="ui
+design system" data-shape="rectangle">
+  <rect x="971.6220000000001" y="478.12083333333334" width="125.68299999999998" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1034.4635" y="505.0208333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1034.4635" dy="-3.9000000000000012">ui</tspan><tspan x="1034.4635" dy="16.900000000000002">design system</tspan></text>
+</g>
+<g class="node" data-id="WEB" data-label="web
+landing + docs (Astro)" data-shape="rectangle">
+  <rect x="747.5695" y="441.2208333333333" width="168.661" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="831.9" y="468.1208333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="831.9" dy="-3.9000000000000012">web</tspan><tspan x="831.9" dy="16.900000000000002">landing + docs (Astro)</tspan></text>
+</g>
+<g class="node" data-id="DESKTOP" data-label="desktop (Tauri)" data-shape="rectangle">
+  <rect x="806.4605" y="376.3208333333333" width="131.611" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="872.2660000000001" y="394.7708333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">desktop (Tauri)</text>
+</g>
+<g class="node" data-id="DESKELE" data-label="desktop-electron" data-shape="rectangle">
+  <rect x="971.6220000000001" y="406.42083333333335" width="141.985" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="1042.6145000000001" y="424.87083333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">desktop-electron</text>
+</g>
+<g class="node" data-id="CONSOLE" data-label="console
+account mgmt" data-shape="rectangle">
+  <rect x="806.4605" y="580.9208333333333" width="119.755" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="866.338" y="607.8208333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="866.338" dy="-3.9000000000000012">console</tspan><tspan x="866.338" dy="16.900000000000002">account mgmt</tspan></text>
+</g>
+<g class="node" data-id="STORY" data-label="storybook" data-shape="rectangle">
+  <rect x="806.4605" y="516.0208333333334" width="102.71199999999999" height="36.900000000000006" rx="0" ry="0" fill="#6b7bff" stroke="#222" stroke-width="0.75" />
+  <text x="857.8165" y="534.4708333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">storybook</text>
+</g>
+<g class="node" data-id="IDENT" data-label="identity (auth)" data-shape="rectangle">
+  <rect x="110.08250000000001" y="776.7958333333333" width="118.273" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="169.219" y="795.2458333333334" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">identity (auth)</text>
+</g>
+<g class="node" data-id="FUNC" data-label="function
+cloudflare workers" data-shape="rectangle">
+  <rect x="110.08250000000001" y="630.0958333333333" width="153.841" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="187.00300000000001" y="656.9958333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="187.00300000000001" dy="-3.9000000000000012">function</tspan><tspan x="187.00300000000001" dy="16.900000000000002">cloudflare workers</tspan></text>
+</g>
+<g class="node" data-id="APP" data-label="app" data-shape="rectangle">
+  <rect x="170.474" y="435.39583333333326" width="64.17999999999999" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="202.564" y="453.84583333333325" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">app</text>
+</g>
+<g class="node" data-id="CONT" data-label="containers" data-shape="rectangle">
+  <rect x="110.08250000000001" y="370.4958333333333" width="105.676" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="162.9205" y="388.94583333333327" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">containers</text>
+</g>
+<g class="node" data-id="EXT" data-label="extensions" data-shape="rectangle">
+  <rect x="110.08250000000001" y="500.29583333333323" width="107.158" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="163.66150000000002" y="518.7458333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">extensions</text>
+</g>
+<g class="node" data-id="IDE" data-label="IDE extensions" data-shape="rectangle">
+  <rect x="109.71199999999999" y="565.1958333333332" width="130.12900000000002" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="174.7765" y="583.6458333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">IDE extensions</text>
+</g>
+<g class="node" data-id="SLACK" data-label="slack" data-shape="rectangle">
+  <rect x="170.474" y="711.8958333333333" width="74.554" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#222" stroke-width="0.75" />
+  <text x="207.75099999999998" y="730.3458333333333" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">slack</text>
+</g>
+<g class="node" data-id="SCRIPT" data-label="script
+build / release" data-shape="rectangle">
+  <rect x="325.841" y="345.1125" width="124.20099999999998" height="53.800000000000004" rx="0" ry="0" fill="#888" stroke="#222" stroke-width="0.75" />
+  <text x="387.9415" y="372.0125" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="387.9415" dy="-3.9000000000000012">script</tspan><tspan x="387.9415" dy="16.900000000000002">build / release</tspan></text>
+</g>
+<g class="node" data-id="DOCS" data-label="docs" data-shape="rectangle">
+  <rect x="378.452" y="426.9125" width="71.59" height="36.900000000000006" rx="0" ry="0" fill="#888" stroke="#222" stroke-width="0.75" />
+  <text x="414.247" y="445.3625" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">docs</text>
+</g>
+</svg>

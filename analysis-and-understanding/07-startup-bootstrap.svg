@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1643.0077500000002 921" width="1643.0077500000002" height="921" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" />
+  </marker>
+  <marker id="seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1" />
+  </marker>
+</defs>
+<g class="block" data-type="loop" data-label="migration progress events">
+  <rect x="30" y="526" width="960.6469999999999" height="60" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="30" y="526" width="185.95" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="36" y="535" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">loop [migration progress events]</text>
+</g>
+<g class="block" data-type="alt" data-label="First run">
+  <rect x="30" y="458" width="960.6469999999999" height="128" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="30" y="458" width="83.65" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="36" y="467" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [First run]</text>
+</g>
+<line class="lifeline" data-actor="Shell" x1="80" y1="70" x2="80" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Node" x1="220" y1="70" x2="220" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Idx" x1="360" y1="70" x2="360" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Yargs" x1="500" y1="70" x2="500" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Log" x1="640" y1="70" x2="640" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Heap" x1="780" y1="70" x2="780" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Migr" x1="920.3235" y1="70" x2="920.3235" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="DB" x1="1060.647" y1="70" x2="1060.647" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Cmd" x1="1209.8625" y1="70" x2="1209.8625" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="IS" x1="1376.067" y1="70" x2="1376.067" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="Layers" x1="1529.6745" y1="70" x2="1529.6745" y2="891" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<g class="message" data-from="Shell" data-to="Node" data-label="opencode &lt;cmd&gt; [args]" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="80" y1="90" x2="220" y2="90" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="150" y="80" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">opencode &lt;cmd&gt; [args]</text>
+</g>
+<g class="message" data-from="Node" data-to="Idx" data-label="entry" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="220" y1="130" x2="360" y2="130" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="290" y="120" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">entry</text>
+</g>
+<g class="message" data-from="Idx" data-to="Idx" data-label="register unhandled handlers" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="360,170 390,170 390,190 360,190" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="398" y="180" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">register unhandled handlers</text>
+</g>
+<g class="message" data-from="Idx" data-to="Yargs" data-label="configure parser + global opts" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="360" y1="240" x2="500" y2="240" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="430" y="230" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">configure parser + global opts</text>
+</g>
+<g class="message" data-from="Yargs" data-to="Log" data-label="init(level, print, dev)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="500" y1="280" x2="640" y2="280" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="570" y="270" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">init(level, print, dev)</text>
+</g>
+<g class="message" data-from="Yargs" data-to="Heap" data-label="start (perf tracing)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="500" y1="320" x2="780" y2="320" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="640" y="310" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">start (perf tracing)</text>
+</g>
+<g class="message" data-from="Yargs" data-to="Yargs" data-label="set env AGENT/OPENCODE/OPENCODE_PID" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="500,360 530,360 530,380 500,380" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="538" y="370" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">set env AGENT/OPENCODE/OPENCODE_PID</text>
+</g>
+<g class="message" data-from="Yargs" data-to="DB" data-label="check data/opencode.db exists" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="500" y1="430" x2="1060.647" y2="430" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="780.3235" y="420" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">check data/opencode.db exists</text>
+</g>
+<g class="message" data-from="Yargs" data-to="Migr" data-label="run(drizzle(client))" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="500" y1="498" x2="920.3235" y2="498" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="710.16175" y="488" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">run(drizzle(client))</text>
+</g>
+<g class="message" data-from="Migr" data-to="Shell" data-label="progress bar/stderr" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="920.3235" y1="566" x2="80" y2="566" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="500.16175" y="556" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">progress bar/stderr</text>
+</g>
+<g class="message" data-from="Yargs" data-to="Cmd" data-label="dispatch handler" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="500" y1="606" x2="1209.8625" y2="606" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="854.93125" y="596" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">dispatch handler</text>
+</g>
+<g class="message" data-from="Cmd" data-to="IS" data-label="resolve instance for cwd" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1209.8625" y1="646" x2="1376.067" y2="646" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1292.96475" y="636" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">resolve instance for cwd</text>
+</g>
+<g class="message" data-from="IS" data-to="Layers" data-label="build layer stack
+Config, Bus, Auth,
+Provider, Plugin, Skill,
+Storage, Session" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1376.067" y1="686" x2="1529.6745" y2="686" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1452.87075" y="676" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1452.87075" dy="-17.6">build layer stack</tspan><tspan x="1452.87075" dy="14.3">Config, Bus, Auth,</tspan><tspan x="1452.87075" dy="14.3">Provider, Plugin, Skill,</tspan><tspan x="1452.87075" dy="14.3">Storage, Session</tspan></text>
+</g>
+<g class="message" data-from="Layers" data-to="Cmd" data-label="runtime" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1529.6745" y1="726" x2="1209.8625" y2="726" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1369.7685000000001" y="716" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">runtime</text>
+</g>
+<g class="message" data-from="Cmd" data-to="Cmd" data-label="execute (serve/run/tui/...)" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="1209.8625,766 1239.8625,766 1239.8625,786 1209.8625,786" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1247.8625" y="776" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">execute (serve/run/tui/...)</text>
+</g>
+<g class="message" data-from="Cmd" data-to="Shell" data-label="exit code" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1209.8625" y1="836" x2="80" y2="836" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="644.93125" y="826" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">exit code</text>
+</g>
+<g class="note" data-position="over" data-actors="IS,Layers">
+  <polygon points="1292.73375,844 1607.0077500000002,844 1613.0077500000002,850 1613.0077500000002,867 1292.73375,867" fill="var(--bg)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <polygon points="1607.0077500000002,844 1613.0077500000002,850 1607.0077500000002,850" fill="var(--_inner-stroke)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1452.87075" y="855.5" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1452.87075" dy="-10.450000000000001">Finalizers publish</tspan><tspan x="1452.87075" dy="14.3">InstanceDisposed and</tspan><tspan x="1452.87075" dy="14.3">shut down PubSubs</tspan></text>
+</g>
+<g class="actor" data-id="Shell" data-label="Shell" data-type="participant">
+  <rect x="40" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="80" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Shell</text>
+</g>
+<g class="actor" data-id="Node" data-label="Bun/Node" data-type="participant">
+  <rect x="173.75549999999998" y="30" width="92.489" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="220" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Bun/Node</text>
+</g>
+<g class="actor" data-id="Idx" data-label="index.ts" data-type="participant">
+  <rect x="320" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="360" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">index.ts</text>
+</g>
+<g class="actor" data-id="Yargs" data-label="Yargs" data-type="participant">
+  <rect x="460" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="500" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Yargs</text>
+</g>
+<g class="actor" data-id="Log" data-label="Log" data-type="participant">
+  <rect x="600" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="640" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Log</text>
+</g>
+<g class="actor" data-id="Heap" data-label="Heap" data-type="participant">
+  <rect x="740" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="780" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Heap</text>
+</g>
+<g class="actor" data-id="Migr" data-label="JsonMigration" data-type="participant">
+  <rect x="860" y="30" width="120.647" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="920.3235" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">JsonMigration</text>
+</g>
+<g class="actor" data-id="DB" data-label="SQLite" data-type="participant">
+  <rect x="1020.6469999999999" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1060.647" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">SQLite</text>
+</g>
+<g class="actor" data-id="Cmd" data-label="Chosen Command" data-type="participant">
+  <rect x="1140.647" y="30" width="138.43099999999998" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1209.8625" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Chosen Command</text>
+</g>
+<g class="actor" data-id="IS" data-label="InstanceState" data-type="participant">
+  <rect x="1319.078" y="30" width="113.978" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1376.067" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">InstanceState</text>
+</g>
+<g class="actor" data-id="Layers" data-label="Effect Layers" data-type="participant">
+  <rect x="1473.056" y="30" width="113.23700000000001" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1529.6745" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Effect Layers</text>
+</g>
+</svg>

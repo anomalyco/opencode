@@ -1,0 +1,283 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1864.5394999999999 2037" width="1864.5394999999999" height="2037" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" />
+  </marker>
+  <marker id="seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
+    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1" />
+  </marker>
+</defs>
+<g class="block" data-type="loop" data-label="Streaming">
+  <rect x="281.428" y="1083" width="1143.9569999999999" height="60" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="281.428" y="1083" width="101.47" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="287.428" y="1092" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">loop [Streaming]</text>
+</g>
+<g class="block" data-type="alt" data-label="LLM calls skill tool">
+  <rect x="281.428" y="1151" width="1553.1115" height="460" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="281.428" y="1151" width="134.47000000000003" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="287.428" y="1160" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [LLM calls skill tool]</text>
+</g>
+<g class="block" data-type="alt" data-label="LLM calls any other tool">
+  <rect x="281.428" y="1619" width="1264.5899999999997" height="180" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="281.428" y="1619" width="162.85" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="287.428" y="1628" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [LLM calls any other tool]</text>
+</g>
+<g class="block" data-type="alt" data-label="Context window overflow">
+  <rect x="281.428" y="1807" width="1143.9569999999999" height="140" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="281.428" y="1807" width="164.82999999999998" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="287.428" y="1816" font-size="11" font-weight="600" fill="var(--_text-sec)" dy="3.8499999999999996">alt [Context window overflow]</text>
+</g>
+<line class="lifeline" data-actor="U" x1="70" y1="70" x2="70" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="SESS" x1="210" y1="70" x2="210" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="PROC" x1="366.5715" y1="70" x2="366.5715" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="SYS" x1="573.1605" y1="70" x2="573.1605" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="SK" x1="759.372" y1="70" x2="759.372" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="PLUG" x1="914.832" y1="70" x2="914.832" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="REG" x1="1071.033" y1="70" x2="1071.033" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="AG" x1="1211.033" y1="70" x2="1211.033" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="LLM" x1="1353.2089999999998" y1="70" x2="1353.2089999999998" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="TOOL" x1="1495.7015" y1="70" x2="1495.7015" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="PERM" x1="1635.7015" y1="70" x2="1635.7015" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line class="lifeline" data-actor="FS" x1="1775.7015" y1="70" x2="1775.7015" y2="2007" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<g class="message" data-from="SK" data-to="SK" data-label="discoverSkills
+(EXTERNAL_DIRS, config.paths, urls)" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="759.372,90 789.372,90 789.372,110 759.372,110" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="797.372" y="100" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)"><tspan x="797.372" dy="-3.3000000000000007">discoverSkills</tspan><tspan x="797.372" dy="14.3">(EXTERNAL_DIRS, config.paths, urls)</tspan></text>
+</g>
+<g class="message" data-from="SK" data-to="FS" data-label="Glob SKILL.md + ConfigMarkdown.parse" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="759.372" y1="160" x2="1775.7015" y2="160" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1267.53675" y="150" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Glob SKILL.md + ConfigMarkdown.parse</text>
+</g>
+<g class="message" data-from="SK" data-to="SK" data-label="skills Map populated" data-line-style="dashed" data-arrow-head="filled" data-self="true">
+  <polyline points="759.372,200 789.372,200 789.372,220 759.372,220" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="797.372" y="210" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">skills Map populated</text>
+</g>
+<g class="message" data-from="PLUG" data-to="PLUG" data-label="load INTERNAL_PLUGINS +
+PluginLoader.loadExternal(cfg.plugin_origins)" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="914.832,270 944.832,270 944.832,290 914.832,290" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="952.832" y="280" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)"><tspan x="952.832" dy="-3.3000000000000007">load INTERNAL_PLUGINS +</tspan><tspan x="952.832" dy="14.3">PluginLoader.loadExternal(cfg.plugin_origins)</tspan></text>
+</g>
+<g class="message" data-from="PLUG" data-to="PLUG" data-label="hook = await plugin(PluginInput)" data-line-style="solid" data-arrow-head="filled" data-self="true">
+  <polyline points="914.832,340 944.832,340 944.832,360 914.832,360" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="952.832" y="350" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">hook = await plugin(PluginInput)</text>
+</g>
+<g class="message" data-from="PLUG" data-to="PLUG" data-label="hooks[] + bus.subscribeAll" data-line-style="dashed" data-arrow-head="filled" data-self="true">
+  <polyline points="914.832,410 944.832,410 944.832,430 914.832,430" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="952.832" y="420" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">hooks[] + bus.subscribeAll</text>
+</g>
+<g class="message" data-from="U" data-to="SESS" data-label="send message" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="70" y1="495" x2="210" y2="495" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="140" y="485" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">send message</text>
+</g>
+<g class="message" data-from="SESS" data-to="PROC" data-label="create(assistantMessage)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="210" y1="535" x2="366.5715" y2="535" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="288.28575" y="525" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">create(assistantMessage)</text>
+</g>
+<g class="message" data-from="PROC" data-to="AG" data-label="resolve agent (build/plan/...)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="575" x2="1211.033" y2="575" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="788.80225" y="565" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">resolve agent (build/plan/...)</text>
+</g>
+<g class="message" data-from="AG" data-to="SK" data-label="Skill.available(agent)
+Permission filter" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1211.033" y1="615" x2="759.372" y2="615" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="985.2024999999999" y="605" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="985.2024999999999" dy="-3.3000000000000007">Skill.available(agent)</tspan><tspan x="985.2024999999999" dy="14.3">Permission filter</tspan></text>
+</g>
+<g class="message" data-from="SK" data-to="AG" data-label="Info[]" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="759.372" y1="655" x2="1211.033" y2="655" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="985.2024999999999" y="645" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Info[]</text>
+</g>
+<g class="message" data-from="AG" data-to="SYS" data-label="SystemPrompt.skills(agent)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1211.033" y1="695" x2="573.1605" y2="695" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="892.0967499999999" y="685" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">SystemPrompt.skills(agent)</text>
+</g>
+<g class="message" data-from="SYS" data-to="AG" data-label="&lt;available_skills&gt; block (verbose)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="573.1605" y1="735" x2="1211.033" y2="735" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="892.0967499999999" y="725" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">&lt;available_skills&gt; block (verbose)</text>
+</g>
+<g class="message" data-from="AG" data-to="PLUG" data-label="trigger experimental.chat.system.transform" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1211.033" y1="775" x2="914.832" y2="775" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1062.9325" y="765" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">trigger experimental.chat.system.transform</text>
+</g>
+<g class="message" data-from="PLUG" data-to="AG" data-label="mutated system prompt" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="914.832" y1="815" x2="1211.033" y2="815" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1062.9325" y="805" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">mutated system prompt</text>
+</g>
+<g class="message" data-from="AG" data-to="REG" data-label="toolset(agent)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1211.033" y1="855" x2="1071.033" y2="855" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1141.033" y="845" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">toolset(agent)</text>
+</g>
+<g class="message" data-from="REG" data-to="PLUG" data-label="trigger tool.definition (per tool)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1071.033" y1="895" x2="914.832" y2="895" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="992.9324999999999" y="885" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">trigger tool.definition (per tool)</text>
+</g>
+<g class="message" data-from="PLUG" data-to="REG" data-label="mutated description/parameters" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="914.832" y1="935" x2="1071.033" y2="935" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="992.9324999999999" y="925" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">mutated description/parameters</text>
+</g>
+<g class="message" data-from="REG" data-to="AG" data-label="tools (incl. &quot;skill&quot;)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1071.033" y1="975" x2="1211.033" y2="975" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1141.033" y="965" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tools (incl. &quot;skill&quot;)</text>
+</g>
+<g class="message" data-from="AG" data-to="LLM" data-label="streamText(system, tools, messages)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1211.033" y1="1015" x2="1353.2089999999998" y2="1015" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1282.1209999999999" y="1005" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">streamText(system, tools, messages)</text>
+</g>
+<g class="message" data-from="PLUG" data-to="LLM" data-label="trigger chat.params / chat.headers
+(llm.ts) before request" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="914.832" y1="1055" x2="1353.2089999999998" y2="1055" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1134.0204999999999" y="1045" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="1134.0204999999999" dy="-3.3000000000000007">trigger chat.params / chat.headers</tspan><tspan x="1134.0204999999999" dy="14.3">(llm.ts) before request</tspan></text>
+</g>
+<g class="message" data-from="LLM" data-to="PROC" data-label="text / tool-call deltas" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1353.2089999999998" y1="1123" x2="366.5715" y2="1123" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="859.8902499999999" y="1113" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">text / tool-call deltas</text>
+</g>
+<g class="message" data-from="PROC" data-to="TOOL" data-label="execute({name})" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1191" x2="1495.7015" y2="1191" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="931.1365" y="1181" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">execute({name})</text>
+</g>
+<g class="message" data-from="TOOL" data-to="PERM" data-label="ctx.ask(&quot;skill&quot;, [name])" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1495.7015" y1="1231" x2="1635.7015" y2="1231" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1565.7015" y="1221" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">ctx.ask(&quot;skill&quot;, [name])</text>
+</g>
+<g class="message" data-from="PERM" data-to="PLUG" data-label="trigger permission.ask" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1635.7015" y1="1271" x2="914.832" y2="1271" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1275.26675" y="1261" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">trigger permission.ask</text>
+</g>
+<g class="message" data-from="PLUG" data-to="PERM" data-label="override decision (optional)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="914.832" y1="1311" x2="1635.7015" y2="1311" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1275.26675" y="1301" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">override decision (optional)</text>
+</g>
+<g class="message" data-from="PERM" data-to="TOOL" data-label="allow" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1635.7015" y1="1351" x2="1495.7015" y2="1351" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1565.7015" y="1341" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">allow</text>
+</g>
+<g class="message" data-from="TOOL" data-to="SK" data-label="skill.get(name)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1495.7015" y1="1391" x2="759.372" y2="1391" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1127.53675" y="1381" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">skill.get(name)</text>
+</g>
+<g class="message" data-from="SK" data-to="TOOL" data-label="Info {content, location}" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="759.372" y1="1431" x2="1495.7015" y2="1431" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1127.53675" y="1421" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Info {content, location}</text>
+</g>
+<g class="message" data-from="TOOL" data-to="FS" data-label="ripgrep bundled files" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="1495.7015" y1="1471" x2="1775.7015" y2="1471" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="1635.7015" y="1461" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">ripgrep bundled files</text>
+</g>
+<g class="message" data-from="FS" data-to="TOOL" data-label="file list" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1775.7015" y1="1511" x2="1495.7015" y2="1511" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="1635.7015" y="1501" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">file list</text>
+</g>
+<g class="message" data-from="TOOL" data-to="PROC" data-label="&lt;skill_content&gt;
++ &lt;skill_files&gt;" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1495.7015" y1="1551" x2="366.5715" y2="1551" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="931.1365" y="1541" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)"><tspan x="931.1365" dy="-3.3000000000000007">&lt;skill_content&gt;</tspan><tspan x="931.1365" dy="14.3">+ &lt;skill_files&gt;</tspan></text>
+</g>
+<g class="message" data-from="PROC" data-to="LLM" data-label="tool result (feeds next turn)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1591" x2="1353.2089999999998" y2="1591" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="859.8902499999999" y="1581" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tool result (feeds next turn)</text>
+</g>
+<g class="message" data-from="PROC" data-to="PLUG" data-label="tool.execute.before(input, output)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1659" x2="914.832" y2="1659" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="640.70175" y="1649" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tool.execute.before(input, output)</text>
+</g>
+<g class="message" data-from="PROC" data-to="TOOL" data-label="execute" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1699" x2="1495.7015" y2="1699" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="931.1365" y="1689" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">execute</text>
+</g>
+<g class="message" data-from="TOOL" data-to="PROC" data-label="result" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="1495.7015" y1="1739" x2="366.5715" y2="1739" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="931.1365" y="1729" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">result</text>
+</g>
+<g class="message" data-from="PROC" data-to="PLUG" data-label="tool.execute.after(input, output)" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1779" x2="914.832" y2="1779" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="640.70175" y="1769" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tool.execute.after(input, output)</text>
+</g>
+<g class="message" data-from="PROC" data-to="PLUG" data-label="trigger experimental.session.compacting" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1847" x2="914.832" y2="1847" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="640.70175" y="1837" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">trigger experimental.session.compacting</text>
+</g>
+<g class="message" data-from="PROC" data-to="PLUG" data-label="trigger experimental.chat.messages.transform" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1887" x2="914.832" y2="1887" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="640.70175" y="1877" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">trigger experimental.chat.messages.transform</text>
+</g>
+<g class="message" data-from="PROC" data-to="LLM" data-label="summarize history" data-line-style="solid" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1927" x2="1353.2089999999998" y2="1927" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)" />
+  <text x="859.8902499999999" y="1917" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">summarize history</text>
+</g>
+<g class="message" data-from="PROC" data-to="SESS" data-label="Result (stop / continue / compact)" data-line-style="dashed" data-arrow-head="filled" data-self="false">
+  <line x1="366.5715" y1="1967" x2="210" y2="1967" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+  <text x="288.28575" y="1957" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Result (stop / continue / compact)</text>
+</g>
+<g class="note" data-position="over" data-actors="U,LLM">
+  <polygon points="667.2974999999999,448 749.9114999999999,448 755.9114999999999,454 755.9114999999999,471 667.2974999999999,471" fill="var(--bg)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <polygon points="749.9114999999999,448 755.9114999999999,454 749.9114999999999,454" fill="var(--_inner-stroke)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="711.6044999999999" y="459.5" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Per user turn</text>
+</g>
+<g class="actor" data-id="U" data-label="User" data-type="participant">
+  <rect x="30" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="70" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">User</text>
+</g>
+<g class="actor" data-id="SESS" data-label="Session" data-type="participant">
+  <rect x="168.572" y="30" width="82.856" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="210" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Session</text>
+</g>
+<g class="actor" data-id="PROC" data-label="Session Processor" data-type="participant">
+  <rect x="291.428" y="30" width="150.287" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="366.5715" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Session Processor</text>
+</g>
+<g class="actor" data-id="SYS" data-label="SystemPrompt (system.ts)" data-type="participant">
+  <rect x="481.715" y="30" width="182.89099999999996" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="573.1605" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">SystemPrompt (system.ts)</text>
+</g>
+<g class="actor" data-id="SK" data-label="Skill.Service" data-type="participant">
+  <rect x="704.606" y="30" width="109.532" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="759.372" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Skill.Service</text>
+</g>
+<g class="actor" data-id="PLUG" data-label="Plugin.Service" data-type="participant">
+  <rect x="854.138" y="30" width="121.388" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="914.832" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Plugin.Service</text>
+</g>
+<g class="actor" data-id="REG" data-label="ToolRegistry" data-type="participant">
+  <rect x="1015.5259999999998" y="30" width="111.01400000000001" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1071.033" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">ToolRegistry</text>
+</g>
+<g class="actor" data-id="AG" data-label="Agent" data-type="participant">
+  <rect x="1171.033" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1211.033" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Agent</text>
+</g>
+<g class="actor" data-id="LLM" data-label="Provider / LLM" data-type="participant">
+  <rect x="1291.033" y="30" width="124.35199999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1353.2089999999998" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Provider / LLM</text>
+</g>
+<g class="actor" data-id="TOOL" data-label="skill tool" data-type="participant">
+  <rect x="1455.385" y="30" width="80.633" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1495.7015" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">skill tool</text>
+</g>
+<g class="actor" data-id="PERM" data-label="Permission" data-type="participant">
+  <rect x="1585.3815" y="30" width="100.64" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1635.7015" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Permission</text>
+</g>
+<g class="actor" data-id="FS" data-label="Filesystem" data-type="participant">
+  <rect x="1726.8635" y="30" width="97.67599999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1775.7015" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Filesystem</text>
+</g>
+</svg>

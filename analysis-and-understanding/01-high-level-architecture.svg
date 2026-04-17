@@ -1,0 +1,239 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1179.629 1628.1" width="1179.629" height="1628.1" style="--bg:#1a1b26;--fg:#a9b1d6;--line:#3d59a1;--accent:#7aa2f7;--muted:#565f89;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Clients" data-label="Client Layer">
+  <rect x="40" y="40" width="889.4929999999999" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="40" width="889.4929999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Client Layer</text>
+</g>
+<g class="subgraph" data-id="SDK" data-label="SDK Layer">
+  <rect x="957.4929999999999" y="64" width="182.13599999999997" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="957.4929999999999" y="64" width="182.13599999999997" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="969.4929999999999" y="78" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">SDK Layer</text>
+</g>
+<g class="subgraph" data-id="Server" data-label="Server (Hono HTTP/WS)">
+  <rect x="377.5967916666666" y="276.1" width="399.693" height="232.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="377.5967916666666" y="276.1" width="399.693" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="389.5967916666666" y="290.1" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Server (Hono HTTP/WS)</text>
+</g>
+<g class="subgraph" data-id="Core" data-label="Core Runtime">
+  <rect x="440.84725000000003" y="568.6" width="610.29275" height="283.6" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="440.84725000000003" y="568.6" width="610.29275" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="452.84725000000003" y="582.6" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Core Runtime</text>
+</g>
+<g class="subgraph" data-id="Services" data-label="Service Layer">
+  <rect x="449.7573333333333" y="1181.8000000000002" width="664.1564999999999" height="232.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="449.7573333333333" y="1181.8000000000002" width="664.1564999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="461.7573333333333" y="1195.8000000000002" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Service Layer</text>
+</g>
+<g class="subgraph" data-id="Persistence" data-label="Persistence">
+  <rect x="546.76075" y="912.2" width="372.8689999999999" height="215.60000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="546.76075" y="912.2" width="372.8689999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="558.76075" y="926.2" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Persistence</text>
+</g>
+<g class="subgraph" data-id="External" data-label="External">
+  <rect x="431.93708333333325" y="1474.3000000000002" width="600.948" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="431.93708333333325" y="1474.3000000000002" width="600.948" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="443.93708333333325" y="1488.3000000000002" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">External</text>
+</g>
+<polyline class="edge" data-from="TUI" data-to="Server" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="HTTP/WS" points="351.07050000000004,149.8 351.07050000000004,264.1 539.5902083333333,264.1 539.5902083333333,276.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="DESKTOP" data-to="Server" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="HTTP/WS" points="505.12399999999997,149.8 505.124,252.10000000000002 549.5902083333333,252.10000000000002 549.5902083333333,276.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WEB" data-to="Server" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="HTTP/WS" points="657.6955,149.8 657.6955,195.8 630.8759583333333,195.8 630.8759583333333,252.10000000000002 559.5902083333333,252.10000000000002 559.5902083333333,276.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CLI" data-to="Core" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="190.17666666666668,149.8 190.17666666666673,550.6 519.8565833333333,550.6 519.8565833333333,568.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ACP" data-to="Core" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="831.756,149.8 831.756,219.8 960.6665,219.8 960.6665,538.6 529.8565833333333,538.6 529.8565833333333,568.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="JSSDK" data-to="Server" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="typed client" points="1048.561,149.8 1048.561,207.8 919.6505,207.8 919.6505,264.1 569.5902083333333,264.1 569.5902083333333,276.1" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="HTTP" data-to="Core" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="555.8802916666666,478.51666666666665 555.8802916666666,550.6 539.8565833333333,550.6 539.8565833333333,568.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="WS" data-to="BUS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="702.8942916666666,495.4166666666667 702.8942916666666,673.5 536.36125,673.5 536.36125,697.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="TOOLS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="820.71625,649.5 820.7162500000001,882.2 535.7607500000001,882.2 535.7607500000001,1163.8000000000002 700.0658333333333,1163.8000000000002 700.0658333333332,1225.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="PROV" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="840.502125,649.5 840.502125,661.5 833.71625,661.5 833.7162500000001,894.2 929.6297500000001,894.2 929.6297500000001,1163.8000000000002 919.9213333333335,1163.8000000000002 919.9213333333332,1225.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AGENT" data-to="SKILL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="936.48925,751.3 936.48925,775.3 1060.6368333333332,775.3 1060.6368333333332,1225.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PROV" data-to="LLM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="919.9213333333332,1296.5000000000002 919.9213333333333,1456.3000000000002 949.9680833333332,1456.3000000000002 949.9680833333332,1518.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LSP" data-to="LSPX" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="538.6023333333333,1398.3000000000002 538.6023333333333,1444.3000000000002 508.5555833333333,1444.3000000000002 508.5555833333332,1518.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="MCP" data-to="MCPX" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="849.3028333333333,1398.3000000000002 849.3028333333333,1456.3000000000002 793.3210833333333,1456.3000000000002 793.3210833333331,1518.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="CLI" data-to="GH" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="123.08833333333334,149.8 123.08833333333337,1456.3000000000002 650.3825833333333,1456.3000000000002 650.3825833333333,1518.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="STORAGE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="800.9303749999999,649.5 800.9303749999999,661.5 807.71625,661.5 807.7162500000001,894.2 662.2817500000001,894.2 662.28175,956.2" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="SHARE" data-style="dotted" data-arrow-start="false" data-arrow-end="true" points="860.288,649.5 860.288,661.5 846.71625,661.5 846.71625,956.2" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="MW" data-to="HTTP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="647.1712916666667,390.8 647.1712916666667,402.8 576.0864583333333,402.8 576.0864583333333,441.6166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="MDNS" data-to="HTTP" data-style="dotted" data-arrow-start="false" data-arrow-end="true" points="464.5892916666666,390.8 464.5892916666666,402.8 535.674125,402.8 535.674125,441.6166666666667" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="AGENT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="880.0738749999999,649.5 880.0738749999999,661.5 936.48925,661.5 936.48925,697.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="BUS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="820.71625,649.5 820.71625,673.5 536.36125,673.5 536.36125,697.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SESS" data-to="PERM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="781.1445,649.5 781.1445,673.5 720.79575,673.5 720.79575,697.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AGENT" data-to="PLUG" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="936.48925,751.3 936.48925,775.3 973.0395,775.3 973.0395,799.3000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TOOLS" data-to="LSP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="700.0658333333333,1296.5000000000002 700.0658333333333,1320.5000000000002 538.6023333333333,1320.5000000000002 538.6023333333333,1344.5000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TOOLS" data-to="SNAP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="700.0658333333333,1296.5000000000002 700.0658333333333,1320.5000000000002 700.0658333333333,1320.5000000000002 700.0658333333333,1344.5000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="TOOLS" data-to="MCP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="700.0658333333333,1296.5000000000002 700.0658333333333,1320.5000000000002 849.3028333333334,1320.5000000000002 849.3028333333334,1344.5000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="STORAGE" data-to="SQLITE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="662.28175,1010 662.28175,1058" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="TUI" data-to="Server" data-label="HTTP/WS">
+  <rect x="318.07050000000004" y="202.8" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="350.6555" y="217.95000000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">HTTP/WS</text>
+</g>
+<g class="edge-label" data-from="DESKTOP" data-to="Server" data-label="HTTP/WS">
+  <rect x="472.124" y="202.8" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="504.709" y="217.95000000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">HTTP/WS</text>
+</g>
+<g class="edge-label" data-from="WEB" data-to="Server" data-label="HTTP/WS">
+  <rect x="597.8759583333333" y="202.8" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="630.4609583333333" y="217.95000000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">HTTP/WS</text>
+</g>
+<g class="edge-label" data-from="JSSDK" data-to="Server" data-label="typed client">
+  <rect x="884.1505" y="226.8" width="70.516" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="919.4085" y="241.95000000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">typed client</text>
+</g>
+<g class="node" data-id="TUI" data-label="TUI (opencode)
+Ink/React" data-shape="rectangle">
+  <rect x="285.265" y="96" width="131.611" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#333" stroke-width="0.75" />
+  <text x="351.0705" y="122.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="351.0705" dy="-3.9000000000000012">TUI (opencode)</tspan><tspan x="351.0705" dy="16.900000000000002">Ink/React</tspan></text>
+</g>
+<g class="node" data-id="DESKTOP" data-label="Desktop App
+Tauri + React" data-shape="rectangle">
+  <rect x="444.876" y="96" width="120.49599999999998" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#333" stroke-width="0.75" />
+  <text x="505.12399999999997" y="122.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="505.12399999999997" dy="-3.9000000000000012">Desktop App</tspan><tspan x="505.12399999999997" dy="16.900000000000002">Tauri + React</tspan></text>
+</g>
+<g class="node" data-id="WEB" data-label="Web App
+packages/web" data-shape="rectangle">
+  <rect x="593.3720000000001" y="96" width="128.647" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#333" stroke-width="0.75" />
+  <text x="657.6955" y="122.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="657.6955" dy="-3.9000000000000012">Web App</tspan><tspan x="657.6955" dy="16.900000000000002">packages/web</tspan></text>
+</g>
+<g class="node" data-id="CLI" data-label="CLI commands
+run/generate/agent/models" data-shape="rectangle">
+  <rect x="56" y="96" width="201.265" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#333" stroke-width="0.75" />
+  <text x="156.6325" y="122.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="156.6325" dy="-3.9000000000000012">CLI commands</tspan><tspan x="156.6325" dy="16.900000000000002">run/generate/agent/models</tspan></text>
+</g>
+<g class="node" data-id="ACP" data-label="ACP
+Agent Client Protocol" data-shape="rectangle">
+  <rect x="750.019" y="96" width="163.474" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#333" stroke-width="0.75" />
+  <text x="831.756" y="122.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="831.756" dy="-3.9000000000000012">ACP</tspan><tspan x="831.756" dy="16.900000000000002">Agent Client Protocol</tspan></text>
+</g>
+<g class="node" data-id="JSSDK" data-label="JS/TS SDK
+@opencode-ai/sdk" data-shape="rectangle">
+  <rect x="973.4929999999999" y="96" width="150.13599999999997" height="53.800000000000004" rx="0" ry="0" fill="#6b7bff" stroke="#333" stroke-width="0.75" />
+  <text x="1048.561" y="122.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="1048.561" dy="-3.9000000000000012">JS/TS SDK</tspan><tspan x="1048.561" dy="16.900000000000002">@opencode-ai/sdk</tspan></text>
+</g>
+<g class="node" data-id="HTTP" data-label="HTTP Routes" data-shape="rectangle">
+  <rect x="495.2617916666666" y="441.6166666666667" width="121.23700000000001" height="36.900000000000006" rx="0" ry="0" fill="#d98040" stroke="#333" stroke-width="0.75" />
+  <text x="555.8802916666666" y="460.06666666666666" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">HTTP Routes</text>
+</g>
+<g class="node" data-id="WS" data-label="WebSocket
+event stream" data-shape="rectangle">
+  <rect x="644.4987916666666" y="441.6166666666667" width="116.79099999999998" height="53.800000000000004" rx="0" ry="0" fill="#d98040" stroke="#333" stroke-width="0.75" />
+  <text x="702.8942916666666" y="468.51666666666665" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="702.8942916666666" dy="-3.9000000000000012">WebSocket</tspan><tspan x="702.8942916666666" dy="16.900000000000002">event stream</tspan></text>
+</g>
+<g class="node" data-id="MW" data-label="Middleware
+Auth / CORS /
+Compression / Fence" data-shape="rectangle">
+  <rect x="563.5817916666666" y="320.1" width="167.17899999999997" height="70.7" rx="0" ry="0" fill="#d98040" stroke="#333" stroke-width="0.75" />
+  <text x="647.1712916666665" y="355.45000000000005" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="647.1712916666665" dy="-12.350000000000001">Middleware</tspan><tspan x="647.1712916666665" dy="16.900000000000002">Auth / CORS /</tspan><tspan x="647.1712916666665" dy="16.900000000000002">Compression / Fence</tspan></text>
+</g>
+<g class="node" data-id="MDNS" data-label="mDNS Discovery" data-shape="rectangle">
+  <rect x="393.5967916666666" y="353.90000000000003" width="141.985" height="36.900000000000006" rx="0" ry="0" fill="#d98040" stroke="#333" stroke-width="0.75" />
+  <text x="464.5892916666666" y="372.35" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">mDNS Discovery</text>
+</g>
+<g class="node" data-id="SESS" data-label="Session Processor" data-shape="rectangle">
+  <rect x="741.5727499999999" y="612.6" width="158.287" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#333" stroke-width="0.75" />
+  <text x="820.71625" y="631.0500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Session Processor</text>
+</g>
+<g class="node" data-id="AGENT" data-label="Agent
+build / plan / general" data-shape="rectangle">
+  <rect x="857.71625" y="697.5" width="157.54600000000002" height="53.800000000000004" rx="0" ry="0" fill="#40a85c" stroke="#333" stroke-width="0.75" />
+  <text x="936.48925" y="724.4" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="936.48925" dy="-3.9000000000000012">Agent</tspan><tspan x="936.48925" dy="16.900000000000002">build / plan / general</tspan></text>
+</g>
+<g class="node" data-id="BUS" data-label="Event Bus (PubSub)" data-shape="rectangle">
+  <rect x="456.84725000000003" y="697.5" width="159.028" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#333" stroke-width="0.75" />
+  <text x="536.36125" y="715.95" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Event Bus (PubSub)</text>
+</g>
+<g class="node" data-id="PERM" data-label="Permission System" data-shape="rectangle">
+  <rect x="643.87525" y="697.5" width="153.84099999999998" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#333" stroke-width="0.75" />
+  <text x="720.79575" y="715.95" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Permission System</text>
+</g>
+<g class="node" data-id="PLUG" data-label="Plugin System" data-shape="rectangle">
+  <rect x="910.939" y="799.3000000000001" width="124.20099999999998" height="36.900000000000006" rx="0" ry="0" fill="#40a85c" stroke="#333" stroke-width="0.75" />
+  <text x="973.0395" y="817.7500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Plugin System</text>
+</g>
+<g class="node" data-id="PROV" data-label="Provider
+Anthropic, OpenAI,
+Google, Bedrock..." data-shape="rectangle">
+  <rect x="844.4828333333332" y="1225.8000000000002" width="150.877" height="70.7" rx="0" ry="0" fill="#b06bb0" stroke="#333" stroke-width="0.75" />
+  <text x="919.9213333333332" y="1261.15" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="919.9213333333332" dy="-12.350000000000001">Provider</tspan><tspan x="919.9213333333332" dy="16.900000000000002">Anthropic, OpenAI,</tspan><tspan x="919.9213333333332" dy="16.900000000000002">Google, Bedrock...</tspan></text>
+</g>
+<g class="node" data-id="TOOLS" data-label="Tools
+bash/edit/read/
+grep/glob/lsp" data-shape="rectangle">
+  <rect x="634.2603333333333" y="1225.8000000000002" width="131.611" height="70.7" rx="0" ry="0" fill="#b06bb0" stroke="#333" stroke-width="0.75" />
+  <text x="700.0658333333333" y="1261.15" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="700.0658333333333" dy="-12.350000000000001">Tools</tspan><tspan x="700.0658333333333" dy="16.900000000000002">bash/edit/read/</tspan><tspan x="700.0658333333333" dy="16.900000000000002">grep/glob/lsp</tspan></text>
+</g>
+<g class="node" data-id="LSP" data-label="LSP
+Launcher &amp; Client" data-shape="rectangle">
+  <rect x="465.7573333333333" y="1344.5000000000002" width="145.69" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#333" stroke-width="0.75" />
+  <text x="538.6023333333333" y="1371.4000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="538.6023333333333" dy="-3.9000000000000012">LSP</tspan><tspan x="538.6023333333333" dy="16.900000000000002">Launcher &amp; Client</tspan></text>
+</g>
+<g class="node" data-id="MCP" data-label="MCP Client
+external tools" data-shape="rectangle">
+  <rect x="788.6843333333334" y="1344.5000000000002" width="121.23700000000001" height="53.800000000000004" rx="0" ry="0" fill="#b06bb0" stroke="#333" stroke-width="0.75" />
+  <text x="849.3028333333334" y="1371.4000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="849.3028333333334" dy="-3.9000000000000012">MCP Client</tspan><tspan x="849.3028333333334" dy="16.900000000000002">external tools</tspan></text>
+</g>
+<g class="node" data-id="SKILL" data-label="Skills" data-shape="rectangle">
+  <rect x="1023.3598333333332" y="1225.8000000000002" width="74.554" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#333" stroke-width="0.75" />
+  <text x="1060.6368333333332" y="1244.2500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Skills</text>
+</g>
+<g class="node" data-id="SNAP" data-label="Snapshot (git)" data-shape="rectangle">
+  <rect x="639.4473333333333" y="1344.5000000000002" width="121.23700000000001" height="36.900000000000006" rx="0" ry="0" fill="#b06bb0" stroke="#333" stroke-width="0.75" />
+  <text x="700.0658333333333" y="1362.9500000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">Snapshot (git)</text>
+</g>
+<g class="node" data-id="SQLITE" data-label="SQLite
+Drizzle ORM" data-shape="rectangle">
+  <rect x="604.25675" y="1058" width="116.05" height="53.800000000000004" rx="0" ry="0" fill="#aa7030" stroke="#333" stroke-width="0.75" />
+  <text x="662.28175" y="1084.9" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="662.28175" dy="-3.9000000000000012">SQLite</tspan><tspan x="662.28175" dy="16.900000000000002">Drizzle ORM</tspan></text>
+</g>
+<g class="node" data-id="STORAGE" data-label="Storage
+sessions, messages, parts" data-shape="rectangle">
+  <rect x="562.76075" y="956.2" width="199.04199999999994" height="53.800000000000004" rx="0" ry="0" fill="#aa7030" stroke="#333" stroke-width="0.75" />
+  <text x="662.28175" y="983.1" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="662.28175" dy="-3.9000000000000012">Storage</tspan><tspan x="662.28175" dy="16.900000000000002">sessions, messages, parts</tspan></text>
+</g>
+<g class="node" data-id="SHARE" data-label="Share
+remote sync" data-shape="rectangle">
+  <rect x="789.80275" y="956.2" width="113.827" height="53.800000000000004" rx="0" ry="0" fill="#aa7030" stroke="#333" stroke-width="0.75" />
+  <text x="846.71625" y="983.1" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="846.71625" dy="-3.9000000000000012">Share</tspan><tspan x="846.71625" dy="16.900000000000002">remote sync</tspan></text>
+</g>
+<g class="node" data-id="LLM" data-label="LLM Providers
+AI SDK v3" data-shape="rectangle">
+  <rect x="883.0510833333332" y="1518.3000000000002" width="133.834" height="53.800000000000004" rx="0" ry="0" fill="#555" stroke="#333" stroke-width="0.75" />
+  <text x="949.9680833333332" y="1545.2000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="#fff"><tspan x="949.9680833333332" dy="-3.9000000000000012">LLM Providers</tspan><tspan x="949.9680833333332" dy="16.900000000000002">AI SDK v3</tspan></text>
+</g>
+<g class="node" data-id="GH" data-label="GitHub / PR" data-shape="rectangle">
+  <rect x="597.1740833333332" y="1518.3000000000002" width="106.41699999999999" height="36.900000000000006" rx="0" ry="0" fill="#555" stroke="#333" stroke-width="0.75" />
+  <text x="650.3825833333332" y="1536.7500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">GitHub / PR</text>
+</g>
+<g class="node" data-id="MCPX" data-label="MCP Servers" data-shape="rectangle">
+  <rect x="731.5910833333332" y="1518.3000000000002" width="123.46" height="36.900000000000006" rx="0" ry="0" fill="#555" stroke="#333" stroke-width="0.75" />
+  <text x="793.3210833333333" y="1536.7500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">MCP Servers</text>
+</g>
+<g class="node" data-id="LSPX" data-label="LSP Servers" data-shape="rectangle">
+  <rect x="447.93708333333325" y="1518.3000000000002" width="121.237" height="36.900000000000006" rx="0" ry="0" fill="#555" stroke="#333" stroke-width="0.75" />
+  <text x="508.55558333333323" y="1536.7500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="#fff" dy="4.55">LSP Servers</text>
+</g>
+</svg>
