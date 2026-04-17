@@ -10,7 +10,7 @@ import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Duration, Effect } from "effect"
+import { Effect } from "effect"
 import {
   type Component,
   createMemo,
@@ -121,10 +121,10 @@ function SessionProviders(props: ParentProps) {
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
-      <Suspense fallback={<Loading />}>
-        {props.appChildren}
-        {props.children}
-      </Suspense>
+      {/*<Suspense fallback={<Loading />}>*/}
+      {props.appChildren}
+      {props.children}
+      {/*</Suspense>*/}
     </AppShellProviders>
   )
 }
@@ -156,11 +156,6 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   )
 }
 
-const effectMinDuration =
-  (duration: Duration.Input) =>
-  <A, E, R>(e: Effect.Effect<A, E, R>) =>
-    Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
-
 function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const server = useServer()
   const checkServerHealth = useCheckServerHealth()
@@ -189,32 +184,41 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   )
 
   return (
-    <Show
-      when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
+    <Suspense
       fallback={
         <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >
+      {/*<Show
+        when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
+        fallback={
+          <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          </div>
+        }
+      >*/}
+      {checkMode() === "blocking" ? startupHealthCheck() : startupHealthCheck.latest}
       <Show
         when={startupHealthCheck()}
         fallback={
           <ConnectionError
             onRetry={() => {
-              if (checkMode() === "background") healthCheckActions.refetch()
+              if (checkMode() === "background") void healthCheckActions.refetch()
             }}
             onServerSelected={(key) => {
               setCheckMode("blocking")
               server.setActive(key)
-              healthCheckActions.refetch()
+              void healthCheckActions.refetch()
             }}
           />
         }
       >
         {props.children}
       </Show>
-    </Show>
+      {/*</Show>*/}
+    </Suspense>
   )
 }
 

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
 describe("filesystem", () => {
@@ -347,31 +347,31 @@ describe("filesystem", () => {
   })
 
   describe("mimeType()", () => {
-    test("returns correct MIME type for JSON", () => {
-      expect(Filesystem.mimeType("test.json")).toContain("application/json")
+    test("returns correct MIME type for JSON", async () => {
+      expect(await Filesystem.mimeType("test.json")).toContain("application/json")
     })
 
-    test("returns correct MIME type for JavaScript", () => {
-      expect(Filesystem.mimeType("test.js")).toContain("javascript")
+    test("returns correct MIME type for JavaScript", async () => {
+      expect(await Filesystem.mimeType("test.js")).toContain("javascript")
     })
 
-    test("returns MIME type for TypeScript (or video/mp2t due to extension conflict)", () => {
-      const mime = Filesystem.mimeType("test.ts")
+    test("returns MIME type for TypeScript (or video/mp2t due to extension conflict)", async () => {
+      const mime = await Filesystem.mimeType("test.ts")
       // .ts is ambiguous: TypeScript vs MPEG-2 TS video
       expect(mime === "video/mp2t" || mime === "application/typescript" || mime === "text/typescript").toBe(true)
     })
 
-    test("returns correct MIME type for images", () => {
-      expect(Filesystem.mimeType("test.png")).toContain("image/png")
-      expect(Filesystem.mimeType("test.jpg")).toContain("image/jpeg")
+    test("returns correct MIME type for images", async () => {
+      expect(await Filesystem.mimeType("test.png")).toContain("image/png")
+      expect(await Filesystem.mimeType("test.jpg")).toContain("image/jpeg")
     })
 
-    test("returns default for unknown extension", () => {
-      expect(Filesystem.mimeType("test.unknown")).toBe("application/octet-stream")
+    test("returns default for unknown extension", async () => {
+      expect(await Filesystem.mimeType("test.unknown")).toBe("application/octet-stream")
     })
 
-    test("handles files without extension", () => {
-      expect(Filesystem.mimeType("Makefile")).toBe("application/octet-stream")
+    test("handles files without extension", async () => {
+      expect(await Filesystem.mimeType("Makefile")).toBe("application/octet-stream")
     })
   })
 

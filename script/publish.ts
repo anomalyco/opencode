@@ -4,34 +4,6 @@ import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
-const highlightsTemplate = `
-<!--
-Add highlights before publishing. Delete this section if no highlights.
-
-- For multiple highlights, use multiple <highlight> tags
-- Highlights with the same source attribute get grouped together
--->
-
-<!--
-<highlight source="SourceName (TUI/Desktop/Web/Core)">
-  <h2>Feature title goes here</h2>
-  <p short="Short description used for Desktop Recap">
-    Full description of the feature or change
-  </p>
-
-  https://github.com/user-attachments/assets/uuid-for-video (you will want to drag & drop the video or picture)
-
-  <img
-    width="1912"
-    height="1164"
-    alt="image"
-    src="https://github.com/user-attachments/assets/uuid-for-image"
-  />
-</highlight>
--->
-
-`
-
 console.log("=== publishing ===\n")
 
 const pkgjsons = await Array.fromAsync(

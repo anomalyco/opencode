@@ -88,7 +88,7 @@ Ana dizininize referans vermek için bir modelin başlangıcında `~` veya `$HOM
 
 ### Harici Dizinler
 
-opencode'un başlatıldığı çalışma dizini dışındaki yollara dokunan araç çağrılarına izin vermek için `external_directory` kullanın. Bu, girdi olarak bir yolu alan tüm araçlar için geçerlidir (örneğin `read`, `edit`, `list`, `glob`, `grep` ve birçok `bash` komutu).
+opencode'un başlatıldığı çalışma dizini dışındaki yollara dokunan araç çağrılarına izin vermek için `external_directory` kullanın. Bu, girdi olarak bir yolu alan tüm araçlar için geçerlidir (örneğin `read`, `edit`, `glob`, `grep` ve birçok `bash` komutu).
 
 Ana sayfa genişletmesi (`~/...` gibi) yalnızca bir kalıbın nasıl yazıldığını etkiler. Geçerli çalışma alanının harici bir yolunu oluşturmaz, dolayısıyla çalışma dizini dışındaki yollara yine de `external_directory` aracılığıyla izin verilmesi gerekir.
 
@@ -133,7 +133,6 @@ opencode izinleri araç adına ve birkaç güvenlik önlemine göre anahtarlanı
 - `edit` — tüm dosya değişiklikleri (`edit`, `write`, `patch`, `multiedit`'yi kapsar)
 - `glob` — dosya genellemesi (glob düzeniyle eşleşir)
 - `grep` — içerik arama (regex modeliyle eşleşir)
-- `list` — bir dizideki dosyaları listeleme (dizin yoluyla eşleşir)
 - `bash` — kabuk komutlarını çalıştırma (`git status --porcelain` gibi ayrıştırılmış komutlarla eşleşir)
 - `task` — alt agent'ların başlatılması (alt agent türüyle eşleşir)
 - `skill` — bir skill yükleniyor (skill adıyla eşleşir)

@@ -1,7 +1,7 @@
 import z from "zod"
 import * as path from "path"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
@@ -10,7 +10,7 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
-import { AppFileSystem } from "../filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
@@ -145,7 +145,15 @@ export const ApplyPatchTool = Tool.define(
           case "delete": {
             const contentToDelete = yield* afs
               .readFileString(filePath)
-              .pipe(Effect.catch((error) => Effect.fail(new Error(`apply_patch verification failed: ${error}`))))
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.fail(
+                    new Error(
+                      `apply_patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                    ),
+                  ),
+                ),
+              )
             const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
 
             const deletions = contentToDelete.split("\n").length

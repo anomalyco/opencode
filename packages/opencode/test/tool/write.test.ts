@@ -5,12 +5,11 @@ import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { LSP } from "../../src/lsp"
-import { AppFileSystem } from "../../src/filesystem"
-import { FileTime } from "../../src/file/time"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "../../src/bus"
 import { Format } from "../../src/format"
-import { Truncate } from "../../src/tool/truncate"
-import { Tool } from "../../src/tool/tool"
+import { Truncate } from "../../src/tool"
+import { Tool } from "../../src/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
@@ -36,7 +35,6 @@ const it = testEffect(
   Layer.mergeAll(
     LSP.defaultLayer,
     AppFileSystem.defaultLayer,
-    FileTime.defaultLayer,
     Bus.layer,
     Format.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
@@ -56,11 +54,6 @@ const run = Effect.fn("WriteToolTest.run")(function* (
 ) {
   const tool = yield* init()
   return yield* tool.execute(args, next)
-})
-
-const markRead = Effect.fn("WriteToolTest.markRead")(function* (sessionID: string, filepath: string) {
-  const ft = yield* FileTime.Service
-  yield* ft.read(sessionID as any, filepath)
 })
 
 describe("tool.write", () => {
@@ -110,8 +103,6 @@ describe("tool.write", () => {
         Effect.gen(function* () {
           const filepath = path.join(dir, "existing.txt")
           yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
-          yield* markRead(ctx.sessionID, filepath)
-
           const result = yield* run({ filePath: filepath, content: "new content" })
 
           expect(result.output).toContain("Wrote file successfully")
@@ -128,8 +119,6 @@ describe("tool.write", () => {
         Effect.gen(function* () {
           const filepath = path.join(dir, "file.txt")
           yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
-          yield* markRead(ctx.sessionID, filepath)
-
           const result = yield* run({ filePath: filepath, content: "new" })
 
           expect(result.metadata).toHaveProperty("filepath", filepath)
@@ -231,8 +220,6 @@ describe("tool.write", () => {
           const readonlyPath = path.join(dir, "readonly.txt")
           yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
           yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
-          yield* markRead(ctx.sessionID, readonlyPath)
-
           const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
           expect(exit._tag).toBe("Failure")
         }),

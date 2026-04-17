@@ -3,17 +3,16 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "../../src/filesystem"
-import { FileTime } from "../../src/file/time"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { LSP } from "../../src/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Truncate } from "../../src/tool/truncate"
-import { Tool } from "../../src/tool/tool"
-import { Filesystem } from "../../src/util/filesystem"
+import { Truncate } from "../../src/tool"
+import { Tool } from "../../src/tool"
+import { Filesystem } from "../../src/util"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -39,7 +38,6 @@ const it = testEffect(
     Agent.defaultLayer,
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
-    FileTime.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
     Truncate.defaultLayer,
