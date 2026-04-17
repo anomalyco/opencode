@@ -124,8 +124,10 @@ const icons = {
   models: `<path fill-rule="evenodd" clip-rule="evenodd" d="M17.5 10C12.2917 10 10 12.2917 10 17.5C10 12.2917 7.70833 10 2.5 10C7.70833 10 10 7.70833 10 2.5C10 7.70833 12.2917 10 17.5 10Z" stroke="currentColor"/>`,
 }
 
+export type IconName = keyof typeof icons
+
 export interface IconProps extends ComponentProps<"svg"> {
-  name: keyof typeof icons
+  name: IconName
   size?: "small" | "normal" | "medium" | "large" | "x-large"
 }
 

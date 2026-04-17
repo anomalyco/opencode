@@ -7,6 +7,7 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { Select } from "@opencode-ai/ui/select"
 import { getFilename } from "@opencode-ai/util/path"
 import { workspaceKey } from "@/pages/layout/helpers"
+import { extraAgentByDirectory } from "@/pages/layout/extra-agents"
 
 const MAIN_WORKTREE = "main"
 const ROOT_CLASS = "size-full flex flex-col"
@@ -63,7 +64,7 @@ export function NewSessionView(props: NewSessionViewProps) {
     return worktrees().find((item) => item.value === selection) ?? worktrees()[0]
   })
   const name = createMemo(() => sync.project?.name || getFilename(root()) || root())
-  const claw = createMemo(() => root() === "/openclaw")
+  const extraAgent = createMemo(() => extraAgentByDirectory(root()))
   const branch = createMemo(() => current()?.branch || language.t("session.new.meta.unknown"))
   const next = createMemo(() => {
     if (current()?.value === MAIN_WORKTREE) return root()
@@ -71,7 +72,8 @@ export function NewSessionView(props: NewSessionViewProps) {
   })
   const picked = createMemo(() => current()?.value !== MAIN_WORKTREE)
   const greet = createMemo(() => {
-    if (claw()) return language.t("session.new.openclaw.title")
+    const agent = extraAgent()
+    if (agent?.emptySessionTitleKey) return language.t(agent.emptySessionTitleKey)
     const seed = [...root()].reduce((sum, item) => sum + item.charCodeAt(0), 0)
     return language.t(GREETINGS[seed % GREETINGS.length])
   })
@@ -82,8 +84,8 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="flex-1 px-6 pb-30 flex items-center justify-center text-center">
         <div class="w-full max-w-200 flex flex-col items-center text-center gap-6">
           <div class="flex flex-col items-center gap-6">
-            <Show when={claw()} fallback={<Mark class="w-10" />}>
-              <Icon name="openclaw" size="x-large" />
+            <Show when={extraAgent()?.emptyIcon} fallback={<Mark class="w-10" />}>
+              {(icon) => <Icon name={icon()} size="x-large" />}
             </Show>
             <div class="text-20-medium text-text-strong">
               {greet()}
@@ -92,7 +94,7 @@ export function NewSessionView(props: NewSessionViewProps) {
           <div class="w-full max-w-180 px-5 py-2">
             <div class="text-20-medium text-text-strong select-text break-words">{name()}</div>
             <div class="mt-1 break-all text-12-medium text-text-weak select-text">{root()}</div>
-            <Show when={!claw() && git()}>
+            <Show when={!extraAgent() && git()}>
               <div class="mt-5 grid gap-3 text-left">
                 <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
                   <div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-text-weaker">

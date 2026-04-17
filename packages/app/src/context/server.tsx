@@ -3,6 +3,13 @@ import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
+import {
+  domainFromIntegration,
+  isExtraAgentIntegration,
+  mainDomain,
+  type DomainId,
+  type ExtraAgentId,
+} from "@/pages/layout/extra-agents"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -34,7 +41,7 @@ function isLocalHost(url: string) {
 }
 
 export namespace ServerConnection {
-  type Base = { displayName?: string; integration?: "openclaw" }
+  type Base = { displayName?: string; integration?: ExtraAgentId }
 
   export type HttpBase = {
     url: string
@@ -133,7 +140,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const [state, setState] = createStore({
       active: props.defaultServer,
-      lastNonOpenclaw: props.defaultServer,
+      lastNonExtraAgent: props.defaultServer,
       healthy: undefined as boolean | undefined,
     })
     const trace = (_event: string, _extra?: Record<string, unknown>) => {}
@@ -175,9 +182,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     function originFor(key: ServerConnection.Key) {
       const conn = allServers().find((item) => ServerConnection.key(item) === key)
-      // Keep OpenClaw's synthetic project state isolated from local sidecar projects,
-      // even though both connections run on localhost in desktop development.
-      if (conn?.integration === "openclaw") return "openclaw"
+      if (isExtraAgentIntegration(conn?.integration)) return conn.integration
       return projectsKey(key)
     }
 
@@ -215,12 +220,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
+    const domain = createMemo(() => domainFromIntegration(current()?.integration))
+
     createEffect(() => {
       const current_ = current()
       if (!current_) return
 
-      if (current_.integration !== "openclaw") {
-        setState("lastNonOpenclaw", ServerConnection.key(current_))
+      if (!isExtraAgentIntegration(current_.integration)) {
+        setState("lastNonExtraAgent", ServerConnection.key(current_))
       }
 
       setState("healthy", undefined)
@@ -229,9 +236,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const origin = createMemo(() => {
       const conn = current()
-      // OpenClaw reuses the normal project/session UI with a synthetic `/openclaw`
-      // worktree, so it needs its own persisted sidebar/project bucket.
-      if (conn?.integration === "openclaw") return "openclaw"
+      if (isExtraAgentIntegration(conn?.integration)) return conn.integration
       return projectsKey(state.active)
     })
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
@@ -261,13 +266,33 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       get current() {
         return current()
       },
-      get lastNonOpenclaw() {
-        const key = state.lastNonOpenclaw
+      get domain() {
+        return domain()
+      },
+      domainFor(input?: ServerConnection.Key) {
+        const conn = input ? allServers().find((item) => ServerConnection.key(item) === input) : current()
+        return domainFromIntegration(conn?.integration)
+      },
+      currentFor(input: DomainId) {
+        if (input === domain()) return current()
+        if (input === mainDomain) return allServers().find((item) => !isExtraAgentIntegration(item.integration))
+        const id = input.slice("extra-agent/".length)
+        return allServers().find((item) => item.integration === id)
+      },
+      get lastNonExtraAgent() {
+        const key = state.lastNonExtraAgent
         const conn = allServers().find((item) => ServerConnection.key(item) === key)
-        if (conn?.integration !== "openclaw") return key
-        const fallback = allServers().find((item) => item.integration !== "openclaw")
+        if (!isExtraAgentIntegration(conn?.integration)) return key
+        const fallback = allServers().find((item) => !isExtraAgentIntegration(item.integration))
         if (!fallback) return
         return ServerConnection.key(fallback)
+      },
+      lastFor(input: DomainId) {
+        if (input === mainDomain) return this.lastNonExtraAgent
+        const id = input.slice("extra-agent/".length)
+        const conn = allServers().find((item) => item.integration === id)
+        if (!conn) return
+        return ServerConnection.key(conn)
       },
       setActive,
       add,

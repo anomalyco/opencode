@@ -2264,7 +2264,7 @@ export default function ConfigPage() {
     setState("claw", "saving", true)
     setState("claw", "test", undefined)
     if (server.current?.integration === "openclaw" && !state.claw.enabled) {
-      const key = server.lastNonOpenclaw
+      const key = server.lastNonExtraAgent
       if (key) {
         server.setActive(key)
       }

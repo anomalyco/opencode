@@ -159,7 +159,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return next
     }
 
-    const unsubscribe = globalSDK.event.listen((e) => {
+    const unsubscribe = globalSDK.listenAll((e) => {
       const event = e.details
       if (event?.type !== "permission.asked") return
 

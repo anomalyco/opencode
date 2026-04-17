@@ -9,8 +9,17 @@ import {
 } from "@thisbeyond/solid-dnd"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import type { IconName } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
+
+export type SidebarExtraAgent = {
+  id: string
+  label: Accessor<string>
+  active?: Accessor<boolean>
+  icon: IconName
+  onOpen: () => void
+}
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -23,9 +32,7 @@ export const SidebarContent = (props: {
   openProjectKeybind: Accessor<string | undefined>
   onOpenProject: () => void
   renderProjectOverlay: () => JSX.Element
-  openclawLabel?: Accessor<string>
-  openclawActive?: Accessor<boolean>
-  onOpenOpenclaw?: () => void
+  extraAgents: Accessor<SidebarExtraAgent[]>
   configLabel: Accessor<string>
   onOpenConfig: () => void
   settingsLabel: Accessor<string>
@@ -91,18 +98,20 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
-          <Show when={props.openclawLabel && props.onOpenOpenclaw}>
-            <Tooltip placement={placement()} value={props.openclawLabel?.() ?? ""}>
-              <IconButton
-                icon="openclaw"
-                variant="ghost"
-                size="large"
-                classList={{ "bg-surface-base-active": !!props.openclawActive?.() }}
-                onClick={props.onOpenOpenclaw}
-                aria-label={props.openclawLabel?.()}
-              />
-            </Tooltip>
-          </Show>
+          <For each={props.extraAgents()}>
+            {(agent) => (
+              <Tooltip placement={placement()} value={agent.label()}>
+                <IconButton
+                  icon={agent.icon}
+                  variant="ghost"
+                  size="large"
+                  classList={{ "bg-surface-base-active": !!agent.active?.() }}
+                  onClick={agent.onOpen}
+                  aria-label={agent.label()}
+                />
+              </Tooltip>
+            )}
+          </For>
           <Tooltip placement={placement()} value={props.configLabel()}>
             <IconButton
               icon="sliders"

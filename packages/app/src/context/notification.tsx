@@ -342,7 +342,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
-    const unsub = globalSDK.event.listen((e) => {
+    const unsub = globalSDK.listenAll((e) => {
       const event = e.details
       if (event.type !== "session.idle" && event.type !== "session.error") return
 

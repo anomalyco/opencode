@@ -20,6 +20,7 @@ import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
 import { formatServerError } from "@/utils/server-errors"
+import { domainFromDirectory } from "@/pages/layout/extra-agents"
 import { mergeMessages, render } from "./quick-assistant-helpers"
 
 function errorName(err: unknown) {
@@ -421,7 +422,7 @@ export function QuickAssistant() {
     const setStore = setData()
     if (!current || !id || !setStore) return
 
-    const off = globalSDK.event.listen((e) => {
+    const off = globalSDK.eventFor(domainFromDirectory(current)).listen((e) => {
       if (!same(e.name, current, win())) return
       const event = e.details
       if (event.type === "session.status") {
