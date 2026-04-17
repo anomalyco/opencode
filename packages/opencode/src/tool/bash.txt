@@ -1,4 +1,4 @@
-Executes a given ${shellName} command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
+Executes a given ${shell} command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
 
 Be aware: OS: ${os}, Shell: ${shell}
 

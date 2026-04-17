@@ -581,7 +581,6 @@ export const BashTool = Tool.define(
         return {
           description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
             .replaceAll("${os}", process.platform)
-            .replaceAll("${shellName}", name)
             .replaceAll("${shell}", name)
             .replaceAll("${chaining}", chain)
             .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
