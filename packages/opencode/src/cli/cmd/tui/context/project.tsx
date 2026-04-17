@@ -10,6 +10,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
   name: "Project",
   init: () => {
     const sdk = useSDK()
+    let sync_seqnr = 0
 
     const defaultPath = {
       home: "",
@@ -33,7 +34,6 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       },
     })
 
-    let sync_seqnr = 0
     async function sync(seqnr = ++sync_seqnr) {
       const workspace = store.workspace.current
       const [path, project] = await Promise.all([
