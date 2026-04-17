@@ -50,9 +50,10 @@ Config sources are loaded in this order (later sources override earlier ones):
 5. **`.opencode` directories** - agents, commands, plugins
 6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
 7. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
-8. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
+8. **macOS managed preferences** (`.mobileconfig` via MDM) - not user-overridable
+9. **`managed-settings.json`** (in the same system directory) - authoritative, cannot be bypassed by any env var or user config
 
-This means project configs can override global defaults, and global configs can override remote organizational defaults. Managed settings override everything.
+This means project configs can override global defaults, and global configs can override remote organizational defaults. `managed-settings.json` overrides everything, including the `OPENCODE_PERMISSION` environment variable.
 
 :::note
 The `.opencode` and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
@@ -166,6 +167,51 @@ Drop an `opencode.json` or `opencode.jsonc` file in the system managed config di
 | Windows  | `%ProgramData%\opencode`                 |
 
 These directories require admin/root access to write, so users cannot modify them.
+
+#### managed-settings.json
+
+For the strongest enforcement, one that cannot be bypassed by `OPENCODE_PERMISSION` or any other environment variable, use `managed-settings.json` in the same system directory:
+
+| Platform | Path                                                          |
+| -------- | ------------------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/managed-settings.json` |
+| Linux    | `/etc/opencode/managed-settings.json`                         |
+| Windows  | `%ProgramData%\opencode\managed-settings.json`                |
+
+`managed-settings.json` is applied after all other config sources, including the `OPENCODE_PERMISSION` environment variable. Object and array fields (such as `mcp`, `agent`, `instructions`, `provider`, `formatter`, `lsp`, `command`, `mode`, `skills`, and `experimental`) are **replaced entirely** rather than merged, so users cannot inject additional entries alongside managed ones.
+
+```json title="/etc/opencode/managed-settings.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled",
+  "permission": {
+    "*": "ask",
+    "bash": {
+      "*": "ask",
+      "rm -rf *": "deny"
+    }
+  }
+}
+```
+
+**Drop-in fragments (`managed-settings.d/`)**
+
+You can also place individual `.json` fragments in a `managed-settings.d/` subdirectory alongside `managed-settings.json`. Fragments are loaded in alphabetical order and merged on top of `managed-settings.json`. This is useful for deploying settings from multiple configuration management sources (Ansible, Puppet, Chef, etc.) without coordination.
+
+```
+/etc/opencode/
+  managed-settings.json          # base policy
+  managed-settings.d/
+    10-providers.json            # loaded first
+    20-permissions.json          # loaded second, overrides 10-*
+    99-override.json             # last word
+```
+
+Hidden files (starting with `.`) are ignored. Invalid JSON in any fragment logs a warning and is skipped; remaining fragments still apply.
+
+:::note
+`managed-settings.json` and `managed-settings.d/` require admin/root access to write, so users cannot modify them.
+:::
 
 #### macOS managed preferences
 

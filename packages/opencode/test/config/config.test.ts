@@ -99,7 +99,7 @@ afterEach(async () => {
   await clear(true)
 })
 
-async function writeManagedSettings(settings: object, filename = "opencode.json") {
+async function writeManagedSettings(settings: object, filename = "managed-settings.json") {
   await fs.mkdir(managedConfigDir, { recursive: true })
   await Filesystem.write(path.join(managedConfigDir, filename), JSON.stringify(settings))
 }
@@ -1335,6 +1335,290 @@ it.instance("migrates legacy edit tool to edit permission", () =>
     const config = yield* Config.Service.use((svc) => svc.get())
     expect(config.agent?.["test"]?.permission).toEqual({ edit: "deny" })
   }),
+)
+
+test("mergeDeep semantics allow OPENCODE_PERMISSION to overwrite managed deny", async () => {
+  const { mergeDeep } = await import("remeda")
+
+  const managed = { bash: { "echo *": "deny" } }
+  const envvar = { bash: { "echo *": "allow" } }
+
+  const result = mergeDeep(managed, envvar) as Record<string, Record<string, string>>
+
+  expect(result.bash["echo *"]).toBe("allow")
+})
+
+it.instance(
+  "managed instructions should replace user instructions, not union",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      instructions: ["/etc/opencode/managed-instructions.md"],
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.instructions).toEqual(["/etc/opencode/managed-instructions.md"])
+  }),
+  { config: { instructions: ["./user-instructions.md"] } },
+)
+
+it.instance(
+  "managed agents should replace user agents, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        build: { permission: { bash: { "echo *": "deny" } } },
+      },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.escape).toBeUndefined()
+  }),
+  { config: { agent: { escape: { permission: { bash: "allow" } } } } },
+)
+
+it.instance(
+  "drop-in fragments union enabled_providers with dedup",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      enabled_providers: [],
+    })
+    yield* Effect.promise(async () => {
+      const dropinDir = path.join(managedConfigDir, "managed-settings.d")
+      await fs.mkdir(dropinDir, { recursive: true })
+      await Filesystem.write(
+        path.join(dropinDir, "10-providers.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", enabled_providers: ["anthropic"] }),
+      )
+      await Filesystem.write(
+        path.join(dropinDir, "20-providers.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", enabled_providers: ["openai", "anthropic"] }),
+      )
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.enabled_providers).toEqual(["anthropic", "openai"])
+  }),
+  { config: {} },
+)
+
+it.instance(
+  "drop-in fragments union disabled_providers with dedup",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      disabled_providers: ["base"],
+    })
+    yield* Effect.promise(async () => {
+      const dropinDir = path.join(managedConfigDir, "managed-settings.d")
+      await fs.mkdir(dropinDir, { recursive: true })
+      await Filesystem.write(
+        path.join(dropinDir, "10-providers.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", disabled_providers: ["anthropic"] }),
+      )
+      await Filesystem.write(
+        path.join(dropinDir, "20-providers.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", disabled_providers: ["openai", "anthropic"] }),
+      )
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.disabled_providers).toEqual(["base", "anthropic", "openai"])
+  }),
+  { config: {} },
+)
+
+it.instance(
+  "managed mcp should replace user mcp, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        safe: { type: "local", command: ["safe"] },
+      },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.mcp?.evil).toBeUndefined()
+  }),
+  { config: { mcp: { evil: { type: "local", command: ["evil"] } } } },
+)
+
+it.instance(
+  "managed commands should replace user commands, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      command: {
+        safe: { template: "do something safe" },
+      },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.command?.evil).toBeUndefined()
+  }),
+  { config: { command: { evil: { template: "do something bad" } } } },
+)
+
+it.instance(
+  "managed providers should replace user providers, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      provider: {
+        "google-vertex": { models: { "gemini-2.5-pro": {} } },
+      },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.provider?.anthropic).toBeUndefined()
+  }),
+  { config: { provider: { anthropic: { models: {} } } } },
+)
+
+it.instance(
+  "managed formatters should replace user formatters, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      formatter: { safe: { command: ["safe-fmt"] } },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    const fmts = config.formatter as Record<string, unknown>
+    expect(fmts.evil).toBeUndefined()
+  }),
+  { config: { formatter: { evil: { command: ["evil-fmt"] } } } },
+)
+
+it.instance(
+  "managed lsp should replace user lsp, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      lsp: { safe: { command: ["safe-lsp"], extensions: [".ts"] } },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    const lsps = config.lsp as Record<string, unknown>
+    expect(lsps.evil).toBeUndefined()
+  }),
+  { config: { lsp: { evil: { command: ["evil-lsp"], extensions: [".txt"] } } } },
+)
+
+it.instance(
+  "managed experimental should replace user experimental, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      experimental: { disable_paste_summary: true },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.experimental?.batch_tool).toBeUndefined()
+    expect(config.experimental?.openTelemetry).toBeUndefined()
+  }),
+  { config: { experimental: { batch_tool: true, openTelemetry: true } } },
+)
+
+it.instance(
+  "managed skills should replace user skills, not additively merge",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      skills: { paths: ["/etc/opencode/skills/"] },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.skills?.paths).toEqual(["/etc/opencode/skills/"])
+    expect(config.skills?.urls).toBeUndefined()
+  }),
+  { config: { skills: { paths: ["./user-skills/"], urls: ["https://evil.com/skills/"] } } },
+)
+
+it.instance(
+  "managed allowed_models should replace user allowed_models, not union",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      allowed_models: ["managed/model-a"],
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.allowed_models).toEqual(["managed/model-a"])
+  }),
+  { config: { allowed_models: ["user/model-b"] } },
+)
+
+it.instance(
+  "drop-in fragments union allowed_models with dedup",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      allowed_models: ["base/model"],
+    })
+    yield* Effect.promise(async () => {
+      const dropinDir = path.join(managedConfigDir, "managed-settings.d")
+      await fs.mkdir(dropinDir, { recursive: true })
+      await Filesystem.write(
+        path.join(dropinDir, "10-models.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", allowed_models: ["dropin/model-a"] }),
+      )
+      await Filesystem.write(
+        path.join(dropinDir, "20-models.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          allowed_models: ["dropin/model-b", "base/model"],
+        }),
+      )
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.allowed_models).toEqual(["base/model", "dropin/model-a", "dropin/model-b"])
+  }),
+  { config: { model: "user/model" } },
+)
+
+it.instance(
+  "managed user_agent_suffixes should replace user suffixes, not concatenate",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      user_agent_suffixes: ["managed-suffix"],
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.user_agent_suffixes).toEqual(["managed-suffix"])
+  }),
+  { config: { user_agent_suffixes: ["user-suffix"] } },
+)
+
+it.instance(
+  "drop-in fragments concatenate user_agent_suffixes",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      user_agent_suffixes: ["base-suffix"],
+    })
+    yield* Effect.promise(async () => {
+      const dropinDir = path.join(managedConfigDir, "managed-settings.d")
+      await fs.mkdir(dropinDir, { recursive: true })
+      await Filesystem.write(
+        path.join(dropinDir, "10-suffix.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", user_agent_suffixes: ["frag-a"] }),
+      )
+      await Filesystem.write(
+        path.join(dropinDir, "20-suffix.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", user_agent_suffixes: ["frag-b"] }),
+      )
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.user_agent_suffixes).toEqual(["base-suffix", "frag-a", "frag-b"])
+  }),
+  { config: { model: "user/model" } },
 )
 
 it.instance("migrates legacy patch tool to edit permission", () =>
