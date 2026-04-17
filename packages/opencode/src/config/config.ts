@@ -12,14 +12,12 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
-import * as LSPServer from "../lsp/server"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
 import { existsSync } from "fs"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
-import { Account } from "@/account"
+import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
-import { InvalidError, JsonError } from "./error"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect"
@@ -38,6 +36,9 @@ import { ConfigPermission } from "./permission"
 import { ConfigProvider } from "./provider"
 import { ConfigSkills } from "./skills"
 import { ConfigPaths } from "./paths"
+import { ConfigFormatter } from "./formatter"
+import { ConfigLSP } from "./lsp"
+import { ConfigVariable } from "./variable"
 
 const log = Log.create({ service: "config" })
 
@@ -187,56 +188,8 @@ export const Info = z
       )
       .optional()
       .describe("MCP (Model Context Protocol) server configurations"),
-    formatter: z
-      .union([
-        z.literal(false),
-        z.record(
-          z.string(),
-          z.object({
-            disabled: z.boolean().optional(),
-            command: z.array(z.string()).optional(),
-            environment: z.record(z.string(), z.string()).optional(),
-            extensions: z.array(z.string()).optional(),
-          }),
-        ),
-      ])
-      .optional(),
-    lsp: z
-      .union([
-        z.literal(false),
-        z.record(
-          z.string(),
-          z.union([
-            z.object({
-              disabled: z.literal(true),
-            }),
-            z.object({
-              command: z.array(z.string()),
-              extensions: z.array(z.string()).optional(),
-              disabled: z.boolean().optional(),
-              env: z.record(z.string(), z.string()).optional(),
-              initialization: z.record(z.string(), z.any()).optional(),
-            }),
-          ]),
-        ),
-      ])
-      .optional()
-      .refine(
-        (data) => {
-          if (!data) return true
-          if (typeof data === "boolean") return true
-          const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
-
-          return Object.entries(data).every(([id, config]) => {
-            if (config.disabled) return true
-            if (serverIds.has(id)) return true
-            return Boolean(config.extensions)
-          })
-        },
-        {
-          error: "For custom LSP servers, 'extensions' array is required.",
-        },
-      ),
+    formatter: ConfigFormatter.Info.optional(),
+    lsp: ConfigLSP.Info.optional(),
     instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
     layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
     permission: ConfigPermission.Info.optional(),
@@ -375,24 +328,16 @@ export const layer = Layer.effect(
       text: string,
       options: { path: string } | { dir: string; source: string },
     ) {
-      if (!("path" in options)) {
-        return yield* Effect.promise(() =>
-          ConfigParse.load(Info, text, {
-            type: "virtual",
-            dir: options.dir,
-            source: options.source,
-            normalize: normalizeLoadedConfig,
-          }),
-        )
-      }
-
-      const data = yield* Effect.promise(() =>
-        ConfigParse.load(Info, text, {
-          type: "path",
-          path: options.path,
-          normalize: normalizeLoadedConfig,
-        }),
+      const source = "path" in options ? options.path : options.source
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute(
+          "path" in options ? { text, type: "path", path: options.path } : { text, type: "virtual", ...options },
+        ),
       )
+      const parsed = ConfigParse.jsonc(expanded, source)
+      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+      if (!("path" in options)) return data
+
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
@@ -773,17 +718,16 @@ export const layer = Layer.effect(
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
-      const input = writable(config)
 
       let next: Info
       if (!file.endsWith(".jsonc")) {
-        const existing = ConfigParse.parse(Info, before, file)
-        const merged = mergeDeep(writable(existing), input)
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+        const merged = mergeDeep(writable(existing), writable(config))
         yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
         next = merged
       } else {
-        const updated = patchJsonc(before, input)
-        next = ConfigParse.parse(Info, updated, file)
+        const updated = patchJsonc(before, writable(config))
+        next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file)
         yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
 

@@ -1,3 +1,5 @@
+export * as TuiConfig from "./tui"
+
 import z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
@@ -16,6 +18,7 @@ import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
 import { makeRuntime } from "@/cli/effect/runtime"
 import { Filesystem, Log } from "@/util"
+import { ConfigVariable } from "@/config/variable"
 
 const log = Log.create({ service: "tui.config" })
 
@@ -46,10 +49,6 @@ function pluginScope(file: string, ctx: { directory: string }): ConfigPlugin.Sco
   if (Filesystem.contains(ctx.directory, file)) return "local"
   // if (ctx.worktree !== "/" && Filesystem.contains(ctx.worktree, file)) return "local"
   return "global"
-}
-
-function customPath() {
-  return Flag.OPENCODE_TUI_CONFIG
 }
 
 function normalize(raw: Record<string, unknown>) {
@@ -91,30 +90,38 @@ async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
 }
 
 async function loadState(ctx: { directory: string }) {
-  let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
+  // Every config dir we may read from: global config dir, any `.opencode`
+  // folders between cwd and home, and OPENCODE_CONFIG_DIR.
   const directories = await ConfigPaths.directories(ctx.directory)
-  const custom = customPath()
-  await migrateTuiConfig({ directories, custom, cwd: ctx.directory })
-  // Re-compute after migration since migrateTuiConfig may have created new tui.json files
-  projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
+  // One-time migration: extract tui keys (theme/keybinds/tui) from existing
+  // opencode.json files into sibling tui.json files.
+  await migrateTuiConfig({ directories, cwd: ctx.directory })
+
+  const projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : await ConfigPaths.projectFiles("tui", ctx.directory)
 
   const acc: Acc = {
     result: {},
   }
 
+  // 1. Global tui config (lowest precedence).
   for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
     await mergeFile(acc, file, ctx)
   }
 
-  if (custom) {
-    await mergeFile(acc, custom, ctx)
-    log.debug("loaded custom tui config", { path: custom })
+  // 2. Explicit OPENCODE_TUI_CONFIG override, if set.
+  if (Flag.OPENCODE_TUI_CONFIG) {
+    await mergeFile(acc, Flag.OPENCODE_TUI_CONFIG, ctx)
+    log.debug("loaded custom tui config", { path: Flag.OPENCODE_TUI_CONFIG })
   }
 
+  // 3. Project tui files, applied root-first so the closest file wins.
   for (const file of projectFiles) {
     await mergeFile(acc, file, ctx)
   }
 
+  // 4. `.opencode` directories (and OPENCODE_CONFIG_DIR) discovered while
+  // walking up the tree. Also returned below so callers can install plugin
+  // dependencies from each location.
   const dirs = unique(directories).filter((dir) => dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR)
 
   for (const dir of dirs) {
@@ -191,23 +198,18 @@ async function loadFile(filepath: string): Promise<Info> {
 }
 
 async function load(text: string, configFilepath: string): Promise<Info> {
-  return ConfigParse.load(Info, text, {
-    type: "path",
-    path: configFilepath,
-    missing: "empty",
-    normalize: (data) => {
+  return ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" })
+    .then((expanded) => ConfigParse.jsonc(expanded, configFilepath))
+    .then((data) => {
       if (!isRecord(data)) return {}
 
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      return normalize(data)
-    },
-  })
+      return ConfigParse.schema(Info, normalize(data), configFilepath)
+    })
     .then((data) => resolvePlugins(data, configFilepath))
     .catch((error) => {
       log.warn("invalid tui config", { path: configFilepath, error })
       return {}
     })
 }
-
-export * as TuiConfig from "./tui"

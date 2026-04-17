@@ -11,15 +11,38 @@ const it = testEffect(Layer.mergeAll(LSP.defaultLayer, CrossSpawnSpawner.default
 
 describe("lsp.spawn", () => {
   it.live("does not spawn builtin LSP for files outside instance", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
+
+            try {
+              yield* lsp.touchFile(path.join(dir, "..", "outside.ts"))
+              yield* lsp.hover({
+                file: path.join(dir, "..", "hover.ts"),
+                line: 0,
+                character: 0,
+              })
+              expect(spy).toHaveBeenCalledTimes(0)
+            } finally {
+              spy.mockRestore()
+            }
+          }),
+        ),
+      { config: { lsp: true } },
+    ),
+  )
+
+  it.live("does not spawn builtin LSP for files inside instance when LSP is unset", () =>
     provideTmpdirInstance((dir) =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {
           const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
 
           try {
-            yield* lsp.touchFile(path.join(dir, "..", "outside.ts"))
             yield* lsp.hover({
-              file: path.join(dir, "..", "hover.ts"),
+              file: path.join(dir, "src", "inside.ts"),
               line: 0,
               character: 0,
             })
@@ -32,24 +55,55 @@ describe("lsp.spawn", () => {
     ),
   )
 
-  it.live("would spawn builtin LSP for files inside instance", () =>
-    provideTmpdirInstance((dir) =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
+  it.live("would spawn builtin LSP for files inside instance when lsp is true", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
 
-          try {
-            yield* lsp.hover({
-              file: path.join(dir, "src", "inside.ts"),
-              line: 0,
-              character: 0,
-            })
-            expect(spy).toHaveBeenCalledTimes(1)
-          } finally {
-            spy.mockRestore()
-          }
-        }),
-      ),
+            try {
+              yield* lsp.hover({
+                file: path.join(dir, "src", "inside.ts"),
+                line: 0,
+                character: 0,
+              })
+              expect(spy).toHaveBeenCalledTimes(1)
+            } finally {
+              spy.mockRestore()
+            }
+          }),
+        ),
+      { config: { lsp: true } },
+    ),
+  )
+
+  it.live("would spawn builtin LSP for files inside instance when config object is provided", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
+
+            try {
+              yield* lsp.hover({
+                file: path.join(dir, "src", "inside.ts"),
+                line: 0,
+                character: 0,
+              })
+              expect(spy).toHaveBeenCalledTimes(1)
+            } finally {
+              spy.mockRestore()
+            }
+          }),
+        ),
+      {
+        config: {
+          lsp: {
+            eslint: { disabled: true },
+          },
+        },
+      },
     ),
   )
 })

@@ -11717,8 +11717,7 @@
           "formatter": {
             "anyOf": [
               {
-                "type": "boolean",
-                "const": false
+                "type": "boolean"
               },
               {
                 "type": "object",
@@ -11760,8 +11759,7 @@
           "lsp": {
             "anyOf": [
               {
-                "type": "boolean",
-                "const": false
+                "type": "boolean"
               },
               {
                 "type": "object",

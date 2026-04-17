@@ -135,14 +135,17 @@ export const layer: Layer.Layer<
                   worktree: ctx.worktree,
                 }
                 const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const output = typeof result === "string" ? result : result.output
+                const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const info = yield* agent.get(toolCtx.agent)
-                const out = yield* truncate.output(result, {}, info)
+                const out = yield* truncate.output(output, {}, info)
                 return {
                   title: "",
-                  output: out.truncated ? out.content : result,
+                  output: out.truncated ? out.content : output,
                   metadata: {
+                    ...metadata,
                     truncated: out.truncated,
-                    outputPath: out.truncated ? out.outputPath : undefined,
+                    ...(out.truncated && { outputPath: out.outputPath }),
                   },
                 }
               }),
