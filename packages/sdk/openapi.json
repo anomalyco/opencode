@@ -5224,6 +5224,47 @@
         ]
       }
     },
+    "/sync/start": {
+      "post": {
+        "operationId": "sync.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Start workspace sync",
+        "description": "Start sync loops for workspaces in the current project that have active sessions.",
+        "responses": {
+          "200": {
+            "description": "Workspace sync started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sync.start({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/sync/replay": {
       "post": {
         "operationId": "sync.replay",
@@ -5328,7 +5369,7 @@
       }
     },
     "/sync/history": {
-      "get": {
+      "post": {
         "operationId": "sync.history.list",
         "parameters": [
           {
