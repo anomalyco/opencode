@@ -126,6 +126,17 @@ test("loads tui config with the same precedence order as server config paths", a
   expect(config.diff_style).toBe("stacked")
 })
 
+test("loads logo animation toggle from tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ logo_animation: false }, null, 2))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.logo_animation).toBe(false)
+})
+
 test("migrates tui-specific keys from opencode.json when tui.json does not exist", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -159,6 +170,32 @@ test("migrates tui-specific keys from opencode.json when tui.json does not exist
   expect(server.tui).toBeUndefined()
   expect(await Filesystem.exists(path.join(tmp.path, "opencode.json.tui-migration.bak"))).toBe(true)
   expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(true)
+})
+
+test("migrates legacy logo_animation key from opencode.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify(
+          {
+            tui: { logo_animation: false },
+          },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.logo_animation).toBe(false)
+  const text = await Filesystem.readText(path.join(tmp.path, "tui.json"))
+  expect(JSON.parse(text)).toMatchObject({
+    logo_animation: false,
+  })
+  const server = JSON.parse(await Filesystem.readText(path.join(tmp.path, "opencode.json")))
+  expect(server.tui).toBeUndefined()
 })
 
 test("migrates project legacy tui keys even when global tui.json already exists", async () => {

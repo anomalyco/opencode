@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/solid"
 import open from "open"
 import { createSignal, onCleanup, onMount } from "solid-js"
 import { selectedForeground, useTheme } from "@tui/context/theme"
+import { useTuiConfig } from "@tui/context/tui-config"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { Link } from "@tui/ui/link"
 import { GoLogo } from "./logo"
@@ -30,6 +31,7 @@ function dismiss(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog
 export function DialogGoUpsell(props: DialogGoUpsellProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
   const fg = selectedForeground(theme)
   const [selected, setSelected] = createSignal<"dismiss" | "subscribe">("subscribe")
   const [center, setCenter] = createSignal<{ x: number; y: number } | undefined>()
@@ -108,7 +110,7 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
         </box>
         <box alignItems="center" gap={1} paddingBottom={1}>
           <box ref={(item: BoxRenderable) => (logoBox = item)}>
-            <GoLogo />
+            <GoLogo animate={tuiConfig.logo_animation ?? true} />
           </box>
           <Link href={GO_URL} fg={theme.primary} />
         </box>

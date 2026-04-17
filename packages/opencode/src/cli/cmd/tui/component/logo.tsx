@@ -551,9 +551,10 @@ function buildIdleState(t: number, ctx: LogoContext): IdleState {
   return { cfg, reach, rings, active }
 }
 
-export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = {}) {
+export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean; animate?: boolean } = {}) {
   const ctx = props.shape ? build(props.shape) : DEFAULT
   const { theme } = useTheme()
+  const animationEnabled = props.animate ?? true
   const [rings, setRings] = createSignal<Ring[]>([])
   const [hold, setHold] = createSignal<Hold>()
   const [release, setRelease] = createSignal<Release>()
@@ -608,7 +609,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   })
 
   onMount(() => {
-    if (!props.idle) return
+    if (!props.idle || !animationEnabled) return
     setNow(performance.now())
     start()
   })
@@ -683,7 +684,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     }
   })
 
-  const idleState = createMemo(() => (props.idle ? buildIdleState(frame().t, ctx) : undefined))
+  const idleState = createMemo(() => (props.idle && animationEnabled ? buildIdleState(frame().t, ctx) : undefined))
 
   const renderLine = (
     line: string,
@@ -829,6 +830,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   }
 
   const mouse = (evt: MouseEvent) => {
+    if (!animationEnabled) return
     if (!box) return
     if ((evt.type === "down" || evt.type === "drag") && evt.button === MouseButton.LEFT) {
       const x = evt.x - box.x
@@ -886,8 +888,8 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   )
 }
 
-export function GoLogo() {
+export function GoLogo(props: { animate?: boolean } = {}) {
   const { theme } = useTheme()
   const base = tint(theme.background, theme.text, 0.62)
-  return <Logo shape={go} ink={base} idle />
+  return <Logo shape={go} ink={base} idle animate={props.animate} />
 }
