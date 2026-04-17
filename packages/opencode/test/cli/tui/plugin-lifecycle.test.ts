@@ -5,7 +5,6 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { mockTuiRuntime } from "../../fixture/tui-runtime"
-import { TuiConfig } from "../../../src/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -40,10 +39,10 @@ test("runs onDispose callbacks with aborted signal and is idempotent", async () 
     },
   })
 
-  const restore = mockTuiRuntime(tmp.path, [[tmp.extra.spec, { marker: tmp.extra.marker }]])
+  const { config, restore } = mockTuiRuntime(tmp.path, [[tmp.extra.spec, { marker: tmp.extra.marker }]])
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
     await TuiPluginRuntime.dispose()
 
     const marker = await fs.readFile(tmp.extra.marker, "utf8")
@@ -100,13 +99,13 @@ test("rolls back failed plugin and continues loading next", async () => {
     },
   })
 
-  const restore = mockTuiRuntime(tmp.path, [
+  const { config, restore } = mockTuiRuntime(tmp.path, [
     [tmp.extra.badSpec, { bad_marker: tmp.extra.badMarker }],
     [tmp.extra.goodSpec, { good_marker: tmp.extra.goodMarker }],
   ])
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
     // bad plugin's onDispose ran during rollback
     await expect(fs.readFile(tmp.extra.badMarker, "utf8")).resolves.toBe("cleaned")
     // good plugin still loaded
@@ -156,11 +155,11 @@ export default {
     },
   })
 
-  const restore = mockTuiRuntime(tmp.path, [tmp.extra.spec])
+  const { config, restore } = mockTuiRuntime(tmp.path, [tmp.extra.spec])
   const err = spyOn(console, "error").mockImplementation(() => {})
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
 
     const marker = await fs.readFile(tmp.extra.marker, "utf8")
     expect(marker).toContain("one")
@@ -203,14 +202,14 @@ test(
       },
     })
 
-    const restore = mockTuiRuntime(tmp.path, [tmp.extra.spec])
+    const { config, restore } = mockTuiRuntime(tmp.path, [tmp.extra.spec])
 
     try {
-      await TuiPluginRuntime.init(createTuiPluginApi())
+      await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
 
       const done = await new Promise<string>((resolve) => {
         const timer = setTimeout(() => resolve("timeout"), 7000)
-        TuiPluginRuntime.dispose().then(() => {
+        void TuiPluginRuntime.dispose().then(() => {
           clearTimeout(timer)
           resolve("done")
         })

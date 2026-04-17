@@ -1,10 +1,11 @@
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
-  subscribe: (directory: string | undefined, handler: (event: Event) => void) => Promise<() => void>
+  subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
 }
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
@@ -32,10 +33,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let sdk = createSDK()
 
     const emitter = createGlobalEmitter<{
-      [key in Event["type"]]: Extract<Event, { type: key }>
+      event: GlobalEvent
     }>()
 
-    let queue: Event[] = []
+    let queue: GlobalEvent[] = []
     let timer: Timer | undefined
     let last = 0
 
@@ -48,12 +49,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
         for (const event of events) {
-          emitter.emit(event.type, event)
+          emitter.emit("event", event)
         }
       })
     }
 
-    const handleEvent = (event: Event) => {
+    const handleEvent = (event: GlobalEvent) => {
       queue.push(event)
       const elapsed = Date.now() - last
 
@@ -74,7 +75,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       ;(async () => {
         while (true) {
           if (abort.signal.aborted || ctrl.signal.aborted) break
-          const events = await sdk.event.subscribe({}, { signal: ctrl.signal })
+          const events = await sdk.global.event({ signal: ctrl.signal })
 
           for await (const event of events.stream) {
             if (ctrl.signal.aborted) break
@@ -89,7 +90,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     onMount(async () => {
       if (props.events) {
-        const unsub = await props.events.subscribe(props.directory, handleEvent)
+        const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
       } else {
         startSSE()

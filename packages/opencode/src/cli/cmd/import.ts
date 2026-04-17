@@ -4,12 +4,13 @@ import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
-import { Database } from "../../storage/db"
+import { Database } from "../../storage"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { Instance } from "../../project/instance"
-import { ShareNext } from "../../share/share-next"
+import { ShareNext } from "../../share"
 import { EOL } from "os"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "../../util"
+import { AppRuntime } from "@/effect/app-runtime"
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -100,7 +101,7 @@ export const ImportCommand = cmd({
       if (isUrl) {
         const slug = parseShareUrl(args.file)
         if (!slug) {
-          const baseUrl = await ShareNext.url()
+          const baseUrl = await AppRuntime.runPromise(ShareNext.Service.use((svc) => svc.url()))
           process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug>`)
           process.stdout.write(EOL)
           return
@@ -108,7 +109,7 @@ export const ImportCommand = cmd({
 
         const parsed = new URL(args.file)
         const baseUrl = parsed.origin
-        const req = await ShareNext.request()
+        const req = await AppRuntime.runPromise(ShareNext.Service.use((svc) => svc.request()))
         const headers = shouldAttachShareAuthHeaders(args.file, req.baseUrl) ? req.headers : {}
 
         const dataPath = req.api.data(slug)

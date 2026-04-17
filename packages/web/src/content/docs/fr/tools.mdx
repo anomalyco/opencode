@@ -151,23 +151,6 @@ Recherchez des fichiers à l'aide de modèles globaux tels que `**/*.js` ou `src
 
 ---
 
-### liste
-
-Répertoriez les fichiers et les répertoires dans un chemin donné.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Cet outil répertorie le contenu du répertoire. Il accepte les modèles globaux pour filtrer les résultats.
-
----
-
 ### lsp (expérimental)
 
 Interagissez avec vos serveurs LSP configurés pour obtenir des fonctionnalités d'intelligence du code telles que des définitions, des références, des informations de survol et une hiérarchie d'appels.
@@ -341,7 +324,7 @@ Les serveurs MCP (Model Context Protocol) vous permettent d'intégrer des outils
 
 ## Internes
 
-En interne, des outils comme `grep`, `glob` et `list` utilisent [ripgrep](https://github.com/BurntSushi/ripgrep) sous le capot. Par défaut, ripgrep respecte les modèles `.gitignore`, ce qui signifie que les fichiers et répertoires répertoriés dans votre `.gitignore` seront exclus des recherches et des listes.
+En interne, des outils comme `grep` et `glob` utilisent [ripgrep](https://github.com/BurntSushi/ripgrep) sous le capot. Par défaut, ripgrep respecte les modèles `.gitignore`, ce qui signifie que les fichiers et répertoires répertoriés dans votre `.gitignore` seront exclus des recherches et des listes.
 
 ---
 

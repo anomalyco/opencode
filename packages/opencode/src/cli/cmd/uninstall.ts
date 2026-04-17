@@ -1,13 +1,14 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../../util/filesystem"
-import { Process } from "../../util/process"
+import { Filesystem } from "../../util"
+import { Process } from "../../util"
 
 interface UninstallArgs {
   keepConfig: boolean
@@ -57,7 +58,7 @@ export const UninstallCommand = {
     UI.empty()
     prompts.intro("Uninstall OpenCode")
 
-    const method = await Installation.method()
+    const method = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
     prompts.log.info(`Installation method: ${method}`)
 
     const targets = await collectRemovalTargets(args, method)

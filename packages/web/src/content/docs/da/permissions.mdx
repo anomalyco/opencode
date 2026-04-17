@@ -88,7 +88,7 @@ Du kan bruge `~` eller `$HOME` i starten af ​​et mønster til at referere ti
 
 ### Eksterne mapper
 
-Brug `external_directory` til at tillade værktøjsopkald, der berører stier uden for den arbejdsmappe, hvor OpenCode blev startet. Dette gælder for ethvert værktøj, der tager en sti som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash` kommandoer).
+Brug `external_directory` til at tillade værktøjsopkald, der berører stier uden for den arbejdsmappe, hvor OpenCode blev startet. Dette gælder for ethvert værktøj, der tager en sti som input (for eksempel `read`, `edit`, `glob`, `grep` og mange `bash` kommandoer).
 
 Hjemmeudvidelse (som `~/...`) påvirker kun, hvordan et mønster skrives. Det gør ikke en ekstern sti til en del af det aktuelle arbejdsområde, så stier uden for arbejdsbiblioteket skal stadig være tilladt via `external_directory`.
 
@@ -133,7 +133,6 @@ OpenCode tilladelser indtastes efter værktøjsnavn plus et par sikkerhedsafskæ
 - `edit` — alle filændringer (dækker `edit`, `write`, `patch`, `multiedit`)
 - `glob` — fil-globing (matcher glob-mønsteret)
 - `grep` — indholdssøgning (matcher regex-mønsteret)
-- `list` — viser filer i en mappe (matcher mappestien)
 - `bash` — kører shell-kommandoer (matcher parsede kommandoer som `git status --porcelain`)
 - `task` — lancering af underagenter (matcher underagenttypen)
 - `skill` — indlæsning af en færdighed (matcher færdighedsnavnet)

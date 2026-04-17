@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import type { NamedError } from "@opencode-ai/util/error"
+import type { NamedError } from "@opencode-ai/shared/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Schedule } from "effect"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderID } from "../../src/provider/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Instance } from "../../src/project/instance"
@@ -94,12 +95,16 @@ describe("session.retry.delay", () => {
                 parse: (err) => err as MessageV2.APIError,
                 set: (info) =>
                   Effect.promise(() =>
-                    SessionStatus.set(sessionID, {
-                      type: "retry",
-                      attempt: info.attempt,
-                      message: info.message,
-                      next: info.next,
-                    }),
+                    AppRuntime.runPromise(
+                      SessionStatus.Service.use((svc) =>
+                        svc.set(sessionID, {
+                          type: "retry",
+                          attempt: info.attempt,
+                          message: info.message,
+                          next: info.next,
+                        }),
+                      ),
+                    ),
                   ),
               }),
             )
@@ -108,7 +113,7 @@ describe("session.retry.delay", () => {
           }),
         )
 
-        expect(await SessionStatus.get(sessionID)).toMatchObject({
+        expect(await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(sessionID)))).toMatchObject({
           type: "retry",
           attempt: 2,
           message: "boom",
@@ -173,6 +178,47 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
+  test("retries 500 errors even when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Internal server error",
+      isRetryable: false,
+      statusCode: 500,
+      responseBody: '{"type":"api_error","message":"Internal server error"}',
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Internal server error")
+  })
+
+  test("retries 502 bad gateway errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad gateway",
+      isRetryable: false,
+      statusCode: 502,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Bad gateway")
+  })
+
+  test("retries 503 service unavailable errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Service unavailable",
+      isRetryable: false,
+      statusCode: 503,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Service unavailable")
+  })
+
+  test("does not retry 4xx errors when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad request",
+      isRetryable: false,
+      statusCode: 400,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
   test("retries ZlibError decompression failures", () => {
     const error = new MessageV2.APIError({
       message: "Response decompression failed",
@@ -193,7 +239,7 @@ describe("session.message-v2.fromError", () => {
       using server = Bun.serve({
         port: 0,
         idleTimeout: 8,
-        async fetch(req) {
+        async fetch(_req) {
           return new Response(
             new ReadableStream({
               async pull(controller) {

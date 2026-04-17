@@ -117,7 +117,7 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
     entry?.value.clear()
   }
 
-  removePersisted(Persist.workspace(dir, "terminal"), platform)
+  void removePersisted(Persist.workspace(dir, "terminal"), platform)
 
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
   for (const id of sessionIDs ?? []) {
@@ -126,7 +126,7 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
     }
   }
   for (const key of legacy) {
-    removePersisted({ key }, platform)
+    void removePersisted({ key }, platform)
   }
 }
 
