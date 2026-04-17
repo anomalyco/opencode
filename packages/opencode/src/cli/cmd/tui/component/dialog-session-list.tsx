@@ -161,9 +161,12 @@ export function DialogSessionList() {
       if (!x) return undefined
       const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
 
-      let footer: JSX.Element | string = ""
+      let footer: JSX.Element | string | undefined
+      let reservedWidth: number | undefined
       if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
         if (x.workspaceID) {
+          const label = workspace ? `${workspace.name} (${workspace.type})` : `${x.workspaceID} (unknown)`
+          reservedWidth = Bun.stringWidth(label) + 1
           footer = workspace ? (
             <WorkspaceLabel
               type={workspace.type}
@@ -193,6 +196,7 @@ export function DialogSessionList() {
         value: x.id,
         category,
         footer,
+        reservedWidth,
         gutter,
       }
     }
@@ -223,6 +227,7 @@ export function DialogSessionList() {
       title="Sessions"
       options={options()}
       skipFilter={true}
+      maxLines={2}
       current={currentSessionID()}
       onFilter={setSearch}
       onMove={() => {

@@ -15,7 +15,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
-import { Locale } from "@/util/locale"
+import { wrap } from "@tui/ui/dialog-select-budget"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../context/tui-config"
 import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
@@ -31,6 +31,7 @@ export interface DialogSelectProps<T> {
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   renderFilter?: boolean
+  maxLines?: 1 | 2
   actions?: {
     command: string
     title: string
@@ -47,6 +48,7 @@ export interface DialogSelectOption<T = any> {
   value: T
   description?: string
   footer?: JSX.Element | string
+  reservedWidth?: number
   category?: string
   categoryView?: JSX.Element
   disabled?: boolean
@@ -166,7 +168,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   const dimensions = useTerminalDimensions()
-  const height = createMemo(() => Math.min(rows(), Math.floor(dimensions().height / 2) - 6))
+  const lines = createMemo(() => props.maxLines ?? 1)
+  const height = createMemo(() =>
+    Math.min(rows() + (lines() - 1) * flat().length, Math.floor(dimensions().height / 2) - 6),
+  )
+  const width = createMemo(() => {
+    const dialogWidth = dialog.size === "large" ? 80 : 60
+    return Math.max(Math.min(dimensions().width - 2, dialogWidth), 1)
+  })
 
   const selected = createMemo(() => flat()[store.selected])
 
@@ -207,8 +216,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       const centerOffset = Math.floor(scroll.height / 2)
       scroll.scrollBy(y - centerOffset)
     } else {
-      if (y >= scroll.height) {
-        scroll.scrollBy(y - scroll.height + 1)
+      if (y + target.height > scroll.height) {
+        scroll.scrollBy(y + target.height - scroll.height)
       }
       if (y < 0) {
         scroll.scrollBy(y)
@@ -457,6 +466,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           active={active()}
                           current={current()}
                           gutter={option.gutter}
+                          reservedWidth={option.reservedWidth}
+                          width={width()}
+                          maxLines={lines()}
                         />
                       </box>
                     )
@@ -514,9 +526,19 @@ function Option(props: {
   footer?: JSX.Element | string
   gutter?: () => JSX.Element
   onMouseOver?: () => void
+  reservedWidth?: number
+  width: number
+  maxLines: number
 }) {
   const { theme } = useTheme()
   const fg = selectedForeground(theme)
+  const tail =
+    props.maxLines > 1
+      ? (props.reservedWidth ??
+        (typeof props.footer === "string" && props.footer.length > 0 ? props.footer.length + 1 : 0))
+      : 0
+  const mode = props.maxLines > 1 ? "word" : "none"
+  const overflow = props.maxLines === 1 ? "hidden" : undefined
 
   return (
     <>
@@ -534,11 +556,12 @@ function Option(props: {
         flexGrow={1}
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
-        overflow="hidden"
-        wrapMode="none"
-        paddingLeft={3}
+        wrapMode={mode}
+        maxHeight={props.maxLines}
+        overflow={overflow}
+        paddingLeft={props.maxLines > 1 ? undefined : 3}
       >
-        {Locale.truncate(props.title, 61)}
+        {wrap(props.title, props.width, tail, props.maxLines)}
         <Show when={props.description}>
           <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
         </Show>
