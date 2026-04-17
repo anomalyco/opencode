@@ -107,7 +107,7 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ projectID: ProjectID.zod })),
-      validator("json", Project.UpdateBody.zod),
+      validator("json", Project.UpdateInput.omit({ projectID: true })),
       async (c) => {
         const projectID = c.req.valid("param").projectID
         const body = c.req.valid("json")

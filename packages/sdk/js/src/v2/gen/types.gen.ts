@@ -2394,6 +2394,110 @@ export type AppLogResponses = {
 
 export type AppLogResponse = AppLogResponses[keyof AppLogResponses]
 
+export type ProjectListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project"
+}
+
+export type ProjectListResponses = {
+  /**
+   * List of projects
+   */
+  200: Array<Project>
+}
+
+export type ProjectListResponse = ProjectListResponses[keyof ProjectListResponses]
+
+export type ProjectCurrentData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/current"
+}
+
+export type ProjectCurrentResponses = {
+  /**
+   * Current project information
+   */
+  200: Project
+}
+
+export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+
+export type ProjectInitGitData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/git/init"
+}
+
+export type ProjectInitGitResponses = {
+  /**
+   * Project information after git initialization
+   */
+  200: Project
+}
+
+export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGitResponses]
+
+export type ProjectUpdateData = {
+  body?: {
+    name?: string
+    icon?: {
+      url?: string
+      override?: string
+      color?: string
+    }
+    commands?: {
+      /**
+       * Startup script to run when creating a new workspace (worktree)
+       */
+      start?: string
+    }
+  }
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}"
+}
+
+export type ProjectUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectUpdateError = ProjectUpdateErrors[keyof ProjectUpdateErrors]
+
+export type ProjectUpdateResponses = {
+  /**
+   * Updated project information
+   */
+  200: Project
+}
+
+export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
+
 export type PtyListData = {
   body?: never
   path?: never
@@ -4175,110 +4279,6 @@ export type PermissionListResponses = {
 }
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
-
-export type ProjectListData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/project"
-}
-
-export type ProjectListResponses = {
-  /**
-   * List of projects
-   */
-  200: Array<Project>
-}
-
-export type ProjectListResponse = ProjectListResponses[keyof ProjectListResponses]
-
-export type ProjectCurrentData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/project/current"
-}
-
-export type ProjectCurrentResponses = {
-  /**
-   * Current project information
-   */
-  200: Project
-}
-
-export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
-
-export type ProjectInitGitData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/project/git/init"
-}
-
-export type ProjectInitGitResponses = {
-  /**
-   * Project information after git initialization
-   */
-  200: Project
-}
-
-export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGitResponses]
-
-export type ProjectUpdateData = {
-  body?: {
-    name?: string
-    icon?: {
-      url?: string
-      override?: string
-      color?: string
-    }
-    commands?: {
-      /**
-       * Startup script to run when creating a new workspace (worktree)
-       */
-      start?: string
-    }
-  }
-  path: {
-    projectID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/project/{projectID}"
-}
-
-export type ProjectUpdateErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type ProjectUpdateError = ProjectUpdateErrors[keyof ProjectUpdateErrors]
-
-export type ProjectUpdateResponses = {
-  /**
-   * Updated project information
-   */
-  200: Project
-}
-
-export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
 
 export type QuestionListData = {
   body?: never

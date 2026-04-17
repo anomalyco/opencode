@@ -13,8 +13,9 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
+import { Schema } from "effect"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "project" })
 
@@ -46,32 +47,7 @@ const ProjectTime = Schema.Struct({
   initialized: Schema.optional(Schema.Number),
 })
 
-const UpdateBodyZod = z.object({
-  name: z.string().optional(),
-  icon: z
-    .object({
-      url: z.string().optional(),
-      override: z.string().optional(),
-      color: z.string().optional(),
-    })
-    .optional(),
-  commands: z
-    .object({
-      start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
-    })
-    .optional(),
-})
-
-const _UpdateBody = Schema.Struct({
-  name: Schema.optional(Schema.String),
-  icon: Schema.optional(ProjectIcon),
-  commands: Schema.optional(ProjectCommands),
-})
-
-export const UpdateBody = Object.assign(_UpdateBody, { zod: UpdateBodyZod })
-export type UpdateBody = Mutable<Schema.Schema.Type<typeof _UpdateBody>>
-
-const _Info = Schema.Struct({
+export const Info = Schema.Struct({
   id: ProjectID,
   worktree: Schema.String,
   vcs: Schema.optional(ProjectVcs),
@@ -80,9 +56,10 @@ const _Info = Schema.Struct({
   commands: Schema.optional(ProjectCommands),
   time: ProjectTime,
   sandboxes: Schema.Array(Schema.String),
-}).annotate({ identifier: "Project" })
-export const Info = Object.assign(_Info, { zod: zod(_Info) })
-export type Info = Mutable<Schema.Schema.Type<typeof _Info>>
+})
+  .annotate({ identifier: "Project" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Mutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
   Updated: BusEvent.define("project.updated", Info.zod),
@@ -109,15 +86,13 @@ export function fromRow(row: Row): Info {
   }
 }
 
-const _UpdateInput = Schema.Struct({
-  projectID: ProjectID,
-  name: Schema.optional(Schema.String),
-  icon: Schema.optional(ProjectIcon),
-  commands: Schema.optional(ProjectCommands),
+export const UpdateInput = z.object({
+  projectID: ProjectID.zod,
+  name: z.string().optional(),
+  icon: zod(ProjectIcon).optional(),
+  commands: zod(ProjectCommands).optional(),
 })
-const UpdateInputZod = z.object({ projectID: ProjectID.zod, ...UpdateBodyZod.shape })
-export const UpdateInput = Object.assign(_UpdateInput, { zod: UpdateInputZod })
-export type UpdateInput = Mutable<Schema.Schema.Type<typeof _UpdateInput>>
+export type UpdateInput = z.infer<typeof UpdateInput>
 
 // ---------------------------------------------------------------------------
 // Effect service
