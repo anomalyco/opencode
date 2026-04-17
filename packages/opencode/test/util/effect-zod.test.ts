@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import z from "zod"
 
 import { zod, ZodOverride } from "../../src/util/effect-zod"
@@ -330,6 +330,152 @@ describe("util.effect-zod", () => {
     test("plain struct without rest still emits additionalProperties unchanged (regression)", () => {
       const schema = zod(Schema.Struct({ id: Schema.String }))
       expect(schema.parse({ id: "x" })).toEqual({ id: "x" })
+    })
+  })
+
+  describe("transforms (Schema.decodeTo)", () => {
+    test("Number -> pseudo-Duration (seconds) applies the decode function", () => {
+      // Models the account/account.ts DurationFromSeconds pattern.
+      const SecondsToMs = Schema.Number.pipe(
+        Schema.decodeTo(Schema.Number, {
+          decode: SchemaGetter.transform((n: number) => n * 1000),
+          encode: SchemaGetter.transform((ms: number) => ms / 1000),
+        }),
+      )
+
+      const schema = zod(SecondsToMs)
+      expect(schema.parse(3)).toBe(3000)
+      expect(schema.parse(0)).toBe(0)
+    })
+
+    test("String -> Number via parseInt decode", () => {
+      const ParsedInt = Schema.String.pipe(
+        Schema.decodeTo(Schema.Number, {
+          decode: SchemaGetter.transform((s: string) => Number.parseInt(s, 10)),
+          encode: SchemaGetter.transform((n: number) => String(n)),
+        }),
+      )
+
+      const schema = zod(ParsedInt)
+      expect(schema.parse("42")).toBe(42)
+      expect(schema.parse("0")).toBe(0)
+    })
+
+    test("transform inside a struct field applies per-field", () => {
+      const Field = Schema.Number.pipe(
+        Schema.decodeTo(Schema.Number, {
+          decode: SchemaGetter.transform((n: number) => n + 1),
+          encode: SchemaGetter.transform((n: number) => n - 1),
+        }),
+      )
+
+      const schema = zod(
+        Schema.Struct({
+          plain: Schema.Number,
+          bumped: Field,
+        }),
+      )
+
+      expect(schema.parse({ plain: 5, bumped: 10 })).toEqual({ plain: 5, bumped: 11 })
+    })
+
+    test("chained decodeTo composes transforms in order", () => {
+      // String -> Number (parseInt) -> Number (doubled).
+      // Exercises the encoded() reduce, not just a single link.
+      const Chained = Schema.String.pipe(
+        Schema.decodeTo(Schema.Number, {
+          decode: SchemaGetter.transform((s: string) => Number.parseInt(s, 10)),
+          encode: SchemaGetter.transform((n: number) => String(n)),
+        }),
+        Schema.decodeTo(Schema.Number, {
+          decode: SchemaGetter.transform((n: number) => n * 2),
+          encode: SchemaGetter.transform((n: number) => n / 2),
+        }),
+      )
+
+      const schema = zod(Chained)
+      expect(schema.parse("21")).toBe(42)
+      expect(schema.parse("0")).toBe(0)
+    })
+
+    test("Schema.Class is unaffected by transform walker (returns plain object, not instance)", () => {
+      // Schema.Class uses Declaration + encoding under the hood to construct
+      // class instances. The walker must NOT apply that transform, or zod
+      // parsing would return class instances instead of plain objects.
+      class Method extends Schema.Class<Method>("TxTestMethod")({
+        type: Schema.String,
+        value: Schema.Number,
+      }) {}
+
+      const schema = zod(Method)
+      const parsed = schema.parse({ type: "oauth", value: 1 })
+      expect(parsed).toEqual({ type: "oauth", value: 1 })
+      // Guardrail: ensure we didn't get back a Method instance.
+      expect(parsed).not.toBeInstanceOf(Method)
+    })
+  })
+
+  describe("optimizations", () => {
+    test("walk() memoizes by AST identity — same AST node returns same Zod", () => {
+      const shared = Schema.Struct({ id: Schema.String, name: Schema.String })
+      const left = zod(shared)
+      const right = zod(shared)
+      expect(left).toBe(right)
+    })
+
+    test("nested reuse of the same AST reuses the cached Zod child", () => {
+      // Two different parents embed the same inner schema. The inner zod
+      // child should be identical by reference inside both parents.
+      class Inner extends Schema.Class<Inner>("MemoTestInner")({
+        value: Schema.String,
+      }) {}
+
+      class OuterA extends Schema.Class<OuterA>("MemoTestOuterA")({
+        inner: Inner,
+      }) {}
+
+      class OuterB extends Schema.Class<OuterB>("MemoTestOuterB")({
+        inner: Inner,
+      }) {}
+
+      const shapeA = (zod(OuterA) as any).shape ?? (zod(OuterA) as any)._def?.shape?.()
+      const shapeB = (zod(OuterB) as any).shape ?? (zod(OuterB) as any)._def?.shape?.()
+      expect(shapeA.inner).toBe(shapeB.inner)
+    })
+
+    test("multiple checks run in a single refinement layer (all fire on one value)", () => {
+      // Three checks attached to the same schema. All three must run and
+      // report — asserting that no check silently got dropped when we
+      // flattened into one superRefine.
+      const positive = Schema.makeFilter((n: number) => (n > 0 ? undefined : "not positive"))
+      const even = Schema.makeFilter((n: number) => (n % 2 === 0 ? undefined : "not even"))
+      const under100 = Schema.makeFilter((n: number) => (n < 100 ? undefined : "too big"))
+
+      const schema = zod(Schema.Number.check(positive).check(even).check(under100))
+
+      const neg = schema.safeParse(-3)
+      expect(neg.success).toBe(false)
+      expect(neg.error!.issues.map((i) => i.message)).toEqual(expect.arrayContaining(["not positive", "not even"]))
+
+      const big = schema.safeParse(101)
+      expect(big.success).toBe(false)
+      expect(big.error!.issues.map((i) => i.message)).toContain("too big")
+
+      // Passing value satisfies all three
+      expect(schema.parse(42)).toBe(42)
+    })
+
+    test("FilterGroup flattens into the single refinement layer alongside its siblings", () => {
+      const positive = Schema.makeFilter((n: number) => (n > 0 ? undefined : "not positive"))
+      const even = Schema.makeFilter((n: number) => (n % 2 === 0 ? undefined : "not even"))
+      const group = Schema.makeFilterGroup([positive, even])
+      const under100 = Schema.makeFilter((n: number) => (n < 100 ? undefined : "too big"))
+
+      const schema = zod(Schema.Number.check(group).check(under100))
+
+      const bad = schema.safeParse(-3)
+      expect(bad.success).toBe(false)
+      expect(bad.error!.issues.map((i) => i.message)).toEqual(expect.arrayContaining(["not positive", "not even"]))
     })
   })
 })

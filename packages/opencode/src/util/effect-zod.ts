@@ -1,4 +1,4 @@
-import { Schema, SchemaAST } from "effect"
+import { Effect, Option, Schema, SchemaAST } from "effect"
 import z from "zod"
 
 /**
@@ -8,33 +8,85 @@ import z from "zod"
  */
 export const ZodOverride: unique symbol = Symbol.for("effect-zod/override")
 
+// AST nodes are immutable and frequently shared across schemas (e.g. a single
+// Schema.Class embedded in multiple parents). Memoizing by node identity
+// avoids rebuilding equivalent Zod subtrees and keeps derived children stable
+// by reference across callers.
+const walkCache = new WeakMap<SchemaAST.AST, z.ZodTypeAny>()
+
+// Shared empty ParseOptions for the rare callers that need one — avoids
+// allocating a fresh object per parse inside refinements and transforms.
+const EMPTY_PARSE_OPTIONS = {} as SchemaAST.ParseOptions
+
 export function zod<S extends Schema.Top>(schema: S): z.ZodType<Schema.Schema.Type<S>> {
   return walk(schema.ast) as z.ZodType<Schema.Schema.Type<S>>
 }
 
 function walk(ast: SchemaAST.AST): z.ZodTypeAny {
+  const cached = walkCache.get(ast)
+  if (cached) return cached
+  const result = walkUncached(ast)
+  walkCache.set(ast, result)
+  return result
+}
+
+function walkUncached(ast: SchemaAST.AST): z.ZodTypeAny {
   const override = (ast.annotations as any)?.[ZodOverride] as z.ZodTypeAny | undefined
   if (override) return override
 
-  let out = body(ast)
-  for (const check of ast.checks ?? []) {
-    out = applyCheck(out, check, ast)
-  }
+  // Schema.Class wraps its fields in a Declaration AST plus an encoding that
+  // constructs the class instance. For the Zod derivation we want the plain
+  // field shape (the decoded/consumer view), not the class instance — so
+  // Declarations fall through to body(), not encoded(). User-level
+  // Schema.decodeTo / Schema.transform attach encoding to non-Declaration
+  // nodes, where we do apply the transform.
+  const hasTransform = ast.encoding?.length && ast._tag !== "Declaration"
+  const base = hasTransform ? encoded(ast) : body(ast)
+  const out = ast.checks?.length ? applyChecks(base, ast.checks, ast) : base
   const desc = SchemaAST.resolveDescription(ast)
   const ref = SchemaAST.resolveIdentifier(ast)
-  const next = desc ? out.describe(desc) : out
-  return ref ? next.meta({ ref }) : next
+  const described = desc ? out.describe(desc) : out
+  return ref ? described.meta({ ref }) : described
 }
 
-function applyCheck(out: z.ZodTypeAny, check: SchemaAST.Check<any>, ast: SchemaAST.AST): z.ZodTypeAny {
-  if (check._tag === "FilterGroup") {
-    return check.checks.reduce((acc, sub) => applyCheck(acc, sub, ast), out)
+// Walk the encoded side and apply each link's decode to produce the decoded
+// shape. A node `Target` produced by `from.decodeTo(Target)` carries
+// `Target.encoding = [Link(from, transformation)]`. Chained decodeTo calls
+// nest the encoding via `Link.to` so walking it recursively threads all
+// prior transforms — typical encoding.length is 1.
+function encoded(ast: SchemaAST.AST): z.ZodTypeAny {
+  const encoding = ast.encoding!
+  return encoding.reduce<z.ZodTypeAny>((acc, link) => acc.transform((v) => decode(link.transformation, v)), walk(encoding[0].to))
+}
+
+// Transformations built via pure `SchemaGetter.transform(fn)` (the common
+// decodeTo case) resolve synchronously, so running with no services is safe.
+// Effectful / middleware-based transforms will surface as Effect defects.
+function decode(transformation: SchemaAST.Link["transformation"], value: unknown): unknown {
+  const exit = Effect.runSyncExit(
+    (transformation.decode as any).run(Option.some(value), EMPTY_PARSE_OPTIONS) as Effect.Effect<Option.Option<unknown>>,
+  )
+  if (exit._tag === "Failure") throw new Error(`effect-zod: transform failed: ${String(exit.cause)}`)
+  return Option.getOrElse(exit.value, () => value)
+}
+
+// Flatten FilterGroups and any nested variants into a linear list of Filters
+// so we can run all of them inside a single Zod .superRefine wrapper instead
+// of stacking N wrapper layers (one per check).
+function applyChecks(out: z.ZodTypeAny, checks: SchemaAST.Checks, ast: SchemaAST.AST): z.ZodTypeAny {
+  const filters: SchemaAST.Filter<unknown>[] = []
+  const collect = (c: SchemaAST.Check<unknown>) => {
+    if (c._tag === "FilterGroup") c.checks.forEach(collect)
+    else filters.push(c)
   }
+  checks.forEach(collect)
   return out.superRefine((value, ctx) => {
-    const issue = check.run(value, ast, {} as any)
-    if (!issue) return
-    const message = issueMessage(issue) ?? (check.annotations as any)?.message ?? "Validation failed"
-    ctx.addIssue({ code: "custom", message })
+    for (const filter of filters) {
+      const issue = filter.run(value, ast, EMPTY_PARSE_OPTIONS)
+      if (!issue) continue
+      const message = issueMessage(issue) ?? (filter.annotations as any)?.message ?? "Validation failed"
+      ctx.addIssue({ code: "custom", message })
+    }
   })
 }
 
