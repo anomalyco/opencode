@@ -15,6 +15,7 @@ import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@/flag/flag"
+import { WorkspaceID } from "@/control-plane/schema"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
@@ -27,9 +28,10 @@ import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceMiddleware } from "./middleware"
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
-  const app = new Hono()
+export const InstanceRoutes = (upgrade: UpgradeWebSocket, workspaceID?: WorkspaceID): Hono => {
+  const app = new Hono().use(InstanceMiddleware(workspaceID))
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
     const handler = ExperimentalHttpApiServer.webHandler().handler

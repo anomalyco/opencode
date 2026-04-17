@@ -1,16 +1,10 @@
 import { generateSpecs } from "hono-openapi"
 import { Hono } from "hono"
-import type { MiddlewareHandler } from "hono"
 import { adapter } from "#hono"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util"
 import { Flag } from "@/flag/flag"
-import { Instance } from "@/project/instance"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { AppRuntime } from "@/effect/app-runtime"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { WorkspaceID } from "@/control-plane/schema"
-import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
 import { FenceMiddleware } from "./fence"
@@ -48,47 +42,23 @@ function create(opts: { cors?: string[] }) {
 
   const runtime = adapter.create(app)
 
-  function InstanceMiddleware(workspaceID?: WorkspaceID): MiddlewareHandler {
-    return async (c, next) => {
-      const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-      const directory = AppFileSystem.resolve(
-        (() => {
-          try {
-            return decodeURIComponent(raw)
-          } catch {
-            return raw
-          }
-        })(),
-      )
-
-      return WorkspaceContext.provide({
-        workspaceID,
-        async fn() {
-          return Instance.provide({
-            directory,
-            init: () => AppRuntime.runPromise(InstanceBootstrap),
-            async fn() {
-              return next()
-            },
-          })
-        },
-      })
-    }
-  }
-
   if (Flag.OPENCODE_WORKSPACE_ID) {
     return {
       app: app
-        .use(InstanceMiddleware(Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined))
         .use(FenceMiddleware)
-        .route("/", InstanceRoutes(runtime.upgradeWebSocket)),
+        .route(
+          "/",
+          InstanceRoutes(
+            runtime.upgradeWebSocket,
+            Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined,
+          ),
+        ),
       runtime,
     }
   }
 
   return {
     app: app
-      .use(InstanceMiddleware())
       .route("/", ControlPlaneRoutes())
       .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket))
       .route("/", InstanceRoutes(runtime.upgradeWebSocket))
