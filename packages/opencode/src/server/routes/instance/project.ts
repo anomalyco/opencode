@@ -9,6 +9,7 @@ import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { AppRuntime } from "@/effect/app-runtime"
+import { jsonRequest, runRequest } from "./trace"
 
 export const ProjectRoutes = lazy(() =>
   new Hono()
@@ -75,7 +76,9 @@ export const ProjectRoutes = lazy(() =>
       async (c) => {
         const dir = Instance.directory
         const prev = Instance.project
-        const next = await AppRuntime.runPromise(
+        const next = await runRequest(
+          "ProjectRoutes.initGit",
+          c,
           Project.Service.use((svc) => svc.initGit({ directory: dir, project: prev })),
         )
         if (next.id === prev.id && next.vcs === prev.vcs && next.worktree === prev.worktree) return c.json(next)
@@ -108,11 +111,12 @@ export const ProjectRoutes = lazy(() =>
       }),
       validator("param", z.object({ projectID: ProjectID.zod })),
       validator("json", Project.UpdateInput.omit({ projectID: true })),
-      async (c) => {
-        const projectID = c.req.valid("param").projectID
-        const body = c.req.valid("json")
-        const project = await AppRuntime.runPromise(Project.Service.use((svc) => svc.update({ ...body, projectID })))
-        return c.json(project)
-      },
+      async (c) =>
+        jsonRequest("ProjectRoutes.update", c, function* () {
+          const projectID = c.req.valid("param").projectID
+          const body = c.req.valid("json")
+          const svc = yield* Project.Service
+          return yield* svc.update({ ...body, projectID })
+        }),
     ),
 )

@@ -1607,24 +1607,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "consoleManagedProviders": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "activeOrgName": {
-                      "type": "string"
-                    },
-                    "switchableOrgCount": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
-                    }
-                  },
-                  "required": ["consoleManagedProviders", "switchableOrgCount"]
+                  "$ref": "#/components/schemas/ConsoleState"
                 }
               }
             }
@@ -12358,6 +12341,24 @@
           }
         },
         "required": ["id", "name", "source", "env", "options", "models"]
+      },
+      "ConsoleState": {
+        "type": "object",
+        "properties": {
+          "consoleManagedProviders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activeOrgName": {
+            "type": "string"
+          },
+          "switchableOrgCount": {
+            "type": "number"
+          }
+        },
+        "required": ["consoleManagedProviders", "switchableOrgCount"]
       },
       "ToolIDs": {
         "type": "array",
