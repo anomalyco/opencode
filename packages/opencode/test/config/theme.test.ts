@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { tmpdir } from "os"
 import { join } from "path"
-import { Config } from "../../src/config/config"
+import { loadThemeFile } from "../../src/config/config"
 import { writeFileSync, mkdirSync, rmSync } from "fs"
 
 describe("Theme Loading", () => {
@@ -29,7 +29,7 @@ describe("Theme Loading", () => {
     const themeFile = join(tempDir, "test-theme.jsonc")
     writeFileSync(themeFile, themeContent)
 
-    const theme = await Config.loadThemeFile(themeFile)
+    const theme = await loadThemeFile(themeFile)
 
     expect(theme.theme.primary).toBe("#ff0000")
     expect(theme.theme.secondary).toBe("#00ff00")
@@ -47,7 +47,7 @@ describe("Theme Loading", () => {
     const themeFile = join(tempDir, "test-theme.jsonc")
     writeFileSync(themeFile, themeContent)
 
-    const theme = await Config.loadThemeFile(themeFile)
+    const theme = await loadThemeFile(themeFile)
 
     // Environment variable should NOT be processed in themes
     expect(theme.theme.primary).toBe("{env:TEST_COLOR}")
@@ -68,7 +68,7 @@ describe("Theme Loading", () => {
     const themeFile = join(tempDir, "test-theme.jsonc")
     writeFileSync(themeFile, themeContent)
 
-    const theme = await Config.loadThemeFile(themeFile)
+    const theme = await loadThemeFile(themeFile)
 
     // File inclusion should NOT be processed in themes
     expect(theme.theme.primary).toBe("{file:color.txt}")
@@ -86,7 +86,7 @@ describe("Theme Loading", () => {
     const themeFile = join(tempDir, "test-theme.jsonc")
     writeFileSync(themeFile, themeContent)
 
-    const theme = await Config.loadThemeFile(themeFile)
+    const theme = await loadThemeFile(themeFile)
 
     expect(theme.theme.primary).toBe("#ff0000")
     expect(theme.theme.secondary).toBe("#00ff00")
@@ -103,13 +103,13 @@ describe("Theme Loading", () => {
     const themeFile = join(tempDir, "test-theme.jsonc")
     writeFileSync(themeFile, themeContent)
 
-    expect(Config.loadThemeFile(themeFile)).rejects.toThrow()
+    expect(loadThemeFile(themeFile)).rejects.toThrow()
   })
 
   test("should throw error for empty theme file", async () => {
     const themeFile = join(tempDir, "empty-theme.jsonc")
     writeFileSync(themeFile, "")
 
-    expect(Config.loadThemeFile(themeFile)).rejects.toThrow("Empty theme file")
+    expect(loadThemeFile(themeFile)).rejects.toThrow("Empty theme file")
   })
 })

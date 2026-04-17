@@ -41,7 +41,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util"
-import { Config } from "../../../../config/config"
+import { loadThemeFile } from "../../../../config/config"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -502,7 +502,7 @@ async function getCustomThemes() {
       const name = path.basename(item, ext)
 
       // Use JSONC parser for all theme files regardless of extension
-      result[name] = await Config.loadThemeFile(item)
+      result[name] = await loadThemeFile(item)
     }
   }
   return result
