@@ -18,6 +18,7 @@ import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
 import { makeRuntime } from "@/cli/effect/runtime"
 import { Filesystem, Log } from "@/util"
+import { ConfigVariable } from "@/config/variable"
 
 const log = Log.create({ service: "tui.config" })
 
@@ -197,18 +198,15 @@ async function loadFile(filepath: string): Promise<Info> {
 }
 
 async function load(text: string, configFilepath: string): Promise<Info> {
-  return ConfigParse.load(Info, text, {
-    type: "path",
-    path: configFilepath,
-    missing: "empty",
-    normalize: (data) => {
+  return ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" })
+    .then((expanded) => ConfigParse.jsonc(expanded, configFilepath))
+    .then((data) => {
       if (!isRecord(data)) return {}
 
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      return normalize(data)
-    },
-  })
+      return ConfigParse.schema(Info, normalize(data), configFilepath)
+    })
     .then((data) => resolvePlugins(data, configFilepath))
     .catch((error) => {
       log.warn("invalid tui config", { path: configFilepath, error })

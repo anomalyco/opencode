@@ -38,6 +38,7 @@ import { ConfigSkills } from "./skills"
 import { ConfigPaths } from "./paths"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLSP } from "./lsp"
+import { ConfigVariable } from "./variable"
 
 const log = Log.create({ service: "config" })
 
@@ -327,24 +328,16 @@ export const layer = Layer.effect(
       text: string,
       options: { path: string } | { dir: string; source: string },
     ) {
-      if (!("path" in options)) {
-        return yield* Effect.promise(() =>
-          ConfigParse.load(Info, text, {
-            type: "virtual",
-            dir: options.dir,
-            source: options.source,
-            normalize: normalizeLoadedConfig,
-          }),
-        )
-      }
-
-      const data = yield* Effect.promise(() =>
-        ConfigParse.load(Info, text, {
-          type: "path",
-          path: options.path,
-          normalize: normalizeLoadedConfig,
-        }),
+      const source = "path" in options ? options.path : options.source
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute(
+          "path" in options ? { text, type: "path", path: options.path } : { text, type: "virtual", ...options },
+        ),
       )
+      const parsed = ConfigParse.jsonc(expanded, source)
+      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+      if (!("path" in options)) return data
+
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
@@ -725,17 +718,16 @@ export const layer = Layer.effect(
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
-      const input = writable(config)
 
       let next: Info
       if (!file.endsWith(".jsonc")) {
-        const existing = ConfigParse.parse(Info, before, file)
-        const merged = mergeDeep(writable(existing), input)
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+        const merged = mergeDeep(writable(existing), writable(config))
         yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
         next = merged
       } else {
-        const updated = patchJsonc(before, input)
-        next = ConfigParse.parse(Info, updated, file)
+        const updated = patchJsonc(before, writable(config))
+        next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file)
         yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
 
