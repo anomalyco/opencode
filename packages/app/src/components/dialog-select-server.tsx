@@ -344,7 +344,7 @@ export function DialogSelectServer() {
 
   createEffect(() => {
     items()
-    refreshHealth()
+    void refreshHealth()
     const interval = setInterval(refreshHealth, 10_000)
     onCleanup(() => clearInterval(interval))
   })
@@ -498,7 +498,7 @@ export function DialogSelectServer() {
   async function handleRemove(url: ServerConnection.Key) {
     server.remove(url)
     if ((await platform.getDefaultServer?.()) === url) {
-      platform.setDefaultServer?.(null)
+      void platform.setDefaultServer?.(null)
     }
   }
 
@@ -536,7 +536,7 @@ export function DialogSelectServer() {
             items={sortedItems}
             key={(x) => x.http.url}
             onSelect={(x) => {
-              if (x) select(x)
+              if (x) void select(x)
             }}
             divider={true}
             class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
