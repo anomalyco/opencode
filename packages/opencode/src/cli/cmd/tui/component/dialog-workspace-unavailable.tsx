@@ -27,12 +27,20 @@ export function DialogWorkspaceUnavailable(props: {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       void confirm()
+      return
     }
     if (evt.name === "left") {
+      evt.preventDefault()
+      evt.stopPropagation()
       setStore("active", "cancel")
+      return
     }
     if (evt.name === "right") {
+      evt.preventDefault()
+      evt.stopPropagation()
       setStore("active", "restore")
     }
   })
