@@ -684,6 +684,49 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("preserves reasoning providerMetadata even when assistant model differs", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "think about this",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "reasoning trace",
+            time: { start: 0 },
+            metadata: { anthropic: { signature: "sig-abc" } },
+          },
+        ] as MessageV2.Part[],
+      } as MessageV2.WithParts,
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "think about this" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "reasoning trace", providerOptions: { anthropic: { signature: "sig-abc" } } },
+        ],
+      },
+    ])
+  })
+
   test("replaces compacted tool output with placeholder", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
