@@ -72,7 +72,7 @@ const share = (id: SessionID) =>
   Database.use((db) => db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, id)).get())
 
 const seed = (url: string, org?: string) =>
-  AccountRepo.use((repo) =>
+  AccountRepo.Service.use((repo) =>
     repo.persistAccount({
       id: AccountID.make("account-1"),
       email: "user@example.com",
