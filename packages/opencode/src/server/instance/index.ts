@@ -30,14 +30,7 @@ import { WorkspaceRouterMiddleware } from "./middleware"
 import { AppRuntime } from "@/effect/app-runtime"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
-  const app = new Hono()
-    .use(WorkspaceRouterMiddleware(upgrade))
-    .route("/project", ProjectRoutes())
-    .route("/pty", PtyRoutes(upgrade))
-    .route("/config", ConfigRoutes())
-    .route("/experimental", ExperimentalRoutes())
-    .route("/session", SessionRoutes())
-    .route("/permission", PermissionRoutes())
+  const app = new Hono().use(WorkspaceRouterMiddleware(upgrade))
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
     const handler = ExperimentalHttpApiServer.webHandler().handler
@@ -57,6 +50,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   }
 
   return app
+    .route("/project", ProjectRoutes())
+    .route("/pty", PtyRoutes(upgrade))
+    .route("/config", ConfigRoutes())
+    .route("/experimental", ExperimentalRoutes())
+    .route("/session", SessionRoutes())
+    .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
     .route("/sync", SyncRoutes())
