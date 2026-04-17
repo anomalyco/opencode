@@ -207,10 +207,15 @@ const rewrittenBody = dedented.map(rewriteLine)
 
 // Assemble the new file. Collapse multiple trailing blank lines so the
 // self-reexport sits cleanly at the end.
+//
+// When the file is itself `index.ts`, prefer `"."` over `"./index"` — both are
+// valid but `"."` matches the existing convention in the codebase (e.g.
+// pty/index.ts, file/index.ts, etc.) and avoids referencing "index" literally.
 const basename = path.basename(absPath, ".ts")
+const reexportSource = basename === "index" ? "." : `./${basename}`
 const assembled = [...before, ...rewrittenBody, ...after].join("\n")
 const trimmed = assembled.replace(/\s+$/g, "")
-const output = `${trimmed}\n\nexport * as ${nsName} from "./${basename}"\n`
+const output = `${trimmed}\n\nexport * as ${nsName} from "${reexportSource}"\n`
 
 if (dryRun) {
   console.log(`--- dry run: ${path.relative(process.cwd(), absPath)} ---`)
@@ -218,7 +223,7 @@ if (dryRun) {
   console.log(`body lines:     ${body.length}`)
   console.log(`declared names: ${Array.from(declaredNames).join(", ") || "(none)"}`)
   console.log(`self-refs rewr: ${rewriteCount}`)
-  console.log(`self-reexport:  export * as ${nsName} from "./${basename}"`)
+  console.log(`self-reexport:  export * as ${nsName} from "${reexportSource}"`)
   console.log(`output preview (last 10 lines):`)
   const outputLines = output.split("\n")
   for (const l of outputLines.slice(Math.max(0, outputLines.length - 10))) {
@@ -231,7 +236,7 @@ fs.writeFileSync(absPath, output)
 console.log(`unwrapped ${path.relative(process.cwd(), absPath)} → ${nsName}`)
 console.log(`  body lines:      ${body.length}`)
 console.log(`  self-refs rewr:  ${rewriteCount}`)
-console.log(`  self-reexport:   export * as ${nsName} from "./${basename}"`)
+console.log(`  self-reexport:   export * as ${nsName} from "${reexportSource}"`)
 console.log("")
 console.log("Next: verify with")
 console.log("  bunx --bun tsgo --noEmit")
