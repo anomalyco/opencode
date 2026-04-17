@@ -4,12 +4,15 @@ import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
 import { ServerProxy } from "../proxy"
-import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { Flag } from "@/flag/flag"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Log } from "@/util"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -40,14 +43,16 @@ async function getSessionWorkspace(url: URL) {
   const id = getSessionID(url)
   if (!id) return null
 
-  const session = await Session.get(id).catch(() => undefined)
+  const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(id))).catch(() => undefined)
   return session?.workspaceID
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
+  const log = Log.create({ service: "workspace-router" })
+
   return async (c, next) => {
     const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-    const directory = Filesystem.resolve(
+    const directory = AppFileSystem.resolve(
       (() => {
         try {
           return decodeURIComponent(raw)
@@ -62,11 +67,25 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const sessionWorkspaceID = await getSessionWorkspace(url)
     const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
 
-    // If no workspace is provided we use the project
-    if (!workspaceID) {
+    if (!workspaceID || url.pathname.startsWith("/console") || Flag.OPENCODE_WORKSPACE_ID) {
+      if (Flag.OPENCODE_WORKSPACE_ID) {
+        return WorkspaceContext.provide({
+          workspaceID: WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID),
+          async fn() {
+            return Instance.provide({
+              directory,
+              init: () => AppRuntime.runPromise(InstanceBootstrap),
+              async fn() {
+                return next()
+              },
+            })
+          },
+        })
+      }
+
       return Instance.provide({
         directory,
-        init: InstanceBootstrap,
+        init: () => AppRuntime.runPromise(InstanceBootstrap),
         async fn() {
           return next()
         },
@@ -76,38 +95,11 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
 
     if (!workspace) {
-      // Special-case deleting a session in case user's data in a
-      // weird state. Allow them to forcefully delete a synced session
-      // even if the remote workspace is not in their data.
-      //
-      // The lets the `DELETE /session/:id` endpoint through and we've
-      // made sure that it will run without an instance
-      if (url.pathname.match(/\/session\/[^/]+$/) && c.req.method === "DELETE") {
-        return next()
-      }
-
       return new Response(`Workspace not found: ${workspaceID}`, {
         status: 500,
         headers: {
           "content-type": "text/plain; charset=utf-8",
         },
-      })
-    }
-
-    const adaptor = await getAdaptor(workspace.type)
-    const target = await adaptor.target(workspace)
-
-    if (target.type === "local") {
-      return WorkspaceContext.provide({
-        workspaceID: WorkspaceID.make(workspaceID),
-        fn: () =>
-          Instance.provide({
-            directory: target.directory,
-            init: InstanceBootstrap,
-            async fn() {
-              return next()
-            },
-          }),
       })
     }
 
@@ -117,18 +109,44 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return next()
     }
 
+    const adaptor = await getAdaptor(workspace.projectID, workspace.type)
+    const target = await adaptor.target(workspace)
+
+    if (target.type === "local") {
+      return WorkspaceContext.provide({
+        workspaceID: WorkspaceID.make(workspaceID),
+        fn: () =>
+          Instance.provide({
+            directory: target.directory,
+            init: () => AppRuntime.runPromise(InstanceBootstrap),
+            async fn() {
+              return next()
+            },
+          }),
+      })
+    }
+
+    const proxyURL = new URL(target.url)
+    proxyURL.pathname = `${proxyURL.pathname.replace(/\/$/, "")}${url.pathname}`
+    proxyURL.search = url.search
+    proxyURL.hash = url.hash
+    proxyURL.searchParams.delete("workspace")
+
+    log.info("workspace proxy forwarding", {
+      workspaceID,
+      request: url.toString(),
+      target: String(target.url),
+      proxy: proxyURL.toString(),
+    })
+
     if (c.req.header("upgrade")?.toLowerCase() === "websocket") {
-      return ServerProxy.websocket(upgrade, target, c.req.raw, c.env)
+      return ServerProxy.websocket(upgrade, proxyURL, target.headers, c.req.raw, c.env)
     }
 
     const headers = new Headers(c.req.raw.headers)
     headers.delete("x-opencode-workspace")
 
-    return ServerProxy.http(
-      target,
-      new Request(c.req.raw, {
-        headers,
-      }),
-    )
+    const req = new Request(c.req.raw, { headers })
+    return ServerProxy.http(proxyURL, target.headers, req, workspace.id)
   }
 }

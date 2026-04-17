@@ -2,7 +2,7 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import { Log } from "./util/log"
+import { Log } from "./util"
 import { ConsoleCommand } from "./cli/cmd/account"
 import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
@@ -11,10 +11,11 @@ import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
-import { NamedError } from "@opencode-ai/util/error"
+import { InstallationVersion } from "./installation/version"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { Filesystem } from "./util/filesystem"
+import { Filesystem } from "./util"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -31,8 +32,8 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import path from "path"
 import { Global } from "./global"
-import { JsonMigration } from "./storage/json-migration"
-import { Database } from "./storage/db"
+import { JsonMigration } from "./storage"
+import { Database } from "./storage"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
@@ -68,7 +69,7 @@ const cli = yargs(args)
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
-  .version("version", "show version number", Installation.VERSION)
+  .version("version", "show version number", InstallationVersion)
   .alias("version", "v")
   .option("print-logs", {
     describe: "print logs to stderr",
@@ -105,7 +106,7 @@ const cli = yargs(args)
     process.env.OPENCODE_PID = String(process.pid)
 
     Log.Default.info("opencode", {
-      version: Installation.VERSION,
+      version: InstallationVersion,
       args: process.argv.slice(2),
     })
 

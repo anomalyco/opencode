@@ -8,7 +8,6 @@ import type {
   Part,
   Path,
   PermissionRequest,
-  Project,
   ProviderListResponse,
   QuestionRequest,
   Session,
@@ -73,6 +72,7 @@ export type State = {
   part: {
     [messageID: string]: Part[]
   }
+  bootstrapPromise: Promise<void>
 }
 
 export type VcsCache = {

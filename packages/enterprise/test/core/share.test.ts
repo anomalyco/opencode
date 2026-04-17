@@ -1,7 +1,7 @@
-import { describe, expect, test, afterAll } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Share } from "../../src/core/share"
 import { Storage } from "../../src/core/storage"
-import { Identifier } from "@opencode-ai/util/identifier"
+import { Identifier } from "@opencode-ai/shared/util/identifier"
 
 describe.concurrent("core.share", () => {
   test("should create a share", async () => {
