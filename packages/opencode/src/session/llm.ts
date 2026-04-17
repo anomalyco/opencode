@@ -19,7 +19,6 @@ import { Bus } from "@/bus"
 import { Wildcard } from "@/util"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
-import { Installation } from "@/installation"
 import { InstallationVersion } from "@/installation/version"
 import { EffectBridge } from "@/effect"
 import * as Option from "effect/Option"
@@ -28,6 +27,28 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
+
+export function buildSystem(input: Pick<StreamInput, "agent" | "model" | "system" | "user">) {
+  return [
+    [
+      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+      ...input.system,
+      ...(input.user.system ? [input.user.system] : []),
+    ]
+      .filter((x) => x)
+      .join("\n"),
+  ]
+}
+
+export function rejoinSystemForCaching(system: string[]) {
+  const header = system[0]
+  if (system.length > 2 && system[0] === header) {
+    const rest = system.slice(1)
+    system.length = 0
+    system.push(header, rest.join("\n"))
+  }
+  return system
+}
 
 export type StreamInput = {
   user: MessageV2.User
@@ -96,32 +117,13 @@ const live: Layer.Layer<
       // TODO: move this to a proper hook
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
-      const system: string[] = []
-      system.push(
-        [
-          // use agent prompt otherwise provider prompt
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-          // any custom prompt passed into this call
-          ...input.system,
-          // any custom prompt from last user message
-          ...(input.user.system ? [input.user.system] : []),
-        ]
-          .filter((x) => x)
-          .join("\n"),
-      )
-
-      const header = system[0]
+      const system = buildSystem(input)
       yield* plugin.trigger(
         "experimental.chat.system.transform",
         { sessionID: input.sessionID, model: input.model },
         { system },
       )
-      // rejoin to maintain 2-part structure for caching if header unchanged
-      if (system.length > 2 && system[0] === header) {
-        const rest = system.slice(1)
-        system.length = 0
-        system.push(header, rest.join("\n"))
-      }
+      rejoinSystemForCaching(system)
 
       const variant =
         !input.small && input.model.variants && input.user.model.variant
@@ -442,7 +444,7 @@ export const defaultLayer = Layer.suspend(() =>
   ),
 )
 
-function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
+export function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),

@@ -4,6 +4,7 @@ import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Config } from "@/config"
 import { InstanceState } from "@/effect"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
@@ -236,6 +237,12 @@ export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
 )
+
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export async function system() {
+  return runPromise((svc) => svc.system())
+}
 
 export function loaded(messages: MessageV2.WithParts[]) {
   return extract(messages)

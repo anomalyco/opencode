@@ -222,6 +222,10 @@ const InfoSchema = Schema.Struct({
       continue_loop_on_deny: Schema.optional(Schema.Boolean).annotate({
         description: "Continue the agent loop when a tool call is denied",
       }),
+      dump_context: Schema.optional(Schema.Union([Schema.Boolean, Schema.String])).annotate({
+        description:
+          "Enable /dump-context commands and optionally override the dump directory (default: <project>/.opencode/dumps/)",
+      }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),

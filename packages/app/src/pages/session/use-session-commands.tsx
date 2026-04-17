@@ -413,6 +413,49 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       onSelect: compact,
     }),
     sessionCommand({
+      id: "session.dump_context",
+      title: "Dump inference context",
+      slash: "dump-context",
+      disabled: !params.id || !sync.data.config.experimental?.dump_context,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+
+        const model = local.model.current()
+        if (!model) {
+          showToast({
+            title: language.t("toast.model.none.title"),
+            description: language.t("toast.model.none.description"),
+          })
+          return
+        }
+
+        await sdk.client.session
+          .dumpContext({
+            sessionID,
+            providerID: model.provider.id,
+            modelID: model.id,
+          })
+          .then(async (result) => {
+            if (!result.data?.path) return
+            const path = result.data.path
+            await write(path)
+            showToast({
+              title: "Context dumped",
+              description: path,
+              variant: "success",
+            })
+          })
+          .catch((error) => {
+            showToast({
+              title: language.t("common.requestFailed"),
+              description: error instanceof Error ? error.message : String(error),
+              variant: "error",
+            })
+          })
+      },
+    }),
+    sessionCommand({
       id: "session.fork",
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),

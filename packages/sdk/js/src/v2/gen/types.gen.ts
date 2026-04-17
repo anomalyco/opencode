@@ -1666,6 +1666,10 @@ export type Config = {
      */
     continue_loop_on_deny?: boolean
     /**
+     * Enable /dump-context commands and optionally override the dump directory (default: <project>/.opencode/dumps/)
+     */
+    dump_context?: boolean | string
+    /**
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
@@ -3724,6 +3728,46 @@ export type SessionSummarizeResponses = {
 }
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
+
+export type SessionDumpContextData = {
+  body?: {
+    providerID: string
+    modelID: string
+    format?: "text" | "json"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/dump-context"
+}
+
+export type SessionDumpContextErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionDumpContextError = SessionDumpContextErrors[keyof SessionDumpContextErrors]
+
+export type SessionDumpContextResponses = {
+  /**
+   * Context dump file path
+   */
+  200: {
+    path: string
+  }
+}
+
+export type SessionDumpContextResponse = SessionDumpContextResponses[keyof SessionDumpContextResponses]
 
 export type SessionMessagesData = {
   body?: never

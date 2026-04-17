@@ -46,6 +46,7 @@ import { Process } from "@/util"
 import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect"
 import { InstanceState } from "@/effect"
+import { makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect"
@@ -61,7 +62,7 @@ IMPORTANT:
 - Complete all necessary research and tool calls BEFORE calling this tool
 - This tool provides your final answer - no further actions are taken after calling it`
 
-const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+export const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
@@ -73,6 +74,20 @@ export interface Interface {
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+  readonly insertReminders: (input: {
+    messages: MessageV2.WithParts[]
+    agent: Agent.Info
+    session: Session.Info
+  }) => Effect.Effect<MessageV2.WithParts[]>
+  readonly resolveTools: (input: {
+    agent: Agent.Info
+    model: Provider.Model
+    session: Session.Info
+    tools?: Record<string, boolean>
+    processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+    bypassAgentCheck: boolean
+    messages: MessageV2.WithParts[]
+  }) => Effect.Effect<Record<string, AITool>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
@@ -1667,6 +1682,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       shell,
       command,
       resolvePromptParts,
+      insertReminders,
+      resolveTools,
     })
   }),
 )
@@ -1701,6 +1718,29 @@ export const defaultLayer = Layer.suspend(() =>
     ),
   ),
 )
+
+const { runPromise } = makeRuntime(Service, defaultLayer as Layer.Layer<Service, never, never>)
+
+export async function insertReminders(input: {
+  messages: MessageV2.WithParts[]
+  agent: Agent.Info
+  session: Session.Info
+}) {
+  return runPromise((svc) => svc.insertReminders(input))
+}
+
+export async function resolveTools(input: {
+  agent: Agent.Info
+  model: Provider.Model
+  session: Session.Info
+  tools?: Record<string, boolean>
+  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+  bypassAgentCheck: boolean
+  messages: MessageV2.WithParts[]
+}) {
+  return runPromise((svc) => svc.resolveTools(input))
+}
+
 export const PromptInput = z.object({
   sessionID: SessionID.zod,
   messageID: MessageID.zod.optional(),

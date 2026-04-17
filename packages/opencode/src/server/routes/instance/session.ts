@@ -20,7 +20,9 @@ import { Command } from "@/command"
 import { Log } from "@/util"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
+import { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { ContextDump } from "@/session/dump"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { Bus } from "@/bus"
@@ -598,6 +600,70 @@ export const SessionRoutes = lazy(() =>
           })
           yield* prompt.loop({ sessionID })
           return true
+        }),
+    )
+    .post(
+      "/:sessionID/dump-context",
+      describeRoute({
+        summary: "Dump inference context",
+        description: "Dump the exact inference context used for the next model request.",
+        operationId: "session.dump_context",
+        responses: {
+          200: {
+            description: "Context dump file path",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    path: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          providerID: ProviderID.zod,
+          modelID: ModelID.zod,
+          format: z.enum(["text", "json"]).optional().default("text"),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.dumpContext", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const agents = yield* Agent.Service
+          const providers = yield* Provider.Service
+          const sessions = yield* Session.Service
+          const messages = yield* sessions.messages({ sessionID })
+          const defaultAgent = yield* agents.defaultAgent()
+          const currentAgent = messages.reduceRight((found, message) => {
+            if (found || message.info.role !== "user") return found
+            return message.info.agent || defaultAgent
+          }, undefined as string | undefined)
+          const agentName = currentAgent ?? defaultAgent
+          const agent = yield* agents.get(agentName)
+          if (!agent) throw new Error(`Agent not found: ${agentName}`)
+          const model = yield* providers.getModel(body.providerID, body.modelID)
+          const content = yield* Effect.promise(() => ContextDump.assemble({ sessionID, model, agent }))
+          const path = yield* Effect.promise(() =>
+            ContextDump.write({
+              sessionID,
+              content,
+              format: body.format,
+            }),
+          )
+          return { path }
         }),
     )
     .get(

@@ -17,6 +17,7 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider"
 import { Question } from "@/question"
+import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { Log } from "@/util"
 import { isRecord } from "@/util/record"
@@ -615,5 +616,15 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
   ),
 )
+
+const { runPromise } = makeRuntime(Service, defaultLayer as Layer.Layer<Service, never, never>)
+
+export async function create(input: {
+  assistantMessage: MessageV2.Assistant
+  sessionID: SessionID
+  model: Provider.Model
+}) {
+  return runPromise((svc) => svc.create(input))
+}
 
 export * as SessionProcessor from "./processor"

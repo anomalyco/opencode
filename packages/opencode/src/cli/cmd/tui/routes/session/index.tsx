@@ -500,6 +500,49 @@ export function Session() {
       },
     },
     {
+      title: "Dump inference context",
+      value: "session.dump_context",
+      category: "Session",
+      hidden: !sync.data.config.experimental?.dump_context,
+      slash: {
+        name: "dump-context",
+      },
+      onSelect: async (dialog) => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to dump this session context",
+            duration: 3000,
+          })
+          return
+        }
+        dialog.clear()
+        await sdk.client.session
+          .dumpContext({
+            sessionID: route.sessionID,
+            modelID: selectedModel.modelID,
+            providerID: selectedModel.providerID,
+          })
+          .then((result) => {
+            if (!result.data?.path) return
+            toast.show({
+              title: "Context dumped",
+              message: result.data.path,
+              variant: "success",
+              duration: 5000,
+            })
+          })
+          .catch((error) => {
+            toast.show({
+              message: error instanceof Error ? error.message : "Failed to dump context",
+              variant: "error",
+              duration: 5000,
+            })
+          })
+      },
+    },
+    {
       title: "Unshare session",
       value: "session.unshare",
       keybind: "session_unshare",

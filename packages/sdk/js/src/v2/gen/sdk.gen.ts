@@ -126,6 +126,8 @@ import type {
   SessionDeleteMessageResponses,
   SessionDeleteResponses,
   SessionDiffResponses,
+  SessionDumpContextErrors,
+  SessionDumpContextResponses,
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
@@ -2136,6 +2138,49 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionSummarizeResponses, SessionSummarizeErrors, ThrowOnError>({
       url: "/session/{sessionID}/summarize",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Dump inference context
+   *
+   * Dump the exact inference context used for the next model request.
+   */
+  public dumpContext<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      providerID?: string
+      modelID?: string
+      format?: "text" | "json"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "modelID" },
+            { in: "body", key: "format" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionDumpContextResponses, SessionDumpContextErrors, ThrowOnError>({
+      url: "/session/{sessionID}/dump-context",
       ...options,
       ...params,
       headers: {
