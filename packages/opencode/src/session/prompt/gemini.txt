@@ -74,7 +74,7 @@ model: true
 
 <example>
 user: list files here.
-model: [tool_call: glob for pattern '*' in path '/path/to/project']
+model: [tool_call: read for absolute_path '/path/to/project']
 </example>
 
 <example>
