@@ -20,7 +20,7 @@ import { zod } from "@/util/effect-zod"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -31,14 +31,6 @@ import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
-
-type Mutable<T> = T extends string | number | boolean | bigint | symbol | null | undefined
-  ? T
-  : T extends ReadonlyArray<infer U>
-    ? Mutable<U>[]
-    : T extends object
-      ? { -readonly [K in keyof T]: Mutable<T[K]> }
-      : T
 
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
@@ -878,7 +870,7 @@ export const Model = Schema.Struct({
 })
   .annotate({ identifier: "Model" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export type Model = Mutable<Schema.Schema.Type<typeof Model>>
+export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
 export const Info = Schema.Struct({
   id: ProviderID,
@@ -891,7 +883,7 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "Provider" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export type Info = Mutable<Schema.Schema.Type<typeof Info>>
+export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
 
@@ -900,13 +892,13 @@ export const ListResult = Schema.Struct({
   default: DefaultModelIDs,
   connected: Schema.Array(Schema.String),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
-export type ListResult = Mutable<Schema.Schema.Type<typeof ListResult>>
+export type ListResult = Types.DeepMutable<Schema.Schema.Type<typeof ListResult>>
 
 export const ConfigProvidersResult = Schema.Struct({
   providers: Schema.Array(Info),
   default: DefaultModelIDs,
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
-export type ConfigProvidersResult = Mutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
+export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
