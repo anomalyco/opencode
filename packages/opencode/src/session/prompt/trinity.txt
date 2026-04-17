@@ -26,7 +26,7 @@ assistant: Yes
 
 <example>
 user: what command should I run to list files in the current directory?
-assistant: Use the read tool.
+assistant: ls
 </example>
 
 <example>

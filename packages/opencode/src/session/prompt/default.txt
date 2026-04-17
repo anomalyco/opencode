@@ -34,7 +34,7 @@ assistant: Yes
 
 <example>
 user: what command should I run to list files in the current directory?
-assistant: Use the read tool.
+assistant: ls
 </example>
 
 <example>
@@ -50,7 +50,7 @@ assistant: 150000
 
 <example>
 user: what files are in the directory src/?
-assistant: [tool_call: read for absolute_path '/path/to/project/src', reports seeing foo.c, bar.c, baz.c]
+assistant: [tool_call: read for absolute_path '/path/to/project/src', reads 'src/' and sees foo.c, bar.c, baz.c]
 user: which file contains the implementation of foo?
 assistant: src/foo.c
 </example>
