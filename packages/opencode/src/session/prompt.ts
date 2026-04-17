@@ -413,7 +413,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const ctx = context(args, options)
                 yield* plugin.trigger(
                   "tool.execute.before",
-                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
+                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID!, ask: (req) => run.promise(ctx.ask(req)) },
                   { args },
                 )
                 const result = yield* item.execute(args, ctx)
@@ -454,7 +454,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const ctx = context(args, opts)
               yield* plugin.trigger(
                 "tool.execute.before",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
+                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, ask: (req) => run.promise(ctx.ask(req)) },
                 { args },
               )
               yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
@@ -574,12 +574,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         subagent_type: task.agent,
         command: task.command,
       }
-      yield* plugin.trigger(
-        "tool.execute.before",
-        { tool: TaskTool.id, sessionID, callID: part.id },
-        { args: taskArgs },
-      )
-
       const taskAgent = yield* agents.get(task.agent)
       if (!taskAgent) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -588,6 +582,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
         throw error
       }
+      yield* plugin.trigger(
+        "tool.execute.before",
+        {
+          tool: TaskTool.id,
+          sessionID,
+          callID: part.id,
+          ask: (req) =>
+            Effect.runPromise(
+              permission
+                .ask({
+                  ...req,
+                  sessionID,
+                  tool: { messageID: assistantMessage.id, callID: part.id },
+                  ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                })
+                .pipe(Effect.orDie),
+            ),
+        },
+        { args: taskArgs },
+      )
 
       let error: Error | undefined
       const taskAbort = new AbortController()
