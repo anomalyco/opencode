@@ -54,7 +54,7 @@ export const McpRoutes = lazy(() =>
         "json",
         z.object({
           name: z.string(),
-          config: ConfigMCP.Info,
+          config: ConfigMCP.Info.zod,
         }),
       ),
       async (c) => {

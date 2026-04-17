@@ -178,7 +178,7 @@ export const Info = z
       .record(
         z.string(),
         z.union([
-          ConfigMCP.Info,
+          ConfigMCP.Info.zod,
           z
             .object({
               enabled: z.boolean(),
