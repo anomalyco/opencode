@@ -1,212 +1,255 @@
-import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
-import { streamSSE } from "hono/streaming";
-import z from "zod";
-import { BusEvent } from "@/bus/bus-event";
-import { GlobalBus } from "@/bus/global";
-import { Instance } from "../../project/instance";
-import { Installation } from "@/installation";
-import { Log } from "../../util/log";
-import { lazy } from "../../util/lazy";
-import { Config } from "../../config/config";
-import { errors } from "../error";
-import { railwayDeploymentFlat } from "@veritly/telemetry-veritly";
+import { Hono } from "hono"
+import { describeRoute, resolver, validator } from "hono-openapi"
+import { streamSSE } from "hono/streaming"
+import z from "zod"
+import { BusEvent } from "@/bus/bus-event"
+import { GlobalBus } from "@/bus/global"
+import { Instance } from "../../project/instance"
+import { Installation } from "@/installation"
+import { Log } from "../../util/log"
+import { lazy } from "../../util/lazy"
+import { Config } from "../../config/config"
+import { errors } from "../error"
+import { railwayDeploymentFlat } from "@veritly/telemetry-veritly"
+import { apiHealthReport } from "../health"
 
-const log = Log.create({ service: "server" });
+const log = Log.create({ service: "server" })
 
-export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}));
+export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
 
 export const GlobalRoutes = lazy(() =>
-	new Hono()
-		.get(
-			"/health",
-			describeRoute({
-				summary: "Get health",
-				description: "Get health information about the OpenCode server.",
-				operationId: "global.health",
-				responses: {
-					200: {
-						description: "Health information",
-						content: {
-							"application/json": {
-								schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
-							},
-						},
-					},
-				},
-			}),
-			async (c) => {
-				return c.json({ healthy: true, version: Installation.VERSION });
-			},
-		)
-		.get("/veritly-deployment", async (c) => {
-			return c.json(railwayDeploymentFlat());
-		})
-		.get(
-			"/event",
-			describeRoute({
-				summary: "Get global events",
-				description: "Subscribe to global events from the OpenCode system using server-sent events.",
-				operationId: "global.event",
-				responses: {
-					200: {
-						description: "Event stream",
-						content: {
-							"text/event-stream": {
-								schema: resolver(
-									z
-										.object({
-											directory: z.string(),
-											payload: BusEvent.payloads(),
-										})
-										.meta({
-											ref: "GlobalEvent",
-										}),
-								),
-							},
-						},
-					},
-				},
-			}),
-			async (c) => {
-				c.header("X-Accel-Buffering", "no");
-				c.header("X-Content-Type-Options", "nosniff");
-				return streamSSE(c, async (stream) => {
-					await new Promise<void>((resolve) => {
-						let done = false;
-						let timer: ReturnType<typeof setInterval> | undefined;
+  new Hono()
+    .get(
+      "/health",
+      describeRoute({
+        summary: "Get health",
+        description:
+          "Get comprehensive health information about the OpenCode server including database, executor, relay, and univer status.",
+        operationId: "global.health",
+        responses: {
+          200: {
+            description: "Health information",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    ok: z.boolean(),
+                    service: z.string(),
+                    version: z.string(),
+                    checks: z.array(
+                      z.object({
+                        name: z.string(),
+                        ok: z.boolean(),
+                        target: z.string().optional(),
+                        detail: z.string().optional(),
+                        status: z.number().optional(),
+                        latencyMs: z.number(),
+                      }),
+                    ),
+                  }),
+                ),
+              },
+            },
+          },
+          503: {
+            description: "One or more health checks failed",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    ok: z.boolean(),
+                    service: z.string(),
+                    version: z.string(),
+                    checks: z.array(
+                      z.object({
+                        name: z.string(),
+                        ok: z.boolean(),
+                        target: z.string().optional(),
+                        detail: z.string().optional(),
+                        status: z.number().optional(),
+                        latencyMs: z.number(),
+                      }),
+                    ),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const report = await apiHealthReport()
+        return c.json(report, report.ok ? 200 : 503)
+      },
+    )
+    .get("/veritly-deployment", async (c) => {
+      return c.json(railwayDeploymentFlat())
+    })
+    .get(
+      "/event",
+      describeRoute({
+        summary: "Get global events",
+        description: "Subscribe to global events from the OpenCode system using server-sent events.",
+        operationId: "global.event",
+        responses: {
+          200: {
+            description: "Event stream",
+            content: {
+              "text/event-stream": {
+                schema: resolver(
+                  z
+                    .object({
+                      directory: z.string(),
+                      payload: BusEvent.payloads(),
+                    })
+                    .meta({
+                      ref: "GlobalEvent",
+                    }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        c.header("X-Accel-Buffering", "no")
+        c.header("X-Content-Type-Options", "nosniff")
+        return streamSSE(c, async (stream) => {
+          await new Promise<void>((resolve) => {
+            let done = false
+            let timer: ReturnType<typeof setInterval> | undefined
 
-						const stop = (reason: string) => {
-							if (done) return;
-							done = true;
-							if (timer) clearInterval(timer);
-							GlobalBus.off("event", handler);
-							c.req.raw.signal.removeEventListener("abort", abort);
-							log.info("global event disconnected", {
-								reason,
-								listeners: GlobalBus.listenerCount("event"),
-							});
-							resolve();
-						};
+            const stop = (reason: string) => {
+              if (done) return
+              done = true
+              if (timer) clearInterval(timer)
+              GlobalBus.off("event", handler)
+              c.req.raw.signal.removeEventListener("abort", abort)
+              log.info("global event disconnected", {
+                reason,
+                listeners: GlobalBus.listenerCount("event"),
+              })
+              resolve()
+            }
 
-						const send = (payload: unknown) =>
-							stream
-								.writeSSE({
-									data: JSON.stringify(payload),
-								})
-								.then(
-									() => true,
-									() => {
-										stop("write");
-										return false;
-									},
-								);
+            const send = (payload: unknown) =>
+              stream
+                .writeSSE({
+                  data: JSON.stringify(payload),
+                })
+                .then(
+                  () => true,
+                  () => {
+                    stop("write")
+                    return false
+                  },
+                )
 
-						const handler = (event: any) => {
-							void send(event);
-						};
+            const handler = (event: any) => {
+              void send(event)
+            }
 
-						const abort = () => stop("abort");
+            const abort = () => stop("abort")
 
-						GlobalBus.on("event", handler);
-						log.info("global event connected", {
-							listeners: GlobalBus.listenerCount("event"),
-						});
-						stream.onAbort(abort);
-						c.req.raw.signal.addEventListener("abort", abort, { once: true });
+            GlobalBus.on("event", handler)
+            log.info("global event connected", {
+              listeners: GlobalBus.listenerCount("event"),
+            })
+            stream.onAbort(abort)
+            c.req.raw.signal.addEventListener("abort", abort, { once: true })
 
-						void send({
-							payload: {
-								type: "server.connected",
-								properties: {},
-							},
-						});
+            void send({
+              payload: {
+                type: "server.connected",
+                properties: {},
+              },
+            })
 
-						timer = setInterval(() => {
-							void send({
-								payload: {
-									type: "server.heartbeat",
-									properties: {},
-								},
-							});
-						}, 10_000);
-					});
-				});
-			},
-		)
-		.get(
-			"/config",
-			describeRoute({
-				summary: "Get global configuration",
-				description: "Retrieve the current global OpenCode configuration settings and preferences.",
-				operationId: "global.config.get",
-				responses: {
-					200: {
-						description: "Get global config info",
-						content: {
-							"application/json": {
-								schema: resolver(Config.Info),
-							},
-						},
-					},
-				},
-			}),
-			async (c) => {
-				return c.json(await Config.getGlobal());
-			},
-		)
-		.patch(
-			"/config",
-			describeRoute({
-				summary: "Update global configuration",
-				description: "Update global OpenCode configuration settings and preferences.",
-				operationId: "global.config.update",
-				responses: {
-					200: {
-						description: "Successfully updated global config",
-						content: {
-							"application/json": {
-								schema: resolver(Config.Info),
-							},
-						},
-					},
-					...errors(400),
-				},
-			}),
-			validator("json", Config.Info),
-			async (c) => {
-				const config = c.req.valid("json");
-				const next = await Config.updateGlobal(config);
-				return c.json(next);
-			},
-		)
-		.post(
-			"/dispose",
-			describeRoute({
-				summary: "Dispose instance",
-				description: "Clean up and dispose all OpenCode instances, releasing all resources.",
-				operationId: "global.dispose",
-				responses: {
-					200: {
-						description: "Global disposed",
-						content: {
-							"application/json": {
-								schema: resolver(z.boolean()),
-							},
-						},
-					},
-				},
-			}),
-			async (c) => {
-				await Instance.disposeAll();
-				GlobalBus.emit("event", {
-					directory: "global",
-					payload: {
-						type: GlobalDisposedEvent.type,
-						properties: {},
-					},
-				});
-				return c.json(true);
-			},
-		),
-);
+            timer = setInterval(() => {
+              void send({
+                payload: {
+                  type: "server.heartbeat",
+                  properties: {},
+                },
+              })
+            }, 10_000)
+          })
+        })
+      },
+    )
+    .get(
+      "/config",
+      describeRoute({
+        summary: "Get global configuration",
+        description: "Retrieve the current global OpenCode configuration settings and preferences.",
+        operationId: "global.config.get",
+        responses: {
+          200: {
+            description: "Get global config info",
+            content: {
+              "application/json": {
+                schema: resolver(Config.Info),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await Config.getGlobal())
+      },
+    )
+    .patch(
+      "/config",
+      describeRoute({
+        summary: "Update global configuration",
+        description: "Update global OpenCode configuration settings and preferences.",
+        operationId: "global.config.update",
+        responses: {
+          200: {
+            description: "Successfully updated global config",
+            content: {
+              "application/json": {
+                schema: resolver(Config.Info),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Config.Info),
+      async (c) => {
+        const config = c.req.valid("json")
+        const next = await Config.updateGlobal(config)
+        return c.json(next)
+      },
+    )
+    .post(
+      "/dispose",
+      describeRoute({
+        summary: "Dispose instance",
+        description: "Clean up and dispose all OpenCode instances, releasing all resources.",
+        operationId: "global.dispose",
+        responses: {
+          200: {
+            description: "Global disposed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        await Instance.disposeAll()
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: GlobalDisposedEvent.type,
+            properties: {},
+          },
+        })
+        return c.json(true)
+      },
+    ),
+)

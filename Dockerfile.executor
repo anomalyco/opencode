@@ -1,15 +1,59 @@
-FROM oven/bun:1.3.10-slim
+# Simple executor that runs commands directly in container
+# Firecracker VMs can be added later - this gets us running now
+FROM ubuntu:22.04
 
 WORKDIR /app
 
-COPY packages/executor/package.json ./package.json
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    python3 \
+    python3-pip \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
+# Install websockets and Univer SDK
+RUN pip3 install websockets
+COPY packages/univer-sdk/python/veritly_univer_sdk.py /usr/local/lib/python3.10/dist-packages/
+RUN python3 -c "from veritly_univer_sdk import UniverSDK; print('Univer SDK ready')"
+
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Download Firecracker (for when we add VM support)
+RUN ARCH="$(uname -m)" && \
+    LATEST_VERSION="v1.8.0" && \
+    curl -L -o firecracker.tgz "https://github.com/firecracker-microvm/firecracker/releases/download/${LATEST_VERSION}/firecracker-${LATEST_VERSION}-${ARCH}.tgz" && \
+    tar -xzf firecracker.tgz && \
+    mv release-${LATEST_VERSION}-$(uname -m)/firecracker-${LATEST_VERSION}-${ARCH} /usr/local/bin/firecracker && \
+    chmod +x /usr/local/bin/firecracker && \
+    rm -rf firecracker.tgz release-*
+
+# Download kernel
+RUN mkdir -p /opt/veritly && \
+    curl -L -o /opt/veritly/vmlinux https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.8/x86_64/vmlinux-5.10.186 && \
+    chmod +x /opt/veritly/vmlinux
+
+# Create a placeholder rootfs file
+RUN echo "placeholder" > /opt/veritly/rootfs.ext4
+
+# Copy executor code
+COPY packages/executor/package.json ./
 RUN bun install --production --no-save
 
 COPY packages/executor/src ./src
 
+# Create workspace
+RUN mkdir -p /workspace /tmp/veritly-vms
+
 ENV PORT=7777
-ENV VERITLY_EXECUTOR_MODE=local
+ENV VM_DATA_DIR=/tmp/veritly-vms
+ENV KERNEL_PATH=/opt/veritly/vmlinux
+ENV ROOTFS_PATH=/opt/veritly/rootfs.ext4
+ENV FIRECRACKER_BINARY=/usr/local/bin/firecracker
+ENV VM_INACTIVITY_TIMEOUT_MS=300000
 
 EXPOSE 7777
 

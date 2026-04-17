@@ -42,6 +42,11 @@ if (!process.env.WORKOS_REDIRECT_URI?.trim()) {
   process.env.WORKOS_REDIRECT_URI = `http://${host}:${port}/auth/callback`
 }
 
+// Point to Docker executor (running on localhost:7777)
+if (!process.env.VERITLY_EXECUTOR_URL?.trim()) {
+  process.env.VERITLY_EXECUTOR_URL = "http://localhost:7777"
+}
+
 const examples = await readFile(examplesPath, "utf8")
 const userInstructions = await readOptional(userInstructionsPath)
 

@@ -1,188 +1,274 @@
-import { Installation } from "@/installation";
-import { Log } from "@/util/log";
-import { Database as SqliteDatabase } from "../storage/db";
-import { getPool } from "../storage/db.pg";
+import { Installation } from "@/installation"
+import { Log } from "@/util/log"
+import { Database as SqliteDatabase } from "../storage/db"
+import { getPool } from "../storage/db.pg"
 
-const log = Log.create({ service: "server.health" });
+const log = Log.create({ service: "server.health" })
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.VERITLY_HEALTH_TIMEOUT_MS ?? "5000");
+const DEFAULT_TIMEOUT_MS = Number(process.env.VERITLY_HEALTH_TIMEOUT_MS ?? "5000")
 
 export type HealthCheckResult = {
-	name: string;
-	ok: boolean;
-	target?: string;
-	detail?: string;
-	status?: number;
-	latencyMs: number;
-};
+  name: string
+  ok: boolean
+  target?: string
+  detail?: string
+  status?: number
+  latencyMs: number
+}
 
 export type ApiHealthReport = {
-	service: "opencode-api";
-	ok: boolean;
-	version: string;
-	checks: HealthCheckResult[];
-};
+  service: "opencode-api"
+  ok: boolean
+  version: string
+  checks: HealthCheckResult[]
+}
 
 function now() {
-	return performance.now();
+  return performance.now()
 }
 
 function withTimeout(timeoutMs: number) {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
-	return {
-		signal: controller.signal,
-		done() {
-			clearTimeout(timer);
-		},
-	};
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort("timeout"), timeoutMs)
+  return {
+    signal: controller.signal,
+    done() {
+      clearTimeout(timer)
+    },
+  }
 }
 
 async function timedCheck(
-	name: string,
-	target: string | undefined,
-	fn: (signal: AbortSignal) => Promise<{ ok: boolean; detail?: string; status?: number }>,
+  name: string,
+  target: string | undefined,
+  fn: (signal: AbortSignal) => Promise<{ ok: boolean; detail?: string; status?: number }>,
 ): Promise<HealthCheckResult> {
-	const startedAt = now();
-	const timeout = withTimeout(DEFAULT_TIMEOUT_MS);
-	try {
-		const result = await fn(timeout.signal);
-		return {
-			name,
-			ok: result.ok,
-			target,
-			detail: result.detail,
-			status: result.status,
-			latencyMs: Math.round(now() - startedAt),
-		};
-	} catch (error) {
-		return {
-			name,
-			ok: false,
-			target,
-			detail: error instanceof Error ? error.message : String(error),
-			latencyMs: Math.round(now() - startedAt),
-		};
-	} finally {
-		timeout.done();
-	}
+  const startedAt = now()
+  const timeout = withTimeout(DEFAULT_TIMEOUT_MS)
+  try {
+    const result = await fn(timeout.signal)
+    return {
+      name,
+      ok: result.ok,
+      target,
+      detail: result.detail,
+      status: result.status,
+      latencyMs: Math.round(now() - startedAt),
+    }
+  } catch (error) {
+    return {
+      name,
+      ok: false,
+      target,
+      detail: error instanceof Error ? error.message : String(error),
+      latencyMs: Math.round(now() - startedAt),
+    }
+  } finally {
+    timeout.done()
+  }
 }
 
 function normalizeBaseUrl(input: string) {
-	return input.replace(/\/+$/, "");
+  return input.replace(/\/+$/, "")
 }
 
 function relayHealthUrl() {
-	const explicit = process.env.VERITLY_HEALTH_RELAY_URL?.trim();
-	if (explicit) return explicit;
-	if (explicit === "") return undefined;
+  const explicit = process.env.VERITLY_HEALTH_RELAY_URL?.trim()
+  if (explicit) return explicit
+  if (explicit === "") return undefined
 
-	const ws = process.env.VITE_UNIVER_SDK_WS?.trim();
-	if (!ws) return "http://relay:8080/healthz";
+  const ws = process.env.VITE_UNIVER_SDK_WS?.trim()
+  if (!ws) return "http://relay:8080/healthz"
 
-	try {
-		const url = new URL(ws);
-		url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-		url.pathname = "/healthz";
-		url.search = "";
-		url.hash = "";
-		return url.toString();
-	} catch {
-		return undefined;
-	}
+  try {
+    const url = new URL(ws)
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:"
+    url.pathname = "/healthz"
+    url.search = ""
+    url.hash = ""
+    return url.toString()
+  } catch {
+    return undefined
+  }
 }
 
 function univerHealthTargets() {
-	const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim();
-	if (!raw) return [];
+  const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim()
+  if (!raw) return []
 
-	const base = normalizeBaseUrl(raw);
-	return [`${base}/healthz`, `${base}/universer-api/license/key`, `${base}/health`];
+  const base = normalizeBaseUrl(raw)
+  return [`${base}/healthz`, `${base}/universer-api/license/key`, `${base}/health`]
 }
 
 async function checkDatabase() {
-	if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
-		return timedCheck("database", process.env.DATABASE_URL, async () => {
-			await getPool().query("SELECT 1");
-			return { ok: true, detail: "postgres reachable" };
-		});
-	}
+  if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
+    return timedCheck("database", process.env.DATABASE_URL, async () => {
+      await getPool().query("SELECT 1")
+      return { ok: true, detail: "postgres reachable" }
+    })
+  }
 
-	return timedCheck("database", SqliteDatabase.Path, async () => {
-		SqliteDatabase.Client().$client.query("select 1").get();
-		return { ok: true, detail: "sqlite reachable" };
-	});
+  return timedCheck("database", SqliteDatabase.Path, async () => {
+    SqliteDatabase.Client().$client.query("select 1").get()
+    return { ok: true, detail: "sqlite reachable" }
+  })
 }
 
 async function checkHttpTarget(name: string, target: string) {
-	return timedCheck(name, target, async (signal) => {
-		const response = await fetch(target, {
-			method: "GET",
-			headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
-			signal,
-		});
-		const ok = response.ok;
-		return {
-			ok,
-			status: response.status,
-			detail: ok ? "reachable" : `unexpected status ${response.status}`,
-		};
-	});
+  return timedCheck(name, target, async (signal) => {
+    const response = await fetch(target, {
+      method: "GET",
+      headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
+      signal,
+    })
+    const ok = response.ok
+    return {
+      ok,
+      status: response.status,
+      detail: ok ? "reachable" : `unexpected status ${response.status}`,
+    }
+  })
 }
 
 async function checkOptionalRelay() {
-	const target = relayHealthUrl();
-	if (!target) {
-		return {
-			name: "relay",
-			ok: true,
-			detail: "skipped (relay url not configured)",
-			latencyMs: 0,
-		} satisfies HealthCheckResult;
-	}
-	return checkHttpTarget("relay", target);
+  const target = relayHealthUrl()
+  if (!target) {
+    return {
+      name: "relay",
+      ok: true,
+      detail: "skipped (relay url not configured)",
+      latencyMs: 0,
+    } satisfies HealthCheckResult
+  }
+  return checkHttpTarget("relay", target)
+}
+
+async function checkExecutor() {
+  const executorUrl = process.env.VERITLY_EXECUTOR_URL ?? "http://executor:7777"
+  return timedCheck("executor", executorUrl, async (signal) => {
+    // First check basic executor health
+    const healthResponse = await fetch(`${executorUrl}/health`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal,
+    })
+
+    if (!healthResponse.ok) {
+      return {
+        ok: false,
+        status: healthResponse.status,
+        detail: `executor health check failed: ${healthResponse.status}`,
+      }
+    }
+
+    // Now test Python3 and Univer SDK via executor
+    const testSessionId = `health-check-${Date.now()}`
+    const execResponse = await fetch(`${executorUrl}/v1/sessions/${testSessionId}/exec`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        command: "python3 --version && python3 -c 'from veritly_univer_sdk import UniverSDK; print(\"Univer SDK OK\")'",
+        timeout: 30000,
+      }),
+      signal,
+    })
+
+    if (!execResponse.ok) {
+      const errorText = await execResponse.text().catch(() => "unknown error")
+      return {
+        ok: false,
+        status: execResponse.status,
+        detail: `executor exec check failed: ${execResponse.status} - ${errorText}`,
+      }
+    }
+
+    const result = await execResponse.json()
+
+    if (result.exitCode !== 0) {
+      return {
+        ok: false,
+        detail: `python/univer sdk check failed: ${result.output}`,
+      }
+    }
+
+    // Verify output contains expected strings
+    const output = result.output || ""
+    if (!output.includes("Python 3")) {
+      return {
+        ok: false,
+        detail: "python3 not available in executor",
+      }
+    }
+
+    if (!output.includes("Univer SDK OK")) {
+      return {
+        ok: false,
+        detail: "univer sdk not available in executor",
+      }
+    }
+
+    return {
+      ok: true,
+      detail: `executor healthy, mode: ${result.mode || "unknown"}`,
+    }
+  })
 }
 
 async function checkOptionalUniver() {
-	const targets = univerHealthTargets();
-	if (!targets.length) {
-		return {
-			name: "univer",
-			ok: true,
-			detail: "skipped (univer url not configured)",
-			latencyMs: 0,
-		} satisfies HealthCheckResult;
-	}
+  const targets = univerHealthTargets()
+  if (!targets.length) {
+    return {
+      name: "univer",
+      ok: true,
+      detail: "skipped (univer url not configured)",
+      latencyMs: 0,
+    } satisfies HealthCheckResult
+  }
 
-	for (const target of targets) {
-		const result = await checkHttpTarget("univer", target);
-		if (result.ok) return result;
-		log.warn("univer health target failed", {
-			target,
-			status: result.status,
-			detail: result.detail,
-		});
-	}
+  for (const target of targets) {
+    const result = await checkHttpTarget("univer", target)
+    if (result.ok) return result
+    log.warn("univer health target failed", {
+      target,
+      status: result.status,
+      detail: result.detail,
+    })
+  }
 
-	return {
-		name: "univer",
-		ok: false,
-		target: targets[0],
-		detail: "all univer health targets failed",
-		latencyMs: 0,
-	};
+  return {
+    name: "univer",
+    ok: false,
+    target: targets[0],
+    detail: "all univer health targets failed",
+    latencyMs: 0,
+  }
 }
 
+// Simple health check for orchestrators (Kubernetes) - just database
+export async function apiHealthReportSimple(): Promise<ApiHealthReport> {
+  const checks = await Promise.all([checkDatabase()])
+  return {
+    service: "opencode-api",
+    ok: checks.every((check) => check.ok),
+    version: Installation.VERSION,
+    checks,
+  }
+}
+
+// Comprehensive health check including all dependencies
 export async function apiHealthReport(): Promise<ApiHealthReport> {
-	const checks = await Promise.all([checkDatabase(), checkOptionalUniver(), checkOptionalRelay()]);
-	return {
-		service: "opencode-api",
-		ok: checks.every((check) => check.ok),
-		version: Installation.VERSION,
-		checks,
-	};
+  const checks = await Promise.all([checkDatabase(), checkOptionalUniver(), checkOptionalRelay(), checkExecutor()])
+  return {
+    service: "opencode-api",
+    ok: checks.every((check) => check.ok),
+    version: Installation.VERSION,
+    checks,
+  }
 }
 
 export function isPublicHealthPath(path: string) {
-	return path === "/health" || path === "/healthz" || path === "/livez";
+  return path === "/health" || path === "/healthz" || path === "/livez"
 }

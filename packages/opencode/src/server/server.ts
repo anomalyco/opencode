@@ -6,7 +6,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
-import { getCookie } from "hono/cookie"
+import { getCookie, setCookie } from "hono/cookie"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
@@ -45,8 +45,8 @@ import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly"
 import path from "path"
-import { apiHealthReport, isPublicHealthPath } from "./health"
-import { AuthRoutes, type SessionUser } from "./routes/auth"
+import { apiHealthReport, apiHealthReportSimple, isPublicHealthPath } from "./health"
+import { AuthRoutes, getCookieOptions, type SessionUser } from "./routes/auth"
 import {
   createWorkOSClient,
   requireCookiePassword,
@@ -156,7 +156,7 @@ export namespace Server {
           return c.json(report, report.ok ? 200 : 503)
         })
         .get("/healthz", async (c) => {
-          const report = await apiHealthReport()
+          const report = await apiHealthReportSimple()
           return c.json(report, report.ok ? 200 : 503)
         })
         .use(async (c, next) => {
@@ -196,6 +196,11 @@ export namespace Server {
 
             if (!result.ok) {
               return c.json({ error: "Invalid session" }, 401)
+            }
+
+            // If session was refreshed, update the cookie with new session data
+            if (result.refreshedSessionData) {
+              setCookie(c, WORKOS_SESSION_COOKIE_NAME, result.refreshedSessionData, getCookieOptions())
             }
           } catch {
             return c.json({ error: "Authentication failed" }, 401)

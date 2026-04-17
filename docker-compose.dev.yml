@@ -31,11 +31,25 @@ services:
       retries: 5
 
   executor:
-    image: opencode-veritly-executor:lean
+    image: opencode-veritly-executor:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.executor
     ports:
       - "7777:7777"
     environment:
-      - VERITLY_EXECUTOR_MODE=local
+      - PORT=7777
+      - VM_INACTIVITY_TIMEOUT_MS=300000
+      - KERNEL_PATH=/opt/veritly/vmlinux
+      - ROOTFS_PATH=/opt/veritly/rootfs.ext4
+      - UNIVER_SDK_WS=ws://relay:8080/ws
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - /dev/kvm:/dev/kvm
+      - executor_vms:/tmp/veritly-vms
 
   opencode-api:
     image: opencode-veritly-api:lean
@@ -54,9 +68,12 @@ services:
       - PUBLIC_BASE_URL=http://localhost:4444
       - NODE_ENV=development
       - VERITLY_HEALTH_RELAY_URL=
+      - VERITLY_EXECUTOR_URL=http://executor:7777
     depends_on:
       postgres:
         condition: service_healthy
+      executor:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"]
       interval: 10s
@@ -69,6 +86,7 @@ services:
 
 volumes:
   postgres_data:
+  executor_vms:
 
 networks:
   default:

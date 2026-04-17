@@ -1,11 +1,21 @@
 {
-	"name": "@veritly/executor",
-	"version": "1.0.0",
-	"type": "module",
-	"scripts": {
-		"start": "bun run src/server.ts"
-	},
-	"dependencies": {
-		"hono": "^4.0.0"
-	}
+  "name": "@veritly/executor",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "build-vm": "bash scripts/build-vm.sh",
+    "test": "bun run test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "node-ssh": "^13.2.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.8",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
 }
