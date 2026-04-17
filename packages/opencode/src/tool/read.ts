@@ -105,7 +105,7 @@ export const ReadTool = Tool.define(
 
       yield* ctx.ask({
         permission: "read",
-        patterns: [filepath],
+        patterns: [path.relative(Instance.worktree, filepath)],
         always: ["*"],
         metadata: {},
       })
@@ -321,3 +321,4 @@ async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean
     await fh.close()
   }
 }
+
