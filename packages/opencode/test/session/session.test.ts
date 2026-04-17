@@ -183,4 +183,63 @@ describe("Session", () => {
 
     expect(missing).toBe(true)
   })
+
+  test("persists metadata and copies it on fork by default", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const meta = { source: "sdk", trace: { id: "abc" } }
+        const session = await create({ title: "with-meta", metadata: meta })
+        const saved = await get(session.id)
+        const fork = await AppRuntime.runPromise(
+          SessionNs.Service.use((svc) => svc.fork({ sessionID: session.id, copyMetadata: true })),
+        )
+
+        expect(saved.metadata).toEqual(meta)
+        expect(fork.metadata).toEqual(meta)
+        expect(fork.metadata).not.toBe(meta)
+
+        await remove(fork.id)
+        await remove(session.id)
+      },
+    })
+  })
+
+  test("can fork without copying metadata", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await create({ metadata: { source: "sdk" } })
+        const fork = await AppRuntime.runPromise(
+          SessionNs.Service.use((svc) => svc.fork({ sessionID: session.id, copyMetadata: false })),
+        )
+
+        expect(fork.metadata).toEqual({})
+
+        await remove(fork.id)
+        await remove(session.id)
+      },
+    })
+  })
+
+  test("defaults metadata to an empty object", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await create({ title: "empty-meta" })
+        const saved = await get(session.id)
+
+        expect(session.metadata).toEqual({})
+        expect(saved.metadata).toEqual({})
+
+        await remove(session.id)
+      },
+    })
+  })
 })

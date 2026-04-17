@@ -236,4 +236,19 @@ describe("session.list", () => {
       },
     })
   })
+
+  test("includes metadata in listed sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const meta = { source: "sdk", trace: { id: "abc" } }
+        const session = await svc.create({ title: "meta-session", metadata: meta })
+
+        const listed = [...svc.list({ search: "meta-session" })].find((item) => item.id === session.id)
+
+        expect(listed?.metadata).toEqual(meta)
+      },
+    })
+  })
 })
