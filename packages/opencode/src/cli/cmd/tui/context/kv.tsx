@@ -14,8 +14,10 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     const [store, setStore] = createStore<Record<string, any>>()
     const filePath = path.join(Global.Path.state, "kv.json")
     const lock = `tui-kv:${filePath}`
+    // Queue same-process writes so rapid updates persist in order.
     let write = Promise.resolve()
 
+    // Write to a temp file first so kv.json is only replaced once the JSON is complete, avoiding partial writes if shutdown interrupts persistence.
     function writeSnapshot(snapshot: Record<string, any>) {
       const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
       return Filesystem.writeJson(tempPath, snapshot)
@@ -26,6 +28,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         })
     }
 
+    // Read under the same lock used for writes because kv.json is shared across processes.
     Flock.withLock(lock, () => Filesystem.readJson<Record<string, any>>(filePath))
       .then((x) => {
         setStore(x)
