@@ -189,7 +189,7 @@ export const Info = z
       .optional()
       .describe("MCP (Model Context Protocol) server configurations"),
     formatter: ConfigFormatter.Info.optional(),
-    lsp: ConfigLSP.Info.optional(),
+    lsp: ConfigLSP.Info.zod.optional(),
     instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
     layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
     permission: ConfigPermission.Info.optional(),
