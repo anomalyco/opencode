@@ -272,16 +272,18 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
   )
   const cacheWriteInputTokens = safe(
-    (input.usage.inputTokenDetails?.cacheWriteTokens ??
-      input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-      // google-vertex-anthropic returns metadata under "vertex" key
-      // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
-      input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
-      // @ts-expect-error
-      input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-      // @ts-expect-error
-      input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-      0) as number,
+    Number(
+      input.usage.inputTokenDetails?.cacheWriteTokens ??
+        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // google-vertex-anthropic returns metadata under "vertex" key
+        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        0,
+    ),
   )
 
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
@@ -519,12 +521,13 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       workspaceID?: WorkspaceID
     }) {
       const directory = yield* InstanceState.directory
+      const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
         parentID: input?.parentID,
         directory,
         title: input?.title,
         permission: input?.permission,
-        workspaceID: input?.workspaceID,
+        workspaceID: workspace,
       })
     })
 

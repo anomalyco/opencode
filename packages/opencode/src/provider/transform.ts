@@ -193,7 +193,7 @@ function normalizeMessages(
             providerOptions: {
               ...msg.providerOptions,
               openaiCompatible: {
-                ...(msg.providerOptions as any)?.openaiCompatible,
+                ...msg.providerOptions?.openaiCompatible,
                 [field]: reasoningText,
               },
             },
@@ -389,12 +389,21 @@ export function topK(model: Provider.Model) {
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+function anthropicAdaptiveEfforts(apiId: string): string[] | null {
+  if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
+    return ["low", "medium", "high", "xhigh", "max"]
+  }
+  if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
+    return ["low", "medium", "high", "max"]
+  }
+  return null
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
-  const isAnthropicAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => model.api.id.includes(v))
-  const adaptiveEfforts = ["low", "medium", "high", "max"]
+  const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
     id.includes("deepseek") ||
     id.includes("minimax") ||
@@ -429,7 +438,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
     case "@ai-sdk/gateway":
       if (model.id.includes("anthropic")) {
-        if (isAnthropicAdaptive) {
+        if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
               effort,
@@ -578,13 +587,16 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/google-vertex/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
-      if (isAnthropicAdaptive) {
+      if (adaptiveEfforts) {
         return Object.fromEntries(
           adaptiveEfforts.map((effort) => [
             effort,
             {
               thinking: {
                 type: "adaptive",
+                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
+                  ? { display: "summarized" }
+                  : {}),
               },
               effort,
             },
@@ -609,7 +621,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
     case "@ai-sdk/amazon-bedrock":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
-      if (isAnthropicAdaptive) {
+      if (adaptiveEfforts) {
         return Object.fromEntries(
           adaptiveEfforts.map((effort) => [
             effort,
@@ -716,7 +728,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
     case "@jerome-benoit/sap-ai-provider-v2":
       if (model.api.id.includes("anthropic")) {
-        if (isAnthropicAdaptive) {
+        if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
               effort,
@@ -782,6 +794,11 @@ export function options(input: {
     input.model.api.npm === "@ai-sdk/github-copilot"
   ) {
     result["store"] = false
+  }
+
+  if (input.model.api.npm === "@ai-sdk/azure") {
+    result["store"] = true
+    result["promptCacheKey"] = input.sessionID
   }
 
   if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
@@ -907,7 +924,7 @@ export function smallOptions(model: Provider.Model) {
     model.api.npm === "@ai-sdk/github-copilot"
   ) {
     if (model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.")) {
+      if (model.api.id.includes("5.") || model.api.id.includes("5-mini")) {
         return { store: false, reasoningEffort: "low" }
       }
       return { store: false, reasoningEffort: "minimal" }

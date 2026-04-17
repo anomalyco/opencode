@@ -10,9 +10,9 @@ import { MCP } from "../../mcp"
 import { Session } from "../../session"
 import { Config } from "../../config"
 import { ConsoleState } from "../../config/console-state"
-import { Account, AccountID, OrgID } from "../../account"
+import { Account } from "../../account/account"
+import { AccountID, OrgID } from "../../account/schema"
 import { AppRuntime } from "../../effect/app-runtime"
-import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Effect, Option } from "effect"
@@ -226,8 +226,7 @@ export const ExperimentalRoutes = lazy(() =>
           tools.map((t) => ({
             id: t.id,
             description: t.description,
-            // Handle both Zod schemas and plain JSON schemas
-            parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+            parameters: z.toJSONSchema(t.parameters),
           })),
         )
       },

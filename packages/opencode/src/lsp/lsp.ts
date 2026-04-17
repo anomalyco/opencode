@@ -440,12 +440,11 @@ export const layer = Layer.effect(
     const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string) {
       const results = yield* runAll((client) =>
         client.connection
-          .sendRequest("workspace/symbol", { query })
-          .then((result: any) => result.filter((x: Symbol) => kinds.includes(x.kind)))
-          .then((result: any) => result.slice(0, 10))
-          .catch(() => []),
+          .sendRequest<Symbol[]>("workspace/symbol", { query })
+          .then((result) => result.filter((x) => kinds.includes(x.kind)).slice(0, 10))
+          .catch(() => [] as Symbol[]),
       )
-      return results.flat() as Symbol[]
+      return results.flat()
     })
 
     const prepareCallHierarchy = Effect.fn("LSP.prepareCallHierarchy")(function* (input: LocInput) {
@@ -465,12 +464,12 @@ export const layer = Layer.effect(
       direction: "callHierarchy/incomingCalls" | "callHierarchy/outgoingCalls",
     ) {
       const results = yield* run(input.file, async (client) => {
-        const items = (await client.connection
-          .sendRequest("textDocument/prepareCallHierarchy", {
+        const items = await client.connection
+          .sendRequest<unknown[] | null>("textDocument/prepareCallHierarchy", {
             textDocument: { uri: pathToFileURL(input.file).href },
             position: { line: input.line, character: input.character },
           })
-          .catch(() => [])) as any[]
+          .catch(() => [] as unknown[])
         if (!items?.length) return []
         return client.connection.sendRequest(direction, { item: items[0] }).catch(() => [])
       })
@@ -506,30 +505,4 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
 
-export namespace Diagnostic {
-  const MAX_PER_FILE = 20
-
-  export function pretty(diagnostic: LSPClient.Diagnostic) {
-    const severityMap = {
-      1: "ERROR",
-      2: "WARN",
-      3: "INFO",
-      4: "HINT",
-    }
-
-    const severity = severityMap[diagnostic.severity || 1]
-    const line = diagnostic.range.start.line + 1
-    const col = diagnostic.range.start.character + 1
-
-    return `${severity} [${line}:${col}] ${diagnostic.message}`
-  }
-
-  export function report(file: string, issues: LSPClient.Diagnostic[]) {
-    const errors = issues.filter((item) => item.severity === 1)
-    if (errors.length === 0) return ""
-    const limited = errors.slice(0, MAX_PER_FILE)
-    const more = errors.length - MAX_PER_FILE
-    const suffix = more > 0 ? `\n... and ${more} more` : ""
-    return `<diagnostics file="${file}">\n${limited.map(pretty).join("\n")}${suffix}\n</diagnostics>`
-  }
-}
+export * as Diagnostic from "./diagnostic"
