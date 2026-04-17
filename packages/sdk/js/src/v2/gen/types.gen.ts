@@ -542,7 +542,6 @@ export type EventWorkspaceStatus = {
   properties: {
     workspaceID: string
     status: "connected" | "connecting" | "disconnected" | "error"
-    error?: string
   }
 }
 
@@ -2499,7 +2498,6 @@ export type ExperimentalWorkspaceStatusResponses = {
   200: Array<{
     workspaceID: string
     status: "connected" | "connecting" | "disconnected" | "error"
-    error?: string
   }>
 }
 
