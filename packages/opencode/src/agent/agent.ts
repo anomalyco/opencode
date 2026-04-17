@@ -45,6 +45,7 @@ export const Info = z
     prompt: z.string().optional(),
     options: z.record(z.string(), z.any()),
     steps: z.number().int().positive().optional(),
+    order: z.number().int().optional(),
   })
   .meta({
     ref: "Agent",
@@ -258,6 +259,7 @@ export const layer = Layer.effect(
           item.hidden = value.hidden ?? item.hidden
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
+          item.order = value.order ?? item.order
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
@@ -288,6 +290,7 @@ export const layer = Layer.effect(
             agents,
             values(),
             sortBy(
+              [(x) => x.order ?? Number.MAX_SAFE_INTEGER, "asc"],
               [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
               [(x) => x.name, "asc"],
             ),

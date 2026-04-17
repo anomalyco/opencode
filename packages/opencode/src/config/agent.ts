@@ -47,6 +47,7 @@ export const Info = z
       .describe("Maximum number of agentic iterations before forcing text-only response"),
     maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
     permission: ConfigPermission.Info.optional(),
+    order: z.number().int().optional().describe("Display order in the agent list. Lower values appear first."),
   })
   .catchall(z.any())
   .transform((agent, _ctx) => {
@@ -67,6 +68,7 @@ export const Info = z
       "permission",
       "disable",
       "tools",
+      "order",
     ])
 
     const options: Record<string, unknown> = { ...agent.options }
