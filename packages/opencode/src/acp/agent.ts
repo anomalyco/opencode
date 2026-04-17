@@ -1162,8 +1162,7 @@ export class Agent implements ACPAgent {
       (await (async () => {
         if (!availableModes.length) return undefined
         const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
-        const resolvedModeId =
-          availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+        const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
         this.sessionManager.setMode(sessionId, resolvedModeId)
         return resolvedModeId
       })())
@@ -1362,8 +1361,7 @@ export class Agent implements ACPAgent {
     if (!current) {
       this.sessionManager.setModel(session.id, model)
     }
-    const agent =
-      session.modeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
+    const agent = session.modeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
 
     const parts: Array<
       | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
@@ -1729,9 +1727,7 @@ function buildAvailableModels(
 ): ModelOption[] {
   const includeVariants = options.includeVariants ?? false
   return providers.flatMap((provider) => {
-    const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(
-      provider.models,
-    )
+    const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(provider.models)
     const models = Provider.sort(unsorted)
     return models.flatMap((model) => {
       const base: ModelOption = {
