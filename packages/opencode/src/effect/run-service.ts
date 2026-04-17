@@ -6,8 +6,7 @@ import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import * as Observability from "./observability"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import type { InstanceContext } from "@/project/instance"
-
-export const memoMap = Layer.makeMemoMapUnsafe()
+import { memoMap } from "./memo-map"
 
 type Refs = {
   instance?: InstanceContext

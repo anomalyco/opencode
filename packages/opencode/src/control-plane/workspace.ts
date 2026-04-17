@@ -7,7 +7,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
 import { SyncEvent } from "@/sync"
-import { EventTable } from "@/sync/event.sql"
+import { EventSequenceTable, EventTable } from "@/sync/event.sql"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util"
 import { Filesystem } from "@/util"
@@ -23,8 +23,8 @@ import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { errorData } from "@/util/error"
 import { AppRuntime } from "@/effect/app-runtime"
-import { EventSequenceTable } from "@/sync/event.sql"
 import { waitEvent } from "./util"
+import { WorkspaceContext } from "./workspace-context"
 
 export const Info = WorkspaceInfo.meta({
   ref: "Workspace",
@@ -34,7 +34,6 @@ export type Info = z.infer<typeof Info>
 export const ConnectionStatus = z.object({
   workspaceID: WorkspaceID.zod,
   status: z.enum(["connected", "connecting", "disconnected", "error"]),
-  error: z.string().optional(),
 })
 export type ConnectionStatus = z.infer<typeof ConnectionStatus>
 
@@ -116,6 +115,8 @@ export const create = fn(CreateInput, async (input) => {
     OPENCODE_AUTH_CONTENT: JSON.stringify(await AppRuntime.runPromise(Auth.Service.use((auth) => auth.all()))),
     OPENCODE_WORKSPACE_ID: config.id,
     OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
+    OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
   }
   await adaptor.create(config, env)
 
@@ -298,22 +299,13 @@ export function list(project: Project.Info) {
     db.select().from(WorkspaceTable).where(eq(WorkspaceTable.project_id, project.id)).all(),
   )
   const spaces = rows.map(fromRow).sort((a, b) => a.id.localeCompare(b.id))
-
-  for (const space of spaces) startSync(space)
   return spaces
 }
 
-function lookup(id: WorkspaceID) {
+export const get = fn(WorkspaceID.zod, async (id) => {
   const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
   if (!row) return
   return fromRow(row)
-}
-
-export const get = fn(WorkspaceID.zod, async (id) => {
-  const space = lookup(id)
-  if (!space) return
-  startSync(space)
-  return space
 })
 
 export const remove = fn(WorkspaceID.zod, async (id) => {
@@ -345,10 +337,10 @@ const connections = new Map<WorkspaceID, ConnectionStatus>()
 const aborts = new Map<WorkspaceID, AbortController>()
 const TIMEOUT = 5000
 
-function setStatus(id: WorkspaceID, status: ConnectionStatus["status"], error?: string) {
+function setStatus(id: WorkspaceID, status: ConnectionStatus["status"]) {
   const prev = connections.get(id)
-  if (prev?.status === status && prev?.error === error) return
-  const next = { workspaceID: id, status, error }
+  if (prev?.status === status) return
+  const next = { workspaceID: id, status }
   connections.set(id, next)
 
   if (status === "error") {
@@ -425,68 +417,145 @@ function route(url: string | URL, path: string) {
   return next
 }
 
-async function syncWorkspace(space: Info, signal: AbortSignal) {
+async function connectSSE(url: URL | string, headers: HeadersInit | undefined, signal: AbortSignal) {
+  const res = await fetch(route(url, "/global/event"), {
+    method: "GET",
+    headers,
+    signal,
+  })
+
+  if (!res.ok) throw new Error(`Workspace sync HTTP failure: ${res.status}`)
+  if (!res.body) throw new Error("No response body from global sync")
+
+  return res.body
+}
+
+async function syncHistory(space: Info, url: URL | string, headers: HeadersInit | undefined, signal: AbortSignal) {
+  const sessionIDs = Database.use((db) =>
+    db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(eq(SessionTable.workspace_id, space.id))
+      .all()
+      .map((row) => row.id),
+  )
+  const state = sessionIDs.length
+    ? Object.fromEntries(
+        Database.use((db) =>
+          db.select().from(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, sessionIDs)).all(),
+        ).map((row) => [row.aggregate_id, row.seq]),
+      )
+    : {}
+
+  log.info("syncing workspace history", {
+    workspaceID: space.id,
+    sessions: sessionIDs.length,
+    known: Object.keys(state).length,
+  })
+
+  const requestHeaders = new Headers(headers)
+  requestHeaders.set("content-type", "application/json")
+
+  const res = await fetch(route(url, "/sync/history"), {
+    method: "POST",
+    headers: requestHeaders,
+    body: JSON.stringify(state),
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Workspace history HTTP failure: ${res.status} ${body}`)
+  }
+
+  const events = await res.json()
+
+  return WorkspaceContext.provide({
+    workspaceID: space.id,
+    fn: () => {
+      for (const event of events) {
+        SyncEvent.replay(
+          {
+            id: event.id,
+            aggregateID: event.aggregate_id,
+            seq: event.seq,
+            type: event.type,
+            data: event.data,
+          },
+          { publish: true },
+        )
+      }
+    },
+  })
+
+  log.info("workspace history synced", {
+    workspaceID: space.id,
+    events: events.length,
+  })
+}
+
+async function syncWorkspaceLoop(space: Info, signal: AbortSignal) {
+  const adaptor = await getAdaptor(space.projectID, space.type)
+  const target = await adaptor.target(space)
+
+  if (target.type === "local") return null
+
+  let attempt = 0
+
   while (!signal.aborted) {
     log.info("connecting to global sync", { workspace: space.name })
     setStatus(space.id, "connecting")
 
-    const adaptor = await getAdaptor(space.projectID, space.type)
-    const target = await adaptor.target(space)
-
-    if (target.type === "local") return
-
-    const res = await fetch(route(target.url, "/global/event"), {
-      method: "GET",
-      headers: target.headers,
-      signal,
-    }).catch((err: unknown) => {
-      setStatus(space.id, "error", err instanceof Error ? err.message : String(err))
-
+    let stream
+    try {
+      stream = await connectSSE(target.url, target.headers, signal)
+      await syncHistory(space, target.url, target.headers, signal)
+    } catch (err) {
+      stream = null
+      setStatus(space.id, "error")
       log.info("failed to connect to global sync", {
         workspace: space.name,
-        error: err,
+        err,
       })
-      return undefined
-    })
-
-    if (!res || !res.ok || !res.body) {
-      const error = !res ? "No response from global sync" : `Global sync HTTP ${res.status}`
-      log.info("failed to connect to global sync", { workspace: space.name, error })
-      setStatus(space.id, "error", error)
-      await sleep(1000)
-      continue
     }
 
-    log.info("global sync connected", { workspace: space.name })
-    setStatus(space.id, "connected")
+    if (stream) {
+      attempt = 0
 
-    await parseSSE(res.body, signal, (evt: any) => {
-      try {
-        if (!("payload" in evt)) return
+      log.info("global sync connected", { workspace: space.name })
+      setStatus(space.id, "connected")
 
-        if (evt.payload.type === "sync") {
-          SyncEvent.replay(evt.payload.syncEvent as SyncEvent.SerializedEvent)
+      await parseSSE(stream, signal, (evt: any) => {
+        try {
+          if (!("payload" in evt)) return
+          if (evt.payload.type === "server.heartbeat") return
+
+          if (evt.payload.type === "sync") {
+            SyncEvent.replay(evt.payload.syncEvent as SyncEvent.SerializedEvent)
+          }
+
+          GlobalBus.emit("event", {
+            directory: evt.directory,
+            project: evt.project,
+            workspace: space.id,
+            payload: evt.payload,
+          })
+        } catch (err) {
+          log.info("failed to replay global event", {
+            workspaceID: space.id,
+            error: err,
+          })
         }
+      })
 
-        GlobalBus.emit("event", {
-          directory: evt.directory,
-          project: evt.project,
-          workspace: space.id,
-          payload: evt.payload,
-        })
-      } catch (err) {
-        log.info("failed to replay global event", {
-          workspaceID: space.id,
-          error: err,
-        })
-      }
-    })
+      log.info("disconnected from global sync: " + space.id)
+      setStatus(space.id, "disconnected")
+    }
 
-    log.info("disconnected from global sync: " + space.id)
-    setStatus(space.id, "disconnected")
-
-    // TODO: Implement exponential backoff
-    await sleep(1000)
+    // Back off reconnect attempts up to 2 minutes while the workspace
+    // stays unavailable.
+    await sleep(Math.min(120_000, 1_000 * 2 ** attempt))
+    attempt += 1
   }
 }
 
@@ -498,7 +567,7 @@ async function startSync(space: Info) {
 
   if (target.type === "local") {
     void Filesystem.exists(target.directory).then((exists) => {
-      setStatus(space.id, exists ? "connected" : "error", exists ? undefined : "directory does not exist")
+      setStatus(space.id, exists ? "connected" : "error")
     })
     return
   }
@@ -510,10 +579,10 @@ async function startSync(space: Info) {
   const abort = new AbortController()
   aborts.set(space.id, abort)
 
-  void syncWorkspace(space, abort.signal).catch((error) => {
+  void syncWorkspaceLoop(space, abort.signal).catch((error) => {
     aborts.delete(space.id)
 
-    setStatus(space.id, "error", String(error))
+    setStatus(space.id, "error")
     log.warn("workspace listener failed", {
       workspaceID: space.id,
       error,
@@ -525,6 +594,21 @@ function stopSync(id: WorkspaceID) {
   aborts.get(id)?.abort()
   aborts.delete(id)
   connections.delete(id)
+}
+
+export function startWorkspaceSyncing(projectID: ProjectID) {
+  const spaces = Database.use((db) =>
+    db
+      .select({ workspace: WorkspaceTable })
+      .from(WorkspaceTable)
+      .innerJoin(SessionTable, eq(SessionTable.workspace_id, WorkspaceTable.id))
+      .where(eq(WorkspaceTable.project_id, projectID))
+      .all(),
+  )
+
+  for (const row of new Map(spaces.map((row) => [row.workspace.id, row.workspace])).values()) {
+    void startSync(fromRow(row))
+  }
 }
 
 export * as Workspace from "./workspace"

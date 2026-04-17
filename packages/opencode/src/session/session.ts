@@ -649,7 +649,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       return input.partID
     })
 
-    const updatePartDelta = Effect.fn("Session.updatePartDelta")(function* (input: {
+    const updatePartDelta = Effect.fnUntraced(function* (input: {
       sessionID: SessionID
       messageID: MessageID
       partID: PartID

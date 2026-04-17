@@ -27,6 +27,7 @@ import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceMiddleware } from "./middleware"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   const app = new Hono()
