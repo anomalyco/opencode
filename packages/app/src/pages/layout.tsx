@@ -87,6 +87,10 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
+const MINIMAL_MODE: boolean = true
+
+const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
+
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
@@ -602,6 +606,20 @@ export default function Layout(props: ParentProps) {
       if (!next) return
       await openProject(next.worktree, true)
     }
+  })
+
+  // autoselecting은 1회성 resource라 globalSync bootstrap이 localStorage의 projects를 뒤늦게 채우는 경우를 못 잡는다.
+  // 최초 진입 시 list가 비어있어 early-return된 뒤, merge로 list가 채워지면 이 effect가 navigate를 재시도한다.
+  createEffect(() => {
+    if (autoselecting.loading) return
+    if (!state.autoselect) return
+    const list = layout.projects.list()
+    if (list.length === 0) return
+    const last = server.projects.last()
+    const next = list.find((project) => project.worktree === last) ?? list[0]
+    if (!next) return
+    setState("autoselect", false)
+    void openProject(next.worktree, true)
   })
 
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
@@ -2376,6 +2394,17 @@ export default function Layout(props: ParentProps) {
       }
     />
   )
+
+  if (MINIMAL_MODE && !devMode) {
+    return (
+      <div class="h-dvh w-screen overflow-hidden bg-background-base">
+        <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
+          {props.children}
+        </Show>
+        <Toast.Region />
+      </div>
+    )
+  }
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">

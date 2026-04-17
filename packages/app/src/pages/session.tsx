@@ -52,6 +52,7 @@ import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -61,6 +62,10 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+
+const MINIMAL_MODE: boolean = true
+
+const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
@@ -1701,6 +1706,140 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
+  const SessionPanelContent = () => (
+    <>
+      <div class="flex-1 min-h-0 overflow-hidden">
+        <Switch>
+          <Match when={params.id}>
+            <Show when={messagesReady()}>
+              <MessageTimeline
+                mobileChanges={mobileChanges()}
+                mobileFallback={reviewContent({
+                  diffStyle: "unified",
+                  classes: {
+                    root: "pb-8",
+                    header: "px-4",
+                    container: "px-4",
+                  },
+                  loadingClass: "px-4 py-4 text-text-weak",
+                  emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+                })}
+                actions={actions}
+                scroll={ui.scroll}
+                onResumeScroll={resumeScroll}
+                setScrollRef={setScrollRef}
+                onScheduleScrollState={scheduleScrollState}
+                onAutoScrollHandleScroll={autoScroll.handleScroll}
+                onMarkScrollGesture={markScrollGesture}
+                hasScrollGesture={hasScrollGesture}
+                onUserScroll={markUserScroll}
+                onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                onAutoScrollInteraction={autoScroll.handleInteraction}
+                centered={centered()}
+                setContentRef={(el) => {
+                  content = el
+                  autoScroll.contentRef(el)
+
+                  const root = scroller
+                  if (root) scheduleScrollState(root)
+                }}
+                turnStart={historyWindow.turnStart()}
+                historyMore={historyMore()}
+                historyLoading={historyLoading()}
+                onLoadEarlier={() => {
+                  void historyWindow.loadAndReveal()
+                }}
+                renderedUserMessages={historyWindow.renderedUserMessages()}
+                anchor={anchor}
+              />
+            </Show>
+          </Match>
+          <Match when={true}>
+            <NewSessionView worktree={newSessionWorktree()} />
+          </Match>
+        </Switch>
+      </div>
+
+      <SessionComposerRegion
+        state={composer}
+        ready={!store.deferRender && messagesReady()}
+        centered={centered()}
+        inputRef={(el) => {
+          inputRef = el
+        }}
+        newSessionWorktree={newSessionWorktree()}
+        onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+        onSubmit={() => {
+          comments.clear()
+          resumeScroll()
+        }}
+        onResponseSubmit={resumeScroll}
+        followup={
+          params.id
+            ? {
+                queue: queueEnabled,
+                items: followupDock(),
+                sending: sendingFollowup(),
+                edit: editingFollowup(),
+                onQueue: queueFollowup,
+                onAbort: () => {
+                  const id = params.id
+                  if (!id) return
+                  setFollowup("paused", id, true)
+                },
+                onSend: (id) => {
+                  void sendFollowup(params.id!, id, { manual: true })
+                },
+                onEdit: editFollowup,
+                onEditLoaded: clearFollowupEdit,
+              }
+            : undefined
+        }
+        revert={
+          rolled().length > 0
+            ? {
+                items: rolled(),
+                restoring: restoring(),
+                disabled: reverting(),
+                onRestore: restore,
+              }
+            : undefined
+        }
+        setPromptDockRef={(el) => {
+          promptDock = el
+        }}
+      />
+
+      <Show when={desktopReviewOpen()}>
+        <div onPointerDown={() => size.start()}>
+          <ResizeHandle
+            direction="horizontal"
+            size={layout.session.width()}
+            min={450}
+            max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+            onResize={(width) => {
+              size.touch()
+              layout.session.resize(width)
+            }}
+          />
+        </div>
+      </Show>
+    </>
+  )
+
+  if (MINIMAL_MODE && !devMode) {
+    return (
+      <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+        <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+          <div class="@container relative flex flex-col min-h-0 h-full bg-background-stronger flex-1 min-w-0">
+            <SessionPanelContent />
+          </div>
+          <SessionPreviewPanel />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
@@ -1741,122 +1880,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div class="flex-1 min-h-0 overflow-hidden">
-            <Switch>
-              <Match when={params.id}>
-                <Show when={messagesReady()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
-
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
-                    anchor={anchor}
-                  />
-                </Show>
-              </Match>
-              <Match when={true}>
-                <NewSessionView worktree={newSessionWorktree()} />
-              </Match>
-            </Switch>
-          </div>
-
-          <SessionComposerRegion
-            state={composer}
-            ready={!store.deferRender && messagesReady()}
-            centered={centered()}
-            inputRef={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            onResponseSubmit={resumeScroll}
-            followup={
-              params.id
-                ? {
-                    queue: queueEnabled,
-                    items: followupDock(),
-                    sending: sendingFollowup(),
-                    edit: editingFollowup(),
-                    onQueue: queueFollowup,
-                    onAbort: () => {
-                      const id = params.id
-                      if (!id) return
-                      setFollowup("paused", id, true)
-                    },
-                    onSend: (id) => {
-                      void sendFollowup(params.id!, id, { manual: true })
-                    },
-                    onEdit: editFollowup,
-                    onEditLoaded: clearFollowupEdit,
-                  }
-                : undefined
-            }
-            revert={
-              rolled().length > 0
-                ? {
-                    items: rolled(),
-                    restoring: restoring(),
-                    disabled: reverting(),
-                    onRestore: restore,
-                  }
-                : undefined
-            }
-            setPromptDockRef={(el) => {
-              promptDock = el
-            }}
-          />
-
-          <Show when={desktopReviewOpen()}>
-            <div onPointerDown={() => size.start()}>
-              <ResizeHandle
-                direction="horizontal"
-                size={layout.session.width()}
-                min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
-                onResize={(width) => {
-                  size.touch()
-                  layout.session.resize(width)
-                }}
-              />
-            </div>
-          </Show>
+          <SessionPanelContent />
         </div>
 
         <SessionSidePanel

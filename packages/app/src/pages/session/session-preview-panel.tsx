@@ -1,10 +1,8 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 
-export function createSessionPreview() {
+function createSessionPreview() {
   const sdk = useSDK()
   const sync = useSync()
 
@@ -43,31 +41,20 @@ export function createSessionPreview() {
   return { previewSrc }
 }
 
-export function SessionPreviewTabTrigger(props: { src: string | undefined }) {
-  const language = useLanguage()
-  return (
-    <Show when={props.src}>
-      <Tabs.Trigger value="preview">
-        <div class="flex items-center gap-1.5">
-          <div>{language.t("session.tab.preview")}</div>
-        </div>
-      </Tabs.Trigger>
-    </Show>
-  )
-}
+export function SessionPreviewPanel() {
+  const { previewSrc } = createSessionPreview()
 
-export function SessionPreviewTabContent(props: { src: string | undefined; active: boolean }) {
   return (
-    <Show when={props.src}>
-      <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
-        <Show when={props.active}>
+    <Show when={previewSrc()}>
+      {(src) => (
+        <div class="flex-1 min-w-0 h-full bg-background-base border-l border-border-weaker-base">
           <iframe
-            src={props.src}
+            src={src()}
             class="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           />
-        </Show>
-      </Tabs.Content>
+        </div>
+      )}
     </Show>
   )
 }
