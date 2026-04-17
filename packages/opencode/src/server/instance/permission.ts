@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { errors } from "../error"
@@ -32,15 +33,19 @@ export const PermissionRoutes = lazy(() =>
           requestID: PermissionID.zod,
         }),
       ),
-      validator("json", z.object({ reply: Permission.Reply, message: z.string().optional() })),
+      validator("json", z.object({ reply: Permission.Reply.zod, message: z.string().optional() })),
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")
-        await Permission.reply({
-          requestID: params.requestID,
-          reply: json.reply,
-          message: json.message,
-        })
+        await AppRuntime.runPromise(
+          Permission.Service.use((svc) =>
+            svc.reply({
+              requestID: params.requestID,
+              reply: json.reply,
+              message: json.message,
+            }),
+          ),
+        )
         return c.json(true)
       },
     )
@@ -55,14 +60,14 @@ export const PermissionRoutes = lazy(() =>
             description: "List of pending permissions",
             content: {
               "application/json": {
-                schema: resolver(Permission.Request.array()),
+                schema: resolver(Permission.Request.zod.array()),
               },
             },
           },
         },
       }),
       async (c) => {
-        const permissions = await Permission.list()
+        const permissions = await AppRuntime.runPromise(Permission.Service.use((svc) => svc.list()))
         return c.json(permissions)
       },
     ),

@@ -17,7 +17,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
@@ -25,7 +25,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/shared/util/path"
 import { Session, type Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -48,8 +48,8 @@ import {
 } from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
+import { Binary } from "@opencode-ai/shared/util/binary"
+import { retry } from "@opencode-ai/shared/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
@@ -132,9 +132,11 @@ export default function Layout(props: ParentProps) {
     if (!slug) return { slug, dir: "" }
     const dir = decode64(slug)
     if (!dir) return { slug, dir: "" }
+    const store = globalSync.peek(dir, { bootstrap: false })
     return {
       slug,
-      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+      store,
+      dir: store[0].path.directory || dir,
     }
   })
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
@@ -704,7 +706,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     const active = new Set(visibleSessionDirs())
-    for (const directory of [...prefetchedByDir.keys()]) {
+    for (const directory of prefetchedByDir.keys()) {
       if (active.has(directory)) continue
       prefetchedByDir.delete(directory)
     }
@@ -956,7 +958,7 @@ export default function Layout(props: ParentProps) {
 
     // warm up child store to prevent flicker
     globalSync.child(target.worktree)
-    openProject(target.worktree)
+    void openProject(target.worktree)
   }
 
   function navigateSessionByUnseen(offset: number) {
@@ -1094,7 +1096,7 @@ export default function Layout(props: ParentProps) {
         disabled: !params.dir || !params.id,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
-          if (session) archiveSession(session)
+          if (session) void archiveSession(session)
         },
       },
       {
@@ -1360,11 +1362,11 @@ export default function Layout(props: ParentProps) {
     if (!server.isLocal()) return
 
     for (const directory of collectOpenProjectDeepLinks(urls)) {
-      openProject(directory)
+      void openProject(directory)
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
-      openProject(link.directory, false)
+      void openProject(link.directory, false)
       const slug = base64Encode(link.directory)
       if (link.prompt) {
         setSessionHandoff(slug, { prompt: link.prompt })
@@ -1453,11 +1455,11 @@ export default function Layout(props: ParentProps) {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         for (const directory of result) {
-          openProject(directory, false)
+          void openProject(directory, false)
         }
-        navigateToProject(result[0])
+        void navigateToProject(result[0])
       } else if (result) {
-        openProject(result)
+        void openProject(result)
       }
     }
 
@@ -1825,7 +1827,7 @@ export default function Layout(props: ParentProps) {
         const next = new Set(dirs)
         for (const directory of next) {
           if (loadedSessionDirs.has(directory)) continue
-          globalSync.project.loadSessions(directory)
+          void globalSync.project.loadSessions(directory)
         }
 
         loadedSessionDirs.clear()
@@ -2110,7 +2112,7 @@ export default function Layout(props: ParentProps) {
                     onSave={(next) => {
                       const item = project()
                       if (!item) return
-                      renameProject(item, next)
+                      void renameProject(item, next)
                     }}
                     class="text-14-medium text-text-strong truncate"
                     displayClass="text-14-medium text-text-strong truncate"
@@ -2242,7 +2244,7 @@ export default function Layout(props: ParentProps) {
                       onClick={() => {
                         const item = project()
                         if (!item) return
-                        createWorkspace(item)
+                        void createWorkspace(item)
                       }}
                     >
                       {language.t("workspace.new")}
@@ -2353,8 +2355,14 @@ export default function Layout(props: ParentProps) {
     />
   )
 
+  const [loading] = createResource(
+    () => route()?.store?.[0]?.bootstrapPromise,
+    (p) => p,
+  )
+
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      {(autoselecting(), loading()) ?? ""}
       <Titlebar />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">

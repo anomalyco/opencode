@@ -17,7 +17,7 @@ const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_Z
 
 const applyZoom = (next: number) => {
   setWebviewZoom(next)
-  invoke("plugin:webview|set_webview_zoom", {
+  void invoke("plugin:webview|set_webview_zoom", {
     value: next,
   })
 }
