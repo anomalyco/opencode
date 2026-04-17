@@ -1,6 +1,7 @@
 import { Global } from "@/global"
 import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/shared/util/flock"
+import { rename, rm } from "fs/promises"
 import { createSignal, type Setter } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -14,6 +15,16 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     const filePath = path.join(Global.Path.state, "kv.json")
     const lock = `tui-kv:${filePath}`
     let write = Promise.resolve()
+
+    function writeSnapshot(snapshot: Record<string, any>) {
+      const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+      return Filesystem.writeJson(tempPath, snapshot)
+        .then(() => rename(tempPath, filePath))
+        .catch(async (error) => {
+          await rm(tempPath, { force: true }).catch(() => undefined)
+          throw error
+        })
+    }
 
     Flock.withLock(lock, () => Filesystem.readJson<Record<string, any>>(filePath))
       .then((x) => {
@@ -51,7 +62,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         setStore(key, value)
         const snapshot = structuredClone(unwrap(store))
         write = write
-          .then(() => Flock.withLock(lock, () => Filesystem.writeJson(filePath, snapshot)))
+          .then(() => Flock.withLock(lock, () => writeSnapshot(snapshot)))
           .catch((error) => {
             console.error("Failed to write KV state", { filePath, error })
           })
