@@ -213,7 +213,7 @@ export const layer: Layer.Layer<
         return true
       })
 
-      const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: StreamEvent) {
+		const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "start":
             yield* status.set(ctx.sessionID, { type: "busy" })
