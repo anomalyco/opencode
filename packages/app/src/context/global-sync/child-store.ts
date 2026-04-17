@@ -182,6 +182,7 @@ export function createChildStoreManager(input: {
             limit: 5,
             message: {},
             part: {},
+            bootstrapPromise: Promise.resolve(),
           })
           children[directory] = child
           disposers.set(directory, dispose)
@@ -243,8 +244,8 @@ export function createChildStoreManager(input: {
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,

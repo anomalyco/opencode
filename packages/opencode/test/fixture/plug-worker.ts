@@ -1,7 +1,7 @@
 import path from "path"
 
 import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 
 type Msg = {
   dir: string
