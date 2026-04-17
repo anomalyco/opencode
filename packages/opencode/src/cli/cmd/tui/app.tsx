@@ -135,9 +135,7 @@ export function tui(input: {
       await TuiPluginRuntime.dispose()
     }
 
-    console.log("starting renderer")
     const renderer = await createCliRenderer(rendererConfig(input.config))
-    console.log("renderer started")
 
     await render(() => {
       return (
@@ -152,7 +150,7 @@ export function tui(input: {
                 <ToastProvider>
                   <RouteProvider
                     initialRoute={
-                      (input.args.sessionID || input.args.continue) && !input.args.fork
+                      input.args.continue
                         ? {
                             type: "session",
                             sessionID: "dummy",
@@ -343,6 +341,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
+      }
+      if (args.sessionID && !args.fork) {
+        route.navigate({
+          type: "session",
+          sessionID: args.sessionID,
+        })
       }
     })
   })
@@ -602,7 +606,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle theme mode",
+      title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
