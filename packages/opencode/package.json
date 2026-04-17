@@ -85,7 +85,7 @@
     "@ai-sdk/cerebras": "2.0.41",
     "@ai-sdk/cohere": "3.0.27",
     "@ai-sdk/deepinfra": "2.0.41",
-    "@ai-sdk/gateway": "3.0.102",
+    "@ai-sdk/gateway": "3.0.104",
     "@ai-sdk/google": "3.0.63",
     "@ai-sdk/google-vertex": "4.0.112",
     "@ai-sdk/groq": "3.0.31",
