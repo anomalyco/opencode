@@ -1,6 +1,6 @@
 import z from "zod"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
 

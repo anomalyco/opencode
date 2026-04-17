@@ -88,7 +88,7 @@ OpenCode 使用 `permission` 設定來決定某個操作是否應自動執行、
 
 ### 外部目錄
 
-使用 `external_directory` 允許工具呼叫存取 OpenCode 啟動時工作目錄之外的路徑。這適用於任何接受路徑作為輸入的工具（例如 `read`、`edit`、`list`、`glob`、`grep` 以及許多 `bash` 指令）。
+使用 `external_directory` 允許工具呼叫存取 OpenCode 啟動時工作目錄之外的路徑。這適用於任何接受路徑作為輸入的工具（例如 `read`、`edit`、`glob`、`grep` 以及許多 `bash` 指令）。
 
 主目錄展開（如 `~/...`）僅影響模式的書寫方式。它不會將外部路徑納入當前工作空間，因此工作目錄之外的路徑仍然必須透過 `external_directory` 來允許。
 
@@ -133,7 +133,6 @@ OpenCode 的權限以工具名稱為鍵，外加幾個安全防護項：
 - `edit` — 所有檔案修改（涵蓋 `edit`、`write`、`patch`、`multiedit`）
 - `glob` — 檔案萬用字元比對（比對萬用字元模式）
 - `grep` — 內容搜尋（比對正規表示式模式）
-- `list` — 列出目錄中的檔案（比對目錄路徑）
 - `bash` — 執行 shell 指令（比對解析後的指令，如 `git status --porcelain`）
 - `task` — 啟動子代理（比對子代理類型）
 - `skill` — 載入技能（比對技能名稱）

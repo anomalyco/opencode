@@ -3,16 +3,16 @@ import { AppRuntime } from "../../effect/app-runtime"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { ModelsDev } from "../../provider/models"
+import { ModelsDev } from "../../provider"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
-import { Process } from "../../util/process"
+import { Process } from "../../util"
 import { text } from "node:stream/consumers"
 import { Effect } from "effect"
 
@@ -40,12 +40,10 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   } else if (plugin.auth.methods.length > 1) {
     const method = await prompts.select({
       message: "Login method",
-      options: [
-        ...plugin.auth.methods.map((x, index) => ({
-          label: x.label,
-          value: index.toString(),
-        })),
-      ],
+      options: plugin.auth.methods.map((x, index) => ({
+        label: x.label,
+        value: index.toString(),
+      })),
     })
     if (prompts.isCancel(method)) throw new UI.CancelledError()
     index = parseInt(method)
@@ -299,7 +297,9 @@ export const ProvidersLoginCommand = cmd({
         prompts.intro("Add credential")
         if (args.url) {
           const url = args.url.replace(/\/+$/, "")
-          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
+          const wellknown = (await fetch(`${url}/.well-known/opencode`).then((x) => x.json())) as {
+            auth: { command: string[]; env: string }
+          }
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",

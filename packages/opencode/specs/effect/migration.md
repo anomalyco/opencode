@@ -13,6 +13,10 @@ Use `makeRuntime` (from `src/effect/run-service.ts`) to create a per-service `Ma
 
 Rule of thumb: if two open directories should not share one copy of the service, it needs `InstanceState`.
 
+## Instance context transition
+
+See `instance-context.md` for the phased plan to remove the legacy ALS / promise-backed `Instance` helper and move request / CLI / tool boundaries onto Effect-provided instance scope.
+
 ## Service shape
 
 Every service follows the same pattern — a single namespace with the service definition, layer, `runPromise`, and async facade functions:

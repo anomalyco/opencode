@@ -121,18 +121,46 @@ Why `question` first:
 
 Do not re-architect business logic during the HTTP migration. `HttpApi` handlers should call the same Effect services already used by the Hono handlers.
 
-### 4. Run in parallel before replacing
+### 4. Bridge into Hono behind a feature flag
 
-Prefer mounting an experimental `HttpApi` surface alongside the existing Hono routes first. That lowers migration risk and lets us compare:
+The `HttpApi` routes are bridged into the Hono server via `HttpRouter.toWebHandler` with a shared `memoMap`. This means:
 
-- handler ergonomics
-- OpenAPI output
-- auth and middleware integration
-- test ergonomics
+- one process, one port — no separate server
+- the Effect handler shares layer instances with `AppRuntime` (same `Question.Service`, etc.)
+- Effect middleware handles auth and instance lookup independently from Hono middleware
+- Hono's `.all()` catch-all intercepts matching paths before the Hono route handlers
 
-### 5. Migrate JSON route groups gradually
+The bridge is gated behind `OPENCODE_EXPERIMENTAL_HTTPAPI` (or `OPENCODE_EXPERIMENTAL`). When the flag is off (default), all requests go through the original Hono handlers unchanged.
 
-If the parallel slice works well, migrate additional JSON route groups one at a time. Leave streaming-style endpoints on Hono until there is a clear reason to move them.
+```ts
+// in instance/index.ts
+if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
+  const handler = ExperimentalHttpApiServer.webHandler().handler
+  app.all("/question", (c) => handler(c.req.raw)).all("/question/*", (c) => handler(c.req.raw))
+}
+```
+
+The Hono route handlers are always registered (after the bridge) so `hono-openapi` generates the OpenAPI spec entries that feed SDK codegen. When the flag is on, these handlers are dead code — the `.all()` bridge matches first.
+
+### 5. Observability
+
+The `webHandler` provides `Observability.layer` via `Layer.provideMerge`. Since the `memoMap` is shared with `AppRuntime`, the tracing provider is deduplicated — no extra initialization cost.
+
+This gives:
+
+- **spans**: `Effect.fn("QuestionHttpApi.list")` etc. appear in traces alongside service-layer spans
+- **HTTP logs**: `HttpMiddleware.logger` emits structured `Effect.log` entries with `http.method`, `http.url`, `http.status` annotations, flowing to motel via `OtlpLogger`
+
+### 6. Migrate JSON route groups gradually
+
+As each route group is ported to `HttpApi`:
+
+1. change its `root` path from `/experimental/httpapi/<group>` to `/<group>`
+2. add `.all("/<group>", handler)` / `.all("/<group>/*", handler)` to the flag block in `instance/index.ts`
+3. for partial ports (e.g. only `GET /provider/auth`), bridge only the specific path
+4. verify SDK output is unchanged
+
+Leave streaming-style endpoints on Hono until there is a clear reason to move them.
 
 ## Schema rule for HttpApi work
 
@@ -157,6 +185,14 @@ Ordering for a route-group migration:
 3. move tagged route-facing errors to `Schema.TaggedErrorClass` where needed
 4. switch existing Zod boundary validators to derived `.zod`
 5. define the `HttpApi` contract from the canonical Effect schemas
+6. regenerate the SDK (`./packages/sdk/js/script/build.ts`) and verify zero diff against `dev`
+
+SDK shape rule:
+
+- every schema migration must preserve the generated SDK output byte-for-byte
+- `Schema.Class` emits a named `$ref` in OpenAPI via its identifier — use it only for types that already had `.meta({ ref })` in the old Zod schema
+- inner / nested types that were anonymous in the old Zod schema should stay as `Schema.Struct` (not `Schema.Class`) to avoid introducing new named components in the OpenAPI spec
+- if a diff appears in `packages/sdk/js/src/v2/gen/types.gen.ts`, the migration introduced an unintended API surface change — fix it before merging
 
 Temporary exception:
 
@@ -196,8 +232,9 @@ Use the same sequence for each route group.
 4. Define the `HttpApi` contract separately from the handlers.
 5. Implement handlers by yielding the existing service from context.
 6. Mount the new surface in parallel under an experimental prefix.
-7. Add one end-to-end test and one OpenAPI-focused test.
-8. Compare ergonomics before migrating the next endpoint.
+7. Regenerate the SDK and verify zero diff against `dev` (see SDK shape rule above).
+8. Add one end-to-end test and one OpenAPI-focused test.
+9. Compare ergonomics before migrating the next endpoint.
 
 Rule of thumb:
 
@@ -218,17 +255,15 @@ Placement rule:
 
 Suggested file layout for a repeatable spike:
 
-- `src/server/instance/httpapi/question.ts`
-- `src/server/instance/httpapi/index.ts`
-- `test/server/question-httpapi.test.ts`
-- `test/server/question-httpapi-openapi.test.ts`
+- `src/server/instance/httpapi/question.ts` — contract and handler layer for one route group
+- `src/server/instance/httpapi/server.ts` — standalone Effect HTTP server that composes all groups
+- `test/server/question-httpapi.test.ts` — end-to-end test against the real service
 
 Suggested responsibilities:
 
-- `question.ts` defines the `HttpApi` contract and `HttpApiBuilder.group(...)` handlers for the experimental slice
-- `index.ts` combines experimental `HttpApi` groups and exposes the mounted handler or layer
-- `question-httpapi.test.ts` proves the route works end-to-end against the real service
-- `question-httpapi-openapi.test.ts` proves the generated OpenAPI is acceptable for the migrated endpoints
+- `question.ts` defines the `HttpApi` contract and `HttpApiBuilder.group(...)` handlers
+- `server.ts` composes all route groups into one `HttpRouter.serve` layer with shared middleware (auth, instance lookup)
+- tests use `ExperimentalHttpApiServer.layerTest` to run against a real in-process HTTP server
 
 ## Example migration shape
 
@@ -248,11 +283,12 @@ Each route-group spike should follow the same shape.
 - keep handler bodies thin
 - keep transport mapping at the HTTP boundary only
 
-### 3. Mounting
+### 3. Standalone server
 
-- mount under an experimental prefix such as `/experimental/httpapi`
-- keep existing Hono routes unchanged
-- expose separate OpenAPI output for the experimental slice first
+- the Effect HTTP server is self-contained in `httpapi/server.ts`
+- it is **not** mounted into the Hono app — no bridge, no `toWebHandler`
+- route paths use the `/experimental/httpapi` prefix so they match the eventual cutover
+- each route group exposes its own OpenAPI doc endpoint
 
 ### 4. Verification
 
@@ -263,89 +299,75 @@ Each route-group spike should follow the same shape.
 
 ## Boundary composition
 
-The first slices should keep the existing outer server composition and only replace the route contract and handler layer.
+The standalone Effect server owns its own middleware stack. It does not share middleware with the Hono server.
 
 ### Auth
 
-- keep `AuthMiddleware` at the outer Hono app level
-- do not duplicate auth checks inside each `HttpApi` group for the first parallel slices
-- treat auth as an already-satisfied transport concern before the request reaches the `HttpApi` handler
-
-Practical rule:
-
-- if a route is currently protected by the shared server middleware stack, the experimental `HttpApi` route should stay mounted behind that same stack
+- the standalone server implements auth as an `HttpApiMiddleware.Service` using `HttpApiSecurity.basic`
+- each route group's `HttpApi` is wrapped with `.middleware(Authorization)` before being served
+- this is independent of the Hono `AuthMiddleware` — when the Effect server eventually replaces Hono, this becomes the only auth layer
 
 ### Instance and workspace lookup
 
-- keep `WorkspaceRouterMiddleware` as the source of truth for resolving `directory`, `workspace`, and session-derived workspace context
-- let that middleware provide `Instance.current` and `WorkspaceContext` before the request reaches the `HttpApi` handler
-- keep the `HttpApi` handlers unaware of path-to-instance lookup details when the existing Hono middleware already handles them
-
-Practical rule:
-
-- `HttpApi` handlers should yield services from context and assume the correct instance has already been provided
-- only move instance lookup into the `HttpApi` layer if we later decide to migrate the outer middleware boundary itself
+- the standalone server resolves instance context via an `HttpRouter.middleware` that reads `x-opencode-directory` headers and `directory` query params
+- this is the Effect equivalent of the Hono `WorkspaceRouterMiddleware`
+- `HttpApi` handlers yield services from context and assume the correct instance has already been provided
 
 ### Error mapping
 
 - keep domain and service errors typed in the service layer
 - declare typed transport errors on the endpoint only when the route can actually return them intentionally
-- prefer explicit endpoint-level error schemas over relying on the outer Hono `ErrorMiddleware` for expected route behavior
-
-Practical rule:
-
-- request decoding failures should remain transport-level `400`s
+- request decoding failures are transport-level `400`s handled by Effect `HttpApi` automatically
 - storage or lookup failures that are part of the route contract should be declared as typed endpoint errors
-- unexpected defects can still fall through to the outer error middleware while the slice is experimental
-
-For the current parallel slices, this means:
-
-- auth still composes outside `HttpApi`
-- instance selection still composes outside `HttpApi`
-- success payloads should be schema-defined from canonical Effect schemas
-- known route errors should be modeled at the endpoint boundary incrementally instead of all at once
 
 ## Exit criteria for the spike
 
 The first slice is successful if:
 
-- the endpoints run in parallel with the current Hono routes
+- the standalone Effect server starts and serves the endpoints independently of the Hono server
 - the handlers reuse the existing Effect service
 - request decoding and response shapes are schema-defined from canonical Effect schemas
 - any remaining Zod boundary usage is derived from `.zod` or clearly temporary
 - OpenAPI is generated from the `HttpApi` contract
 - the tests are straightforward enough that the next slice feels mechanical
 
-## Learnings from the question slice
+## Learnings
 
-The first parallel `question` spike gave us a concrete pattern to reuse.
+### Schema
 
 - `Schema.Class` works well for route DTOs such as `Question.Request`, `Question.Info`, and `Question.Reply`.
 - scalar or collection schemas such as `Question.Answer` should stay as schemas and use helpers like `withStatics(...)` instead of being forced into classes.
 - if an `HttpApi` success schema uses `Schema.Class`, the handler or underlying service needs to return real schema instances rather than plain objects.
 - internal event payloads can stay anonymous when we want to avoid adding extra named OpenAPI component churn for non-route shapes.
-- the experimental slice should stay mounted in parallel and keep calling the existing service layer unchanged.
-- compare generated OpenAPI semantically at the route and schema level; in the current setup the exported OpenAPI paths do not include the outer Hono mount prefix.
+- `Schema.Class` emits named `$ref` in OpenAPI — only use it for types that already had `.meta({ ref })` in the old Zod schema. Inner/nested types should stay as `Schema.Struct` to avoid SDK shape changes.
+
+### Integration
+
+- `HttpRouter.toWebHandler` with the shared `memoMap` from `run-service.ts` cleanly bridges Effect routes into Hono — one process, one port, shared layer instances.
+- `Observability.layer` must be explicitly provided via `Layer.provideMerge` in the routes layer for OTEL spans and HTTP logs to flow. The `memoMap` deduplicates it with `AppRuntime` — no extra cost.
+- `HttpMiddleware.logger` (enabled by default when `disableLogger` is not set) emits structured `Effect.log` entries with `http.method`, `http.url`, `http.status` — these flow through `OtlpLogger` to motel.
+- Hono OpenAPI stubs must remain registered for SDK codegen until the SDK pipeline reads from the Effect OpenAPI spec instead.
+- the `OPENCODE_EXPERIMENTAL_HTTPAPI` flag gates the bridge at the Hono router level — default off, no behavior change unless opted in.
 
 ## Route inventory
 
 Status legend:
 
-- `done` - parallel `HttpApi` slice exists
+- `bridged` - Effect HttpApi slice exists and is bridged into Hono behind the flag
+- `done` - Effect HttpApi slice exists but not yet bridged
 - `next` - good near-term candidate
 - `later` - possible, but not first wave
 - `defer` - not a good early `HttpApi` target
 
 Current instance route inventory:
 
-- `question` - `done`
-  endpoints in slice: `GET /question`, `POST /question/:requestID/reply`
-- `permission` - `done`
-  endpoints in slice: `GET /permission`, `POST /permission/:requestID/reply`
-- `provider` - `next`
-  best next endpoint: `GET /provider/auth`
-  later endpoint: `GET /provider`
-  defer first-wave OAuth mutations
+- `question` - `bridged`
+  endpoints: `GET /question`, `POST /question/:requestID/reply`, `POST /question/:requestID/reject`
+- `permission` - `bridged`
+  endpoints: `GET /permission`, `POST /permission/:requestID/reply`
+- `provider` - `bridged` (partial)
+  bridged endpoint: `GET /provider/auth`
+  not yet ported: `GET /provider`, OAuth mutations
 - `config` - `next`
   best next endpoint: `GET /config/providers`
   later endpoint: `GET /config`
@@ -385,7 +407,13 @@ Recommended near-term sequence after the first spike:
 - [x] keep the underlying service calls identical to the current handlers
 - [x] compare generated OpenAPI against the current Hono/OpenAPI setup
 - [x] document how auth, instance lookup, and error mapping would compose in the new stack
-- [ ] decide after the spike whether `HttpApi` should stay parallel, replace only some groups, or become the long-term default
+- [x] bridge Effect routes into Hono via `toWebHandler` with shared `memoMap`
+- [x] gate behind `OPENCODE_EXPERIMENTAL_HTTPAPI` flag
+- [x] verify OTEL spans and HTTP logs flow to motel
+- [x] bridge question, permission, and provider auth routes
+- [ ] port remaining provider endpoints (`GET /provider`, OAuth mutations)
+- [ ] port `config` read endpoints
+- [ ] decide when to remove the flag and make Effect routes the default
 
 ## Rule of thumb
 

@@ -1,19 +1,16 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "../../config/config"
-import { Provider } from "../../provider/provider"
-import { ModelsDev } from "../../provider/models"
-import { ProviderAuth } from "../../provider/auth"
+import { Config } from "../../config"
+import { Provider } from "../../provider"
+import { ModelsDev } from "../../provider"
+import { ProviderAuth } from "../../provider"
 import { ProviderID } from "../../provider/schema"
 import { AppRuntime } from "../../effect/app-runtime"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { Log } from "../../util/log"
 import { Effect } from "effect"
-
-const log = Log.create({ service: "server" })
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -28,13 +25,7 @@ export const ProviderRoutes = lazy(() =>
             description: "List of providers",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    all: Provider.Info.array(),
-                    default: z.record(z.string(), z.string()),
-                    connected: z.array(z.string()),
-                  }),
-                ),
+                schema: resolver(Provider.ListResult.zod),
               },
             },
           },
@@ -62,7 +53,7 @@ export const ProviderRoutes = lazy(() =>
             )
             return {
               all: Object.values(providers),
-              default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+              default: Provider.defaultModelIDs(providers),
               connected: Object.keys(connected),
             }
           }),
@@ -85,7 +76,7 @@ export const ProviderRoutes = lazy(() =>
             description: "Provider auth methods",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), z.array(ProviderAuth.Method))),
+                schema: resolver(ProviderAuth.Methods.zod),
               },
             },
           },
@@ -106,7 +97,7 @@ export const ProviderRoutes = lazy(() =>
             description: "Authorization URL and method",
             content: {
               "application/json": {
-                schema: resolver(ProviderAuth.Authorization.optional()),
+                schema: resolver(ProviderAuth.Authorization.zod.optional()),
               },
             },
           },
@@ -119,13 +110,7 @@ export const ProviderRoutes = lazy(() =>
           providerID: ProviderID.zod.meta({ description: "Provider ID" }),
         }),
       ),
-      validator(
-        "json",
-        z.object({
-          method: z.number().meta({ description: "Auth method index" }),
-          inputs: z.record(z.string(), z.string()).optional().meta({ description: "Prompt inputs" }),
-        }),
-      ),
+      validator("json", ProviderAuth.AuthorizeInput.zod),
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, inputs } = c.req.valid("json")
@@ -165,13 +150,7 @@ export const ProviderRoutes = lazy(() =>
           providerID: ProviderID.zod.meta({ description: "Provider ID" }),
         }),
       ),
-      validator(
-        "json",
-        z.object({
-          method: z.number().meta({ description: "Auth method index" }),
-          code: z.string().optional().meta({ description: "OAuth authorization code" }),
-        }),
-      ),
+      validator("json", ProviderAuth.CallbackInput.zod),
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, code } = c.req.valid("json")
