@@ -6,18 +6,19 @@ import { useSDK } from "./sdk"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
-const defaultPath = {
-  home: "",
-  state: "",
-  config: "",
-  worktree: "",
-  directory: "",
-} satisfies Path
-
 export const { use: useProject, provider: ProjectProvider } = createSimpleContext({
   name: "Project",
   init: () => {
     const sdk = useSDK()
+
+    const defaultPath = {
+      home: "",
+      state: "",
+      config: "",
+      worktree: "",
+      directory: sdk.directory ?? "",
+    } satisfies Path
+
     const [store, setStore] = createStore({
       project: {
         id: undefined as string | undefined,
