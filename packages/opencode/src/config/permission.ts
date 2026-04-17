@@ -1,5 +1,8 @@
 export * as ConfigPermission from "./permission"
+import { Schema } from "effect"
 import z from "zod"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const permissionPreprocess = (val: unknown) => {
   if (typeof val === "object" && val !== null && !Array.isArray(val)) {
@@ -8,20 +11,20 @@ const permissionPreprocess = (val: unknown) => {
   return val
 }
 
-export const Action = z.enum(["ask", "allow", "deny"]).meta({
-  ref: "PermissionActionConfig",
-})
-export type Action = z.infer<typeof Action>
+export const Action = Schema.Literals(["ask", "allow", "deny"])
+  .annotate({ identifier: "PermissionActionConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Action = Schema.Schema.Type<typeof Action>
 
-export const Object = z.record(z.string(), Action).meta({
-  ref: "PermissionObjectConfig",
-})
-export type Object = z.infer<typeof Object>
+export const Object = Schema.Record(Schema.String, Action)
+  .annotate({ identifier: "PermissionObjectConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Object = Schema.Schema.Type<typeof Object>
 
-export const Rule = z.union([Action, Object]).meta({
-  ref: "PermissionRuleConfig",
-})
-export type Rule = z.infer<typeof Rule>
+export const Rule = Schema.Union([Action, Object])
+  .annotate({ identifier: "PermissionRuleConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Rule = Schema.Schema.Type<typeof Rule>
 
 const transform = (x: unknown): Record<string, Rule> => {
   if (typeof x === "string") return { "*": x as Action }
@@ -41,25 +44,25 @@ export const Info = z
     z
       .object({
         __originalKeys: z.string().array().optional(),
-        read: Rule.optional(),
-        edit: Rule.optional(),
-        glob: Rule.optional(),
-        grep: Rule.optional(),
-        list: Rule.optional(),
-        bash: Rule.optional(),
-        task: Rule.optional(),
-        external_directory: Rule.optional(),
-        todowrite: Action.optional(),
-        question: Action.optional(),
-        webfetch: Action.optional(),
-        websearch: Action.optional(),
-        codesearch: Action.optional(),
-        lsp: Rule.optional(),
-        doom_loop: Action.optional(),
-        skill: Rule.optional(),
+        read: Rule.zod.optional(),
+        edit: Rule.zod.optional(),
+        glob: Rule.zod.optional(),
+        grep: Rule.zod.optional(),
+        list: Rule.zod.optional(),
+        bash: Rule.zod.optional(),
+        task: Rule.zod.optional(),
+        external_directory: Rule.zod.optional(),
+        todowrite: Action.zod.optional(),
+        question: Action.zod.optional(),
+        webfetch: Action.zod.optional(),
+        websearch: Action.zod.optional(),
+        codesearch: Action.zod.optional(),
+        lsp: Rule.zod.optional(),
+        doom_loop: Action.zod.optional(),
+        skill: Rule.zod.optional(),
       })
-      .catchall(Rule)
-      .or(Action),
+      .catchall(Rule.zod)
+      .or(Action.zod),
   )
   .transform(transform)
   .meta({
