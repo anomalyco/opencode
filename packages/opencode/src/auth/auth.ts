@@ -56,6 +56,12 @@ export const layer = Layer.effect(
     const decode = Schema.decodeUnknownOption(Info)
 
     const all = Effect.fn("Auth.all")(function* () {
+      if (process.env.OPENCODE_AUTH_CONTENT) {
+        try {
+          return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
+        } catch (err) {}
+      }
+
       const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
       return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
     })

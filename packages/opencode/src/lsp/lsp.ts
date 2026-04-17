@@ -440,12 +440,11 @@ export const layer = Layer.effect(
     const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string) {
       const results = yield* runAll((client) =>
         client.connection
-          .sendRequest("workspace/symbol", { query })
-          .then((result: any) => result.filter((x: Symbol) => kinds.includes(x.kind)))
-          .then((result: any) => result.slice(0, 10))
-          .catch(() => []),
+          .sendRequest<Symbol[]>("workspace/symbol", { query })
+          .then((result) => result.filter((x) => kinds.includes(x.kind)).slice(0, 10))
+          .catch(() => [] as Symbol[]),
       )
-      return results.flat() as Symbol[]
+      return results.flat()
     })
 
     const prepareCallHierarchy = Effect.fn("LSP.prepareCallHierarchy")(function* (input: LocInput) {
@@ -465,12 +464,12 @@ export const layer = Layer.effect(
       direction: "callHierarchy/incomingCalls" | "callHierarchy/outgoingCalls",
     ) {
       const results = yield* run(input.file, async (client) => {
-        const items = (await client.connection
-          .sendRequest("textDocument/prepareCallHierarchy", {
+        const items = await client.connection
+          .sendRequest<unknown[] | null>("textDocument/prepareCallHierarchy", {
             textDocument: { uri: pathToFileURL(input.file).href },
             position: { line: input.line, character: input.character },
           })
-          .catch(() => [])) as any[]
+          .catch(() => [] as unknown[])
         if (!items?.length) return []
         return client.connection.sendRequest(direction, { item: items[0] }).catch(() => [])
       })

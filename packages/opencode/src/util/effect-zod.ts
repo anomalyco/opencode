@@ -77,8 +77,8 @@ function union(ast: SchemaAST.Union): z.ZodTypeAny {
   if (items.length === 1) return items[0]
   if (items.length < 2) return fail(ast)
 
-  const discriminator = (ast as any).annotations?.discriminator
-  if (discriminator) {
+  const discriminator = ast.annotations?.discriminator
+  if (typeof discriminator === "string") {
     return z.discriminatedUnion(discriminator, items as [z.ZodObject<any>, z.ZodObject<any>, ...z.ZodObject<any>[]])
   }
 

@@ -10,9 +10,11 @@ import { File } from "@/file"
 import { Vcs } from "@/project"
 import { Snapshot } from "@/snapshot"
 import { Bus } from "@/bus"
+import { Config } from "@/config"
 import * as Observability from "./observability"
 
 export const BootstrapLayer = Layer.mergeAll(
+  Config.defaultLayer,
   Plugin.defaultLayer,
   ShareNext.defaultLayer,
   Format.defaultLayer,
