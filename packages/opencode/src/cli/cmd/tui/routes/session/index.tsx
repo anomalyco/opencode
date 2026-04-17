@@ -54,7 +54,6 @@ import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
-import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
@@ -88,6 +87,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
+import { getRevertDiffFiles } from "../../util/revert-diff"
 
 addDefaultParsers(parsers.parsers)
 
@@ -991,31 +991,7 @@ export function Session() {
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
 
-  const revertDiffFiles = createMemo(() => {
-    const diffText = revertInfo()?.diff ?? ""
-    if (!diffText) return []
-
-    try {
-      const patches = parsePatch(diffText)
-      return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown"
-        const cleanFilename = filename.replace(/^[ab]\//, "")
-        return {
-          filename: cleanFilename,
-          additions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-            0,
-          ),
-          deletions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-            0,
-          ),
-        }
-      })
-    } catch {
-      return []
-    }
-  })
+  const revertDiffFiles = createMemo(() => getRevertDiffFiles(revertInfo()?.diff ?? ""))
 
   const revertRevertedMessages = createMemo(() => {
     const messageID = revertMessageID()
