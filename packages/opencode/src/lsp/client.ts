@@ -144,33 +144,33 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       return connection
     },
     notify: {
-      async open(input: { path: string }) {
-        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(input.directory, input.path)
-        const text = await Filesystem.readText(input.path)
-        const extension = path.extname(input.path)
+      async open(request: { path: string }) {
+        request.path = path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path)
+        const text = await Filesystem.readText(request.path)
+        const extension = path.extname(request.path)
         const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
-        const version = files[input.path]
+        const version = files[request.path]
         if (version !== undefined) {
-          log.info("workspace/didChangeWatchedFiles", input)
+          log.info("workspace/didChangeWatchedFiles", request)
           await connection.sendNotification("workspace/didChangeWatchedFiles", {
             changes: [
               {
-                uri: pathToFileURL(input.path).href,
+                uri: pathToFileURL(request.path).href,
                 type: 2, // Changed
               },
             ],
           })
 
           const next = version + 1
-          files[input.path] = next
+          files[request.path] = next
           log.info("textDocument/didChange", {
-            path: input.path,
+            path: request.path,
             version: next,
           })
           await connection.sendNotification("textDocument/didChange", {
             textDocument: {
-              uri: pathToFileURL(input.path).href,
+              uri: pathToFileURL(request.path).href,
               version: next,
             },
             contentChanges: [{ text }],
@@ -178,36 +178,36 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
           return
         }
 
-        log.info("workspace/didChangeWatchedFiles", input)
+        log.info("workspace/didChangeWatchedFiles", request)
         await connection.sendNotification("workspace/didChangeWatchedFiles", {
           changes: [
             {
-              uri: pathToFileURL(input.path).href,
+              uri: pathToFileURL(request.path).href,
               type: 1, // Created
             },
           ],
         })
 
-        log.info("textDocument/didOpen", input)
-        diagnostics.delete(input.path)
+        log.info("textDocument/didOpen", request)
+        diagnostics.delete(request.path)
         await connection.sendNotification("textDocument/didOpen", {
           textDocument: {
-            uri: pathToFileURL(input.path).href,
+            uri: pathToFileURL(request.path).href,
             languageId,
             version: 0,
             text,
           },
         })
-        files[input.path] = 0
+        files[request.path] = 0
         return
       },
     },
     get diagnostics() {
       return diagnostics
     },
-    async waitForDiagnostics(input: { path: string }) {
+    async waitForDiagnostics(request: { path: string }) {
       const normalizedPath = Filesystem.normalizePath(
-        path.isAbsolute(input.path) ? input.path : path.resolve(input.directory, input.path),
+        path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
       )
       log.info("waiting for diagnostics", { path: normalizedPath })
       let unsub: () => void

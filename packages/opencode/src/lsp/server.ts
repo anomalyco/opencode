@@ -810,8 +810,8 @@ export const SourceKit: Info = {
 
 export const RustAnalyzer: Info = {
   id: "rust",
-  root: async (root) => {
-    const crateRoot = await NearestRoot(["Cargo.toml", "Cargo.lock"])(root)
+  root: async (file, ctx) => {
+    const crateRoot = await NearestRoot(["Cargo.toml", "Cargo.lock"])(file, ctx)
     if (crateRoot === undefined) {
       return undefined
     }
