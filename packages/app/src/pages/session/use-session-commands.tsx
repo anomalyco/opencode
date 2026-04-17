@@ -19,7 +19,6 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { DialogSelectFile } from "@/components/dialog-select-file"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -364,101 +363,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           ? language.t("toast.session.share.success.description")
           : language.t("command.session.share.description"),
         slash: "share",
-      }),
-      sessionCommand({
-        id: "session.new",
-        title: language.t("command.session.new"),
-        keybind: "mod+shift+s",
-        slash: "new",
-        onSelect: () => navigate(`/${params.dir}/session`),
-      }),
-      fileCommand({
-        id: "file.open",
-        title: language.t("command.file.open"),
-        description: language.t("palette.search.placeholder"),
-        keybind: "mod+k,mod+p",
-        slash: "open",
-        onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
-      }),
-      fileCommand({
-        id: "tab.close",
-        title: language.t("command.tab.close"),
-        keybind: "mod+w",
-        disabled: !closableTab(),
-        onSelect: () => {
-          const tab = closableTab()
-          if (!tab) return
-          tabs().close(tab)
-        },
-      }),
-      contextCommand({
-        id: "context.addSelection",
-        title: language.t("command.context.addSelection"),
-        description: language.t("command.context.addSelection.description"),
-        keybind: "mod+shift+l",
-        disabled: !canAddSelectionContext(),
-        onSelect: () => {
-          const tab = activeFileTab()
-          if (!tab) return
-          const path = file.pathFromTab(tab)
-          if (!path) return
-
-          const range = file.selectedLines(path) as SelectedLineRange | null | undefined
-          if (!range) {
-            showToast({
-              title: language.t("toast.context.noLineSelection.title"),
-              description: language.t("toast.context.noLineSelection.description"),
-            })
-            return
-          }
-
-          addSelectionToContext(path, selectionFromLines(range))
-        },
-      }),
-      viewCommand({
-        id: "terminal.toggle",
-        title: language.t("command.terminal.toggle"),
-        keybind: "ctrl+`",
-        slash: "terminal",
-        onSelect: () => view().terminal.toggle(),
-      }),
-      viewCommand({
-        id: "review.toggle",
-        title: language.t("command.review.toggle"),
-        keybind: "mod+shift+r",
-        onSelect: () => view().reviewPanel.toggle(),
-      }),
-      ...(shown()
-        ? [
-            viewCommand({
-              id: "fileTree.toggle",
-              title: language.t("command.fileTree.toggle"),
-              keybind: "mod+\\",
-              onSelect: () => layout.fileTree.toggle(),
-            }),
-          ]
-        : []),
-      viewCommand({
-        id: "input.focus",
-        title: language.t("command.input.focus"),
-        keybind: "ctrl+l",
-        onSelect: focusInput,
-      }),
-      terminalCommand({
-        id: "terminal.new",
-        title: language.t("command.terminal.new"),
-        description: language.t("command.terminal.new.description"),
-        keybind: "ctrl+alt+t",
-        onSelect: () => {
-          if (terminal.all().length > 0) terminal.new()
-          view().terminal.open()
-        },
-      }),
-      sessionCommand({
-        id: "message.previous",
-        title: language.t("command.message.previous"),
-        description: language.t("command.message.previous.description"),
-        keybind: "mod+arrowup",
         disabled: !params.id,
         onSelect: share,
       }),
@@ -558,12 +462,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
-    viewCommand({
-      id: "fileTree.toggle",
-      title: language.t("command.fileTree.toggle"),
-      keybind: "mod+\\",
-      onSelect: () => layout.fileTree.toggle(),
-    }),
+    ...(shown()
+      ? [
+          viewCommand({
+            id: "fileTree.toggle",
+            title: language.t("command.fileTree.toggle"),
+            keybind: "mod+\\",
+            onSelect: () => layout.fileTree.toggle(),
+          }),
+        ]
+      : []),
     viewCommand({
       id: "input.focus",
       title: language.t("command.input.focus"),

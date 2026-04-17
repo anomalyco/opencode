@@ -80,7 +80,7 @@ export function Titlebar() {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
-  const nav = createMemo(() => platform.platform !== "desktop" || settings.general.showNavigation())
+  const nav = createMemo(() => import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" || settings.general.showNavigation())
 
   const back = () => {
     const next = backPath(history)
@@ -255,48 +255,45 @@ export function Titlebar() {
                 </div>
               </div>
             </Show>
-            <Show when={hasProjects() && nav()}>
-              <div
-                class="flex items-center shrink-0"
-                classList={{
-                  "translate-x-0": !layout.sidebar.opened(),
-                  "-translate-x-[36px]": layout.sidebar.opened(),
-                  "duration-180 ease-out": !layout.sidebar.opened(),
-                  "duration-180 ease-in": layout.sidebar.opened(),
-                }}
-              >
-                <Show when={hasProjects()}>
-                  <div class="flex items-center gap-0 transition-transform">
-                    <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
-                      <Button
-                        variant="ghost"
-                        icon="chevron-left"
-                        class="titlebar-icon w-6 h-6 p-0 box-border"
-                        disabled={!canBack()}
-                        onClick={back}
-                        aria-label={language.t("common.goBack")}
-                      />
-                    </Tooltip>
-                    <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
-                      <Button
-                        variant="ghost"
-                        icon="chevron-right"
-                        class="titlebar-icon w-6 h-6 p-0 box-border"
-                        disabled={!canForward()}
-                        onClick={forward}
-                        aria-label={language.t("common.goForward")}
-                      />
-                    </Tooltip>
-                  </div>
-                </Show>
-                <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
-                  <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-                    {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
-                  </div>
-                )}
-              </div>
-            </Show>
+            <div
+              class="flex items-center shrink-0"
+              classList={{
+                "-translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
+                "duration-180 ease-out": !layout.sidebar.opened(),
+                "duration-180 ease-in": layout.sidebar.opened(),
+              }}
+            >
+              <Show when={hasProjects() && nav()}>
+                <div class="flex items-center gap-0 transition-transform">
+                  <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
+                    <Button
+                      variant="ghost"
+                      icon="chevron-left"
+                      class="titlebar-icon w-6 h-6 p-0 box-border"
+                      disabled={!canBack()}
+                      onClick={back}
+                      aria-label={language.t("common.goBack")}
+                    />
+                  </Tooltip>
+                  <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
+                    <Button
+                      variant="ghost"
+                      icon="chevron-right"
+                      class="titlebar-icon w-6 h-6 p-0 box-border"
+                      disabled={!canForward()}
+                      onClick={forward}
+                      aria-label={language.t("common.goForward")}
+                    />
+                  </Tooltip>
+                </div>
+              </Show>
+              <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+              {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
+                <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
+                  {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
