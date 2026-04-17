@@ -57,6 +57,81 @@ export namespace Billing {
     )
   }
 
+  export interface ModelStats {
+    model: string
+    provider: string
+    totalInputTokens: number
+    totalOutputTokens: number
+    totalReasoningTokens: number
+    totalCacheReadTokens: number
+    totalCacheWriteTokens: number
+    totalCost: number
+    requestCount: number
+    avgCostPerRequest: number
+  }
+
+  export const modelStats = async (days = 30) => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+
+    const usages = await Database.use((tx) =>
+      tx
+        .select()
+        .from(UsageTable)
+        .where(sql`${UsageTable.workspaceID} = ${Actor.workspace()} AND ${UsageTable.timeCreated} >= ${cutoff}`),
+    )
+
+    // Aggregate by model
+    const stats = new Map<string, ModelStats>()
+
+    for (const usage of usages) {
+      const key = `${usage.provider}:${usage.model}`
+      const existing = stats.get(key)
+
+      const inputTokens = usage.inputTokens ?? 0
+      const outputTokens = usage.outputTokens ?? 0
+      const reasoningTokens = usage.reasoningTokens ?? 0
+      const cacheReadTokens = usage.cacheReadTokens ?? 0
+      const cacheWriteTokens = (usage.cacheWrite5mTokens ?? 0) + (usage.cacheWrite1hTokens ?? 0)
+      const cost = Number(usage.cost)
+
+      if (existing) {
+        existing.totalInputTokens += inputTokens
+        existing.totalOutputTokens += outputTokens
+        existing.totalReasoningTokens += reasoningTokens
+        existing.totalCacheReadTokens += cacheReadTokens
+        existing.totalCacheWriteTokens += cacheWriteTokens
+        existing.totalCost += cost
+        existing.requestCount += 1
+      } else {
+        stats.set(key, {
+          model: usage.model,
+          provider: usage.provider,
+          totalInputTokens: inputTokens,
+          totalOutputTokens: outputTokens,
+          totalReasoningTokens: reasoningTokens,
+          totalCacheReadTokens: cacheReadTokens,
+          totalCacheWriteTokens: cacheWriteTokens,
+          totalCost: cost,
+          requestCount: 1,
+          avgCostPerRequest: 0,
+        })
+      }
+    }
+
+    // Calculate averages
+    const result: ModelStats[] = []
+    for (const stat of stats.values()) {
+      stat.avgCostPerRequest = stat.totalCost / stat.requestCount
+      result.push(stat)
+    }
+
+    // Sort by total cost descending
+    result.sort((a, b) => b.totalCost - a.totalCost)
+
+    return result
+  }
+
   export const calculateFeeInCents = (x: number) => {
     // math: x = total - (total * 0.044 + 0.30)
     // math: x = total * (1-0.044) - 0.30
