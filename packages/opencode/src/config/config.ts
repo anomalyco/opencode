@@ -36,8 +36,8 @@ import { ConfigPermission } from "./permission"
 import { ConfigProvider } from "./provider"
 import { ConfigSkills } from "./skills"
 import { ConfigPaths } from "./paths"
-import * as ConfigFormatter from "./formatter"
-import * as ConfigLSP from "./lsp"
+import { ConfigFormatter } from "./formatter"
+import { ConfigLSP } from "./lsp"
 
 const log = Log.create({ service: "config" })
 
