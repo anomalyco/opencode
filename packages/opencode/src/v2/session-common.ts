@@ -1,1 +1,0 @@
-export namespace SessionCommon {}

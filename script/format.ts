@@ -2,4 +2,6 @@
 
 import { $ } from "bun"
 
-await $`bun run prettier --ignore-unknown --write .`
+const dir = Bun.argv[2] ?? "."
+
+await $`bun run prettier --ignore-unknown --write ${dir}`
