@@ -9,6 +9,7 @@ import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
+import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { MessageID, PartID } from "@/session/schema"
@@ -38,6 +39,8 @@ import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
+import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
 
 export type PromptProps = {
@@ -92,6 +95,7 @@ export function Prompt(props: PromptProps) {
   const args = useArgs()
   const sdk = useSDK()
   const route = useRoute()
+  const project = useProject()
   const sync = useSync()
   const dialog = useDialog()
   const toast = useToast()
@@ -241,9 +245,11 @@ export function Prompt(props: PromptProps) {
         keybind: "input_submit",
         category: "Prompt",
         hidden: true,
-        onSelect: (dialog) => {
+        onSelect: async (dialog) => {
           if (!input.focused) return
-          void submit()
+          const handled = await submit()
+          if (!handled) return
+
           dialog.clear()
         },
       },
@@ -628,20 +634,48 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "input", input.plainText)
       syncExtmarksWithPromptParts()
     }
-    if (props.disabled) return
-    if (autocomplete?.visible) return
-    if (!store.prompt.input) return
+    if (props.disabled) return false
+    if (autocomplete?.visible) return false
+    if (!store.prompt.input) return false
     const agent = local.agent.current()
-    if (!agent) return
+    if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
-      return
+      return true
     }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
-      return
+      return false
+    }
+
+    const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
+    const workspaceID = workspaceSession?.workspaceID
+    const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
+    if (props.sessionID && workspaceID && workspaceStatus !== "connected") {
+      dialog.replace(() => (
+        <DialogWorkspaceUnavailable
+          onRestore={() => {
+            dialog.replace(() => (
+              <DialogWorkspaceCreate
+                onSelect={(nextWorkspaceID) =>
+                  restoreWorkspaceSession({
+                    dialog,
+                    sdk,
+                    sync,
+                    project,
+                    toast,
+                    workspaceID: nextWorkspaceID,
+                    sessionID: props.sessionID!,
+                  })
+                }
+              />
+            ))
+          }}
+        />
+      ))
+      return false
     }
 
     let sessionID = props.sessionID
@@ -656,7 +690,7 @@ export function Prompt(props: PromptProps) {
           variant: "error",
         })
 
-        return
+        return true
       }
 
       sessionID = res.data.id
@@ -770,6 +804,7 @@ export function Prompt(props: PromptProps) {
         })
       }, 50)
     input.clear()
+    return true
   }
   const exit = useExit()
 
