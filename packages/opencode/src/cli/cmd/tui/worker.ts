@@ -11,9 +11,9 @@ import { Flag } from "@/flag/flag"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
+import { ensureProcessMetadata } from "@/util/opencode-process"
 
-process.env.OPENCODE_RUN_ID ??= crypto.randomUUID()
-process.env.OPENCODE_PROCESS_ROLE ??= "worker"
+ensureProcessMetadata("worker")
 
 await Log.init({
   print: process.argv.includes("--print-logs"),

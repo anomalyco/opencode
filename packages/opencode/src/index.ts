@@ -38,9 +38,9 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
+import { ensureProcessMetadata } from "./util/opencode-process"
 
-process.env.OPENCODE_RUN_ID ??= crypto.randomUUID()
-process.env.OPENCODE_PROCESS_ROLE ??= "main"
+const processMetadata = ensureProcessMetadata("main")
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -111,8 +111,8 @@ const cli = yargs(args)
     Log.Default.info("opencode", {
       version: InstallationVersion,
       args: process.argv.slice(2),
-      process_role: process.env.OPENCODE_PROCESS_ROLE,
-      run_id: process.env.OPENCODE_RUN_ID,
+      process_role: processMetadata.processRole,
+      run_id: processMetadata.runID,
     })
 
     const marker = path.join(Global.Path.data, "opencode.db")
