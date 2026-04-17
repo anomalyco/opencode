@@ -61,7 +61,7 @@ export function SubagentFooter() {
   const parentShortcut = useCommandShortcut("session.parent")
   const previousShortcut = useCommandShortcut("session.child.previous")
   const nextShortcut = useCommandShortcut("session.child.next")
-  const childShortcut = useCommandShortcut("session.child.first")
+  const childShortcut = useCommandShortcut("session.child.first.subagent")
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | "child" | null>(null)
   useTerminalDimensions()
 
@@ -131,7 +131,7 @@ export function SubagentFooter() {
               <box
                 onMouseOver={() => setHover("child")}
                 onMouseOut={() => setHover(null)}
-                onMouseUp={() => command.run("session.child.first")}
+                onMouseUp={() => command.run("session.child.first.subagent")}
                 backgroundColor={hover() === "child" ? theme.backgroundElement : theme.backgroundPanel}
               >
                 <text fg={theme.text}>
