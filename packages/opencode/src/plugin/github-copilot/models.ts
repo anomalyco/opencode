@@ -68,6 +68,11 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
       input: remote.capabilities.limits.max_prompt_tokens,
       output: remote.capabilities.limits.max_output_tokens,
     },
+    policy: z
+      .object({
+        state: z.string().optional(),
+      })
+      .optional(),
     capabilities: {
       temperature: prev?.capabilities.temperature ?? true,
       reasoning: prev?.capabilities.reasoning ?? reasoning,
@@ -122,7 +127,9 @@ export async function get(
   })
 
   const result = { ...existing }
-  const remote = new Map(data.data.filter((m) => m.model_picker_enabled).map((m) => [m.id, m] as const))
+  const remote = new Map(
+    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
+  )
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {
