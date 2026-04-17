@@ -286,5 +286,14 @@ export default {
         ],
       },
     },
+    {
+      filetype: "diff",
+      wasm: "https://github.com/tree-sitter-grammars/tree-sitter-diff/releases/download/v0.1.0/tree-sitter-diff.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-diff/refs/heads/main/queries/highlights.scm",
+        ],
+      },
+    },
   ],
 }
