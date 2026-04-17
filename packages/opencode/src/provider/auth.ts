@@ -58,31 +58,17 @@ export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuth
   static readonly zod = zod(this)
 }
 
-const AuthorizeInputZod = z.object({
-  method: z.number().meta({ description: "Auth method index" }),
-  inputs: z.record(z.string(), z.string()).optional().meta({ description: "Prompt inputs" }),
-})
-
-const _AuthorizeInput = Schema.Struct({
+export const AuthorizeInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
   inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
-})
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 
-export const AuthorizeInput = Object.assign(_AuthorizeInput, { zod: AuthorizeInputZod })
-export type AuthorizeInput = Schema.Schema.Type<typeof _AuthorizeInput>
-
-const CallbackInputZod = z.object({
-  method: z.number().meta({ description: "Auth method index" }),
-  code: z.string().optional().meta({ description: "OAuth authorization code" }),
-})
-
-const _CallbackInput = Schema.Struct({
+export const CallbackInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
-})
-
-export const CallbackInput = Object.assign(_CallbackInput, { zod: CallbackInputZod })
-export type CallbackInput = Schema.Schema.Type<typeof _CallbackInput>
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
 export const OauthMissing = NamedError.create("ProviderAuthOauthMissing", z.object({ providerID: ProviderID.zod }))
 

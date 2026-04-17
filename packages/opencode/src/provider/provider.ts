@@ -25,6 +25,7 @@ import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
+import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -860,7 +861,7 @@ const ProviderLimit = Schema.Struct({
   output: Schema.Number,
 })
 
-const _Model = Schema.Struct({
+export const Model = Schema.Struct({
   id: ModelID,
   providerID: ProviderID,
   api: ProviderApiInfo,
@@ -874,11 +875,12 @@ const _Model = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
   variants: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
-}).annotate({ identifier: "Model" })
-export const Model = Object.assign(_Model, { zod: zod(_Model) })
-export type Model = Mutable<Schema.Schema.Type<typeof _Model>>
+})
+  .annotate({ identifier: "Model" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Model = Mutable<Schema.Schema.Type<typeof Model>>
 
-const _Info = Schema.Struct({
+export const Info = Schema.Struct({
   id: ProviderID,
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
@@ -886,26 +888,25 @@ const _Info = Schema.Struct({
   key: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
-}).annotate({ identifier: "Provider" })
-export const Info = Object.assign(_Info, { zod: zod(_Info) })
-export type Info = Mutable<Schema.Schema.Type<typeof _Info>>
+})
+  .annotate({ identifier: "Provider" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Mutable<Schema.Schema.Type<typeof Info>>
 
 const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
 
-const _ListResult = Schema.Struct({
+export const ListResult = Schema.Struct({
   all: Schema.Array(Info),
   default: DefaultModelIDs,
   connected: Schema.Array(Schema.String),
-})
-export const ListResult = Object.assign(_ListResult, { zod: zod(_ListResult) })
-export type ListResult = Mutable<Schema.Schema.Type<typeof _ListResult>>
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ListResult = Mutable<Schema.Schema.Type<typeof ListResult>>
 
-const _ConfigProvidersResult = Schema.Struct({
+export const ConfigProvidersResult = Schema.Struct({
   providers: Schema.Array(Info),
   default: DefaultModelIDs,
-})
-export const ConfigProvidersResult = Object.assign(_ConfigProvidersResult, { zod: zod(_ConfigProvidersResult) })
-export type ConfigProvidersResult = Mutable<Schema.Schema.Type<typeof _ConfigProvidersResult>>
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ConfigProvidersResult = Mutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
@@ -953,7 +954,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 }
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
-  const m: Model = {
+  const base: Model = {
     id: ModelID.make(model.id),
     providerID: ProviderID.make(provider.id),
     name: model.name,
@@ -997,9 +998,10 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     variants: {},
   }
 
-  m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
-
-  return m
+  return {
+    ...base,
+    variants: mapValues(ProviderTransform.variants(base), (v) => v),
+  }
 }
 
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
@@ -1008,17 +1010,22 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     models[key] = fromModelsDevModel(provider, model)
     for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
       const id = `${model.id}-${mode}`
-      const m = fromModelsDevModel(provider, model)
-      m.id = ModelID.make(id)
-      m.name = `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`
-      if (opts.cost) m.cost = mergeDeep(m.cost, cost(opts.cost))
-      // convert body params to camelCase for ai sdk compatibility
-      if (opts.provider?.body)
-        m.options = Object.fromEntries(
-          Object.entries(opts.provider.body).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]),
-        )
-      if (opts.provider?.headers) m.headers = opts.provider.headers
-      models[id] = m
+      const base = fromModelsDevModel(provider, model)
+      models[id] = {
+        ...base,
+        id: ModelID.make(id),
+        name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
+        cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
+        options: opts.provider?.body
+          ? Object.fromEntries(
+              Object.entries(opts.provider.body).map(([k, v]) => [
+                k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+                v,
+              ]),
+            )
+          : base.options,
+        headers: opts.provider?.headers ?? base.headers,
+      }
     }
   }
   return {
