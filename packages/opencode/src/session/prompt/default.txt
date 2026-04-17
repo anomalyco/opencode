@@ -50,7 +50,7 @@ assistant: 150000
 
 <example>
 user: what files are in the directory src/?
-assistant: [uses the glob tool and reports seeing foo.c, bar.c, baz.c]
+assistant: [tool_call: glob for pattern '*' in path '/path/to/projects', reports seeing foo.c, bar.c, baz.c]
 user: which file contains the implementation of foo?
 assistant: src/foo.c
 </example>
