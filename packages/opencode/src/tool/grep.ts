@@ -1,23 +1,20 @@
-import z from "zod"
-import { Effect } from "effect"
-import * as Stream from "effect/Stream"
-import { Tool } from "./tool"
-import { Filesystem } from "../util/filesystem"
-import { Ripgrep } from "../file/ripgrep"
-import { ChildProcess } from "effect/unstable/process"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-
-import DESCRIPTION from "./grep.txt"
-import { Instance } from "../project/instance"
 import path from "path"
+import z from "zod"
+import { Effect, Option } from "effect"
+import { InstanceState } from "@/effect"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import DESCRIPTION from "./grep.txt"
+import * as Tool from "./tool"
 
 const MAX_LINE_LENGTH = 2000
 
 export const GrepTool = Tool.define(
   "grep",
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner
+    const fs = yield* AppFileSystem.Service
+    const rg = yield* Ripgrep.Service
 
     return {
       description: DESCRIPTION,
@@ -28,6 +25,11 @@ export const GrepTool = Tool.define(
       }),
       execute: (params: { pattern: string; path?: string; include?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const empty = {
+            title: params.pattern,
+            metadata: { matches: 0, truncated: false },
+            output: "No files found",
+          }
           if (!params.pattern) {
             throw new Error("pattern is required")
           }
@@ -43,131 +45,99 @@ export const GrepTool = Tool.define(
             },
           })
 
-          let searchPath = params.path ?? Instance.directory
-          searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
-          yield* assertExternalDirectoryEffect(ctx, searchPath, { kind: "directory" })
-
-          const rgPath = yield* Effect.promise(() => Ripgrep.filepath())
-          const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
-          if (params.include) {
-            args.push("--glob", params.include)
-          }
-          args.push(searchPath)
-
-          const result = yield* Effect.scoped(
-            Effect.gen(function* () {
-              const handle = yield* spawner.spawn(
-                ChildProcess.make(rgPath, args, {
-                  stdin: "ignore",
-                }),
-              )
-
-              const [output, errorOutput] = yield* Effect.all(
-                [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-                { concurrency: 2 },
-              )
-
-              const exitCode = yield* handle.exitCode
-
-              return { output, errorOutput, exitCode }
-            }),
+          const ins = yield* InstanceState.context
+          const search = AppFileSystem.resolve(
+            path.isAbsolute(params.path ?? ins.directory)
+              ? (params.path ?? ins.directory)
+              : path.join(ins.directory, params.path ?? "."),
           )
+          const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const cwd = info?.type === "Directory" ? search : path.dirname(search)
+          const file = info?.type === "Directory" ? undefined : [path.relative(cwd, search)]
+          yield* assertExternalDirectoryEffect(ctx, search, {
+            kind: info?.type === "Directory" ? "directory" : "file",
+          })
 
-          const { output, errorOutput, exitCode } = result
+          const result = yield* rg.search({
+            cwd,
+            pattern: params.pattern,
+            glob: params.include ? [params.include] : undefined,
+            file,
+            signal: ctx.abort,
+          })
+          if (result.items.length === 0) return empty
 
-          // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
-          // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
-          // Only fail if exit code is 2 AND no output was produced
-          if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
-            return {
-              title: params.pattern,
-              metadata: { matches: 0, truncated: false },
-              output: "No files found",
-            }
-          }
+          const rows = result.items.map((item) => ({
+            path: AppFileSystem.resolve(
+              path.isAbsolute(item.path.text) ? item.path.text : path.join(cwd, item.path.text),
+            ),
+            line: item.line_number,
+            text: item.lines.text,
+          }))
+          const times = new Map(
+            (yield* Effect.forEach(
+              [...new Set(rows.map((row) => row.path))],
+              Effect.fnUntraced(function* (file) {
+                const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!info || info.type === "Directory") return undefined
+                return [
+                  file,
+                  info.mtime.pipe(
+                    Option.map((time) => time.getTime()),
+                    Option.getOrElse(() => 0),
+                  ) ?? 0,
+                ] as const
+              }),
+              { concurrency: 16 },
+            )).filter((entry): entry is readonly [string, number] => Boolean(entry)),
+          )
+          const matches = rows.flatMap((row) => {
+            const mtime = times.get(row.path)
+            if (mtime === undefined) return []
+            return [{ ...row, mtime }]
+          })
 
-          if (exitCode !== 0 && exitCode !== 2) {
-            throw new Error(`ripgrep failed: ${errorOutput}`)
-          }
-
-          const hasErrors = exitCode === 2
-
-          // Handle both Unix (\n) and Windows (\r\n) line endings
-          const lines = output.trim().split(/\r?\n/)
-          const matches = []
-
-          for (const line of lines) {
-            if (!line) continue
-
-            const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
-            if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
-
-            const lineNum = parseInt(lineNumStr, 10)
-            const lineText = lineTextParts.join("|")
-
-            const stats = Filesystem.stat(filePath)
-            if (!stats) continue
-
-            matches.push({
-              path: filePath,
-              modTime: stats.mtime.getTime(),
-              lineNum,
-              lineText,
-            })
-          }
-
-          matches.sort((a, b) => b.modTime - a.modTime)
+          matches.sort((a, b) => b.mtime - a.mtime)
 
           const limit = 100
           const truncated = matches.length > limit
-          const finalMatches = truncated ? matches.slice(0, limit) : matches
+          const final = truncated ? matches.slice(0, limit) : matches
+          if (final.length === 0) return empty
 
-          if (finalMatches.length === 0) {
-            return {
-              title: params.pattern,
-              metadata: { matches: 0, truncated: false },
-              output: "No files found",
+          const total = matches.length
+          const output = [`Found ${total} matches${truncated ? ` (showing first ${limit})` : ""}`]
+
+          let current = ""
+          for (const match of final) {
+            if (current !== match.path) {
+              if (current !== "") output.push("")
+              current = match.path
+              output.push(`${match.path}:`)
             }
-          }
-
-          const totalMatches = matches.length
-          const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
-
-          let currentFile = ""
-          for (const match of finalMatches) {
-            if (currentFile !== match.path) {
-              if (currentFile !== "") {
-                outputLines.push("")
-              }
-              currentFile = match.path
-              outputLines.push(`${match.path}:`)
-            }
-            const truncatedLineText =
-              match.lineText.length > MAX_LINE_LENGTH
-                ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..."
-                : match.lineText
-            outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
+            const text =
+              match.text.length > MAX_LINE_LENGTH ? match.text.substring(0, MAX_LINE_LENGTH) + "..." : match.text
+            output.push(`  Line ${match.line}: ${text}`)
           }
 
           if (truncated) {
-            outputLines.push("")
-            outputLines.push(
-              `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
+            output.push("")
+            output.push(
+              `(Results truncated: showing ${limit} of ${total} matches (${total - limit} hidden). Consider using a more specific path or pattern.)`,
             )
           }
 
-          if (hasErrors) {
-            outputLines.push("")
-            outputLines.push("(Some paths were inaccessible and skipped)")
+          if (result.partial) {
+            output.push("")
+            output.push("(Some paths were inaccessible and skipped)")
           }
 
           return {
             title: params.pattern,
             metadata: {
-              matches: totalMatches,
+              matches: total,
               truncated,
             },
-            output: outputLines.join("\n"),
+            output: output.join("\n"),
           }
         }).pipe(Effect.orDie),
     }

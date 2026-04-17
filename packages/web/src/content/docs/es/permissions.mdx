@@ -88,7 +88,7 @@ Puede usar `~` o `$HOME` al comienzo de un patrón para hacer referencia a su di
 
 ### Directorios externos
 
-Utilice `external_directory` para permitir llamadas a herramientas que toquen rutas fuera del directorio de trabajo donde se inició OpenCode. Esto se aplica a cualquier herramienta que tome una ruta como entrada (por ejemplo, `read`, `edit`, `list`, `glob`, `grep` y muchos comandos `bash`).
+Utilice `external_directory` para permitir llamadas a herramientas que toquen rutas fuera del directorio de trabajo donde se inició OpenCode. Esto se aplica a cualquier herramienta que tome una ruta como entrada (por ejemplo, `read`, `edit`, `glob`, `grep` y muchos comandos `bash`).
 
 La expansión del hogar (como `~/...`) solo afecta la forma en que se escribe un patrón. No hace que una ruta externa forme parte del espacio de trabajo actual, por lo que las rutas fuera del directorio de trabajo aún deben permitirse a través de `external_directory`.
 
@@ -133,7 +133,6 @@ Los permisos OpenCode están codificados por el nombre de la herramienta, ademá
 - `edit` — todas las modificaciones de archivos (cubre `edit`, `write`, `patch`, `multiedit`)
 - `glob` — globalización de archivos (coincide con el patrón global)
 - `grep` — búsqueda de contenido (coincide con el patrón de expresiones regulares)
-- `list` — enumerar archivos en un directorio (coincide con la ruta del directorio)
 - `bash`: ejecuta comandos de shell (coincide con comandos analizados como `git status --porcelain`)
 - `task` — lanzamiento de subagentes (coincide con el tipo de subagente)
 - `skill` — cargar una habilidad (coincide con el nombre de la habilidad)

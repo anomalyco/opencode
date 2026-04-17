@@ -4,7 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { map, pipe, entries, sortBy } from "remeda"
 import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useTheme } from "../context/theme"
-import { Keybind } from "@/util/keybind"
+import { Keybind } from "@/util"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 
@@ -78,7 +78,7 @@ export function DialogMcp() {
       title="MCPs"
       options={options()}
       keybind={keybinds()}
-      onSelect={(option) => {
+      onSelect={(_option) => {
         // Don't close on select, only on escape
       }}
     />

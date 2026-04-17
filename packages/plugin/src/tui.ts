@@ -13,7 +13,6 @@ import type {
   QuestionRequest,
   SessionStatus,
   TextPart,
-  Workspace,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
