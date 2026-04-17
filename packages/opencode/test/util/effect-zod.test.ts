@@ -263,4 +263,73 @@ describe("util.effect-zod", () => {
       expect(result.error!.issues[0].message).toBe("missing 'required' key")
     })
   })
+
+  describe("StructWithRest / catchall", () => {
+    test("struct with a string-keyed record rest parses known AND extra keys", () => {
+      const schema = zod(
+        Schema.StructWithRest(
+          Schema.Struct({
+            apiKey: Schema.optional(Schema.String),
+            baseURL: Schema.optional(Schema.String),
+          }),
+          [Schema.Record(Schema.String, Schema.Unknown)],
+        ),
+      )
+
+      // Known fields come through as declared
+      expect(schema.parse({ apiKey: "sk-x" })).toEqual({ apiKey: "sk-x" })
+
+      // Extra keys are preserved (catchall)
+      expect(
+        schema.parse({
+          apiKey: "sk-x",
+          baseURL: "https://api.example.com",
+          customField: "anything",
+          nested: { foo: 1 },
+        }),
+      ).toEqual({
+        apiKey: "sk-x",
+        baseURL: "https://api.example.com",
+        customField: "anything",
+        nested: { foo: 1 },
+      })
+    })
+
+    test("catchall value type constrains the extras", () => {
+      const schema = zod(
+        Schema.StructWithRest(
+          Schema.Struct({
+            count: Schema.Number,
+          }),
+          [Schema.Record(Schema.String, Schema.Number)],
+        ),
+      )
+
+      // Known field + numeric extras
+      expect(schema.parse({ count: 10, a: 1, b: 2 })).toEqual({ count: 10, a: 1, b: 2 })
+
+      // Non-numeric extra is rejected
+      expect(schema.safeParse({ count: 10, bad: "not a number" }).success).toBe(false)
+    })
+
+    test("JSON schema output marks additionalProperties appropriately", () => {
+      const schema = zod(
+        Schema.StructWithRest(
+          Schema.Struct({
+            id: Schema.String,
+          }),
+          [Schema.Record(Schema.String, Schema.Unknown)],
+        ),
+      )
+      const shape = json(schema) as { additionalProperties?: unknown }
+      // Presence of `additionalProperties` (truthy or a schema) signals catchall.
+      expect(shape.additionalProperties).not.toBe(false)
+      expect(shape.additionalProperties).toBeDefined()
+    })
+
+    test("plain struct without rest still emits additionalProperties unchanged (regression)", () => {
+      const schema = zod(Schema.Struct({ id: Schema.String }))
+      expect(schema.parse({ id: "x" })).toEqual({ id: "x" })
+    })
+  })
 })

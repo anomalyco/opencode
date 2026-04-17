@@ -107,15 +107,27 @@ function union(ast: SchemaAST.Union): z.ZodTypeAny {
 }
 
 function object(ast: SchemaAST.Objects): z.ZodTypeAny {
+  // Pure record: { [k: string]: V }
   if (ast.propertySignatures.length === 0 && ast.indexSignatures.length === 1) {
     const sig = ast.indexSignatures[0]
     if (sig.parameter._tag !== "String") return fail(ast)
     return z.record(z.string(), walk(sig.type))
   }
 
-  if (ast.indexSignatures.length > 0) return fail(ast)
+  // Pure object with known fields and no index signatures.
+  if (ast.indexSignatures.length === 0) {
+    return z.object(Object.fromEntries(ast.propertySignatures.map((sig) => [String(sig.name), walk(sig.type)])))
+  }
 
-  return z.object(Object.fromEntries(ast.propertySignatures.map((sig) => [String(sig.name), walk(sig.type)])))
+  // Struct with a catchall (StructWithRest): known fields + index signature.
+  // Only supports a single string-keyed index signature; multi-signature or
+  // symbol/number keys fall through to fail.
+  if (ast.indexSignatures.length !== 1) return fail(ast)
+  const sig = ast.indexSignatures[0]
+  if (sig.parameter._tag !== "String") return fail(ast)
+  return z
+    .object(Object.fromEntries(ast.propertySignatures.map((p) => [String(p.name), walk(p.type)])))
+    .catchall(walk(sig.type))
 }
 
 function array(ast: SchemaAST.Arrays): z.ZodTypeAny {
