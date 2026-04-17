@@ -174,7 +174,6 @@ export type PartComponent = Component<MessagePartProps>
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
 const TEXT_RENDER_THROTTLE_MS = 100
-const TEXT_SETTLE_MS = 160
 
 function createThrottledValue(getValue: () => string) {
   const [value, setValue] = createSignal(getValue())
@@ -238,6 +237,10 @@ function createLiveText(getValue: () => string, active: () => boolean) {
   })
 
   return value
+}
+
+function clip(text: string, size = 40) {
+  return JSON.stringify(text.slice(-size))
 }
 
 function relativizeProjectPath(path: string, directory?: string) {
@@ -1588,39 +1591,11 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return last?.id === part.id
   })
   const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
-  const [idle, setIdle] = createSignal(!streaming())
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  createEffect(() => {
-    const text = renderText()
-    const live = streaming() && isLastTextPart()
-    if (timer) {
-      clearTimeout(timer)
-      timer = undefined
-    }
-    if (!live) {
-      setIdle(true)
-      return
-    }
-    setIdle(false)
-    console.debug("[text-part] stream update", { id: part.id, size: text.length })
-    timer = setTimeout(() => {
-      console.debug("[text-part] stream settled", { id: part.id, size: text.length })
-      setIdle(true)
-      timer = undefined
-    }, TEXT_SETTLE_MS)
-  })
-
-  onCleanup(() => {
-    if (!timer) return
-    clearTimeout(timer)
-    timer = undefined
-  })
 
   const block = createMemo(() => {
     const text = renderText()
     if (!text) return { head: "", tail: "" }
-    if (!streaming() || !isLastTextPart() || idle()) return { head: text, tail: "" }
+    if (!streaming() || !isLastTextPart()) return { head: text, tail: "" }
     return streamsplit(text)
   })
   const showCopy = createMemo(() => {

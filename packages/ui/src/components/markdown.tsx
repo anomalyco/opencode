@@ -70,6 +70,10 @@ function fallback(markdown: string) {
   return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
 }
 
+function clip(text: string, size = 40) {
+  return JSON.stringify(text.slice(-size))
+}
+
 type CopyLabels = {
   copy: string
   copied: string
@@ -768,6 +772,12 @@ export function Markdown(
     const isStreaming = local.streaming
     const chunked = local.chunked
 
+    if (isStreaming) {
+      console.debug(
+        `[markdown] patch key=${local.cacheKey ?? ""} prev=${prevHtml.length} next=${content.length} text=${local.text.length} tail=${clip(local.text)}`,
+      )
+    }
+
     // Fast-append path: during streaming, if new HTML starts with the previous HTML,
     // find the common top-level node boundary and only morphdom the tail.
     if (isStreaming && prevHtml && content.startsWith(prevHtml.slice(0, Math.max(0, prevHtml.lastIndexOf("<"))))) {
@@ -793,6 +803,9 @@ export function Markdown(
         }
 
         if (stableCount > 0 && stableCount >= existingCount - 1) {
+          console.debug(
+            `[markdown] append key=${local.cacheKey ?? ""} stable=${stableCount} old=${existingCount} new=${newCount} next=${content.length}`,
+          )
           // Remove unstable trailing nodes from container
           while (container.childNodes.length > stableCount) {
             container.removeChild(container.lastChild!)
@@ -831,6 +844,12 @@ export function Markdown(
         setLabels(container, next)
       }, 150)
       return
+    }
+
+    if (isStreaming) {
+      console.debug(
+        `[markdown] morph key=${local.cacheKey ?? ""} prev=${prevHtml.length} next=${content.length} old=${container.childNodes.length} new=${temp.childNodes.length}`,
+      )
     }
 
     morphdom(container, temp, {
