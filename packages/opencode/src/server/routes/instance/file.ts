@@ -1,13 +1,12 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
-import { Effect } from "effect"
 import z from "zod"
-import { AppRuntime } from "@/effect/app-runtime"
 import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
 import { LSP } from "@/lsp"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
+import { jsonRequest } from "./trace"
 
 export const FileRoutes = lazy(() =>
   new Hono()
@@ -34,13 +33,13 @@ export const FileRoutes = lazy(() =>
           pattern: z.string(),
         }),
       ),
-      async (c) => {
-        const pattern = c.req.valid("query").pattern
-        const result = await AppRuntime.runPromise(
-          Ripgrep.Service.use((svc) => svc.search({ cwd: Instance.directory, pattern, limit: 10 })),
-        )
-        return c.json(result.items)
-      },
+      async (c) =>
+        jsonRequest("FileRoutes.findText", c, function* () {
+          const pattern = c.req.valid("query").pattern
+          const svc = yield* Ripgrep.Service
+          const result = yield* svc.search({ cwd: Instance.directory, pattern, limit: 10 })
+          return result.items
+        }),
     )
     .get(
       "/find/file",
@@ -68,25 +67,17 @@ export const FileRoutes = lazy(() =>
           limit: z.coerce.number().int().min(1).max(200).optional(),
         }),
       ),
-      async (c) => {
-        const query = c.req.valid("query").query
-        const dirs = c.req.valid("query").dirs
-        const type = c.req.valid("query").type
-        const limit = c.req.valid("query").limit
-        const results = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            return yield* File.Service.use((svc) =>
-              svc.search({
-                query,
-                limit: limit ?? 10,
-                dirs: dirs !== "false",
-                type,
-              }),
-            )
-          }),
-        )
-        return c.json(results)
-      },
+      async (c) =>
+        jsonRequest("FileRoutes.findFile", c, function* () {
+          const query = c.req.valid("query")
+          const svc = yield* File.Service
+          return yield* svc.search({
+            query: query.query,
+            limit: query.limit ?? 10,
+            dirs: query.dirs !== "false",
+            type: query.type,
+          })
+        }),
     )
     .get(
       "/find/symbol",
@@ -138,15 +129,11 @@ export const FileRoutes = lazy(() =>
           path: z.string(),
         }),
       ),
-      async (c) => {
-        const path = c.req.valid("query").path
-        const content = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            return yield* File.Service.use((svc) => svc.list(path))
-          }),
-        )
-        return c.json(content)
-      },
+      async (c) =>
+        jsonRequest("FileRoutes.list", c, function* () {
+          const svc = yield* File.Service
+          return yield* svc.list(c.req.valid("query").path)
+        }),
     )
     .get(
       "/file/content",
@@ -171,15 +158,11 @@ export const FileRoutes = lazy(() =>
           path: z.string(),
         }),
       ),
-      async (c) => {
-        const path = c.req.valid("query").path
-        const content = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            return yield* File.Service.use((svc) => svc.read(path))
-          }),
-        )
-        return c.json(content)
-      },
+      async (c) =>
+        jsonRequest("FileRoutes.read", c, function* () {
+          const svc = yield* File.Service
+          return yield* svc.read(c.req.valid("query").path)
+        }),
     )
     .get(
       "/file/status",
@@ -198,13 +181,10 @@ export const FileRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        const content = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            return yield* File.Service.use((svc) => svc.status())
-          }),
-        )
-        return c.json(content)
-      },
+      async (c) =>
+        jsonRequest("FileRoutes.status", c, function* () {
+          const svc = yield* File.Service
+          return yield* svc.status()
+        }),
     ),
 )
