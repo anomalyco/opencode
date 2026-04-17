@@ -1,4 +1,4 @@
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
