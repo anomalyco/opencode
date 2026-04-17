@@ -10,7 +10,6 @@
       "packages/opencode/migration/*": "deny",
     },
   },
-  "plugin": ["../daytona.ts"],
   "mcp": {},
   "tools": {
     "github-triage": false,
