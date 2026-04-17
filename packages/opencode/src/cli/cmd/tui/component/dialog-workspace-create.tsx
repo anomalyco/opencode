@@ -229,6 +229,10 @@ export function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) =
     })
 
     const result = await sdk.client.experimental.workspace.create({ type, branch: null }).catch((err) => {
+      toast.show({
+        message: "Creating workspace failed",
+        variant: "error",
+      })
       log.error("workspace create request failed", {
         type,
         error: errorData(err),
