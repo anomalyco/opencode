@@ -1031,6 +1031,10 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
+                // Once we cross an async boundary below, the terminal may perform its
+                // default paste unless we suppress it first and handle insertion ourselves.
+                event.preventDefault()
+
                 const filepath = iife(() => {
                   const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
                   if (raw.startsWith("file://")) {
@@ -1048,7 +1052,6 @@ export function Prompt(props: PromptProps) {
                     const filename = path.basename(filepath)
                     // Handle SVG as raw text content, not as base64 image
                     if (mime === "image/svg+xml") {
-                      event.preventDefault()
                       const content = await Filesystem.readText(filepath).catch(() => {})
                       if (content) {
                         pasteText(content, `[SVG: ${filename ?? "image"}]`)
@@ -1056,7 +1059,6 @@ export function Prompt(props: PromptProps) {
                       }
                     }
                     if (mime.startsWith("image/") || mime === "application/pdf") {
-                      event.preventDefault()
                       const content = await Filesystem.readArrayBuffer(filepath)
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
                         .catch(() => {})
@@ -1078,10 +1080,11 @@ export function Prompt(props: PromptProps) {
                   (lineCount >= 3 || pastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
-                  event.preventDefault()
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                input.insertText(normalizedText)
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {

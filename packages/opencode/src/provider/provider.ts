@@ -547,12 +547,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (modelID.startsWith("duo-workflow-")) {
-            const workflowRef = options?.workflowRef as string | undefined
+            const workflowRef = typeof options?.workflowRef === "string" ? options.workflowRef : undefined
             // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
             const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
+            const workflowDefinition =
+              typeof options?.workflowDefinition === "string" ? options.workflowDefinition : undefined
             const model = sdk.workflowChat(sdkModelID, {
               featureFlags,
-              workflowDefinition: options?.workflowDefinition as string | undefined,
+              workflowDefinition,
             })
             if (workflowRef) {
               model.selectedModelRef = workflowRef

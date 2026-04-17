@@ -1589,7 +1589,7 @@ export type Config = {
         }
   }
   formatter?:
-    | false
+    | boolean
     | {
         [key: string]: {
           disabled?: boolean
@@ -1601,7 +1601,7 @@ export type Config = {
         }
       }
   lsp?:
-    | false
+    | boolean
     | {
         [key: string]:
           | {
