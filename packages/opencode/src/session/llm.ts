@@ -336,6 +336,21 @@ const live: Layer.Layer<
               toolName: lower,
             }
           }
+
+          // Attempt JSON repair for malformed/truncated tool call arguments
+          if (failed.error.message?.includes("JSON")) {
+            const repaired = repairToolCallJson(failed.toolCall.input, l, failed.toolCall.toolName)
+            if (repaired !== undefined) {
+              l.info("repaired malformed tool call JSON", {
+                tool: failed.toolCall.toolName,
+              })
+              return {
+                ...failed.toolCall,
+                input: repaired,
+              }
+            }
+          }
+          
           return {
             ...failed.toolCall,
             input: JSON.stringify({
@@ -436,6 +451,86 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+function repairToolCallJson(input: string, log: ReturnType<typeof Log.create>, toolName: string): string | undefined {
+  // Already valid JSON
+  try {
+    JSON.parse(input)
+    return undefined
+  } catch {}
+
+  let repaired = input
+
+  // Strategy 1: Handle duplicated/overlapping JSON objects (specific case we observed)
+  // Look for valid JSON at the beginning and use only that part
+  let firstValidEnd = 0
+  for (let i = 1; i <= repaired.length; i++) {
+    try {
+      JSON.parse(repaired.substring(0, i))
+      firstValidEnd = i
+    } catch {
+      // Continue searching
+    }
+  }
+  
+  if (firstValidEnd > 0 && firstValidEnd < repaired.length) {
+    const firstObject = repaired.substring(0, firstValidEnd)
+    try {
+      JSON.parse(firstObject)
+      log.info("repaired duplicated JSON by taking first valid object", { tool: toolName })
+      return firstObject
+    } catch {
+      // If first object isn't valid, continue with other strategies
+    }
+  }
+
+  // Strategy 2: Fix overlapping objects pattern
+  // Pattern: {"key": "value","key2": value{... -> {"key": "value","key2": value}{...
+  const patternMatch = repaired.match(/^(\{[^}]*\}?)\{(.*)$/)
+  if (patternMatch) {
+    const firstPart = patternMatch[1] + '}'
+    try {
+      JSON.parse(firstPart)
+      log.info("repaired overlapping JSON objects", { tool: toolName })
+      return firstPart
+    } catch {
+      // Fall through to other strategies
+    }
+  }
+
+  // Strategy 3: Insert missing commas that might be causing issues
+  repaired = repaired.replace(/"(\s*)(\{|$$)/g, '"$1,$2')
+
+  // Try closing unterminated strings
+  if (!repaired.endsWith('"') && repaired.split('"').length % 2 === 0) {
+    repaired += '"'
+  }
+
+  // Count unmatched braces/brackets
+  const counts = { "{": 0, "[": 0 }
+  let inString = false
+  let escape = false
+  for (const ch of repaired) {
+    if (escape) { escape = false; continue }
+    if (ch === "\\") { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === "{" || ch === "[") counts[ch]++
+    if (ch === "}" && counts["{"] > 0) counts["{"]--
+    if (ch === "]" && counts["["] > 0) counts["["]--
+  }
+
+  // Close open brackets in reverse order
+  if (counts["["] > 0) repaired += "]".repeat(counts["["])
+  if (counts["{"] > 0) repaired += "}".repeat(counts["{"])
+
+  try {
+    JSON.parse(repaired)
+    return repaired
+  } catch {}
+
+  return undefined
 }
 
 // Check if messages contain any tool-call content
