@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { SessionEvent } from "./session-event"
-import { produce } from "immer"
+import { castDraft, produce } from "immer"
 
 export const ID = SessionEvent.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -145,8 +145,13 @@ export function step(old: History, event: SessionEvent.Event): History {
   return produce(old, (draft) => {
     const lastAssistant = draft.entries.findLast((x) => x.type === "assistant")
     const pendingAssistant = lastAssistant && !lastAssistant.time.completed ? lastAssistant : undefined
+    type DraftContent = NonNullable<typeof pendingAssistant>["content"][number]
+    type DraftTool = Extract<DraftContent, { type: "tool" }>
 
-    const latestTool = () => pendingAssistant?.content.findLast((item) => item.type === "tool")
+    const latestTool = (callID?: string) =>
+      pendingAssistant?.content.findLast(
+        (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.callID === callID),
+      )
     const latestText = () => pendingAssistant?.content.findLast((item) => item.type === "text")
     const latestReasoning = () => pendingAssistant?.content.findLast((item) => item.type === "reasoning")
 
@@ -154,12 +159,10 @@ export function step(old: History, event: SessionEvent.Event): History {
       prompt: (event) => {
         const entry = User.fromEvent(event)
         if (pendingAssistant) {
-          // @ts-expect-error
-          draft.pending.push(entry)
+          draft.pending.push(castDraft(entry))
           return
         }
-        // @ts-expect-error
-        draft.entries.push(entry)
+        draft.entries.push(castDraft(entry))
       },
       synthetic: (event) => {
         draft.entries.push(new Synthetic({ ...event, time: { created: event.timestamp } }))
@@ -211,14 +214,14 @@ export function step(old: History, event: SessionEvent.Event): History {
       },
       "tool.input.delta": (event) => {
         if (!pendingAssistant) return
-        const match = latestTool()
+        const match = latestTool(event.callID)
         // oxlint-disable-next-line no-base-to-string -- event.delta is a Schema.String (runtime string)
         if (match) match.state.input += event.delta
       },
       "tool.input.ended": () => {},
       "tool.called": (event) => {
         if (!pendingAssistant) return
-        const match = latestTool()
+        const match = latestTool(event.callID)
         if (match) {
           match.time.ran = event.timestamp
           match.state = {
@@ -229,7 +232,7 @@ export function step(old: History, event: SessionEvent.Event): History {
       },
       "tool.success": (event) => {
         if (!pendingAssistant) return
-        const match = latestTool()
+        const match = latestTool(event.callID)
         if (match && match.state.status === "running") {
           match.state = {
             status: "completed",
@@ -243,7 +246,7 @@ export function step(old: History, event: SessionEvent.Event): History {
       },
       "tool.error": (event) => {
         if (!pendingAssistant) return
-        const match = latestTool()
+        const match = latestTool(event.callID)
         if (match && match.state.status === "running") {
           match.state = {
             status: "error",
