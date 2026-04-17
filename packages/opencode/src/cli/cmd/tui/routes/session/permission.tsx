@@ -52,6 +52,7 @@ function EditBody(props: { request: PermissionRequest }) {
   const theme = themeState.theme
   const syntax = themeState.syntax
   const kv = useKV()
+  const tuiConfig = useTuiConfig()
   const dimensions = useTerminalDimensions()
 
   const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
@@ -64,7 +65,7 @@ function EditBody(props: { request: PermissionRequest }) {
   })
 
   const ft = createMemo(() => filetype(filepath()))
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
     <box flexDirection="column" gap={1}>
