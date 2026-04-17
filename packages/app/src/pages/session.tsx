@@ -65,6 +65,8 @@ import { formatServerError } from "@/utils/server-errors"
 
 const MINIMAL_MODE: boolean = true
 
+const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
+
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -1825,7 +1827,7 @@ export default function Page() {
     </>
   )
 
-  if (MINIMAL_MODE) {
+  if (MINIMAL_MODE && !devMode) {
     return (
       <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
         <div class="flex-1 min-h-0 flex flex-col md:flex-row">

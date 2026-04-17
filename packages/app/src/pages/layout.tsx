@@ -89,6 +89,8 @@ import { SidebarContent } from "./layout/sidebar-shell"
 
 const MINIMAL_MODE: boolean = true
 
+const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
+
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
@@ -2393,7 +2395,7 @@ export default function Layout(props: ParentProps) {
     />
   )
 
-  if (MINIMAL_MODE) {
+  if (MINIMAL_MODE && !devMode) {
     return (
       <div class="h-dvh w-screen overflow-hidden bg-background-base">
         <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
