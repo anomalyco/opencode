@@ -591,7 +591,7 @@ describe("session-entry step", () => {
       )
     })
 
-    test.failing("records synthetic events", () => {
+    test("records synthetic events", () => {
       FastCheck.assert(
         FastCheck.property(word, (body) => {
           const next = SessionEntry.step(history(), SessionEvent.Synthetic.create({ text: body, timestamp: time(1) }))
@@ -604,7 +604,7 @@ describe("session-entry step", () => {
       )
     })
 
-    test.failing("records compaction events", () => {
+    test("records compaction events", () => {
       FastCheck.assert(
         FastCheck.property(FastCheck.boolean(), maybe(FastCheck.boolean()), (auto, overflow) => {
           const next = SessionEntry.step(
