@@ -928,30 +928,26 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Block ANY exit attempt when meta or ctrl is held (Mac Command+V fix)
-                if (e.meta || e.ctrl) {
-                  // Check if it might be a paste attempt
-                  const mightBePaste = e.name === "v" || e.name === "c" || keybind.match("input_paste", e)
-                  if (mightBePaste) {
-                    // Try to read clipboard - if successful, it's a paste, not an exit
-                    try {
-                      const content = await Clipboard.read()
-                      if (content) {
-                        e.preventDefault()
-                        // If it's text, just return and let onPaste handle it
-                        // If it's an image, handle it
-                        if (content.mime.startsWith("image/")) {
-                          await pasteAttachment({
-                            filename: "clipboard",
-                            mime: content.mime,
-                            content: content.data,
-                          })
-                        }
-                        return
+                // Handle Cmd+V (paste) specially - don't block it
+                if (e.meta && e.name === "v") {
+                  try {
+                    const content = await Clipboard.read()
+                    if (content) {
+                      e.preventDefault()
+                      if (content.mime.startsWith("image/")) {
+                        await pasteAttachment({
+                          filename: "clipboard",
+                          mime: content.mime,
+                          content: content.data,
+                        })
                       }
-                    } catch {}
-                  }
-                  // Block any exit when meta/ctrl held - likely a paste attempt that came through wrong
+                      return
+                    }
+                  } catch {}
+                  // No content in clipboard - let it pass through for normal paste handling
+                }
+                // Block other meta/ctrl combos (not Cmd+V) to prevent accidental exit
+                if (e.meta || e.ctrl) {
                   e.preventDefault()
                   return
                 }
