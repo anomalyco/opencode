@@ -94,6 +94,14 @@ function setupApp() {
     killSidecar()
   })
 
+  // On macOS, closing all windows does not quit the app by default —
+  // the process stays alive in the Dock with the sidecar still running.
+  // Explicitly quit so the sidecar is cleaned up via before-quit/will-quit.
+  app.on("window-all-closed", () => {
+    killSidecar()
+    app.quit()
+  })
+
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       killSidecar()
