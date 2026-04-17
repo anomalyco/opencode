@@ -5,7 +5,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { Filesystem } from "@/util"
 import { useLocal } from "@tui/context/local"
-import { useTheme } from "@tui/context/theme"
+import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -463,19 +463,25 @@ export function Prompt(props: PromptProps) {
   createEffect(() => {
     if (!input || input.isDestroyed) return
     if (props.visible === false || dialog.stack.length > 0) {
-      input.blur()
+      if (input.focused) input.blur()
       return
     }
 
     // Slot/plugin updates can remount the background prompt while a dialog is open.
     // Keep focus with the dialog and let the prompt reclaim it after the dialog closes.
-    input.focus()
+    if (!input.focused) input.focus()
   })
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
+    const capture =
+      store.mode === "normal"
+        ? auto()?.visible
+          ? (["escape", "navigate", "submit", "tab"] as const)
+          : (["tab"] as const)
+        : undefined
     input.traits = {
-      capture: auto()?.visible ? ["escape", "navigate", "submit", "tab"] : undefined,
+      capture,
       suspend: !!props.disabled || store.mode === "shell",
       status: store.mode === "shell" ? "SHELL" : undefined,
     }
@@ -870,6 +876,7 @@ export function Prompt(props: PromptProps) {
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
   )
+  const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
@@ -931,7 +938,7 @@ export function Prompt(props: PromptProps) {
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
-          borderColor={highlight()}
+          borderColor={borderHighlight()}
           customBorderChars={{
             ...SplitBorder.customBorderChars,
             bottomLeft: "╹",
@@ -1146,11 +1153,10 @@ export function Prompt(props: PromptProps) {
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
                   {(agent) => (
                     <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}{" "}
-                      </text>
+                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>{store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}</text>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text
                             flexShrink={0}
                             fg={fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha())}
@@ -1183,7 +1189,7 @@ export function Prompt(props: PromptProps) {
         <box
           height={1}
           border={["left"]}
-          borderColor={highlight()}
+          borderColor={borderHighlight()}
           customBorderChars={{
             ...EmptyBorder,
             vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
