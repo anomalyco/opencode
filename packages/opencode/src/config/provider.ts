@@ -1,120 +1,116 @@
+import { Schema } from "effect"
 import z from "zod"
+import { zod, ZodOverride } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
-export const Model = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    family: z.string().optional(),
-    release_date: z.string(),
-    attachment: z.boolean(),
-    reasoning: z.boolean(),
-    temperature: z.boolean(),
-    tool_call: z.boolean(),
-    interleaved: z
-      .union([
-        z.literal(true),
-        z
-          .object({
-            field: z.enum(["reasoning_content", "reasoning_details"]),
-          })
-          .strict(),
-      ])
-      .optional(),
-    cost: z
-      .object({
-        input: z.number(),
-        output: z.number(),
-        cache_read: z.number().optional(),
-        cache_write: z.number().optional(),
-        context_over_200k: z
-          .object({
-            input: z.number(),
-            output: z.number(),
-            cache_read: z.number().optional(),
-            cache_write: z.number().optional(),
-          })
-          .optional(),
-      })
-      .optional(),
-    limit: z.object({
-      context: z.number(),
-      input: z.number().optional(),
-      output: z.number(),
+// Positive integer preserving exact Zod JSON Schema (type: integer, exclusiveMinimum: 0).
+const PositiveInt = Schema.Number.annotate({
+  [ZodOverride]: z.number().int().positive(),
+})
+
+export const Model = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+  family: Schema.optional(Schema.String),
+  release_date: Schema.optional(Schema.String),
+  attachment: Schema.optional(Schema.Boolean),
+  reasoning: Schema.optional(Schema.Boolean),
+  temperature: Schema.optional(Schema.Boolean),
+  tool_call: Schema.optional(Schema.Boolean),
+  interleaved: Schema.optional(
+    Schema.Union([
+      Schema.Literal(true),
+      Schema.Struct({
+        field: Schema.Literals(["reasoning_content", "reasoning_details"]),
+      }),
+    ]),
+  ),
+  cost: Schema.optional(
+    Schema.Struct({
+      input: Schema.Number,
+      output: Schema.Number,
+      cache_read: Schema.optional(Schema.Number),
+      cache_write: Schema.optional(Schema.Number),
+      context_over_200k: Schema.optional(
+        Schema.Struct({
+          input: Schema.Number,
+          output: Schema.Number,
+          cache_read: Schema.optional(Schema.Number),
+          cache_write: Schema.optional(Schema.Number),
+        }),
+      ),
     }),
-    modalities: z
-      .object({
-        input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
-        output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
-      })
-      .optional(),
-    experimental: z.boolean().optional(),
-    status: z.enum(["alpha", "beta", "deprecated"]).optional(),
-    provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
-    options: z.record(z.string(), z.any()),
-    headers: z.record(z.string(), z.string()).optional(),
-    variants: z
-      .record(
-        z.string(),
-        z
-          .object({
-            disabled: z.boolean().optional().describe("Disable this variant for the model"),
-          })
-          .catchall(z.any()),
-      )
-      .optional()
-      .describe("Variant-specific configuration"),
-  })
-  .partial()
+  ),
+  limit: Schema.optional(
+    Schema.Struct({
+      context: Schema.Number,
+      input: Schema.optional(Schema.Number),
+      output: Schema.Number,
+    }),
+  ),
+  modalities: Schema.optional(
+    Schema.Struct({
+      input: Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"]))),
+      output: Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"]))),
+    }),
+  ),
+  experimental: Schema.optional(Schema.Boolean),
+  status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated"])),
+  provider: Schema.optional(Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) })),
+  options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  variants: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.StructWithRest(
+        Schema.Struct({
+          disabled: Schema.optional(Schema.Boolean).annotate({ description: "Disable this variant for the model" }),
+        }),
+        [Schema.Record(Schema.String, Schema.Any)],
+      ),
+    ).annotate({ description: "Variant-specific configuration" }),
+  ),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export const Info = z
-  .object({
-    api: z.string().optional(),
-    name: z.string(),
-    env: z.array(z.string()),
-    id: z.string(),
-    npm: z.string().optional(),
-    whitelist: z.array(z.string()).optional(),
-    blacklist: z.array(z.string()).optional(),
-    options: z
-      .object({
-        apiKey: z.string().optional(),
-        baseURL: z.string().optional(),
-        enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-        setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
-        timeout: z
-          .union([
-            z
-              .number()
-              .int()
-              .positive()
-              .describe(
-                "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-              ),
-            z.literal(false).describe("Disable timeout for this provider entirely."),
-          ])
-          .optional()
-          .describe(
+export class Info extends Schema.Class<Info>("ProviderConfig")({
+  api: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+  env: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  id: Schema.optional(Schema.String),
+  npm: Schema.optional(Schema.String),
+  whitelist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  blacklist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  options: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
+        apiKey: Schema.optional(Schema.String),
+        baseURL: Schema.optional(Schema.String),
+        enterpriseUrl: Schema.optional(Schema.String).annotate({
+          description: "GitHub Enterprise URL for copilot authentication",
+        }),
+        setCacheKey: Schema.optional(Schema.Boolean).annotate({
+          description: "Enable promptCacheKey for this provider (default false)",
+        }),
+        timeout: Schema.optional(
+          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
+            description:
+              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+          }),
+        ).annotate({
+          description:
             "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-          ),
-        chunkTimeout: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe(
+        }),
+        chunkTimeout: Schema.optional(PositiveInt).annotate({
+          description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
-          ),
-      })
-      .catchall(z.any())
-      .optional(),
-    models: z.record(z.string(), Model).optional(),
-  })
-  .partial()
-  .strict()
-  .meta({
-    ref: "ProviderConfig",
-  })
-
-export type Info = z.infer<typeof Info>
+        }),
+      }),
+      [Schema.Record(Schema.String, Schema.Any)],
+    ),
+  ),
+  models: Schema.optional(Schema.Record(Schema.String, Model)),
+}) {
+  static readonly zod = zod(this)
+}
 
 export * as ConfigProvider from "./provider"

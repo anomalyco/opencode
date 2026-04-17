@@ -171,7 +171,7 @@ export const Info = z
       .optional()
       .describe("Agent configuration, see https://opencode.ai/docs/agents"),
     provider: z
-      .record(z.string(), ConfigProvider.Info)
+      .record(z.string(), ConfigProvider.Info.zod)
       .optional()
       .describe("Custom provider configurations and model overrides"),
     mcp: z
