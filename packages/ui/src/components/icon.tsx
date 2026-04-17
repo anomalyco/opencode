@@ -160,8 +160,10 @@ function ensureSprite() {
   spriteInserted = true
 }
 
+export type IconName = keyof typeof icons
+
 export interface IconProps extends ComponentProps<"svg"> {
-  name: keyof typeof icons
+  name: IconName
   size?: "small" | "normal" | "medium" | "large" | "x-large"
 }
 

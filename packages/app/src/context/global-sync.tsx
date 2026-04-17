@@ -36,11 +36,26 @@ import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject, stripProvider } from "./global-sync/utils"
 import { formatServerError, permissionNotice } from "@/utils/server-errors"
 import { useServer } from "./server"
+import {
+  domainFromDirectory,
+  extraAgentByIntegration,
+  isExtraAgentIntegration,
+  mainDomain,
+  type DomainId,
+} from "@/pages/layout/extra-agents"
 
 type GlobalStore = {
   ready: boolean
   error?: InitError
   path: Path
+  rootByDomain: Partial<
+    Record<
+      DomainId,
+      Omit<GlobalStore, "projectByDomain" | "sessionTodoByDomain" | "project" | "session_todo" | "rootByDomain">
+    >
+  >
+  projectByDomain: Partial<Record<DomainId, Project[]>>
+  sessionTodoByDomain: Partial<Record<DomainId, Record<string, Todo[]>>>
   project: Project[]
   session_todo: {
     [sessionID: string]: Todo[]
@@ -90,94 +105,128 @@ function createGlobalSync() {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
+  const queues = new Map<DomainId, ReturnType<typeof createRefreshQueue>>()
+  const bootedAt = new Map<DomainId, number>()
+  const bootingRoot = new Map<DomainId, boolean>()
+
+  const currentDomain = () => server.domain
+  const blankRoot = () => ({
+    ready: false,
+    error: undefined as InitError | undefined,
+    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    provider: { all: [], connected: [], default: {} } as ProviderListResponse,
+    provider_auth: {} as ProviderAuthResponse,
+    config: {} as Config,
+    reload: undefined as undefined | "pending" | "complete",
+  })
+  const rootBucket = (domain = currentDomain()) => globalStore.rootByDomain[domain] ?? blankRoot()
+  const projectBucket = (domain = currentDomain()) => globalStore.projectByDomain[domain] ?? []
+  const todoBucket = (domain = currentDomain()) => globalStore.sessionTodoByDomain[domain] ?? {}
+  const runtime = (domain = currentDomain()) => globalSDK.forDomain(domain)
 
   const [projectCache, setProjectCache, projectInit] = persisted(
-    Persist.global("globalSync.project", ["globalSync.project.v1"]),
-    createStore({ value: [] as Project[] }),
+    {
+      ...Persist.global("globalSync.project", ["globalSync.project.v1"]),
+      migrate(value) {
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          return { domains: { [mainDomain]: [] as Project[] } }
+        if ("domains" in value) return value
+        const list = Array.isArray((value as { value?: unknown }).value)
+          ? ((value as { value: Project[] }).value ?? [])
+          : []
+        return { domains: { [mainDomain]: list } }
+      },
+    },
+    createStore({ domains: { [mainDomain]: [] as Project[] } as Partial<Record<DomainId, Project[]>> }),
   )
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
-    ready: false,
-    path: { state: "", config: "", worktree: "", directory: "", home: "" },
-    project: projectCache.value,
+    ...blankRoot(),
+    rootByDomain: {},
+    projectByDomain: projectCache.domains,
+    sessionTodoByDomain: {},
+    project: projectCache.domains[mainDomain] ?? [],
     session_todo: {},
-    provider: { all: [], connected: [], default: {} },
-    provider_auth: {},
-    config: {},
-    reload: undefined,
   })
   const [loaded, setLoaded] = createStore({ dir: {} as Record<string, true> })
 
   let active = true
   let projectWritten = false
-  let bootedAt = 0
-  let bootingRoot = false
   let prevServer = server.current?.integration
-  const claw = "/openclaw"
-  const isolated = (directory: string) => server.current?.integration === "openclaw" && directory !== claw
+  const isolated = (directory: string) =>
+    isExtraAgentIntegration(server.current?.integration) && directory !== `/${server.current?.integration}`
   const trace = (_event: string, _extra?: Record<string, unknown>) => {}
 
   onCleanup(() => {
     active = false
   })
 
-  const cacheProjects = () => {
+  createEffect(
+    on(
+      currentDomain,
+      (domain) => {
+        const root = rootBucket(domain)
+        setGlobalStore("ready", root.ready)
+        setGlobalStore("error", root.error)
+        setGlobalStore("path", reconcile(root.path))
+        setGlobalStore("provider", reconcile(root.provider))
+        setGlobalStore("provider_auth", reconcile(root.provider_auth))
+        setGlobalStore("config", reconcile(root.config))
+        setGlobalStore("reload", root.reload)
+        setGlobalStore("project", reconcile(projectBucket(domain)))
+        setGlobalStore("session_todo", reconcile(todoBucket(domain)))
+      },
+      { defer: false },
+    ),
+  )
+
+  const cacheProjects = (domain = currentDomain()) => {
     setProjectCache(
-      "value",
-      untrack(() => globalStore.project.map(sanitizeProject)),
+      "domains",
+      domain,
+      untrack(() => projectBucket(domain).map(sanitizeProject)),
     )
   }
 
-  const queryOptionsApi = makeQueryOptionsApi(() => globalSDK.client, sdkFor)
+  const setProjectsFor = (domain: DomainId, next: Project[] | ((draft: Project[]) => void)) => {
+    projectWritten = true
+    if (typeof next === "function") {
+      const mutate = next
+      setGlobalStore(
+        "projectByDomain",
+        domain,
+        produce<Project[] | undefined>((draft) => {
+          if (!draft) return
+          mutate(draft)
+        }),
+      )
+      if (domain === currentDomain()) setGlobalStore("project", produce(mutate))
+      cacheProjects(domain)
+      return
+    }
+    setGlobalStore("projectByDomain", domain, next)
+    if (domain === currentDomain()) setGlobalStore("project", next)
+    cacheProjects(domain)
+  }
 
-  const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
-    queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
-  }))
+  const setProjects = (next: Project[] | ((draft: Project[]) => void)) => setProjectsFor(currentDomain(), next)
 
-  const [globalStore, setGlobalStore] = createStore<GlobalStore>({
-    get ready() {
-      return bootstrap.isPending
-    },
-    project: [],
-    session_todo: {},
-    provider_auth: {},
-    get path() {
-      const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
-      return pathQuery.data ?? EMPTY
-    },
-    get provider() {
-      const EMPTY = { all: new Map(), connected: [], default: {} }
-      if (providerQuery.isLoading) return EMPTY
-      return providerQuery.data ?? EMPTY
-    },
-    get config() {
-      if (configQuery.isLoading) return {}
-      return configQuery.data ?? {}
-    },
-    get reload() {
-      return updateConfigMutation.isPending ? "pending" : undefined
-    },
-  })
-  const queryClient = useQueryClient()
-
-  let bootedAt = 0
-  let bootingRoot = false
-  let eventFrame: number | undefined
-  let eventTimer: ReturnType<typeof setTimeout> | undefined
-
-  onCleanup(() => {
-    if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
-    if (eventTimer !== undefined) clearTimeout(eventTimer)
-  })
-
-  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
-    setGlobalStore("project", next)
+  const setRoot = (domain: DomainId, key: keyof ReturnType<typeof blankRoot>, value: unknown) => {
+    ;(setGlobalStore as (...args: unknown[]) => unknown)("rootByDomain", domain, key, value)
+    if (domain !== currentDomain()) return
+    ;(setGlobalStore as (...args: unknown[]) => unknown)(key, value)
   }
 
   const setBootStore = ((...input: unknown[]) => {
     if (input[0] === "project" && Array.isArray(input[1])) {
-      setProjects(input[1] as Project[])
+      setProjectsFor(currentDomain(), input[1] as Project[])
+      return input[1]
+    }
+    if (
+      typeof input[0] === "string" &&
+      ["ready", "error", "path", "provider", "provider_auth", "config", "reload"].includes(input[0])
+    ) {
+      setRoot(currentDomain(), input[0] as keyof ReturnType<typeof blankRoot>, input[1])
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
@@ -204,12 +253,39 @@ function createGlobalSync() {
       setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
       return input[1]
     }
+    if (
+      typeof input[0] === "string" &&
+      ["ready", "error", "path", "provider", "provider_auth", "config", "reload"].includes(input[0])
+    ) {
+      setRoot(currentDomain(), input[0] as keyof ReturnType<typeof blankRoot>, input[1])
+      return input[1]
+    }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
 
+  if (projectInit instanceof Promise) {
+    void projectInit.then(() => {
+      if (!active) return
+      if (projectWritten) return
+      const cached = projectCache.domains[currentDomain()] ?? []
+      if (cached.length === 0) return
+      setGlobalStore("projectByDomain", currentDomain(), cached)
+      setGlobalStore("project", cached)
+    })
+  }
+
   const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
     if (!sessionID) return
+    const domain = currentDomain()
     if (!todos) {
+      setGlobalStore(
+        "sessionTodoByDomain",
+        domain,
+        produce((draft) => {
+          if (!draft) return
+          delete draft[sessionID]
+        }),
+      )
       setGlobalStore(
         "session_todo",
         produce((draft) => {
@@ -218,17 +294,22 @@ function createGlobalSync() {
       )
       return
     }
+    setGlobalStore("sessionTodoByDomain", domain, sessionID, reconcile(todos, { key: "id" }))
     setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
   }
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
-
-  const queue = createRefreshQueue({
-    paused,
-    key: directoryKey,
-    bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
-    bootstrapInstance,
-  })
+  const queueFor = (domain = currentDomain()) => {
+    const existing = queues.get(domain)
+    if (existing) return existing
+    const queue = createRefreshQueue({
+      paused,
+      bootstrap: () => bootstrap(domain),
+      bootstrapInstance,
+    })
+    queues.set(domain, queue)
+    return queue
+  }
 
   const children = createChildStoreManager({
     owner,
@@ -238,12 +319,10 @@ function createGlobalSync() {
       void bootstrapInstance(directory)
     },
     onDispose: (directory) => {
-      const key = directoryKey(directory)
-      queue.clear(key)
-      sessionMeta.delete(key)
-      sdkCache.delete(key)
-      clearProviderRev(key)
-      clearSessionPrefetchDirectory(key)
+      queueFor(domainFromDirectory(directory)).clear(directory)
+      sessionMeta.delete(directory)
+      sdkCache.delete(directory)
+      clearSessionPrefetchDirectory(directory)
     },
     translate: language.t,
     queryOptions: queryOptionsApi,
@@ -255,7 +334,7 @@ function createGlobalSync() {
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
-    const sdk = globalSDK.createClient({
+    const sdk = runtime(domainFromDirectory(directory)).createClient({
       directory,
       throwOnError: true,
     })
@@ -267,7 +346,7 @@ function createGlobalSync() {
     if (isolated(directory)) {
       trace("loadSessions.skip", {
         directory,
-        why: "openclaw-isolated",
+        why: "extra-agent-isolated",
         silent: !!opts?.silent,
       })
       return
@@ -321,7 +400,7 @@ function createGlobalSync() {
     const promise = loadRootSessionsWithFallback({
       directory,
       limit,
-      list: (query) => globalSDK.client.session.list(query),
+      list: (query) => runtime(domainFromDirectory(directory)).client.session.list(query),
     })
       .then((x) => {
         const nonArchived = (x.data ?? [])
@@ -367,10 +446,10 @@ function createGlobalSync() {
         })
         if (opts?.silent || note) return
         const project = getFilename(directory)
-        const title =
-          server.current?.integration === "openclaw"
-            ? language.t("toast.session.listFailed.openclaw.title")
-            : language.t("toast.session.listFailed.title", { project })
+        const agent = extraAgentByIntegration(server.current?.integration)
+        const title = agent?.sessionListFailedTitleKey
+          ? language.t(agent.sessionListFailedTitleKey)
+          : language.t("toast.session.listFailed.title", { project })
         showToast({
           variant: "error",
           title,
@@ -392,7 +471,7 @@ function createGlobalSync() {
     if (isolated(directory)) {
       trace("bootstrap.skip", {
         directory,
-        why: "openclaw-isolated",
+        why: "extra-agent-isolated",
       })
       return
     }
@@ -421,8 +500,7 @@ function createGlobalSync() {
         directory,
         global: {
           config: globalStore.config,
-          path: globalStore.path,
-          project: globalStore.project,
+          project: projectBucket(),
           provider: globalStore.provider,
         },
         sdk,
@@ -450,20 +528,23 @@ function createGlobalSync() {
     return promise
   }
 
-  const unsub = globalSDK.event.listen((e) => {
+  const unsub = globalSDK.listenAll((e) => {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
-    const recent = bootingRoot || Date.now() - bootedAt < 1500
+    const emittingDomain = e.domain
+    const dirDomain = directory === "global" ? emittingDomain : domainFromDirectory(directory)
+    const recent = !!bootingRoot.get(dirDomain) || Date.now() - (bootedAt.get(dirDomain) ?? 0) < 1500
 
     if (directory === "global") {
-      if (server.current?.integration === "openclaw") return
+      if (emittingDomain !== currentDomain()) return
+      if (isExtraAgentIntegration(server.current?.integration)) return
       applyGlobalEvent({
         event,
         project: globalStore.project,
         refresh: () => {
           if (recent) return
-          bootstrap.refetch()
+          queueFor(currentDomain()).refresh()
         },
         setGlobalProject: setProjects,
       })
@@ -471,7 +552,7 @@ function createGlobalSync() {
         if (recent) return
         for (const directory of Object.keys(children.children)) {
           if (!loaded.dir[directory]) continue
-          queue.push(directory)
+          queueFor(domainFromDirectory(directory)).push(directory)
         }
       }
       return
@@ -487,7 +568,7 @@ function createGlobalSync() {
       directory,
       store,
       setStore,
-      push: queue.push,
+      push: queueFor(dirDomain).push,
       setSessionTodo,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
@@ -498,7 +579,8 @@ function createGlobalSync() {
 
   onCleanup(unsub)
   onCleanup(() => {
-    queue.dispose()
+    for (const queue of queues.values()) queue.dispose()
+    queues.clear()
   })
   onCleanup(() => {
     for (const directory of Object.keys(children.children)) {
@@ -506,11 +588,11 @@ function createGlobalSync() {
     }
   })
 
-  async function bootstrap() {
-    bootingRoot = true
+  async function bootstrap(domain = currentDomain()) {
+    bootingRoot.set(domain, true)
     try {
       await bootstrapGlobal({
-        globalSDK: globalSDK.client,
+        globalSDK: runtime(domain).client,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
@@ -518,12 +600,12 @@ function createGlobalSync() {
       })
       await Promise.allSettled(
         Object.keys(children.children)
-          .filter((directory) => loaded.dir[directory])
+          .filter((directory) => loaded.dir[directory] && domainFromDirectory(directory) === domain)
           .map((directory) => bootstrapInstance(directory)),
       )
-      bootedAt = Date.now()
+      bootedAt.set(domain, Date.now())
     } finally {
-      bootingRoot = false
+      bootingRoot.set(domain, false)
     }
   }
 
@@ -532,37 +614,40 @@ function createGlobalSync() {
       () => globalSDK.version,
       () => {
         const nextServer = server.current?.integration
-        const openclawSwitch =
-          (prevServer === "openclaw" && nextServer !== "openclaw") ||
-          (prevServer !== "openclaw" && nextServer === "openclaw")
+        const prevDomain = prevServer
+          ? isExtraAgentIntegration(prevServer)
+            ? `extra-agent/${prevServer}`
+            : mainDomain
+          : mainDomain
+        const nextDomain = server.domain
+        const domainSwitch = prevDomain !== nextDomain
         prevServer = nextServer
-        const dirs = openclawSwitch ? ["/openclaw"] : Object.keys(children.children)
+        const dirs = Object.keys(children.children).filter((directory) => domainFromDirectory(directory) === nextDomain)
         trace("server.switch.reset", {
-          openclawSwitch,
+          domainSwitch,
+          prevDomain,
+          nextDomain,
           dirs,
         })
-        if (openclawSwitch) {
-          booting.delete(claw)
-          sessionLoads.delete(claw)
-          sessionMeta.delete(claw)
-        } else {
-          for (const key of Array.from(booting.keys())) booting.delete(key)
-          for (const key of Array.from(sessionLoads.keys())) sessionLoads.delete(key)
-          sessionMeta.clear()
+        if (!domainSwitch) {
+          for (const dir of dirs) {
+            booting.delete(dir)
+            sessionLoads.delete(dir)
+            sessionMeta.delete(dir)
+          }
         }
         for (const directory of dirs) {
           if (!children.children[directory]) continue
-          // Mounted views can keep references to child stores across a server switch.
-          // Reset the store in place and drop cached clients so the next bootstrap/load
-          // repopulates it from the newly active backend instead of stale OpenClaw data.
-          queue.clear(directory)
-          sdkCache.delete(directory)
-          clearSessionPrefetchDirectory(directory)
-          children.resetDirectory(directory)
+          if (!domainSwitch) {
+            queueFor(domainFromDirectory(directory)).clear(directory)
+            sdkCache.delete(directory)
+            clearSessionPrefetchDirectory(directory)
+            children.resetDirectory(directory)
+          }
         }
         setGlobalStore("reload", undefined)
         setVersion((x) => x + 1)
-        if (!openclawSwitch) void bootstrap()
+        if (!domainSwitch) void bootstrap(nextDomain)
       },
     ),
   )
@@ -591,13 +676,13 @@ function createGlobalSync() {
 
   const updateConfig = async (config: Config) => {
     setGlobalStore("reload", "pending")
-    return globalSDK.client.global.config
-      .update({ config })
-      .then(bootstrap)
+    return runtime()
+      .client.global.config.update({ config })
+      .then(() => bootstrap())
       .then(() => {
-        queue.refresh()
+        queueFor().refresh()
         setGlobalStore("reload", undefined)
-        queue.refresh()
+        queueFor().refresh()
       })
       .catch((error) => {
         setGlobalStore("reload", undefined)
