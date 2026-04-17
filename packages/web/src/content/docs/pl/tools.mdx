@@ -151,23 +151,6 @@ Szukaj plików przy użyciu wzorców glob, takich jak `**/*.js` lub `src/**/*.ts
 
 ---
 
-### list
-
-Wyświetla listę plików i katalogów w podanej ścieżce.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-To narzędzie wyświetla zawartość katalogu. Akceptuje wzorce glob do filtrowania wyników.
-
----
-
 ### LSP (eksperymentalne)
 
 Interakcja ze skonfigurowanymi serwerami LSP w celu uzyskania funkcji analizy kodu, takich jak definicje, referencje, podpowiedzi (hover) i hierarchia wywołań.
@@ -341,7 +324,7 @@ Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych nar
 
 ## Szczegóły techniczne
 
-Wewnętrznie narzędzia takie jak `grep`, `glob` i `list` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
+Wewnętrznie narzędzia takie jak `grep` i `glob` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
 
 ---
 

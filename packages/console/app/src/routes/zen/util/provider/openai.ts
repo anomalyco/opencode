@@ -36,7 +36,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
         let json
         try {
           json = JSON.parse(data.slice(6)) as { response?: { usage?: Usage } }
-        } catch (e) {
+        } catch {
           return
         }
 

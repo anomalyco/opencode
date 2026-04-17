@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { ProviderTransform } from "../../src/provider/transform"
+import { ProviderTransform } from "../../src/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-
-const OUTPUT_TOKEN_MAX = 32000
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -101,6 +99,24 @@ describe("ProviderTransform.options - setCacheKey", () => {
       providerOptions: {},
     })
     expect(result.store).toBe(false)
+  })
+
+  test("should set store=true for azure provider by default", () => {
+    const azureModel = {
+      ...mockModel,
+      providerID: "azure",
+      api: {
+        id: "gpt-4",
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: azureModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(true)
   })
 })
 
@@ -2248,6 +2264,46 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
+    test("anthropic opus 4.7 models return adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-7",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4-7",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "xhigh",
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "max",
+      })
+    })
+
+    test("anthropic opus 4.7 dot-format models return adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-7",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4.7",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+    })
+
     test("anthropic models return anthropic thinking options", () => {
       const model = createMockModel({
         id: "anthropic/claude-sonnet-4",
@@ -2656,6 +2712,34 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
+    test("opus 4.7 returns adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-7",
+        providerID: "anthropic",
+        api: {
+          id: "claude-opus-4-7",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "xhigh",
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "max",
+      })
+    })
+
     test("returns high and max with thinking config", () => {
       const model = createMockModel({
         id: "anthropic/claude-4",
@@ -2696,6 +2780,32 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.max).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "max",
+        },
+      })
+    })
+
+    test("anthropic opus 4.7 returns adaptive reasoning options with xhigh", () => {
+      const model = createMockModel({
+        id: "bedrock/anthropic-claude-opus-4-7",
+        providerID: "bedrock",
+        api: {
+          id: "anthropic.claude-opus-4-7",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "xhigh",
+        },
+      })
       expect(result.max).toEqual({
         reasoningConfig: {
           type: "adaptive",

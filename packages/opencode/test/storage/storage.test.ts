@@ -5,7 +5,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Git } from "../../src/git"
 import { Global } from "../../src/global"
-import { Storage } from "../../src/storage/storage"
+import { Storage } from "../../src/storage"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 

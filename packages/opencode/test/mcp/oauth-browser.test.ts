@@ -7,7 +7,7 @@ import type { MCP as MCPNS } from "../../src/mcp/index"
 let openShouldFail = false
 let openCalledWith: string | undefined
 
-mock.module("open", () => ({
+void mock.module("open", () => ({
   default: async (url: string) => {
     openCalledWith = url
 
@@ -39,7 +39,7 @@ const transportCalls: Array<{
 }> = []
 
 // Mock the transport constructors
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     url: string
     authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
@@ -65,7 +65,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   },
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: class MockSSE {
     constructor(url: URL) {
       transportCalls.push({
@@ -81,7 +81,7 @@ mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }))
 
 // Mock the MCP SDK Client to trigger OAuth flow
-mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
@@ -90,7 +90,7 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 }))
 
 // Mock UnauthorizedError in the auth module
-mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
 }))
 

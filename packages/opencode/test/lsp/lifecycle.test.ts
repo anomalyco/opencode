@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { LSP } from "../../src/lsp"
-import { LSPServer } from "../../src/lsp/server"
+import { LSPServer } from "../../src/lsp"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -46,14 +46,46 @@ describe("LSP service lifecycle", () => {
     ),
   )
 
-  it.live("hasClients() returns true for .ts files in instance", () =>
+  it.live("hasClients() returns false for .ts files in instance when LSP is unset", () =>
     provideTmpdirInstance((dir) =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {
           const result = yield* lsp.hasClients(path.join(dir, "test.ts"))
-          expect(result).toBe(true)
+          expect(result).toBe(false)
         }),
       ),
+    ),
+  )
+
+  it.live("hasClients() returns true for .ts files in instance when lsp is true", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const result = yield* lsp.hasClients(path.join(dir, "test.ts"))
+            expect(result).toBe(true)
+          }),
+        ),
+      { config: { lsp: true } },
+    ),
+  )
+
+  it.live("hasClients() keeps built-in LSPs when config object is provided", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const result = yield* lsp.hasClients(path.join(dir, "test.ts"))
+            expect(result).toBe(true)
+          }),
+        ),
+      {
+        config: {
+          lsp: {
+            eslint: { disabled: true },
+          },
+        },
+      },
     ),
   )
 
