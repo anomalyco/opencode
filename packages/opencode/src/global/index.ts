@@ -8,7 +8,7 @@ import { Flock } from "@opencode-ai/shared/util/flock"
 const app = "opencode"
 
 const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
+const cache = process.env.OPENCODE_CACHE_PATH ?? path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
@@ -21,7 +21,10 @@ export namespace Global {
     data,
     bin: path.join(cache, "bin"),
     log: path.join(data, "log"),
-    cache,
+    // Allow override via OPENCODE_CACHE_PATH for test isolation; re-read on each access
+    get cache() {
+      return process.env.OPENCODE_CACHE_PATH ?? cache
+    },
     config,
     state,
   }

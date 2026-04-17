@@ -8,23 +8,21 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Arborist } from "@npmcli/arborist"
+import { load as loadConfig } from "./config"
+import { preResolveGitSubdir } from "./git"
+import { classify } from "./spec"
+import { preResolveReleaseAsset } from "./release"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
-  const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
-
-  function split(pkg: string) {
-    const url = /^https?:\/\//.test(pkg)
-    const git = pkg.startsWith("github:")
-    if (url || git) return { name: pkg, version: "latest", url, git }
-    const at = pkg.lastIndexOf("@")
-    return {
-      name: at > 0 ? pkg.slice(0, at) : pkg,
-      version: at > 0 ? pkg.slice(at + 1) : "latest",
-      url,
-      git,
-    }
-  }
+  // Always sanitize `:` (URL-scheme delimiter) and control chars regardless of platform:
+  // bun's import resolver treats `foo:/bar` paths as URL schemes and bypasses registered
+  // plugins (like @opentui/solid's JSX transform), even when the path exists on disk.
+  // The Windows-only reserved set additionally includes <, >, ", |, ?, *.
+  const illegal =
+    process.platform === "win32"
+      ? new Set(["<", ">", ":", '"', "|", "?", "*"])
+      : new Set([":"])
 
   async function meta(pkg: string) {
     const response = await fetch(`https://registry.npmjs.org/${pkg}`).catch(() => undefined)
@@ -47,7 +45,6 @@ export namespace Npm {
   )
 
   export function sanitize(pkg: string) {
-    if (!illegal) return pkg
     return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
   }
 
@@ -67,6 +64,14 @@ export namespace Npm {
     return result
   }
 
+  /**
+   * Check if a registry-installed package has an updated dist-tag.
+   *
+   * KNOWN GAP: This only consults the default npm registry (registry.npmjs.org).
+   * For packages installed from GitHub Packages or other scoped registries,
+   * this check is silently wrong — it will never detect a moved dist-tag.
+   * Registry-aware dist-tag lookup is tracked as a follow-up.
+   */
   export async function outdated(pkg: string, cachedVersion: string, name = "latest"): Promise<boolean> {
     const latestVersion = await tag(pkg, name)
     if (!latestVersion) {
@@ -82,36 +87,73 @@ export namespace Npm {
     return semver.lt(cachedVersion, latestVersion)
   }
 
+  /**
+   * Install a plugin-style package and return its directory + entrypoint.
+   *
+   * Accepted spec shapes:
+   * - npm registry:       `@scope/pkg@1.2.3`, `pkg@latest`, `pkg@^1`
+   * - GitHub Packages:    same shape, routed via user's ~/.npmrc scope config
+   * - GitHub shorthand:   `github:owner/repo#ref` (private: relies on git credential helper)
+   * - GitHub + subdir:    `github:owner/repo#main::path:packages/foo`
+   * - Git+HTTPS URL:      `git+https://github.com/owner/repo.git#ref`
+   * - Release asset URL:  `https://github.com/owner/repo/releases/download/tag/file.tgz`
+   *                       (auth via GITHUB_TOKEN/GH_TOKEN env, or `gh auth token` fallback)
+   * - Local path:         `file:./rel`, `/abs/path`, `./rel`, `~/rel` (resolved from cwd)
+   */
   export async function add(pkg: string) {
-    const spec = split(pkg)
+    const spec = classify(pkg)
+    const cfg = await loadConfig()
+    let forArborist: string
+    if (spec.kind === "release") {
+      const local = await preResolveReleaseAsset(spec, { cacheRoot: Global.Path.cache })
+      forArborist = `file:${local}`
+    } else if ((spec.kind === "git" || spec.kind === "github") && pkg.includes("::path:")) {
+      const local = await preResolveGitSubdir(pkg, Global.Path.cache, cfg)
+      forArborist = `file:${local}`
+    } else if (spec.kind === "file") {
+      forArborist = `file:${spec.path}`
+    } else {
+      forArborist = pkg
+    }
+
     const dir = directory(pkg)
     await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
-    log.info("installing package", {
-      pkg,
-    })
+    log.info("installing package", { pkg, forArborist })
 
     const arborist = new Arborist({
+      ...cfg,
       path: dir,
       binLinks: true,
       progress: false,
       savePrefix: "",
       ignoreScripts: true,
+      // Skip auto-installing peerDependencies into the plugin cache. Plugins import shared
+      // runtimes (e.g. @opentui/solid, solid-js) that are already bundled into opencode's
+      // binary and re-exported via @opentui/solid/runtime-plugin-support. Installing a
+      // second copy here creates two module identities, causing context/signal mismatch.
+      legacyPeerDeps: true,
     })
+
     const tree = await arborist.loadVirtual().catch(() => {})
     if (tree) {
       const first = tree.edgesOut.values().next().value?.to
       if (first) {
-        if (!spec.git && !spec.url && (spec.version === "latest" || !semver.validRange(spec.version))) {
-          const version = await Filesystem.readJson<{ version?: string }>(path.join(first.path, "package.json"))
-            .then((x) => x.version)
-            .catch(() => undefined)
-          const next = await tag(spec.name, spec.version)
-          if (version && next && version !== next) {
-            log.info("dist-tag moved, reinstalling package", { pkg, version, next })
+        if (spec.kind === "registry") {
+          if (spec.version === "latest" || !semver.validRange(spec.version)) {
+            const version = await Filesystem.readJson<{ version?: string }>(path.join(first.path, "package.json"))
+              .then((x) => x.version)
+              .catch(() => undefined)
+            const next = await tag(spec.name, spec.version)
+            if (version && next && version !== next) {
+              log.info("dist-tag moved, reinstalling package", { pkg, version, next })
+            } else {
+              return resolveEntryPoint(first.name, first.path)
+            }
           } else {
             return resolveEntryPoint(first.name, first.path)
           }
         } else {
+          // Non-registry specs: cache hit returns the installed tree. No dist-tag check.
           return resolveEntryPoint(first.name, first.path)
         }
       }
@@ -119,17 +161,12 @@ export namespace Npm {
 
     const result = await arborist
       .reify({
-        add: [pkg],
+        add: [forArborist],
         save: true,
         saveType: "prod",
       })
       .catch((cause: unknown) => {
-        throw new InstallFailedError(
-          { pkg },
-          {
-            cause,
-          },
-        )
+        throw new InstallFailedError({ pkg }, { cause })
       })
 
     const first = result.edgesOut.values().next().value?.to
@@ -142,6 +179,12 @@ export namespace Npm {
     log.info("checking dependencies", { dir })
 
     const reify = async () => {
+      // NOTE: We intentionally do NOT pass @npmcli/config flat options here.
+      // Npm.install bootstraps @opencode-ai/plugin in .opencode dirs. The repo uses
+      // bun workspace linking to resolve it to the in-repo source during development.
+      // Passing `...cfg` (which sets registry/cache) forces Arborist to resolve against
+      // the public npm registry instead, pulling v1.4.x which lacks APIs the current
+      // dev code expects. Keep Arborist in its default (workspace-aware) mode here.
       const arb = new Arborist({
         path: dir,
         binLinks: true,

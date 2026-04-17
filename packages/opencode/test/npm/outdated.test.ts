@@ -1,5 +1,9 @@
+// Known gap: Npm.outdated() only consults registry.npmjs.org. For packages
+// installed from GitHub Packages or other scoped registries, this check is
+// silently wrong — it will always report "not outdated." Tracked as follow-up.
+
 import { describe, expect, test, spyOn } from "bun:test"
-import { Npm } from "../src/npm"
+import { Npm } from "../../src/npm"
 
 describe("Npm.outdated", () => {
   test('does not throw on "latest" specifiers', async () => {
