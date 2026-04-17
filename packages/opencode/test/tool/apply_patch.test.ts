@@ -1,10 +1,28 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import * as fs from "fs/promises"
+import { Effect, ManagedRuntime, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
+import { LSP } from "../../src/lsp"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Format } from "../../src/format"
+import { Agent } from "../../src/agent/agent"
+import { Bus } from "../../src/bus"
+import { Truncate } from "../../src/tool"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+
+const runtime = ManagedRuntime.make(
+  Layer.mergeAll(
+    LSP.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Format.defaultLayer,
+    Bus.layer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
+)
 
 const baseCtx = {
   sessionID: SessionID.make("ses_test"),
@@ -13,7 +31,7 @@ const baseCtx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
+  metadata: () => Effect.void,
 }
 
 type AskInput = {
@@ -36,21 +54,23 @@ type AskInput = {
 }
 
 type ToolCtx = typeof baseCtx & {
-  ask: (input: AskInput) => Promise<void>
+  ask: (input: AskInput) => Effect.Effect<void>
 }
 
 const execute = async (params: { patchText: string }, ctx: ToolCtx) => {
-  const tool = await ApplyPatchTool.init()
-  return tool.execute(params, ctx)
+  const info = await runtime.runPromise(ApplyPatchTool)
+  const tool = await runtime.runPromise(info.init())
+  return Effect.runPromise(tool.execute(params, ctx))
 }
 
 const makeCtx = () => {
   const calls: AskInput[] = []
   const ctx: ToolCtx = {
     ...baseCtx,
-    ask: async (input) => {
-      calls.push(input)
-    },
+    ask: (input) =>
+      Effect.sync(() => {
+        calls.push(input)
+      }),
   }
 
   return { ctx, calls }

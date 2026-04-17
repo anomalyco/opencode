@@ -4,10 +4,9 @@ import { createReadStream } from "fs"
 import { open } from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
-import { Tool } from "./tool"
-import { AppFileSystem } from "../filesystem"
+import * as Tool from "./tool"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { LSP } from "../lsp"
-import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -25,13 +24,12 @@ const parameters = z.object({
   limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
 })
 
-export const ReadTool = Tool.defineEffect(
+export const ReadTool = Tool.define(
   "read",
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
-    const time = yield* FileTime.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -75,9 +73,8 @@ export const ReadTool = Tool.defineEffect(
       ).pipe(Effect.map((items: string[]) => items.sort((a, b) => a.localeCompare(b))))
     })
 
-    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string, sessionID: Tool.Context["sessionID"]) {
+    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
       yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
-      yield* time.read(sessionID, filepath)
     })
 
     const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
@@ -106,14 +103,12 @@ export const ReadTool = Tool.defineEffect(
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
-      yield* Effect.promise(() =>
-        ctx.ask({
-          permission: "read",
-          patterns: [filepath],
-          always: ["*"],
-          metadata: {},
-        }),
-      )
+      yield* ctx.ask({
+        permission: "read",
+        patterns: [filepath],
+        always: ["*"],
+        metadata: {},
+      })
 
       if (!stat) return yield* miss(filepath)
 
@@ -183,7 +178,7 @@ export const ReadTool = Tool.defineEffect(
         )
       }
 
-      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>" + "\n"].join("\n")
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
       output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
 
       const last = file.offset + file.raw.length - 1
@@ -198,7 +193,7 @@ export const ReadTool = Tool.defineEffect(
       }
       output += "\n</content>"
 
-      yield* warm(filepath, ctx.sessionID)
+      yield* warm(filepath)
 
       if (loaded.length > 0) {
         output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
@@ -218,9 +213,7 @@ export const ReadTool = Tool.defineEffect(
     return {
       description: DESCRIPTION,
       parameters,
-      async execute(params: z.infer<typeof parameters>, ctx) {
-        return Effect.runPromise(run(params, ctx).pipe(Effect.orDie))
-      },
+      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

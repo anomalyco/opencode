@@ -88,7 +88,7 @@ Vous pouvez utiliser `~` ou `$HOME` au début d'un modèle pour référencer vot
 
 ### Répertoires externes
 
-Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où OpenCode a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `list`, `glob`, `grep` et de nombreuses commandes `bash`).
+Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où OpenCode a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `glob`, `grep` et de nombreuses commandes `bash`).
 
 L'expansion du répertoire personnel (comme `~/...`) n'affecte que la façon dont un modèle est écrit. Cela n'intègre pas un chemin externe à l'espace de travail actuel, donc les chemins en dehors du répertoire de travail doivent toujours être autorisés via `external_directory`.
 
@@ -133,7 +133,6 @@ Les autorisations OpenCode sont classées par nom d'outil, plus quelques garde-f
 - `edit` — toutes les modifications de fichiers (couvre `edit`, `write`, `patch`, `multiedit`)
 - `glob` — globalisation de fichiers (correspond au modèle global)
 - `grep` — recherche de contenu (correspond au modèle regex)
-- `list` — listant les fichiers dans un répertoire (correspond au chemin du répertoire)
 - `bash` - exécution de commandes shell (correspond aux commandes analysées comme `git status --porcelain`)
 - `task` — lancement de sous-agents (correspond au type de sous-agent)
 - `skill` — chargement d'une compétence (correspond au nom de la compétence)

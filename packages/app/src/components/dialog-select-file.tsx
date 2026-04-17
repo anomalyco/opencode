@@ -4,8 +4,8 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
+import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
 import { useNavigate } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
@@ -348,8 +348,8 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
   const open = (path: string) => {
     const value = file.tab(path)
-    tabs().open(value)
-    file.load(path)
+    void tabs().open(value)
+    void file.load(path)
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
     layout.fileTree.setTab("all")
     props.onOpenFile?.(path)
