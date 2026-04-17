@@ -390,6 +390,17 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
+    llmgateway: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+            "X-Source": "opencode",
+          },
+        },
+      }),
     openrouter: () =>
       Effect.succeed({
         autoload: false,
