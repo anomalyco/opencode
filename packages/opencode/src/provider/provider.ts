@@ -900,6 +900,10 @@ export const ConfigProvidersResult = Schema.Struct({
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
+export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
+  return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
+}
+
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
   readonly getProvider: (providerID: ProviderID) => Effect.Effect<Info>

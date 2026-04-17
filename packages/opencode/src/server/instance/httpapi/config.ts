@@ -1,6 +1,5 @@
 import { Config } from "@/config"
 import { Provider } from "@/provider"
-import { mapValues } from "remeda"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
@@ -40,10 +39,10 @@ export const configHandlers = Layer.unwrap(
     const svc = yield* Provider.Service
 
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
-      const providers = mapValues(yield* svc.list(), (item) => item)
+      const providers = yield* svc.list()
       return {
         providers: Object.values(providers),
-        default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+        default: Provider.defaultModelIDs(providers),
       }
     })
 
