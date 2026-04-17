@@ -1,7 +1,7 @@
 import { Global } from "@/global"
 import { Filesystem } from "@/util"
 import { createSignal, type Setter } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import path from "path"
 
@@ -11,12 +11,15 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     const [ready, setReady] = createSignal(false)
     const [store, setStore] = createStore<Record<string, any>>()
     const filePath = path.join(Global.Path.state, "kv.json")
+    let write = Promise.resolve()
 
     Filesystem.readJson<Record<string, any>>(filePath)
       .then((x) => {
         setStore(x)
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.error("Failed to read KV state", { filePath, error })
+      })
       .finally(() => {
         setReady(true)
       })
@@ -44,7 +47,12 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       },
       set(key: string, value: any) {
         setStore(key, value)
-        void Filesystem.writeJson(filePath, store)
+        const snapshot = structuredClone(unwrap(store))
+        write = write
+          .then(() => Filesystem.writeJson(filePath, snapshot))
+          .catch((error) => {
+            console.error("Failed to write KV state", { filePath, error })
+          })
       },
     }
     return result
