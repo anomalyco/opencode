@@ -3,7 +3,6 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../config"
 import { Provider } from "../../provider"
-import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { AppRuntime } from "../../effect/app-runtime"
@@ -70,12 +69,7 @@ export const ConfigRoutes = lazy(() =>
             description: "List of providers",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    providers: Provider.Info.array(),
-                    default: z.record(z.string(), z.string()),
-                  }),
-                ),
+                schema: resolver(Provider.ConfigProvidersResult.zod),
               },
             },
           },
@@ -84,10 +78,10 @@ export const ConfigRoutes = lazy(() =>
       async (c) =>
         jsonRequest("ConfigRoutes.providers", c, function* () {
           const svc = yield* Provider.Service
-          const providers = mapValues(yield* svc.list(), (item) => item)
+          const providers = yield* svc.list()
           return {
             providers: Object.values(providers),
-            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+            default: Provider.defaultModelIDs(providers),
           }
         }),
     ),
