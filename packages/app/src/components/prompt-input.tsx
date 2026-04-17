@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -1260,8 +1260,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const providersLoading = () => agentsLoading() || providersQuery.isLoading || globalProvidersQuery.isLoading
 
+  const [promptReady] = createResource(
+    () => prompt.ready().promise,
+    (p) => p,
+  )
+
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
+      {(promptReady(), null)}
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1358,15 +1364,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
               style={{ "padding-bottom": space }}
             />
-            <Show when={!prompt.dirty()}>
-              <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
-                classList={{ "font-mono!": store.mode === "shell" }}
-                style={{ "padding-bottom": space }}
-              >
-                {placeholder()}
-              </div>
-            </Show>
+            <div
+              class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+              classList={{ "font-mono!": store.mode === "shell" }}
+              style={{ "padding-bottom": space, display: prompt.dirty() ? "none" : undefined }}
+            >
+              {placeholder()}
+            </div>
           </div>
 
           <div
