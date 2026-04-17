@@ -6105,6 +6105,56 @@
       }
     }
   },
+  "tencent-token-plan": {
+    "id": "tencent-token-plan",
+    "env": ["TENCENT_TOKEN_PLAN_API_KEY"],
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://api.lkeap.cloud.tencent.com/plan/v3",
+    "name": "Tencent Token Plan",
+    "doc": "https://cloud.tencent.com/document/product/1823/130060",
+    "models": {
+      "hy3-preview": {
+        "id": "hy3-preview",
+        "name": "HY3 Preview",
+        "family": "HY",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2026-04-20",
+        "last_updated": "2026-04-20",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
+        "limit": { "context": 256000, "output": 64000 }
+      }
+    }
+  },
+  "tencent-tokenhub": {
+    "id": "tencent-tokenhub",
+    "env": ["TENCENT_TOKENHUB_API_KEY"],
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://tokenhub.tencentmaas.com/v1",
+    "name": "Tencent TokenHub",
+    "doc": "https://cloud.tencent.com/document/product/1823/130050",
+    "models": {
+      "hy3-preview": {
+        "id": "hy3-preview",
+        "name": "HY3 Preview",
+        "family": "HY",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2026-04-20",
+        "last_updated": "2026-04-20",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
+        "limit": { "context": 256000, "output": 64000 }
+      }
+    }
+  },
   "jiekou": {
     "id": "jiekou",
     "env": ["JIEKOU_API_KEY"],
