@@ -75,16 +75,15 @@ jobs:
 
       - name: Prepare Desktop
         run: |
-          cd packages/desktop
           VERSION="${APP_VERSION#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            BASE=$(jq -r '.version' ../opencode/package.json)
+            BASE=$(cat VERSION)
             TAG=$(printf '%s' "${APP_VERSION}" | tr '[:upper:]' '[:lower:]' | tr -cs '0-9a-z-' '-' | sed 's/^-*//; s/-*$//')
             VERSION="${BASE}-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
           fi
-          # Update version
-          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
-          mv package.json.tmp package.json
+          bun ./script/sync-version.ts "$VERSION"
+
+          cd packages/desktop
 
           # List downloaded files for debugging
           echo "Downloaded files:"
@@ -164,16 +163,15 @@ jobs:
 
       - name: Prepare Desktop
         run: |
-          cd packages/desktop
           VERSION="${APP_VERSION#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            BASE=$(jq -r '.version' ../opencode/package.json)
+            BASE=$(cat VERSION)
             TAG=$(printf '%s' "${APP_VERSION}" | tr '[:upper:]' '[:lower:]' | tr -cs '0-9a-z-' '-' | sed 's/^-*//; s/-*$//')
             VERSION="${BASE}-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
           fi
-          # Update version
-          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
-          mv package.json.tmp package.json
+          bun ./script/sync-version.ts "$VERSION"
+
+          cd packages/desktop
 
           # List downloaded files for debugging
           echo "Downloaded files:"
