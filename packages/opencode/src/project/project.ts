@@ -8,7 +8,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
-import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
+import { Effect, Layer, Path, Scope, Context, Stream, Types } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -18,14 +18,6 @@ import { Schema } from "effect"
 import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "project" })
-
-type Mutable<T> = T extends string | number | boolean | bigint | symbol | null | undefined
-  ? T
-  : T extends ReadonlyArray<infer U>
-    ? Mutable<U>[]
-    : T extends object
-      ? { -readonly [K in keyof T]: Mutable<T[K]> }
-      : T
 
 const ProjectVcs = Schema.Literal("git")
 
@@ -59,7 +51,7 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "Project" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export type Info = Mutable<Schema.Schema.Type<typeof Info>>
+export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
   Updated: BusEvent.define("project.updated", Info.zod),
