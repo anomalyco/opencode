@@ -1,18 +1,16 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "../../config/config"
-import { Provider } from "../../provider/provider"
-import { ModelsDev } from "../../provider/models"
-import { ProviderAuth } from "../../provider/auth"
+import { Config } from "../../config"
+import { Provider } from "../../provider"
+import { ModelsDev } from "../../provider"
+import { ProviderAuth } from "../../provider"
 import { ProviderID } from "../../provider/schema"
 import { AppRuntime } from "../../effect/app-runtime"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { Log } from "../../util/log"
-
-const log = Log.create({ service: "server" })
+import { Effect } from "effect"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -40,27 +38,36 @@ export const ProviderRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const config = await Config.get()
-        const disabled = new Set(config.disabled_providers ?? [])
-        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-
-        const allProviders = await ModelsDev.get()
-        const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
-        for (const [key, value] of Object.entries(allProviders)) {
-          if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
-            filteredProviders[key] = value
-          }
-        }
-
-        const connected = await Provider.list()
-        const providers = Object.assign(
-          mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
-          connected,
+        const result = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const svc = yield* Provider.Service
+            const cfg = yield* Config.Service
+            const config = yield* cfg.get()
+            const all = yield* Effect.promise(() => ModelsDev.get())
+            const disabled = new Set(config.disabled_providers ?? [])
+            const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+            const filtered: Record<string, (typeof all)[string]> = {}
+            for (const [key, value] of Object.entries(all)) {
+              if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+                filtered[key] = value
+              }
+            }
+            const connected = yield* svc.list()
+            const providers = Object.assign(
+              mapValues(filtered, (x) => Provider.fromModelsDevProvider(x)),
+              connected,
+            )
+            return {
+              all: Object.values(providers),
+              default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+              connected: Object.keys(connected),
+            }
+          }),
         )
         return c.json({
-          all: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-          connected: Object.keys(connected),
+          all: result.all,
+          default: result.default,
+          connected: result.connected,
         })
       },
     )
@@ -75,7 +82,7 @@ export const ProviderRoutes = lazy(() =>
             description: "Provider auth methods",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), z.array(ProviderAuth.Method))),
+                schema: resolver(ProviderAuth.Methods.zod),
               },
             },
           },
@@ -96,7 +103,7 @@ export const ProviderRoutes = lazy(() =>
             description: "Authorization URL and method",
             content: {
               "application/json": {
-                schema: resolver(ProviderAuth.Authorization.optional()),
+                schema: resolver(ProviderAuth.Authorization.zod.optional()),
               },
             },
           },

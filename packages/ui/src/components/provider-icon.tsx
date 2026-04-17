@@ -15,7 +15,7 @@ export const ProviderIcon: Component<ProviderIconProps> = (props) => {
       data-component="provider-icon"
       {...rest}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
