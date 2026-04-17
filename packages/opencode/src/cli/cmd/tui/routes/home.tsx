@@ -10,7 +10,6 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "../plugin"
 
-// TODO: what is the best way to do this?
 let once = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
@@ -31,8 +30,8 @@ export function Home() {
     setRef(r)
     promptRef.set(r)
     if (once || !r) return
-    if (route.initialPrompt) {
-      r.set(route.initialPrompt)
+    if (route.prompt) {
+      r.set(route.prompt)
       once = true
       return
     }

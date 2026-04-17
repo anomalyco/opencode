@@ -1,15 +1,15 @@
 import path from "path"
 import semver from "semver"
-import { Arborist } from "@npmcli/arborist"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
-import { Flock } from "./util/flock"
+import { EffectFlock } from "./util/effect-flock"
 
 export namespace Npm {
   export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
-    pkg: Schema.String,
+    add: Schema.Array(Schema.String).pipe(Schema.optional),
+    dir: Schema.String,
     cause: Schema.optional(Schema.Defect),
   }) {}
 
@@ -19,8 +19,11 @@ export namespace Npm {
   }
 
   export interface Interface {
-    readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError>
-    readonly install: (dir: string) => Effect.Effect<void>
+    readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+    readonly install: (
+      dir: string,
+      input?: { add: string[] },
+    ) => Effect.Effect<void, EffectFlock.LockError | InstallFailedError>
     readonly outdated: (pkg: string, cachedVersion: string) => Effect.Effect<boolean>
     readonly which: (pkg: string) => Effect.Effect<Option.Option<string>>
   }
@@ -56,12 +59,44 @@ export namespace Npm {
   interface ArboristTree {
     edgesOut: Map<string, { to?: ArboristNode }>
   }
+
+  const reify = (input: { dir: string; add?: string[] }) =>
+    Effect.gen(function* () {
+      const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
+      const arborist = new Arborist({
+        path: input.dir,
+        binLinks: true,
+        progress: false,
+        savePrefix: "",
+        ignoreScripts: true,
+      })
+      return yield* Effect.tryPromise({
+        try: () =>
+          arborist.reify({
+            add: input?.add || [],
+            save: true,
+            saveType: "prod",
+          }),
+        catch: (cause) =>
+          new InstallFailedError({
+            cause,
+            add: input?.add,
+            dir: input.dir,
+          }),
+      }) as Effect.Effect<ArboristTree, InstallFailedError>
+    }).pipe(
+      Effect.withSpan("Npm.reify", {
+        attributes: input,
+      }),
+    )
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const afs = yield* AppFileSystem.Service
       const global = yield* Global.Service
       const fs = yield* FileSystem.FileSystem
+      const flock = yield* EffectFlock.Service
       const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
 
       const outdated = Effect.fn("Npm.outdated")(function* (pkg: string, cachedVersion: string) {
@@ -92,96 +127,62 @@ export namespace Npm {
 
       const add = Effect.fn("Npm.add")(function* (pkg: string) {
         const dir = directory(pkg)
-        yield* Flock.effect(`npm-install:${dir}`)
+        yield* flock.acquire(`npm-install:${dir}`)
 
-        const arborist = new Arborist({
-          path: dir,
-          binLinks: true,
-          progress: false,
-          savePrefix: "",
-          ignoreScripts: true,
-        })
-
-        const tree = yield* Effect.tryPromise({
-          try: () => arborist.loadVirtual().catch(() => undefined),
-          catch: () => undefined,
-        }).pipe(Effect.orElseSucceed(() => undefined)) as Effect.Effect<ArboristTree | undefined>
-
-        if (tree) {
-          const first = tree.edgesOut.values().next().value?.to
-          if (first) {
-            return resolveEntryPoint(first.name, first.path)
-          }
-        }
-
-        const result = yield* Effect.tryPromise({
-          try: () =>
-            arborist.reify({
-              add: [pkg],
-              save: true,
-              saveType: "prod",
-            }),
-          catch: (cause) => new InstallFailedError({ pkg, cause }),
-        }) as Effect.Effect<ArboristTree, InstallFailedError>
-
-        const first = result.edgesOut.values().next().value?.to
-        if (!first) {
-          return yield* new InstallFailedError({ pkg })
-        }
-
+        const tree = yield* reify({ dir, add: [pkg] })
+        const first = tree.edgesOut.values().next().value?.to
+        if (!first) return yield* new InstallFailedError({ add: [pkg], dir })
         return resolveEntryPoint(first.name, first.path)
       }, Effect.scoped)
 
-      const install = Effect.fn("Npm.install")(function* (dir: string) {
-        yield* Flock.effect(`npm-install:${dir}`)
+      const install = Effect.fn("Npm.install")(function* (dir: string, input?: { add: string[] }) {
+        const canWrite = yield* afs.access(dir, { writable: true }).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        )
+        if (!canWrite) return
 
-        const reify = Effect.fnUntraced(function* () {
-          const arb = new Arborist({
-            path: dir,
-            binLinks: true,
-            progress: false,
-            savePrefix: "",
-            ignoreScripts: true,
-          })
-          yield* Effect.tryPromise({
-            try: () => arb.reify().catch(() => {}),
-            catch: () => {},
-          }).pipe(Effect.orElseSucceed(() => {}))
-        })
+        yield* flock.acquire(`npm-install:${dir}`)
 
-        const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
-        if (!nodeModulesExists) {
-          yield* reify()
-          return
-        }
-
-        const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
-        const lock = yield* afs.readJson(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => ({})))
-
-        const pkgAny = pkg as any
-        const lockAny = lock as any
-
-        const declared = new Set([
-          ...Object.keys(pkgAny?.dependencies || {}),
-          ...Object.keys(pkgAny?.devDependencies || {}),
-          ...Object.keys(pkgAny?.peerDependencies || {}),
-          ...Object.keys(pkgAny?.optionalDependencies || {}),
-        ])
-
-        const root = lockAny?.packages?.[""] || {}
-        const locked = new Set([
-          ...Object.keys(root?.dependencies || {}),
-          ...Object.keys(root?.devDependencies || {}),
-          ...Object.keys(root?.peerDependencies || {}),
-          ...Object.keys(root?.optionalDependencies || {}),
-        ])
-
-        for (const name of declared) {
-          if (!locked.has(name)) {
-            yield* reify()
+        yield* Effect.gen(function* () {
+          const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
+          if (!nodeModulesExists) {
+            yield* reify({ add: input?.add, dir })
             return
           }
-        }
+        }).pipe(Effect.withSpan("Npm.checkNodeModules"))
+
+        yield* Effect.gen(function* () {
+          const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
+          const lock = yield* afs.readJson(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => ({})))
+
+          const pkgAny = pkg as any
+          const lockAny = lock as any
+          const declared = new Set([
+            ...Object.keys(pkgAny?.dependencies || {}),
+            ...Object.keys(pkgAny?.devDependencies || {}),
+            ...Object.keys(pkgAny?.peerDependencies || {}),
+            ...Object.keys(pkgAny?.optionalDependencies || {}),
+            ...(input?.add || []),
+          ])
+
+          const root = lockAny?.packages?.[""] || {}
+          const locked = new Set([
+            ...Object.keys(root?.dependencies || {}),
+            ...Object.keys(root?.devDependencies || {}),
+            ...Object.keys(root?.peerDependencies || {}),
+            ...Object.keys(root?.optionalDependencies || {}),
+          ])
+
+          for (const name of declared) {
+            if (!locked.has(name)) {
+              yield* reify({ dir, add: input?.add })
+              return
+            }
+          }
+        }).pipe(Effect.withSpan("Npm.checkDirty"))
+
+        return
       }, Effect.scoped)
 
       const which = Effect.fn("Npm.which")(function* (pkg: string) {
@@ -240,6 +241,7 @@ export namespace Npm {
   )
 
   export const defaultLayer = layer.pipe(
+    Layer.provide(EffectFlock.layer),
     Layer.provide(AppFileSystem.layer),
     Layer.provide(Global.layer),
     Layer.provide(NodeFileSystem.layer),

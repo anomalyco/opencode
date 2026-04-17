@@ -2,11 +2,11 @@ import { EOL } from "os"
 import { basename } from "path"
 import { Effect } from "effect"
 import { Agent } from "../../../agent/agent"
-import { Provider } from "../../../provider/provider"
+import { Provider } from "../../../provider"
 import { Session } from "../../../session"
 import type { MessageV2 } from "../../../session/message-v2"
 import { MessageID, PartID } from "../../../session/schema"
-import { ToolRegistry } from "../../../tool/registry"
+import { ToolRegistry } from "../../../tool"
 import { Instance } from "../../../project/instance"
 import { Permission } from "../../../permission"
 import { iife } from "../../../util/iife"
@@ -111,6 +111,7 @@ function parseToolParams(input?: string) {
       } catch (evalError) {
         throw new Error(
           `Failed to parse --params. Use JSON or a JS object literal. JSON error: ${jsonError}. Eval error: ${evalError}.`,
+          { cause: evalError },
         )
       }
     }

@@ -5,14 +5,16 @@ import { Plugin } from "@/plugin"
 import { LSP } from "@/lsp"
 import { FileWatcher } from "@/file/watcher"
 import { Format } from "@/format"
-import { ShareNext } from "@/share/share-next"
+import { ShareNext } from "@/share"
 import { File } from "@/file"
-import { Vcs } from "@/project/vcs"
+import { Vcs } from "@/project"
 import { Snapshot } from "@/snapshot"
 import { Bus } from "@/bus"
-import { Observability } from "./observability"
+import { Config } from "@/config"
+import * as Observability from "./observability"
 
 export const BootstrapLayer = Layer.mergeAll(
+  Config.defaultLayer,
   Plugin.defaultLayer,
   ShareNext.defaultLayer,
   Format.defaultLayer,

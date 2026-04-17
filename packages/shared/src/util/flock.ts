@@ -345,10 +345,14 @@ export namespace Flock {
     return await fn()
   }
 
-  export const effect = Effect.fn("Flock.effect")(function* (key: string) {
+  export const effect = Effect.fn("Flock.effect")(function* (key: string, input: Options = {}) {
     return yield* Effect.acquireRelease(
-      Effect.promise((signal) => Flock.acquire(key, { signal })),
-      (foo) => Effect.promise(() => foo.release()),
+      Effect.promise((signal) => Flock.acquire(key, { ...input, signal })).pipe(
+        Effect.withSpan("Flock.acquire", {
+          attributes: { key },
+        }),
+      ),
+      (lock) => Effect.promise(() => lock.release()).pipe(Effect.withSpan("Flock.release")),
     ).pipe(Effect.asVoid)
   })
 }
