@@ -6,6 +6,14 @@ import { useSDK } from "./sdk"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
+const defaultPath = {
+  home: "",
+  state: "",
+  config: "",
+  worktree: "",
+  directory: "",
+} satisfies Path
+
 export const { use: useProject, provider: ProjectProvider } = createSimpleContext({
   name: "Project",
   init: () => {
@@ -15,13 +23,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         id: undefined as string | undefined,
       },
       instance: {
-        path: {
-          home: "",
-          state: "",
-          config: "",
-          worktree: "",
-          directory: sdk.directory ?? "",
-        } satisfies Path,
+        path: defaultPath,
       },
       workspace: {
         current: undefined as string | undefined,
@@ -38,7 +40,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       ])
 
       batch(() => {
-        setStore("instance", "path", reconcile(path.data!))
+        setStore("instance", "path", reconcile(path.data || defaultPath))
         setStore("project", "id", project.data?.id)
       })
     }
