@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenCode",
+  "identifier": "ai.opencode.desktop",
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/prod/32x32.png",
+      "icons/prod/128x128.png",
+      "icons/prod/128x128@2x.png",
+      "icons/prod/icon.icns",
+      "icons/prod/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/prod/icon.ico"
+      }
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "release/appstream.metainfo.xml"
+        }
+      },
+      "rpm": {
+        "compression": {
+          "type": "none"
+        }
+      }
+    }
+  }
+}

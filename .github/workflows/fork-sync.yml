@@ -1,0 +1,108 @@
+name: fork-sync
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_repository:
+        description: "Upstream repository in owner/repo format"
+        required: false
+        type: string
+      upstream_branch:
+        description: "Upstream branch to sync from"
+        required: false
+        type: string
+      fork_branch:
+        description: "Fork branch to open the sync PR against"
+        required: false
+        type: string
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.fork_branch || vars.FORK_BRANCH || 'dev' }}
+
+      - name: Merge upstream into sync branch
+        id: sync
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPOSITORY: ${{ inputs.upstream_repository || vars.UPSTREAM_REPOSITORY || 'anomalyco/opencode' }}
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch || vars.UPSTREAM_BRANCH || 'dev' }}
+          FORK_BRANCH: ${{ inputs.fork_branch || vars.FORK_BRANCH || 'dev' }}
+        run: |
+          set -euo pipefail
+
+          sync_branch="sync/upstream-${UPSTREAM_BRANCH}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          else
+            git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          fi
+
+          git fetch origin "${FORK_BRANCH}"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+          git checkout -B "${sync_branch}" "origin/${FORK_BRANCH}"
+
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            echo "sync_branch=${sync_branch}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"
+          git push origin "HEAD:${sync_branch}" --force-with-lease
+
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+          echo "sync_branch=${sync_branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update sync PR
+        if: steps.sync.outputs.updated == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPOSITORY: ${{ inputs.upstream_repository || vars.UPSTREAM_REPOSITORY || 'anomalyco/opencode' }}
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch || vars.UPSTREAM_BRANCH || 'dev' }}
+          FORK_BRANCH: ${{ inputs.fork_branch || vars.FORK_BRANCH || 'dev' }}
+          SYNC_BRANCH: ${{ steps.sync.outputs.sync_branch }}
+        run: |
+          set -euo pipefail
+
+          title="chore: sync ${UPSTREAM_REPOSITORY#*/}/${UPSTREAM_BRANCH} into ${FORK_BRANCH}"
+          body_file="$(mktemp)"
+
+          cat <<EOF > "${body_file}"
+          ## Summary
+
+          - Syncs upstream `${UPSTREAM_REPOSITORY}:${UPSTREAM_BRANCH}` into `${FORK_BRANCH}` through a reviewable PR branch
+          - Keeps fork maintenance in a reviewable PR instead of pushing directly to ${FORK_BRANCH}
+          - Resolve conflicts in the PR branch, then merge it into ${FORK_BRANCH}
+          EOF
+
+          pr_number="$(gh pr list --head "${SYNC_BRANCH}" --base "${FORK_BRANCH}" --json number --jq '.[0].number')"
+
+          if [ -n "${pr_number}" ]; then
+            gh pr edit "${pr_number}" --title "${title}" --body-file "${body_file}"
+            exit 0
+          fi
+
+          gh pr create --base "${FORK_BRANCH}" --head "${SYNC_BRANCH}" --title "${title}" --body-file "${body_file}"
+
+      - name: Upstream already included
+        if: steps.sync.outputs.updated == 'false'
+        run: echo "Fork already contains upstream changes"
