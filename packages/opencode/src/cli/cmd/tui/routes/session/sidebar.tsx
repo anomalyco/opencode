@@ -3,7 +3,7 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationChannel, InstallationVersion } from "@/installation/version"
 import { TuiPluginRuntime } from "../../plugin"
 
 import { getScrollAcceleration } from "../../util/scroll"
@@ -62,6 +62,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.text}>
                   <b>{session()!.title}</b>
                 </text>
+                <Show when={InstallationChannel !== "latest"}>
+                  <text fg={theme.textMuted}>{props.sessionID}</text>
+                </Show>
                 <Show when={session()!.workspaceID}>
                   <text fg={theme.textMuted}>
                     <span style={{ fg: workspaceStatus() === "connected" ? theme.success : theme.error }}>●</span>{" "}
