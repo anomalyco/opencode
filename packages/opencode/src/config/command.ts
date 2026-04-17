@@ -6,9 +6,9 @@ import { NamedError } from "@opencode-ai/shared/util/error"
 import { Glob } from "@opencode-ai/shared/util/glob"
 import { Bus } from "@/bus"
 import { configEntryNameFromPath } from "./entry-name"
+import { InvalidError } from "./error"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
-import { InvalidError } from "./paths"
 
 const log = Log.create({ service: "config" })
 

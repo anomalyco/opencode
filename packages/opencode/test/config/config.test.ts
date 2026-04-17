@@ -2,11 +2,13 @@ import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config, ConfigManaged } from "../../src/config"
+import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
-import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
+import { Account } from "../../src/account/account"
+import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -136,6 +138,42 @@ test("loads JSON config file", async () => {
       const config = await load()
       expect(config.model).toBe("test/model")
       expect(config.username).toBe("testuser")
+    },
+  })
+})
+
+test("loads formatter boolean config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        formatter: true,
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.formatter).toBe(true)
+    },
+  })
+})
+
+test("loads lsp boolean config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        lsp: true,
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.lsp).toBe(true)
     },
   })
 })
@@ -756,7 +794,7 @@ test("updates config and writes to file", async () => {
       const newConfig = { model: "updated/model" }
       await save(newConfig as any)
 
-      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
+      const writtenConfig = await Filesystem.readJson<{ model: string }>(path.join(tmp.path, "config.json"))
       expect(writtenConfig.model).toBe("updated/model")
     },
   })
@@ -2211,17 +2249,23 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 // parseManagedPlist unit tests — pure function, no OS interaction
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
-  const config = await ConfigManaged.parseManagedPlist(
-    JSON.stringify({
-      PayloadDisplayName: "OpenCode Managed",
-      PayloadIdentifier: "ai.opencode.managed.test",
-      PayloadType: "ai.opencode.managed",
-      PayloadUUID: "AAAA-BBBB-CCCC",
-      PayloadVersion: 1,
-      _manualProfile: true,
-      share: "disabled",
-      model: "mdm/model",
-    }),
+  const config = ConfigParse.schema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          PayloadDisplayName: "OpenCode Managed",
+          PayloadIdentifier: "ai.opencode.managed.test",
+          PayloadType: "ai.opencode.managed",
+          PayloadUUID: "AAAA-BBBB-CCCC",
+          PayloadVersion: 1,
+          _manualProfile: true,
+          share: "disabled",
+          model: "mdm/model",
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.share).toBe("disabled")
@@ -2233,12 +2277,18 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 })
 
 test("parseManagedPlist parses server settings", async () => {
-  const config = await ConfigManaged.parseManagedPlist(
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      server: { hostname: "127.0.0.1", mdns: false },
-      autoupdate: true,
-    }),
+  const config = ConfigParse.schema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          server: { hostname: "127.0.0.1", mdns: false },
+          autoupdate: true,
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.server?.hostname).toBe("127.0.0.1")
@@ -2247,18 +2297,24 @@ test("parseManagedPlist parses server settings", async () => {
 })
 
 test("parseManagedPlist parses permission rules", async () => {
-  const config = await ConfigManaged.parseManagedPlist(
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      permission: {
-        "*": "ask",
-        bash: { "*": "ask", "rm -rf *": "deny", "curl *": "deny" },
-        grep: "allow",
-        glob: "allow",
-        webfetch: "ask",
-        "~/.ssh/*": "deny",
-      },
-    }),
+  const config = ConfigParse.schema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            "*": "ask",
+            bash: { "*": "ask", "rm -rf *": "deny", "curl *": "deny" },
+            grep: "allow",
+            glob: "allow",
+            webfetch: "ask",
+            "~/.ssh/*": "deny",
+          },
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.permission?.["*"]).toBe("ask")
@@ -2271,19 +2327,29 @@ test("parseManagedPlist parses permission rules", async () => {
 })
 
 test("parseManagedPlist parses enabled_providers", async () => {
-  const config = await ConfigManaged.parseManagedPlist(
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      enabled_providers: ["anthropic", "google"],
-    }),
+  const config = ConfigParse.schema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_providers: ["anthropic", "google"],
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.enabled_providers).toEqual(["anthropic", "google"])
 })
 
 test("parseManagedPlist handles empty config", async () => {
-  const config = await ConfigManaged.parseManagedPlist(
-    JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+  const config = ConfigParse.schema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
