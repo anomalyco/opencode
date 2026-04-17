@@ -12,6 +12,7 @@ import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
 import { ConfigApi, configHandlers } from "./config"
 import { PermissionApi, permissionHandlers } from "./permission"
+import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
 
@@ -108,11 +109,13 @@ const instance = HttpRouter.middleware()(
 
 const QuestionSecured = QuestionApi.middleware(Authorization)
 const PermissionSecured = PermissionApi.middleware(Authorization)
+const ProjectSecured = ProjectApi.middleware(Authorization)
 const ProviderSecured = ProviderApi.middleware(Authorization)
 const ConfigSecured = ConfigApi.middleware(Authorization)
 
 export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(ConfigSecured).pipe(Layer.provide(configHandlers)),
+  HttpApiBuilder.layer(ProjectSecured).pipe(Layer.provide(projectHandlers)),
   HttpApiBuilder.layer(QuestionSecured).pipe(Layer.provide(questionHandlers)),
   HttpApiBuilder.layer(PermissionSecured).pipe(Layer.provide(permissionHandlers)),
   HttpApiBuilder.layer(ProviderSecured).pipe(Layer.provide(providerHandlers)),

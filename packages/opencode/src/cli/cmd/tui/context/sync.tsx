@@ -27,7 +27,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, createEffect, on } from "solid-js"
+import { batch, onMount } from "solid-js"
 import { Log } from "@/util"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 
@@ -107,6 +107,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
+
+    const fullSyncedSessions = new Set<string>()
+    let syncedWorkspace = project.workspace.current()
 
     event.subscribe((event) => {
       switch (event.type) {
@@ -350,9 +353,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const exit = useExit()
     const args = useArgs()
 
-    async function bootstrap() {
-      console.log("bootstrapping")
+    async function bootstrap(input: { fatal?: boolean } = {}) {
+      const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
+      if (workspace !== syncedWorkspace) {
+        fullSyncedSessions.clear()
+        syncedWorkspace = workspace
+      }
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
@@ -441,20 +448,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             name: e instanceof Error ? e.name : undefined,
             stack: e instanceof Error ? e.stack : undefined,
           })
-          await exit(e)
+          if (fatal) {
+            await exit(e)
+          } else {
+            throw e
+          }
         })
     }
 
-    const fullSyncedSessions = new Set<string>()
-    createEffect(
-      on(
-        () => project.workspace.current(),
-        () => {
-          fullSyncedSessions.clear()
-          void bootstrap()
-        },
-      ),
-    )
+    onMount(() => {
+      void bootstrap()
+    })
 
     const result = {
       data: store,

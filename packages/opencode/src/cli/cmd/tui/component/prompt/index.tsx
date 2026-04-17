@@ -12,7 +12,7 @@ import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { MessageID, PartID } from "@/session/schema"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
@@ -74,6 +74,8 @@ function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
 }
+
+let stashed: { prompt: PromptInfo; cursor: number } | undefined
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -433,7 +435,22 @@ export function Prompt(props: PromptProps) {
     },
   }
 
+  onMount(() => {
+    const saved = stashed
+    stashed = undefined
+    if (store.prompt.input) return
+    if (saved && saved.prompt.input) {
+      input.setText(saved.prompt.input)
+      setStore("prompt", saved.prompt)
+      restoreExtmarksFromParts(saved.prompt.parts)
+      input.cursorOffset = saved.cursor
+    }
+  })
+
   onCleanup(() => {
+    if (store.prompt.input) {
+      stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
+    }
     props.ref?.(undefined)
   })
 

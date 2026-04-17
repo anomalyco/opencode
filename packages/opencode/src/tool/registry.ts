@@ -39,7 +39,6 @@ import { InstanceState } from "@/effect"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "../lsp"
-import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "../bus"
@@ -80,7 +79,6 @@ export const layer: Layer.Layer<
   | Session.Service
   | Provider.Service
   | LSP.Service
-  | FileTime.Service
   | Instruction.Service
   | AppFileSystem.Service
   | Bus.Service
@@ -329,7 +327,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(LSP.defaultLayer),
-    Layer.provide(FileTime.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),

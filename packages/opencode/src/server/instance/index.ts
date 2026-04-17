@@ -30,14 +30,7 @@ import { WorkspaceRouterMiddleware } from "./middleware"
 import { AppRuntime } from "@/effect/app-runtime"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
-  const app = new Hono()
-    .use(WorkspaceRouterMiddleware(upgrade))
-    .route("/project", ProjectRoutes())
-    .route("/pty", PtyRoutes(upgrade))
-    .route("/config", ConfigRoutes())
-    .route("/experimental", ExperimentalRoutes())
-    .route("/session", SessionRoutes())
-    .route("/permission", PermissionRoutes())
+  const app = new Hono().use(WorkspaceRouterMiddleware(upgrade))
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
     const handler = ExperimentalHttpApiServer.webHandler().handler
@@ -52,9 +45,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get("/provider/auth", (c) => handler(c.req.raw, context))
     app.post("/provider/:providerID/oauth/authorize", (c) => handler(c.req.raw, context))
     app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
+    app.get("/project", (c) => handler(c.req.raw, context))
+    app.get("/project/current", (c) => handler(c.req.raw, context))
   }
 
   return app
+    .route("/project", ProjectRoutes())
+    .route("/pty", PtyRoutes(upgrade))
+    .route("/config", ConfigRoutes())
+    .route("/experimental", ExperimentalRoutes())
+    .route("/session", SessionRoutes())
+    .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
     .route("/sync", SyncRoutes())

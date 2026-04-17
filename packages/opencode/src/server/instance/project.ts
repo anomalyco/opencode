@@ -23,7 +23,7 @@ export const ProjectRoutes = lazy(() =>
             description: "List of projects",
             content: {
               "application/json": {
-                schema: resolver(Project.Info.array()),
+                schema: resolver(Project.Info.zod.array()),
               },
             },
           },
@@ -45,7 +45,7 @@ export const ProjectRoutes = lazy(() =>
             description: "Current project information",
             content: {
               "application/json": {
-                schema: resolver(Project.Info),
+                schema: resolver(Project.Info.zod),
               },
             },
           },
@@ -66,7 +66,7 @@ export const ProjectRoutes = lazy(() =>
             description: "Project information after git initialization",
             content: {
               "application/json": {
-                schema: resolver(Project.Info),
+                schema: resolver(Project.Info.zod),
               },
             },
           },
@@ -99,7 +99,7 @@ export const ProjectRoutes = lazy(() =>
             description: "Updated project information",
             content: {
               "application/json": {
-                schema: resolver(Project.Info),
+                schema: resolver(Project.Info.zod),
               },
             },
           },

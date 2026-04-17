@@ -1,16 +1,16 @@
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../component/prompt/history"
 
 export type HomeRoute = {
   type: "home"
-  initialPrompt?: PromptInfo
+  prompt?: PromptInfo
 }
 
 export type SessionRoute = {
   type: "session"
   sessionID: string
-  initialPrompt?: PromptInfo
+  prompt?: PromptInfo
 }
 
 export type PluginRoute = {
@@ -37,7 +37,7 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
         return store
       },
       navigate(route: Route) {
-        setStore(route)
+        setStore(reconcile(route))
       },
     }
   },
