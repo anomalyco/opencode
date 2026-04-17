@@ -25,13 +25,7 @@ export const ProviderRoutes = lazy(() =>
             description: "List of providers",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    all: Provider.Info.array(),
-                    default: z.record(z.string(), z.string()),
-                    connected: z.array(z.string()),
-                  }),
-                ),
+                schema: resolver(Provider.ListResult.zod),
               },
             },
           },
@@ -59,7 +53,7 @@ export const ProviderRoutes = lazy(() =>
             )
             return {
               all: Object.values(providers),
-              default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+              default: Provider.defaultModelIDs(providers),
               connected: Object.keys(connected),
             }
           }),
@@ -116,13 +110,7 @@ export const ProviderRoutes = lazy(() =>
           providerID: ProviderID.zod.meta({ description: "Provider ID" }),
         }),
       ),
-      validator(
-        "json",
-        z.object({
-          method: z.number().meta({ description: "Auth method index" }),
-          inputs: z.record(z.string(), z.string()).optional().meta({ description: "Prompt inputs" }),
-        }),
-      ),
+      validator("json", ProviderAuth.AuthorizeInput.zod),
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, inputs } = c.req.valid("json")
@@ -162,13 +150,7 @@ export const ProviderRoutes = lazy(() =>
           providerID: ProviderID.zod.meta({ description: "Provider ID" }),
         }),
       ),
-      validator(
-        "json",
-        z.object({
-          method: z.number().meta({ description: "Auth method index" }),
-          code: z.string().optional().meta({ description: "OAuth authorization code" }),
-        }),
-      ),
+      validator("json", ProviderAuth.CallbackInput.zod),
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, code } = c.req.valid("json")
