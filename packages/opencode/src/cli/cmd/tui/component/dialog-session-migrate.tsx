@@ -1,7 +1,7 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { createResource, createMemo, createSignal, onMount } from "solid-js"
-import { Locale, Keybind } from "@/util"
+import { createResource, createMemo, createSignal, onMount, Show } from "solid-js"
+import { Locale } from "@/util"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { useKeybind } from "../context/keybind"
@@ -46,36 +46,39 @@ export function DialogSessionMigrate() {
   })
 
   return (
-    <DialogSelect
-      title="Migrate Session"
-      placeholder="Search sessions"
-      options={options()}
-      onSelect={(option) => {
-        const session = data()?.sessions.find((x) => x.id === option.value)
-        if (!session) return
-        dialog.replace(() => <DialogSessionRescue session={session} onDone={refetch} />)
-      }}
-      keybind={[
-        {
-          keybind: keybind.all.session_delete?.[0],
-          title: "delete",
-          onTrigger: async (option) => {
-            if (toDelete() === option.value) {
-              await sdk.client.session.delete({ sessionID: option.value })
-              setToDelete(undefined)
-              await refetch()
-              return
-            }
-            setToDelete(option.value)
+    <box>
+      <DialogSelect
+        title="Migrate Session"
+        placeholder="Search sessions"
+        options={options()}
+        onSelect={(option) => {
+          const session = data()?.sessions.find((x) => x.id === option.value)
+          if (!session) return
+          dialog.replace(() => <DialogSessionRescue session={session} onDone={refetch} />)
+        }}
+        keybind={[
+          {
+            keybind: keybind.all.session_delete?.[0],
+            title: "delete",
+            onTrigger: async (option) => {
+              if (toDelete() === option.value) {
+                await sdk.client.session.delete({ sessionID: option.value })
+                setToDelete(undefined)
+                await refetch()
+                return
+              }
+              setToDelete(option.value)
+            },
           },
-        },
-        {
-          keybind: Keybind.parse("!")[0],
-          title: "orphan",
-          side: "right",
-          onTrigger: () => {},
-        },
-      ]}
-    />
+        ]}
+      />
+      <Show when={data()?.orphans.size}>
+        <box paddingLeft={4} paddingRight={4} paddingBottom={1}>
+          <text fg={theme.textMuted}>
+            NOTE: <span style={{ fg: theme.warning }}>!</span> means the session is orphan
+          </text>
+        </box>
+      </Show>
+    </box>
   )
 }
