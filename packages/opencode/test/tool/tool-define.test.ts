@@ -1,13 +1,12 @@
 import { describe, test, expect } from "bun:test"
-import { Effect, Layer, ManagedRuntime } from "effect"
-import z from "zod"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Tool } from "../../src/tool"
 import { Truncate } from "../../src/tool"
 
 const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
 
-const params = z.object({ input: z.string() })
+const params = Schema.Struct({ input: Schema.String })
 
 function makeTool(id: string, executeFn?: () => void) {
   return {

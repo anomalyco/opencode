@@ -1,6 +1,5 @@
-import z from "zod"
 import * as path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
@@ -15,8 +14,8 @@ import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
 
-export const Parameters = z.object({
-  patchText: z.string().describe("The full patch text that describes all changes to be made"),
+export const Parameters = Schema.Struct({
+  patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
 })
 
 export const ApplyPatchTool = Tool.define(
@@ -27,7 +26,7 @@ export const ApplyPatchTool = Tool.define(
     const format = yield* Format.Service
     const bus = yield* Bus.Service
 
-    const run = Effect.fn("ApplyPatchTool.execute")(function* (params: z.infer<typeof Parameters>, ctx: Tool.Context) {
+    const run = Effect.fn("ApplyPatchTool.execute")(function* (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) {
       if (!params.patchText) {
         return yield* Effect.fail(new Error("patchText is required"))
       }
@@ -288,7 +287,7 @@ export const ApplyPatchTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

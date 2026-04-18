@@ -1,23 +1,26 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { EditTool } from "./edit"
 import DESCRIPTION from "./multiedit.txt"
 import path from "path"
 import { Instance } from "../project/instance"
 
-export const Parameters = z.object({
-  filePath: z.string().describe("The absolute path to the file to modify"),
-  edits: z
-    .array(
-      z.object({
-        filePath: z.string().describe("The absolute path to the file to modify"),
-        oldString: z.string().describe("The text to replace"),
-        newString: z.string().describe("The text to replace it with (must be different from oldString)"),
-        replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+export const Parameters = Schema.Struct({
+  filePath: Schema.String.annotate({ description: "The absolute path to the file to modify" }),
+  edits: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        filePath: Schema.String.annotate({ description: "The absolute path to the file to modify" }),
+        oldString: Schema.String.annotate({ description: "The text to replace" }),
+        newString: Schema.String.annotate({
+          description: "The text to replace it with (must be different from oldString)",
+        }),
+        replaceAll: Schema.optional(Schema.Boolean).annotate({
+          description: "Replace all occurrences of oldString (default false)",
+        }),
       }),
-    )
-    .describe("Array of edit operations to perform sequentially on the file"),
+    ),
+  ).annotate({ description: "Array of edit operations to perform sequentially on the file" }),
 })
 
 export const MultiEditTool = Tool.define(

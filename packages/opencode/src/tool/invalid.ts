@@ -1,10 +1,9 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 
-export const Parameters = z.object({
-  tool: z.string(),
-  error: z.string(),
+export const Parameters = Schema.Struct({
+  tool: Schema.String,
+  error: Schema.String,
 })
 
 export const InvalidTool = Tool.define(

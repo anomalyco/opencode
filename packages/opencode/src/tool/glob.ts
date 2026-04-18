@@ -1,6 +1,5 @@
 import path from "path"
-import z from "zod"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -9,14 +8,11 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
 
-export const Parameters = z.object({
-  pattern: z.string().describe("The glob pattern to match files against"),
-  path: z
-    .string()
-    .optional()
-    .describe(
-      `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
-    ),
+export const Parameters = Schema.Struct({
+  pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
+  path: Schema.optional(Schema.String).annotate({
+    description: `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
+  }),
 })
 
 export const GlobTool = Tool.define(

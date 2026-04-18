@@ -1,6 +1,5 @@
-import z from "zod"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"
@@ -17,7 +16,7 @@ function getLastModel(sessionID: SessionID) {
   return undefined
 }
 
-export const Parameters = z.object({})
+export const Parameters = Schema.Struct({})
 
 export const PlanExitTool = Tool.define(
   "plan_exit",

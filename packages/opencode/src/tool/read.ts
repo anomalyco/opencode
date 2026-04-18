@@ -1,5 +1,4 @@
-import z from "zod"
-import { Effect, Scope } from "effect"
+import { Effect, Schema, Scope } from "effect"
 import { createReadStream } from "fs"
 import { open } from "fs/promises"
 import * as path from "path"
@@ -18,10 +17,19 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
-export const Parameters = z.object({
-  filePath: z.string().describe("The absolute path to the file or directory to read"),
-  offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
-  limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
+// `offset` and `limit` were originally `z.coerce.number()` — the runtime
+// coercion was useful when the tool was called from a shell but serves no
+// purpose in the LLM tool-call path (the model emits typed JSON). The JSON
+// Schema output is identical (`type: "number"`), so the LLM view is
+// unchanged; purely CLI-facing uses must now send numbers rather than strings.
+export const Parameters = Schema.Struct({
+  filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
+  offset: Schema.optional(Schema.Number).annotate({
+    description: "The line number to start reading from (1-indexed)",
+  }),
+  limit: Schema.optional(Schema.Number).annotate({
+    description: "The maximum number of lines to read (defaults to 2000)",
+  }),
 })
 
 export const ReadTool = Tool.define(
@@ -77,7 +85,7 @@ export const ReadTool = Tool.define(
       yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
     })
 
-    const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof Parameters>, ctx: Tool.Context) {
+    const run = Effect.fn("ReadTool.execute")(function* (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) {
       if (params.offset !== undefined && params.offset < 1) {
         return yield* Effect.fail(new Error("offset must be greater than or equal to 1"))
       }
@@ -213,7 +221,7 @@ export const ReadTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

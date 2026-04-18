@@ -1,4 +1,4 @@
-import z from "zod"
+import { Schema } from "effect"
 import * as path from "path"
 import { Effect } from "effect"
 import * as Tool from "./tool"
@@ -16,9 +16,11 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
-export const Parameters = z.object({
-  content: z.string().describe("The content to write to the file"),
-  filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
+export const Parameters = Schema.Struct({
+  content: Schema.String.annotate({ description: "The content to write to the file" }),
+  filePath: Schema.String.annotate({
+    description: "The absolute path to the file to write (must be absolute, not relative)",
+  }),
 })
 
 export const WriteTool = Tool.define(

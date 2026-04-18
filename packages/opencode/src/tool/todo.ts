@@ -1,11 +1,19 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
 
-export const Parameters = z.object({
-  todos: z.array(z.object(Todo.Info.shape)).describe("The updated todo list"),
+// Todo.Info is still a zod schema (session/todo.ts). Inline the field shape
+// here rather than referencing its `.shape` — the LLM-visible JSON Schema is
+// identical, and it removes the last zod dependency from this tool.
+const TodoItem = Schema.Struct({
+  content: Schema.String.annotate({ description: "Brief description of the task" }),
+  status: Schema.String.annotate({ description: "Current status of the task: pending, in_progress, completed, cancelled" }),
+  priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
+})
+
+export const Parameters = Schema.Struct({
+  todos: Schema.mutable(Schema.Array(TodoItem)).annotate({ description: "The updated todo list" }),
 })
 
 type Metadata = {
@@ -20,7 +28,7 @@ export const TodoWriteTool = Tool.define<typeof Parameters, Metadata, Todo.Servi
     return {
       description: DESCRIPTION_WRITE,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           yield* ctx.ask({
             permission: "todowrite",

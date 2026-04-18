@@ -1,4 +1,4 @@
-import z from "zod"
+import { Schema } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -50,20 +50,16 @@ const FILES = new Set([
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
-export const Parameters = z.object({
-  command: z.string().describe("The command to execute"),
-  timeout: z.number().describe("Optional timeout in milliseconds").optional(),
-  workdir: z
-    .string()
-    .describe(
-      `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
-    )
-    .optional(),
-  description: z
-    .string()
-    .describe(
+export const Parameters = Schema.Struct({
+  command: Schema.String.annotate({ description: "The command to execute" }),
+  timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in milliseconds" }),
+  workdir: Schema.optional(Schema.String).annotate({
+    description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
+  }),
+  description: Schema.String.annotate({
+    description:
       "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-    ),
+  }),
 })
 
 type Part = {
@@ -587,7 +583,7 @@ export const BashTool = Tool.define(
             .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
             .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
           parameters: Parameters,
-          execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+          execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
               const cwd = params.workdir
                 ? yield* resolvePath(params.workdir, Instance.directory, shell)
