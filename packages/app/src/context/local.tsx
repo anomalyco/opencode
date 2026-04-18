@@ -147,6 +147,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       if (validModel(model)) return model
     }
 
+    createEffect(() => {
+      const cfg = configuredModel()
+      if (cfg) models.setVisibility(cfg, true)
+    })
+
     const recentModel = () => {
       for (const item of models.recent.list()) {
         if (validModel(item)) return item
@@ -170,6 +175,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const fallback = createMemo<ModelKey | undefined>(() => configuredModel() ?? recentModel() ?? defaultModel())
+
+    createEffect(() => {
+      const model = fallback()
+      if (model) models.setVisibility(model, true)
+    })
 
     const agent = {
       list,
