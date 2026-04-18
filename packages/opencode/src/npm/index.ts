@@ -150,13 +150,17 @@ export const layer = Layer.effect(
       if (!canWrite) return
 
       const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
-      yield* Effect.gen(function* () {
-        const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
-        if (!nodeModulesExists) {
-          yield* reify({ add, dir })
-          return
-        }
-      }).pipe(Effect.withSpan("Npm.checkNodeModules"))
+      if (
+        yield* Effect.gen(function* () {
+          const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
+          if (!nodeModulesExists) {
+            yield* reify({ add, dir })
+            return true
+          }
+          return false
+        }).pipe(Effect.withSpan("Npm.checkNodeModules"))
+      )
+        return
 
       yield* Effect.gen(function* () {
         const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))

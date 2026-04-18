@@ -104,6 +104,24 @@ export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Sessio
   text: Schema.String,
 }) {}
 
+export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Entry.Assistant.Retry")({
+  attempt: Schema.Number,
+  error: SessionEvent.RetryError,
+  time: Schema.Struct({
+    created: Schema.DateTimeUtc,
+  }),
+}) {
+  static fromEvent(event: SessionEvent.Retried) {
+    return new AssistantRetry({
+      attempt: event.attempt,
+      error: event.error,
+      time: {
+        created: event.timestamp,
+      },
+    })
+  }
+}
+
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
   Schema.toTaggedUnion("type"),
 )
@@ -113,6 +131,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
   ...Base,
   type: Schema.Literal("assistant"),
   content: AssistantContent.pipe(Schema.Array),
+  retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
   cost: Schema.Number.pipe(Schema.optional),
   tokens: Schema.Struct({
     input: Schema.Number,
@@ -137,6 +156,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
         created: event.timestamp,
       },
       content: [],
+      retries: [],
     })
   }
 }
