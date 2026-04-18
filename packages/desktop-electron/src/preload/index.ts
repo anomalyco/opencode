@@ -5,10 +5,16 @@ const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: (onStep) => {
-    const handler = (_: unknown, step: InitStep) => onStep(step)
+    const handler = (_: unknown, step: InitStep) => {
+      onStep(step)
+      if (step.phase === "done") {
+        ipcRenderer.removeListener("init-step", handler)
+      }
+    }
     ipcRenderer.on("init-step", handler)
-    return ipcRenderer.invoke("await-initialization").finally(() => {
+    return ipcRenderer.invoke("await-initialization").catch((error) => {
       ipcRenderer.removeListener("init-step", handler)
+      throw error
     })
   },
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
