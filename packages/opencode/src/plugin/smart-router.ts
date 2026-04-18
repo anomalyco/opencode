@@ -22,18 +22,15 @@ const log = Log.create({ service: "smart_router_plugin" })
 
 // Hook implementations
 export const smartRouterHooks: Hooks = {
-  "chat.params": async (input, output) => {
+  "chat.params": async (_input, _output) => {
     // All smart routing is handled by hermes-agent
-    // OpenCode just passes through
-    return output
+    // OpenCode just passes through - no modification needed
   },
 
-  "chat.headers": async (input, output) => {
+  "chat.headers": async (_input, output) => {
     // Signal that requests should use hermes's smart routing
-    return {
-      ...output,
-      "x-smart-routing": "hermes",  // Tell hermes to handle routing
-    }
+    // Modify output.headers in place
+    output.headers["x-smart-routing"] = "hermes"
   },
 }
 

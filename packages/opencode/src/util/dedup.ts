@@ -456,7 +456,7 @@ export namespace SmartRouter {
   export interface RoutingResult {
     model: string
     provider: string
-    complexity: "simple" | "moderate" | "complex"
+    complexity: "simple" | "moderate" | "complex" | "unknown"
     confidence: number
     reason: string
     costEstimate: number
