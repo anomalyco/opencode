@@ -11,6 +11,7 @@ import ignore from "ignore"
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
+import { Instance } from "../project/instance"
 import { Log } from "../util"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
@@ -512,7 +513,7 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const full = path.join(ctx.directory, file)
 
-      if (!AppFileSystem.contains(ctx.directory, full) && (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, full))) {
+      if (!Instance.containsPath(full, ctx)) {
         throw new Error("Access denied: path escapes project directory")
       }
 
@@ -592,10 +593,7 @@ export const layer = Layer.effect(
       }
 
       const resolved = dir ? path.join(ctx.directory, dir) : ctx.directory
-      if (
-        !AppFileSystem.contains(ctx.directory, resolved) &&
-        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, resolved))
-      ) {
+      if (!Instance.containsPath(resolved, ctx)) {
         throw new Error("Access denied: path escapes project directory")
       }
 
