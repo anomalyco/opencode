@@ -76,6 +76,7 @@ export function createMenu(deps: Deps) {
         { label: "Toggle Sidebar", accelerator: "Cmd+B", click: () => deps.trigger("sidebar.toggle") },
         { label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => deps.trigger("terminal.toggle") },
         { label: "Toggle File Tree", click: () => deps.trigger("fileTree.toggle") },
+        { label: "Toggle Browser", click: () => deps.trigger("browser.toggle") },
         { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },

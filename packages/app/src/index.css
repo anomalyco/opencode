@@ -82,4 +82,50 @@
       opacity: 1;
     }
   }
+
+  [data-component="browser-panel"] [data-component="browser-tabs"] [data-component="tabs"][data-variant="alt"][data-scope="browser"] {
+    background-color: transparent;
+    overflow: visible;
+
+    [data-slot="tabs-list"] {
+      height: 40px;
+      padding-inline: 12px;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-weaker-base);
+      background-color: var(--background-stronger);
+
+      &::after {
+        border: none;
+        background-color: transparent;
+      }
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      max-width: 240px;
+      gap: 0;
+      color: var(--text-weak);
+      border-bottom-color: transparent;
+    }
+
+    [data-slot="tabs-trigger"] {
+      height: 100%;
+      padding: 0 2px 6px;
+      align-items: stretch;
+      justify-content: flex-start;
+      text-align: left;
+    }
+
+    [data-slot="tabs-trigger-wrapper"]:has([data-selected]) {
+      color: var(--text-strong);
+      border-bottom-color: var(--icon-strong-base);
+    }
+
+    [data-slot="tabs-trigger-wrapper"]:hover:not(:disabled):not(:has([data-selected])) {
+      color: var(--text-base);
+    }
+
+    [data-slot="tabs-trigger-wrapper"]:has([data-slot="tabs-trigger"]:focus-visible) {
+      border-bottom-color: var(--icon-base);
+    }
+  }
 }

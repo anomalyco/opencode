@@ -1,5 +1,6 @@
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Tabs } from "@opencode-ai/ui/tabs"
 import { For, Show, createEffect, createMemo, onCleanup } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -60,6 +61,7 @@ const text = (value: unknown) => (typeof value === "string" ? value : undefined)
 const bool = (value: unknown) => (typeof value === "boolean" ? value : undefined)
 const int = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : undefined)
 const host = (url: string) => (typeof URL !== "undefined" && URL.canParse(url) ? new URL(url).hostname : "")
+const site = (url: string) => host(url).replace(/^www\./, "")
 const http = (value: string) => value.startsWith("http://") || value.startsWith("https://")
 const name = (tab: Tab) => {
   const title = tab.title.trim()
@@ -93,6 +95,31 @@ const pick = (tabs: Tab[], view: { sessionID: string; index: number }, root?: st
 
 const same = (a: { sessionID: string; index: number }, b: { sessionID: string; index: number }) =>
   a.sessionID === b.sessionID && a.index === b.index
+const key = (tab: Tab) => `browser:${tab.sessionID}:${tab.index}`
+const fav = (url: string) => (http(url) && typeof URL !== "undefined" && URL.canParse(url) ? new URL("/favicon.ico", url).toString() : "")
+const meta = (tab: Tab) => {
+  const value = site(tab.url)
+  if (!value) return ""
+  return name(tab).trim().toLowerCase() === value.toLowerCase() ? "" : value
+}
+const glyph = (tab: Tab) => {
+  const value = site(tab.url) || name(tab)
+  const match = value.trim().match(/[a-z0-9]/i)?.[0]
+  if (match) return match.toUpperCase()
+  return "•"
+}
+const sessions = (tabs: Tab[], root?: string) => {
+  const out = tabs.reduce<string[]>((acc, tab) => (acc.includes(tab.sessionID) ? acc : [...acc, tab.sessionID]), [])
+  if (!root || !out.includes(root)) return out
+  return [root, ...out.filter((id) => id !== root)]
+}
+const mark = (ids: string[], tab: Tab, root?: string) => {
+  if (ids.length < 2) return ""
+  if (root && tab.sessionID === root) return "Main"
+  const at = ids.indexOf(tab.sessionID)
+  if (at === -1) return ""
+  return `S${at + 1}`
+}
 
 export function BrowserPanel(props: { size: Sizing }) {
   const layout = useLayout()
@@ -126,11 +153,18 @@ export function BrowserPanel(props: { size: Sizing }) {
   const tab = createMemo(() => pick(shown(), store.view, params.id) ?? pick(store.tabs, store.view, params.id))
   const on = createMemo(() => pick(shown(), store.view, params.id))
   const url = createMemo(() => on()?.url ?? "")
+  const cur = createMemo(() => {
+    const value = on()
+    if (!value) return
+    return key(value)
+  })
+  const ids = createMemo(() => sessions(shown(), params.id))
   const watch = createMemo(() => tab()?.sessionID || params.id)
   const side = createMemo(() => {
     const max = typeof window === "undefined" ? 960 : Math.floor(window.innerWidth * 0.7)
     return Math.min(width(), max)
   })
+  const live = createMemo(() => store.connected && store.screencasting)
 
   const auth = createMemo(() => {
     const info = server.current?.http
@@ -354,6 +388,7 @@ export function BrowserPanel(props: { size: Sizing }) {
   const choose = (tab: Tab) => {
     const root = params.id
     if (!root) return
+    if (same(store.view, { sessionID: tab.sessionID, index: tab.index })) return
     const width = box ? Math.max(320, Math.floor(box.clientWidth)) : undefined
     const height = box ? Math.max(240, Math.floor(box.clientHeight)) : undefined
     const scale = dpr()
@@ -525,11 +560,12 @@ export function BrowserPanel(props: { size: Sizing }) {
     <Show when={desktop()}>
       <aside
         id="browser-panel"
+        data-component="browser-panel"
         role="region"
         aria-label="Browser"
         aria-hidden={!opened()}
         inert={!opened()}
-        class="relative min-w-0 h-full shrink-0 overflow-hidden bg-background-base"
+        class="relative min-w-0 h-full shrink-0 overflow-hidden bg-background-stronger"
         classList={{
           "pointer-events-none": !opened(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
@@ -537,64 +573,123 @@ export function BrowserPanel(props: { size: Sizing }) {
         }}
         style={{ width: opened() ? `${side()}px` : "0px" }}
       >
-        <div class="size-full flex flex-col border-l border-border-weaker-base">
-          <div class="h-9 px-2 flex items-center gap-2 border-b border-border bg-surface-raised-base shrink-0">
-            <div class="shrink-0 px-1 flex items-center gap-2 text-12-medium text-text-strong">
+        <div class="size-full flex flex-col border-l border-border-weaker-base bg-background-stronger">
+          <div class="h-11 px-3 flex items-center gap-3 border-b border-border-weaker-base bg-background-stronger shrink-0">
+            <div class="shrink-0 flex items-center gap-2 text-12-medium text-text-strong">
               <Icon name="window-cursor" size="small" />
-              Browser
+              <span>Browser</span>
             </div>
-            <div class="flex-1 min-w-0 h-full overflow-x-auto">
+            <div class="min-w-0 flex-1">
+              <div class="h-8 flex items-center gap-2 rounded-lg border border-border-weak-base bg-background-base px-2.5">
+                <Icon name="link" size="small" class="text-icon-weak" />
+                <input
+                  value={url()}
+                  readOnly
+                  spellcheck={false}
+                  class="flex-1 min-w-0 border-0 bg-transparent p-0 text-12-regular text-text-weak outline-none placeholder:text-text-weaker"
+                  placeholder="No selected tab URL"
+                  title={url() || "No selected tab URL"}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              </div>
+            </div>
+            <div class="shrink-0 flex items-center gap-1.5 text-11-regular text-text-weak">
               <Show
-                when={shown().length > 0}
+                when={live()}
                 fallback={
-                  <div class="h-full flex items-center px-1 text-11-regular text-text-weak">
-                    No tabs
-                  </div>
+                  <Show
+                    when={store.loading && !store.error}
+                    fallback={
+                      <>
+                        <div class="size-1.5 rounded-full shrink-0 bg-icon-critical-base" />
+                        <span>Disconnected</span>
+                      </>
+                    }
+                  >
+                    <>
+                      <div class="size-1.5 rounded-full shrink-0 bg-icon-weak-base" />
+                      <span>Connecting</span>
+                    </>
+                  </Show>
                 }
               >
-                <div class="h-full flex items-center gap-1 min-w-max pr-2">
+                <>
+                  <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                  <span class="sr-only">Connected</span>
+                </>
+              </Show>
+            </div>
+          </div>
+          <Show
+            when={shown().length > 0}
+            fallback={
+              <div class="h-10 px-3 flex items-center border-b border-border-weaker-base bg-background-stronger text-11-regular text-text-weak shrink-0">
+                No tabs
+              </div>
+            }
+          >
+            <div data-component="browser-tabs" class="shrink-0">
+              <Tabs
+                variant="alt"
+                value={cur()}
+                class="!h-auto !flex-none !bg-transparent overflow-visible"
+                data-scope="browser"
+              >
+                <Tabs.List>
                   <For each={shown()}>
                     {(tab) => (
-                      <button
-                        type="button"
-                        class="h-7 px-2 rounded-md border text-11-regular min-w-0 max-w-[220px] transition-colors"
-                        classList={{
-                          "border-border-strong-base bg-surface-base text-text-strong":
-                            same(on() ?? { sessionID: "", index: -1 }, { sessionID: tab.sessionID, index: tab.index }),
-                          "border-border-base bg-surface-raised-base text-text-weak hover:text-text-strong hover:bg-surface-raised-base-hover":
-                            !same(on() ?? { sessionID: "", index: -1 }, { sessionID: tab.sessionID, index: tab.index }),
-                        }}
+                      <Tabs.Trigger
+                        value={key(tab)}
                         title={tab.url || tab.title || `Tab ${tab.index + 1}`}
                         onClick={() => choose(tab)}
+                        class="!shadow-none"
+                        classes={{
+                          button: "border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
+                        }}
                       >
-                        <span class="truncate">{name(tab)}</span>
-                      </button>
+                        <div class="flex items-center gap-2 min-w-0">
+                          <div class="relative size-4 shrink-0 rounded-[4px] border border-border-weak-base bg-surface-base overflow-hidden">
+                            <div class="absolute inset-0 flex items-center justify-center text-[9px] font-medium text-text-weaker">
+                              {glyph(tab)}
+                            </div>
+                            <Show when={fav(tab.url)}>
+                              {(src) => (
+                                <img
+                                  src={src()}
+                                  alt=""
+                                  class="absolute inset-0 size-full rounded-[4px] bg-background-base"
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(event) => {
+                                    event.currentTarget.style.display = "none"
+                                  }}
+                                />
+                              )}
+                            </Show>
+                          </div>
+                          <div class="min-w-0 flex flex-col items-start justify-center leading-none">
+                            <span class="max-w-full truncate text-12-medium">{name(tab)}</span>
+                            <div class="flex items-center gap-1 min-w-0 text-[10px] text-text-weaker">
+                              <Show when={meta(tab)}>
+                                {(value) => <span class="truncate max-w-[10rem]">{value()}</span>}
+                              </Show>
+                              <Show when={mark(ids(), tab, params.id)}>
+                                {(value) => (
+                                  <span class="shrink-0 px-1 py-px rounded-sm border border-border-weak-base bg-surface-base text-[9px] uppercase tracking-[0.04em] text-text-weaker">
+                                    {value()}
+                                  </span>
+                                )}
+                              </Show>
+                            </div>
+                          </div>
+                        </div>
+                      </Tabs.Trigger>
                     )}
                   </For>
-                </div>
-              </Show>
+                </Tabs.List>
+              </Tabs>
             </div>
-            <div class="shrink-0 px-1 text-11-regular text-text-weak">
-              <Show when={store.connected && store.screencasting} fallback={<span>Disconnected</span>}>
-                <span>Streaming</span>
-              </Show>
-              <Show when={store.width > 0 && store.height > 0}>
-                <span>{` · ${store.width}x${store.height}`}</span>
-              </Show>
-            </div>
-          </div>
-          <div class="h-9 px-2 flex items-center gap-2 border-b border-border bg-surface-base shrink-0">
-            <div class="shrink-0 px-1 text-11-regular text-text-weak">URL</div>
-            <input
-              value={url()}
-              readOnly
-              spellcheck={false}
-              class="h-7 flex-1 min-w-0 rounded-md border border-border-base bg-surface-raised-base px-2 text-11-regular text-text-strong outline-none"
-              placeholder="No selected tab URL"
-              title={url() || "No selected tab URL"}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </div>
+          </Show>
 
           <div ref={box} class="flex-1 min-h-0 bg-black relative overflow-hidden">
             <img
@@ -605,10 +700,12 @@ export function BrowserPanel(props: { size: Sizing }) {
               draggable={false}
             />
             <Show when={!store.width || !store.height}>
-              <div class="absolute inset-0 flex items-center justify-center text-text-weak text-12-regular bg-background-base">
-                <Show when={store.error} fallback={<span>{store.loading ? "Connecting browser stream..." : "No stream frame yet"}</span>}>
-                  <span>{store.error}</span>
-                </Show>
+              <div class="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_42%)]">
+                <div class="px-4 py-3 rounded-xl border border-border-weak-base bg-background-stronger text-12-regular text-text-weak shadow-sm">
+                  <Show when={store.error} fallback={<span>{store.loading ? "Connecting browser stream..." : "No stream frame yet"}</span>}>
+                    <span>{store.error}</span>
+                  </Show>
+                </div>
               </div>
             </Show>
           </div>
