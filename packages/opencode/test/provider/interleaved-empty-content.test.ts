@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ProviderTransform } from "../../src/provider/transform"
+import * as ProviderTransform from "../../src/provider/transform"
 
 // Model with interleaved reasoning (object form with field property)
 const interleavedBedrockModel = {
