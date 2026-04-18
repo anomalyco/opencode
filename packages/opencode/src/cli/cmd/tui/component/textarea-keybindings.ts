@@ -65,8 +65,11 @@ export function useTextareaKeybindings() {
     const keybinds = keybind.all
 
     return [
+      // NEWLINE before SUBMIT - critical order!
+      { name: "return", shift: true, action: "newline" },
+      { name: "return", ctrl: true, action: "newline" },
+      // Only plain Return submits
       { name: "return", action: "submit" },
-      { name: "return", meta: true, action: "newline" },
       ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
     ] satisfies KeyBinding[]
   })

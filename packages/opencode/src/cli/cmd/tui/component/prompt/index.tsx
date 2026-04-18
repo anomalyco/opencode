@@ -946,8 +946,33 @@ export function Prompt(props: PromptProps) {
                   } catch {}
                   // No content in clipboard - let it pass through for normal paste handling
                 }
-                // Block other meta/ctrl combos (not Cmd+V) to prevent accidental exit
-                if (e.meta || e.ctrl) {
+                // Handle Ctrl+J for newline (also mapped in config)
+                if (e.ctrl && e.name === "j") {
+                  if (input) {
+                    input.insertText("\n")
+                    e.preventDefault()
+                    return
+                  }
+                }
+
+                // Handle Shift+Return, Ctrl+Return, Ctrl+J for newline - insert into prompt store
+                const isNewline = (e.shift || e.ctrl) && (e.name === "return" || e.name === "j")
+                if (isNewline) {
+                  // Get current text and add newline
+                  const currentText = input?.plainText ?? ""
+                  const cursorPos = input?.cursorOffset ?? currentText.length
+                  const before = currentText.substring(0, cursorPos)
+                  const after = currentText.substring(cursorPos)
+                  const newText = before + "\n" + after
+                  // Update the input
+                  input?.setText(newText)
+                  // Move cursor after the newline
+                  input.cursorOffset = cursorPos + 1
+                  e.preventDefault()
+                  return
+                }
+                // Block meta (Cmd) combos to prevent accidental exit
+                if (e.meta) {
                   e.preventDefault()
                   return
                 }
