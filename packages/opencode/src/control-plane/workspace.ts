@@ -7,7 +7,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
 import { SyncEvent } from "@/sync"
-import { EventTable } from "@/sync/event.sql"
+import { EventSequenceTable, EventTable } from "@/sync/event.sql"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util"
 import { Filesystem } from "@/util"
@@ -23,8 +23,8 @@ import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { errorData } from "@/util/error"
 import { AppRuntime } from "@/effect/app-runtime"
-import { EventSequenceTable } from "@/sync/event.sql"
 import { waitEvent } from "./util"
+import { WorkspaceContext } from "./workspace-context"
 
 export const Info = WorkspaceInfo.meta({
   ref: "Workspace",
@@ -115,6 +115,9 @@ export const create = fn(CreateInput, async (input) => {
     OPENCODE_AUTH_CONTENT: JSON.stringify(await AppRuntime.runPromise(Auth.Service.use((auth) => auth.all()))),
     OPENCODE_WORKSPACE_ID: config.id,
     OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
+    OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
   }
   await adaptor.create(config, env)
 
@@ -297,22 +300,13 @@ export function list(project: Project.Info) {
     db.select().from(WorkspaceTable).where(eq(WorkspaceTable.project_id, project.id)).all(),
   )
   const spaces = rows.map(fromRow).sort((a, b) => a.id.localeCompare(b.id))
-
-  for (const space of spaces) startSync(space)
   return spaces
 }
 
-function lookup(id: WorkspaceID) {
+export const get = fn(WorkspaceID.zod, async (id) => {
   const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
   if (!row) return
   return fromRow(row)
-}
-
-export const get = fn(WorkspaceID.zod, async (id) => {
-  const space = lookup(id)
-  if (!space) return
-  startSync(space)
-  return space
 })
 
 export const remove = fn(WorkspaceID.zod, async (id) => {
@@ -437,6 +431,70 @@ async function connectSSE(url: URL | string, headers: HeadersInit | undefined, s
   return res.body
 }
 
+async function syncHistory(space: Info, url: URL | string, headers: HeadersInit | undefined, signal: AbortSignal) {
+  const sessionIDs = Database.use((db) =>
+    db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(eq(SessionTable.workspace_id, space.id))
+      .all()
+      .map((row) => row.id),
+  )
+  const state = sessionIDs.length
+    ? Object.fromEntries(
+        Database.use((db) =>
+          db.select().from(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, sessionIDs)).all(),
+        ).map((row) => [row.aggregate_id, row.seq]),
+      )
+    : {}
+
+  log.info("syncing workspace history", {
+    workspaceID: space.id,
+    sessions: sessionIDs.length,
+    known: Object.keys(state).length,
+  })
+
+  const requestHeaders = new Headers(headers)
+  requestHeaders.set("content-type", "application/json")
+
+  const res = await fetch(route(url, "/sync/history"), {
+    method: "POST",
+    headers: requestHeaders,
+    body: JSON.stringify(state),
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Workspace history HTTP failure: ${res.status} ${body}`)
+  }
+
+  const events = await res.json()
+
+  return WorkspaceContext.provide({
+    workspaceID: space.id,
+    fn: () => {
+      for (const event of events) {
+        SyncEvent.replay(
+          {
+            id: event.id,
+            aggregateID: event.aggregate_id,
+            seq: event.seq,
+            type: event.type,
+            data: event.data,
+          },
+          { publish: true },
+        )
+      }
+    },
+  })
+
+  log.info("workspace history synced", {
+    workspaceID: space.id,
+    events: events.length,
+  })
+}
+
 async function syncWorkspaceLoop(space: Info, signal: AbortSignal) {
   const adaptor = await getAdaptor(space.projectID, space.type)
   const target = await adaptor.target(space)
@@ -452,7 +510,9 @@ async function syncWorkspaceLoop(space: Info, signal: AbortSignal) {
     let stream
     try {
       stream = await connectSSE(target.url, target.headers, signal)
+      await syncHistory(space, target.url, target.headers, signal)
     } catch (err) {
+      stream = null
       setStatus(space.id, "error")
       log.info("failed to connect to global sync", {
         workspace: space.name,
@@ -469,6 +529,7 @@ async function syncWorkspaceLoop(space: Info, signal: AbortSignal) {
       await parseSSE(stream, signal, (evt: any) => {
         try {
           if (!("payload" in evt)) return
+          if (evt.payload.type === "server.heartbeat") return
 
           if (evt.payload.type === "sync") {
             SyncEvent.replay(evt.payload.syncEvent as SyncEvent.SerializedEvent)
@@ -534,6 +595,21 @@ function stopSync(id: WorkspaceID) {
   aborts.get(id)?.abort()
   aborts.delete(id)
   connections.delete(id)
+}
+
+export function startWorkspaceSyncing(projectID: ProjectID) {
+  const spaces = Database.use((db) =>
+    db
+      .select({ workspace: WorkspaceTable })
+      .from(WorkspaceTable)
+      .innerJoin(SessionTable, eq(SessionTable.workspace_id, WorkspaceTable.id))
+      .where(eq(WorkspaceTable.project_id, projectID))
+      .all(),
+  )
+
+  for (const row of new Map(spaces.map((row) => [row.workspace.id, row.workspace])).values()) {
+    void startSync(fromRow(row))
+  }
 }
 
 export * as Workspace from "./workspace"

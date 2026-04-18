@@ -31,7 +31,7 @@ export const TuiInfo = z
     $schema: z.string().optional(),
     theme: z.string().optional(),
     keybinds: KeybindOverride.optional(),
-    plugin: ConfigPlugin.Spec.array().optional(),
+    plugin: ConfigPlugin.Spec.zod.array().optional(),
     plugin_enabled: z.record(z.string(), z.boolean()).optional(),
   })
   .extend(TuiOptions.shape)
