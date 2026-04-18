@@ -1,11 +1,11 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
+import { jsonRequest } from "./trace"
 
 export const PermissionRoutes = lazy(() =>
   new Hono()
@@ -34,20 +34,18 @@ export const PermissionRoutes = lazy(() =>
         }),
       ),
       validator("json", z.object({ reply: Permission.Reply.zod, message: z.string().optional() })),
-      async (c) => {
-        const params = c.req.valid("param")
-        const json = c.req.valid("json")
-        await AppRuntime.runPromise(
-          Permission.Service.use((svc) =>
-            svc.reply({
-              requestID: params.requestID,
-              reply: json.reply,
-              message: json.message,
-            }),
-          ),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("PermissionRoutes.reply", c, function* () {
+          const params = c.req.valid("param")
+          const json = c.req.valid("json")
+          const svc = yield* Permission.Service
+          yield* svc.reply({
+            requestID: params.requestID,
+            reply: json.reply,
+            message: json.message,
+          })
+          return true
+        }),
     )
     .get(
       "/",
@@ -66,9 +64,10 @@ export const PermissionRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        const permissions = await AppRuntime.runPromise(Permission.Service.use((svc) => svc.list()))
-        return c.json(permissions)
-      },
+      async (c) =>
+        jsonRequest("PermissionRoutes.list", c, function* () {
+          const svc = yield* Permission.Service
+          return yield* svc.list()
+        }),
     ),
 )

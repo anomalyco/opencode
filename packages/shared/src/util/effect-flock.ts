@@ -165,55 +165,60 @@ export namespace EffectFlock {
 
       type Handle = { token: string; metaPath: string; heartbeatPath: string; lockDir: string }
 
-      const tryAcquireLockDir = Effect.fn("EffectFlock.tryAcquire")(function* (lockDir: string) {
-        const token = randomUUID()
-        const metaPath = path.join(lockDir, "meta.json")
-        const heartbeatPath = path.join(lockDir, "heartbeat")
+      const tryAcquireLockDir = (lockDir: string, key: string) =>
+        Effect.gen(function* () {
+          const token = randomUUID()
+          const metaPath = path.join(lockDir, "meta.json")
+          const heartbeatPath = path.join(lockDir, "heartbeat")
 
-        // Atomic mkdir — the POSIX lock primitive
-        const created = yield* atomicMkdir(lockDir)
+          // Atomic mkdir — the POSIX lock primitive
+          const created = yield* atomicMkdir(lockDir)
 
-        if (!created) {
-          if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return yield* new NotAcquired()
+          if (!created) {
+            if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return yield* new NotAcquired()
 
-          // Stale — race for breaker ownership
-          const breakerPath = lockDir + ".breaker"
+            // Stale — race for breaker ownership
+            const breakerPath = lockDir + ".breaker"
 
-          const claimed = yield* fs.makeDirectory(breakerPath, { mode: 0o700 }).pipe(
-            Effect.as(true),
-            Effect.catchIf(
-              (e) => e.reason._tag === "AlreadyExists",
-              () => cleanStaleBreaker(breakerPath),
-            ),
-            Effect.catchIf(isPathGone, () => Effect.succeed(false)),
-            Effect.orDie,
-          )
+            const claimed = yield* fs.makeDirectory(breakerPath, { mode: 0o700 }).pipe(
+              Effect.as(true),
+              Effect.catchIf(
+                (e) => e.reason._tag === "AlreadyExists",
+                () => cleanStaleBreaker(breakerPath),
+              ),
+              Effect.catchIf(isPathGone, () => Effect.succeed(false)),
+              Effect.orDie,
+            )
 
-          if (!claimed) return yield* new NotAcquired()
+            if (!claimed) return yield* new NotAcquired()
 
-          // We own the breaker — double-check staleness, nuke, recreate
-          const recreated = yield* Effect.gen(function* () {
-            if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return false
-            yield* forceRemove(lockDir)
-            return yield* atomicMkdir(lockDir)
-          }).pipe(Effect.ensuring(forceRemove(breakerPath)))
+            // We own the breaker — double-check staleness, nuke, recreate
+            const recreated = yield* Effect.gen(function* () {
+              if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return false
+              yield* forceRemove(lockDir)
+              return yield* atomicMkdir(lockDir)
+            }).pipe(Effect.ensuring(forceRemove(breakerPath)))
 
-          if (!recreated) return yield* new NotAcquired()
-        }
+            if (!recreated) return yield* new NotAcquired()
+          }
 
-        // We own the lock dir — write heartbeat + meta with exclusive create
-        yield* exclusiveWrite(heartbeatPath, "", lockDir, "heartbeat already existed")
+          // We own the lock dir — write heartbeat + meta with exclusive create
+          yield* exclusiveWrite(heartbeatPath, "", lockDir, "heartbeat already existed")
 
-        const metaJson = encodeMeta({ token, pid: process.pid, hostname, createdAt: new Date().toISOString() })
-        yield* exclusiveWrite(metaPath, metaJson, lockDir, "meta.json already existed")
+          const metaJson = encodeMeta({ token, pid: process.pid, hostname, createdAt: new Date().toISOString() })
+          yield* exclusiveWrite(metaPath, metaJson, lockDir, "meta.json already existed")
 
-        return { token, metaPath, heartbeatPath, lockDir } satisfies Handle
-      })
+          return { token, metaPath, heartbeatPath, lockDir } satisfies Handle
+        }).pipe(
+          Effect.withSpan("EffectFlock.tryAcquire", {
+            attributes: { key },
+          }),
+        )
 
       // -- retry wrapper (preserves Handle type) --
 
       const acquireHandle = (lockfile: string, key: string): Effect.Effect<Handle, LockError> =>
-        tryAcquireLockDir(lockfile).pipe(
+        tryAcquireLockDir(lockfile, key).pipe(
           Effect.retry({
             while: (err) => err._tag === "NotAcquired",
             schedule: retrySchedule,

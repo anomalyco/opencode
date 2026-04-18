@@ -30,6 +30,8 @@ export function createModelTpmLimiter(providers: { id: string; model: string; tp
       )
     },
     track: async (id: string, model: string, usageInfo: UsageInfo) => {
+      const key = `${id}/${model}`
+      if (!keys.includes(key)) return
       const usage =
         usageInfo.inputTokens +
         usageInfo.outputTokens +
@@ -41,7 +43,7 @@ export function createModelTpmLimiter(providers: { id: string; model: string; tp
       await Database.use((tx) =>
         tx
           .insert(ModelRateLimitTable)
-          .values({ key: `${id}/${model}`, interval: yyyyMMddHHmm, count: usage })
+          .values({ key, interval: yyyyMMddHHmm, count: usage })
           .onDuplicateKeyUpdate({ set: { count: sql`${ModelRateLimitTable.count} + ${usage}` } }),
       )
     },
