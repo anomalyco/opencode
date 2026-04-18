@@ -441,7 +441,7 @@ export namespace SessionEvent {
     {
       mode: "oneOf",
     },
-  )
+  ).pipe(Schema.toTaggedUnion("type"))
   export type Event = Schema.Schema.Type<typeof Event>
   export type Type = Event["type"]
 }
