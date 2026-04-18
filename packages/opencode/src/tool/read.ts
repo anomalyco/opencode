@@ -1,7 +1,6 @@
 import z from "zod"
-import { Effect, Scope } from "effect"
+import { Effect, Option, Scope } from "effect"
 import { createReadStream } from "fs"
-import { open } from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
 import * as Tool from "./tool"
@@ -35,19 +34,6 @@ const sniffAttachmentMime = (bytes: Uint8Array, fallback: string) => {
   }
 
   return fallback
-}
-
-async function readSample(filepath: string, fileSize: number, sampleSize: number) {
-  if (fileSize === 0) return new Uint8Array()
-
-  const fh = await open(filepath, "r")
-  try {
-    const bytes = Buffer.alloc(Math.min(sampleSize, fileSize))
-    const result = await fh.read(bytes, 0, bytes.length, 0)
-    return bytes.subarray(0, result.bytesRead)
-  } finally {
-    await fh.close()
-  }
 }
 
 const parameters = z.object({
@@ -107,6 +93,65 @@ export const ReadTool = Tool.define(
 
     const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
       yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
+    })
+
+    const readSample = Effect.fn("ReadTool.readSample")(function* (filepath: string, fileSize: number, sampleSize: number) {
+      if (fileSize === 0) return new Uint8Array()
+
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(filepath, { flag: "r" })
+          return Option.getOrElse(yield* file.readAlloc(Math.min(sampleSize, fileSize)), () => new Uint8Array())
+        }),
+      )
+    })
+
+    const isBinaryFile = Effect.fn("ReadTool.isBinaryFile")(function* (filepath: string, fileSize: number) {
+      const ext = path.extname(filepath).toLowerCase()
+      switch (ext) {
+        case ".zip":
+        case ".tar":
+        case ".gz":
+        case ".exe":
+        case ".dll":
+        case ".so":
+        case ".class":
+        case ".jar":
+        case ".war":
+        case ".7z":
+        case ".doc":
+        case ".docx":
+        case ".xls":
+        case ".xlsx":
+        case ".ppt":
+        case ".pptx":
+        case ".odt":
+        case ".ods":
+        case ".odp":
+        case ".bin":
+        case ".dat":
+        case ".obj":
+        case ".o":
+        case ".a":
+        case ".lib":
+        case ".wasm":
+        case ".pyc":
+        case ".pyo":
+          return true
+      }
+
+      const bytes = yield* readSample(filepath, fileSize, 4096)
+      if (bytes.length === 0) return false
+
+      let nonPrintableCount = 0
+      for (let i = 0; i < bytes.length; i++) {
+        if (bytes[i] === 0) return true
+        if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
+          nonPrintableCount++
+        }
+      }
+
+      return nonPrintableCount / bytes.length > 0.3
     })
 
     const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
@@ -175,7 +220,7 @@ export const ReadTool = Tool.define(
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
       const mime = sniffAttachmentMime(
-        yield* Effect.promise(() => readSample(filepath, Number(stat.size), MIME_SAMPLE_BYTES)),
+        yield* readSample(filepath, Number(stat.size), MIME_SAMPLE_BYTES),
         AppFileSystem.mimeType(filepath),
       )
       const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
@@ -201,7 +246,7 @@ export const ReadTool = Tool.define(
         }
       }
 
-      if (yield* Effect.promise(() => isBinaryFile(filepath, Number(stat.size)))) {
+      if (yield* isBinaryFile(filepath, Number(stat.size))) {
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
@@ -296,58 +341,4 @@ async function lines(filepath: string, opts: { limit: number; offset: number }) 
   }
 
   return { raw, count, cut, more, offset: opts.offset }
-}
-
-async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {
-  const ext = path.extname(filepath).toLowerCase()
-  // binary check for common non-text extensions
-  switch (ext) {
-    case ".zip":
-    case ".tar":
-    case ".gz":
-    case ".exe":
-    case ".dll":
-    case ".so":
-    case ".class":
-    case ".jar":
-    case ".war":
-    case ".7z":
-    case ".doc":
-    case ".docx":
-    case ".xls":
-    case ".xlsx":
-    case ".ppt":
-    case ".pptx":
-    case ".odt":
-    case ".ods":
-    case ".odp":
-    case ".bin":
-    case ".dat":
-    case ".obj":
-    case ".o":
-    case ".a":
-    case ".lib":
-    case ".wasm":
-    case ".pyc":
-    case ".pyo":
-      return true
-    default:
-      break
-  }
-
-  if (fileSize === 0) return false
-
-  const bytes = await readSample(filepath, fileSize, 4096)
-  if (bytes.length === 0) return false
-
-  let nonPrintableCount = 0
-  for (let i = 0; i < bytes.length; i++) {
-    if (bytes[i] === 0) return true
-    if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
-      nonPrintableCount++
-    }
-  }
-
-  // If >30% non-printable characters, consider it binary
-  return nonPrintableCount / bytes.length > 0.3
 }
