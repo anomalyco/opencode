@@ -478,4 +478,195 @@ describe("util.effect-zod", () => {
       expect(bad.error!.issues.map((i) => i.message)).toEqual(expect.arrayContaining(["not positive", "not even"]))
     })
   })
+
+  describe("well-known refinement translation", () => {
+    test("Schema.isInt emits type: integer in JSON Schema", () => {
+      const schema = zod(Schema.Number.check(Schema.isInt()))
+      const native = json(z.number().int())
+      expect(json(schema)).toEqual(native)
+      expect(schema.parse(3)).toBe(3)
+      expect(schema.safeParse(1.5).success).toBe(false)
+    })
+
+    test("Schema.isGreaterThan(0) emits exclusiveMinimum: 0", () => {
+      const schema = zod(Schema.Number.check(Schema.isGreaterThan(0)))
+      expect((json(schema) as any).exclusiveMinimum).toBe(0)
+      expect(schema.parse(1)).toBe(1)
+      expect(schema.safeParse(0).success).toBe(false)
+      expect(schema.safeParse(-1).success).toBe(false)
+    })
+
+    test("Schema.isGreaterThanOrEqualTo(0) emits minimum: 0", () => {
+      const schema = zod(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)))
+      expect((json(schema) as any).minimum).toBe(0)
+      expect(schema.parse(0)).toBe(0)
+      expect(schema.safeParse(-1).success).toBe(false)
+    })
+
+    test("Schema.isLessThan(10) emits exclusiveMaximum: 10", () => {
+      const schema = zod(Schema.Number.check(Schema.isLessThan(10)))
+      expect((json(schema) as any).exclusiveMaximum).toBe(10)
+      expect(schema.parse(9)).toBe(9)
+      expect(schema.safeParse(10).success).toBe(false)
+    })
+
+    test("Schema.isLessThanOrEqualTo(10) emits maximum: 10", () => {
+      const schema = zod(Schema.Number.check(Schema.isLessThanOrEqualTo(10)))
+      expect((json(schema) as any).maximum).toBe(10)
+      expect(schema.parse(10)).toBe(10)
+      expect(schema.safeParse(11).success).toBe(false)
+    })
+
+    test("Schema.isMultipleOf(5) emits multipleOf: 5", () => {
+      const schema = zod(Schema.Number.check(Schema.isMultipleOf(5)))
+      expect((json(schema) as any).multipleOf).toBe(5)
+      expect(schema.parse(10)).toBe(10)
+      expect(schema.safeParse(7).success).toBe(false)
+    })
+
+    test("Schema.isFinite validates at runtime", () => {
+      const schema = zod(Schema.Number.check(Schema.isFinite()))
+      expect(schema.parse(1)).toBe(1)
+      expect(schema.safeParse(Infinity).success).toBe(false)
+      expect(schema.safeParse(NaN).success).toBe(false)
+    })
+
+    test("chained isInt + isGreaterThan(0) matches z.number().int().positive()", () => {
+      const schema = zod(Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)))
+      const native = json(z.number().int().positive())
+      expect(json(schema)).toEqual(native)
+      expect(schema.parse(3)).toBe(3)
+      expect(schema.safeParse(0).success).toBe(false)
+      expect(schema.safeParse(1.5).success).toBe(false)
+    })
+
+    test("chained isInt + isGreaterThanOrEqualTo(0) matches z.number().int().min(0)", () => {
+      const schema = zod(Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)))
+      const native = json(z.number().int().min(0))
+      expect(json(schema)).toEqual(native)
+      expect(schema.parse(0)).toBe(0)
+      expect(schema.safeParse(-1).success).toBe(false)
+    })
+
+    test("Schema.isBetween emits both bounds", () => {
+      const schema = zod(Schema.Number.check(Schema.isBetween({ minimum: 1, maximum: 10 })))
+      const shape = json(schema) as any
+      expect(shape.minimum).toBe(1)
+      expect(shape.maximum).toBe(10)
+      expect(schema.parse(5)).toBe(5)
+      expect(schema.safeParse(11).success).toBe(false)
+      expect(schema.safeParse(0).success).toBe(false)
+    })
+
+    test("Schema.isBetween with exclusive bounds emits exclusiveMinimum/Maximum", () => {
+      const schema = zod(
+        Schema.Number.check(
+          Schema.isBetween({ minimum: 1, maximum: 10, exclusiveMinimum: true, exclusiveMaximum: true }),
+        ),
+      )
+      const shape = json(schema) as any
+      expect(shape.exclusiveMinimum).toBe(1)
+      expect(shape.exclusiveMaximum).toBe(10)
+      expect(schema.parse(5)).toBe(5)
+      expect(schema.safeParse(1).success).toBe(false)
+      expect(schema.safeParse(10).success).toBe(false)
+    })
+
+    test("Schema.isInt32 (FilterGroup) produces integer bounds", () => {
+      const schema = zod(Schema.Number.check(Schema.isInt32()))
+      const shape = json(schema) as any
+      expect(shape.type).toBe("integer")
+      expect(shape.minimum).toBe(-2147483648)
+      expect(shape.maximum).toBe(2147483647)
+      expect(schema.parse(42)).toBe(42)
+      expect(schema.safeParse(1.5).success).toBe(false)
+      expect(schema.safeParse(2147483648).success).toBe(false)
+    })
+
+    test("Schema.isMinLength on string emits minLength", () => {
+      const schema = zod(Schema.String.check(Schema.isMinLength(3)))
+      expect((json(schema) as any).minLength).toBe(3)
+      expect(schema.parse("abc")).toBe("abc")
+      expect(schema.safeParse("ab").success).toBe(false)
+    })
+
+    test("Schema.isMaxLength on string emits maxLength", () => {
+      const schema = zod(Schema.String.check(Schema.isMaxLength(5)))
+      expect((json(schema) as any).maxLength).toBe(5)
+      expect(schema.parse("abcde")).toBe("abcde")
+      expect(schema.safeParse("abcdef").success).toBe(false)
+    })
+
+    test("Schema.isLengthBetween on string emits both bounds", () => {
+      const schema = zod(Schema.String.check(Schema.isLengthBetween(2, 4)))
+      const shape = json(schema) as any
+      expect(shape.minLength).toBe(2)
+      expect(shape.maxLength).toBe(4)
+      expect(schema.parse("abc")).toBe("abc")
+      expect(schema.safeParse("a").success).toBe(false)
+      expect(schema.safeParse("abcde").success).toBe(false)
+    })
+
+    test("Schema.isMinLength on array emits minItems", () => {
+      const schema = zod(Schema.Array(Schema.String).check(Schema.isMinLength(1)))
+      expect((json(schema) as any).minItems).toBe(1)
+      expect(schema.parse(["x"])).toEqual(["x"])
+      expect(schema.safeParse([]).success).toBe(false)
+    })
+
+    test("Schema.isPattern emits pattern", () => {
+      const schema = zod(Schema.String.check(Schema.isPattern(/^per/)))
+      expect((json(schema) as any).pattern).toBe("^per")
+      expect(schema.parse("per_abc")).toBe("per_abc")
+      expect(schema.safeParse("abc").success).toBe(false)
+    })
+
+    test("Schema.isStartsWith matches native zod .startsWith() JSON Schema", () => {
+      const schema = zod(Schema.String.check(Schema.isStartsWith("per")))
+      const native = json(z.string().startsWith("per"))
+      expect(json(schema)).toEqual(native)
+      expect(schema.parse("per_abc")).toBe("per_abc")
+      expect(schema.safeParse("abc").success).toBe(false)
+    })
+
+    test("Schema.isEndsWith matches native zod .endsWith() JSON Schema", () => {
+      const schema = zod(Schema.String.check(Schema.isEndsWith(".json")))
+      const native = json(z.string().endsWith(".json"))
+      expect(json(schema)).toEqual(native)
+      expect(schema.parse("a.json")).toBe("a.json")
+      expect(schema.safeParse("a.txt").success).toBe(false)
+    })
+
+    test("Schema.isUUID emits format: uuid", () => {
+      const schema = zod(Schema.String.check(Schema.isUUID()))
+      expect((json(schema) as any).format).toBe("uuid")
+    })
+
+    test("mix of well-known and anonymous filters translates known and reroutes unknown to superRefine", () => {
+      // isInt is well-known (translates to .int()); the anonymous filter falls
+      // back to superRefine.
+      const notSeven = Schema.makeFilter((n: number) => (n !== 7 ? undefined : "no sevens allowed"))
+      const schema = zod(Schema.Number.check(Schema.isInt()).check(notSeven))
+
+      const shape = json(schema) as any
+      // Well-known translation is preserved — type is integer, not plain number
+      expect(shape.type).toBe("integer")
+
+      // Runtime: both constraints fire
+      expect(schema.parse(3)).toBe(3)
+      expect(schema.safeParse(1.5).success).toBe(false)
+      const seven = schema.safeParse(7)
+      expect(seven.success).toBe(false)
+      expect(seven.error!.issues[0].message).toBe("no sevens allowed")
+    })
+
+    test("inside a struct field, well-known refinements propagate through", () => {
+      // Mirrors config.ts port: z.number().int().positive().optional()
+      const Port = Schema.optional(Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)))
+      const schema = zod(Schema.Struct({ port: Port }))
+      const shape = json(schema) as any
+      expect(shape.properties.port.type).toBe("integer")
+      expect(shape.properties.port.exclusiveMinimum).toBe(0)
+    })
+  })
 })
