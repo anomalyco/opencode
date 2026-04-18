@@ -169,6 +169,27 @@ describe("ProviderTransform.options - zai/zhipuai thinking", () => {
         clear_thinking: false,
       })
     })
+
+    test(`${providerID} should NOT set thinking cfg for non-reasoning model`, () => {
+      const result = ProviderTransform.options({
+        model: {
+          ...createModel(providerID),
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+        sessionID,
+        providerOptions: {},
+      })
+
+      expect(result.thinking).toBeUndefined()
+    })
   }
 })
 
@@ -2099,18 +2120,22 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("glm returns empty object", () => {
+  test("glm via openai-compatible returns reasoning efforts", () => {
     const model = createMockModel({
-      id: "glm/glm-4",
-      providerID: "glm",
+      id: "zai-coding-plan/glm-4.7",
+      providerID: "zai-coding-plan",
       api: {
-        id: "glm-4",
-        url: "https://api.glm.com",
+        id: "glm-4.7",
+        url: "https://open.bigmodel.cn/api/paas/v4",
         npm: "@ai-sdk/openai-compatible",
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    expect(result).toEqual({
+      low: { reasoningEffort: "low" },
+      medium: { reasoningEffort: "medium" },
+      high: { reasoningEffort: "high" },
+    })
   })
 
   test("mistral returns empty object", () => {

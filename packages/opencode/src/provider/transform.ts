@@ -407,7 +407,6 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (
     id.includes("deepseek") ||
     id.includes("minimax") ||
-    id.includes("glm") ||
     id.includes("mistral") ||
     id.includes("kimi") ||
     id.includes("k2p5") ||
@@ -828,7 +827,8 @@ export function options(input: {
 
   if (
     ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
-    input.model.api.npm === "@ai-sdk/openai-compatible"
+    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+    input.model.capabilities.reasoning
   ) {
     result["thinking"] = {
       type: "enabled",
