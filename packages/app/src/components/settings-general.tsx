@@ -451,6 +451,18 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showSessionProgress.title")}
+          description={language.t("settings.general.row.showSessionProgress.description")}
+        >
+          <div data-action="settings-show-session-progress">
+            <Switch
+              checked={settings.general.showSessionProgress()}
+              onChange={(checked) => settings.general.setShowSessionProgress(checked)}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )
