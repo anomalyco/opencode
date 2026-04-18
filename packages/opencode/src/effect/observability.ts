@@ -4,9 +4,11 @@ import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
 import * as EffectLogger from "./logger"
 import { Flag } from "@/flag/flag"
 import { InstallationChannel, InstallationVersion } from "@/installation/version"
+import { ensureProcessMetadata } from "@/util/opencode-process"
 
 const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 export const enabled = !!base
+const processID = crypto.randomUUID()
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -19,26 +21,34 @@ const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
     )
   : undefined
 
-const resource = {
-  serviceName: "opencode",
-  serviceVersion: InstallationVersion,
-  attributes: {
-    "deployment.environment.name": InstallationChannel,
-    "opencode.client": Flag.OPENCODE_CLIENT,
-  },
+function resource() {
+  const processMetadata = ensureProcessMetadata("main")
+  return {
+    serviceName: "opencode",
+    serviceVersion: InstallationVersion,
+    attributes: {
+      "deployment.environment.name": InstallationChannel,
+      "opencode.client": Flag.OPENCODE_CLIENT,
+      "opencode.process_role": processMetadata.processRole,
+      "opencode.run_id": processMetadata.runID,
+      "service.instance.id": processID,
+    },
+  }
 }
 
-const logs = Logger.layer(
-  [
-    EffectLogger.logger,
-    OtlpLogger.make({
-      url: `${base}/v1/logs`,
-      resource,
-      headers,
-    }),
-  ],
-  { mergeWithExisting: false },
-).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer))
+function logs() {
+  return Logger.layer(
+    [
+      EffectLogger.logger,
+      OtlpLogger.make({
+        url: `${base}/v1/logs`,
+        resource: resource(),
+        headers,
+      }),
+    ],
+    { mergeWithExisting: false },
+  ).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer))
+}
 
 const traces = async () => {
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
@@ -58,7 +68,7 @@ const traces = async () => {
   context.setGlobalContextManager(mgr)
 
   return NodeSdk.layer(() => ({
-    resource,
+    resource: resource(),
     spanProcessor: new SdkBase.BatchSpanProcessor(
       new OTLP.OTLPTraceExporter({
         url: `${base}/v1/traces`,
@@ -73,7 +83,7 @@ export const layer = !base
   : Layer.unwrap(
       Effect.gen(function* () {
         const trace = yield* Effect.promise(traces)
-        return Layer.mergeAll(trace, logs)
+        return Layer.mergeAll(trace, logs())
       }),
     )
 

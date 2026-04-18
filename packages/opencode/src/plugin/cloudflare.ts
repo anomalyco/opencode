@@ -61,5 +61,16 @@ export async function CloudflareAIGatewayAuthPlugin(_input: PluginInput): Promis
         },
       ],
     },
+    "chat.params": async (input, output) => {
+      if (input.model.providerID !== "cloudflare-ai-gateway") return
+      // The unified gateway routes through @ai-sdk/openai-compatible, which
+      // always emits max_tokens. OpenAI reasoning models (gpt-5.x, o-series)
+      // reject that field and require max_completion_tokens instead, and the
+      // compatible SDK has no way to rename it. Drop the cap so OpenAI falls
+      // back to the model's default output budget.
+      if (!input.model.api.id.toLowerCase().startsWith("openai/")) return
+      if (!input.model.capabilities.reasoning) return
+      output.maxOutputTokens = undefined
+    },
   }
 }

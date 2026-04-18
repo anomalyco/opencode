@@ -27,7 +27,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, createEffect, on } from "solid-js"
+import { batch, onMount } from "solid-js"
 import { Log } from "@/util"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 
@@ -107,6 +107,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
+
+    const fullSyncedSessions = new Set<string>()
+    let syncedWorkspace = project.workspace.current()
 
     event.subscribe((event) => {
       switch (event.type) {
@@ -350,9 +353,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const exit = useExit()
     const args = useArgs()
 
-    async function bootstrap() {
-      console.log("bootstrapping")
+    async function bootstrap(input: { fatal?: boolean } = {}) {
+      const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
+      if (workspace !== syncedWorkspace) {
+        fullSyncedSessions.clear()
+        syncedWorkspace = workspace
+      }
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
@@ -441,20 +448,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             name: e instanceof Error ? e.name : undefined,
             stack: e instanceof Error ? e.stack : undefined,
           })
-          await exit(e)
+          if (fatal) {
+            await exit(e)
+          } else {
+            throw e
+          }
         })
     }
 
-    const fullSyncedSessions = new Set<string>()
-    createEffect(
-      on(
-        () => project.workspace.current(),
-        () => {
-          fullSyncedSessions.clear()
-          void bootstrap()
-        },
-      ),
-    )
+    onMount(() => {
+      void bootstrap()
+    })
 
     const result = {
       data: store,
@@ -463,6 +467,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         return store.status
       },
       get ready() {
+        return true
+        if (process.env.OPENCODE_FAST_BOOT) return true
         return store.status !== "loading"
       },
       get path() {
@@ -473,6 +479,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const match = Binary.search(store.session, sessionID, (s) => s.id)
           if (match.found) return store.session[match.index]
           return undefined
+        },
+        async refresh() {
+          const start = Date.now() - 30 * 24 * 60 * 60 * 1000
+          const list = await sdk.client.session
+            .list({ start })
+            .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+          setStore("session", reconcile(list))
         },
         status(sessionID: string) {
           const session = result.session.get(sessionID)
@@ -486,12 +499,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const workspace = project.workspace.current()
           const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID, workspace }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100, workspace }),
-            sdk.client.session.todo({ sessionID, workspace }),
-            sdk.client.session.diff({ sessionID, workspace }),
+            sdk.client.session.get({ sessionID }, { throwOnError: true }),
+            sdk.client.session.messages({ sessionID, limit: 100 }),
+            sdk.client.session.todo({ sessionID }),
+            sdk.client.session.diff({ sessionID }),
           ])
           setStore(
             produce((draft) => {
