@@ -6,43 +6,58 @@ import { fileURLToPath } from "url"
 
 console.log("=== publishing ===\n")
 
+const tag = `v${Script.version}`
+
 const pkgjsons = await Array.fromAsync(
   new Bun.Glob("**/package.json").scan({
     absolute: true,
   }),
 ).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
 
-for (const file of pkgjsons) {
-  let pkg = await Bun.file(file).text()
-  pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
-  console.log("updated:", file)
-  await Bun.file(file).write(pkg)
+const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
+
+async function hasChanges() {
+  return (await $`git diff --quiet && git diff --cached --quiet`.nothrow()).exitCode !== 0
 }
 
-const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
-let toml = await Bun.file(extensionToml).text()
-toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-console.log("updated:", extensionToml)
-await Bun.file(extensionToml).write(toml)
+async function releaseTagExists() {
+  return (await $`git rev-parse -q --verify refs/tags/${tag}`.nothrow()).exitCode === 0
+}
 
-await $`bun install`
-await import(`../packages/sdk/js/script/build.ts`)
-
-if (Script.release) {
-  if (!Script.preview) {
-    await $`git commit -am "release: v${Script.version}"`
-    await $`git tag v${Script.version}`
-    await $`git fetch origin`
-    await $`git cherry-pick HEAD..origin/dev`.nothrow()
-    await $`git push origin HEAD --tags --no-verify --force-with-lease`
-    await new Promise((resolve) => setTimeout(resolve, 5_000))
+async function prepareReleaseFiles() {
+  for (const file of pkgjsons) {
+    let pkg = await Bun.file(file).text()
+    pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
+    console.log("updated:", file)
+    await Bun.file(file).write(pkg)
   }
 
-  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
-  await import(`../packages/desktop-electron/scripts/finalize-latest-yml.ts`)
+  let toml = await Bun.file(extensionToml).text()
+  toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
+  toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
+  console.log("updated:", extensionToml)
+  await Bun.file(extensionToml).write(toml)
 
-  await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
+  await $`bun install`
+  await $`./packages/sdk/js/script/build.ts`
+}
+
+if (Script.release && !Script.preview) {
+  await $`git fetch origin --tags`
+  await $`git switch --detach`
+}
+
+await prepareReleaseFiles()
+
+if (Script.release && !Script.preview) {
+  if (await releaseTagExists()) {
+    console.log(`release tag ${tag} already exists, skipping tag creation`)
+  } else {
+    await $`git commit -am "release: ${tag}"`
+    await $`git tag ${tag}`
+    await $`git push origin refs/tags/${tag} --no-verify`
+    await new Promise((resolve) => setTimeout(resolve, 5_000))
+  }
 }
 
 console.log("\n=== cli ===\n")
@@ -53,6 +68,27 @@ await import(`../packages/sdk/js/script/publish.ts`)
 
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
+
+if (Script.release) {
+  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
+  await import(`../packages/desktop-electron/scripts/finalize-latest-yml.ts`)
+}
+
+if (Script.release && !Script.preview) {
+  await $`git fetch origin`
+  await $`git checkout -B dev origin/dev`
+  await prepareReleaseFiles()
+  if (await hasChanges()) {
+    await $`git commit -am "sync release versions for v${Script.version}"`
+    await $`git push origin HEAD:dev --no-verify`
+  } else {
+    console.log(`dev already synced for ${tag}`)
+  }
+}
+
+if (Script.release) {
+  await $`gh release edit ${tag} --draft=false --repo ${process.env.GH_REPO}`
+}
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
