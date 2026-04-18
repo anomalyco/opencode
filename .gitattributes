@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.ts linguist-language=TypeScript
+*.tsx linguist-language=TypeScript
+*.sh eol=lf
+*.bat eol=crlf
+*.cmd eol=crlf
