@@ -1467,6 +1467,12 @@ export class Agent implements ACPAgent {
     })
 
     if (!cmd) {
+      // Forward optional structured-output format carried on ACP _meta.
+      // Clients opt in with `_meta: { opencode: { format: <OutputFormat> } }`
+      // mirroring the SDK's `session.prompt({ format })` shape added in #8161.
+      const formatResult = MessageV2.Format.safeParse((params._meta as any)?.opencode?.format)
+      const format = formatResult.success ? formatResult.data : undefined
+
       const response = await this.sdk.session.prompt({
         sessionID,
         model: {
@@ -1477,6 +1483,7 @@ export class Agent implements ACPAgent {
         parts,
         agent,
         directory,
+        ...(format && { format }),
       })
       const msg = response.data?.info
 
@@ -1485,7 +1492,7 @@ export class Agent implements ACPAgent {
       return {
         stopReason: "end_turn" as const,
         usage: msg ? buildUsage(msg) : undefined,
-        _meta: {},
+        _meta: msg?.structured !== undefined ? { opencode: { structured: msg.structured } } : {},
       }
     }
 
