@@ -1262,7 +1262,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("does not filter empty-text parts inside arrays for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",
@@ -1273,8 +1273,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     }
 
+    // Pass 1 (in-array text/reasoning filtering) only runs for Anthropic/Bedrock.
+    // The universal guard drops empty-content messages but does NOT reach inside arrays —
+    // so a message with content:[{text:""}] is kept (non-empty array) with its parts intact.
     const msgs = [
-      { role: "assistant", content: "" },
       {
         role: "assistant",
         content: [{ type: "text", text: "" }],
@@ -1283,9 +1285,9 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
-    expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toMatchObject({ type: "text", text: "" })
   })
 
   test("splits anthropic assistant messages when text trails tool calls", () => {
@@ -3111,5 +3113,329 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+})
+
+describe("ProviderTransform.message - universal empty-content guard", () => {
+  const openaiModel = {
+    id: "openai/gpt-4o",
+    providerID: "openai",
+    api: {
+      id: "gpt-4o",
+      url: "https://api.openai.com",
+      npm: "@ai-sdk/openai",
+    },
+    name: "GPT-4o",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.005, output: 0.015, cache: { read: 0.0005, write: 0.001 } },
+    limit: { context: 128000, output: 4096 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const anthropicModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const bedrockModel = {
+    id: "amazon-bedrock/anthropic.claude-3-5-sonnet",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude 3.5 Sonnet (Bedrock)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("drops assistant message with empty string content (non-Anthropic)", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("drops assistant message with empty array content (non-Anthropic)", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: [] },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("drops tool message with empty array content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "tool", content: [] },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("drops system message with empty string content", () => {
+    const msgs = [
+      { role: "system", content: "" },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("drops user message with empty array content", () => {
+    const msgs = [
+      { role: "user", content: [] },
+      { role: "assistant", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("preserves messages with non-empty string content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("preserves messages with non-empty array content", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+
+  test("preserves messages with empty-text parts (guard does not reach inside arrays)", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+      },
+    ] as any[]
+
+    // Non-Anthropic provider: Pass 1 does not run, array has 1 part -> not empty at message level
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "" })
+  })
+
+  test("Pass 3 regression: Anthropic tool reorder does not leave empty non-tool half", () => {
+    // When an assistant message is ALL tool-calls with no text, the reorder produces
+    // [content:[], content:[tool-calls]]. The guard drops the empty half.
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    // The reorder only fires when there are non-tool parts AFTER a tool-call.
+    // A message that is only tool-calls is returned unchanged.
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0].type).toBe("tool-call")
+  })
+
+  test("Pass 3 regression: split that produces empty non-tool part is dropped by guard", () => {
+    // text="" before tool-call: after split, the text-only half has content:[{text:""}]
+    // which Pass 1 then collapses to [], which the guard drops.
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "bash", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    // Pass 1 strips empty text part; after split the non-tool half is empty -> guard drops it.
+    // Only the tool-call half and the tool result remain.
+    const toolCallMsgs = result.filter((m: any) => Array.isArray(m.content) && m.content.some((p: any) => p.type === "tool-call"))
+    expect(toolCallMsgs).toHaveLength(1)
+    expect(toolCallMsgs[0].content).toHaveLength(1)
+    expect(toolCallMsgs[0].content[0].type).toBe("tool-call")
+  })
+
+  test("Pass 5 regression: interleaved-only assistant message is dropped by guard", () => {
+    const interleavedModel = {
+      ...openaiModel,
+      id: "zai/glm-4.7",
+      providerID: "zai",
+      api: {
+        id: "glm-4.7",
+        url: "https://open.bigmodel.cn/api/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        ...openaiModel.capabilities,
+        interleaved: { field: "reasoning_content" },
+      },
+    }
+
+    const msgs = [
+      { role: "user", content: "Solve this" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think..." },
+        ],
+      },
+      { role: "user", content: "Done" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, interleavedModel, {})
+
+    // Pass 5 strips reasoning parts from content, leaving content:[].
+    // Universal guard drops it.
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Solve this")
+    expect(result[1].content).toBe("Done")
+  })
+
+  test("cross-provider matrix: empty array content is always dropped", () => {
+    const providers = [
+      { ...bedrockModel },
+      { ...anthropicModel },
+      { ...openaiModel },
+      {
+        ...openaiModel,
+        id: "google-vertex/gemini-2.5-pro",
+        providerID: "google-vertex",
+        api: { id: "gemini-2.5-pro", url: "https://us-central1-aiplatform.googleapis.com", npm: "@ai-sdk/google-vertex" },
+      },
+      {
+        ...openaiModel,
+        id: "mistral/mistral-large",
+        providerID: "mistral",
+        api: { id: "mistral-large-latest", url: "https://api.mistral.ai", npm: "@ai-sdk/mistral" },
+      },
+      {
+        ...openaiModel,
+        id: "gateway/anthropic/claude-3-5-sonnet",
+        providerID: "anthropic",
+        api: { id: "anthropic/claude-3-5-sonnet", url: "https://gateway.ai.cloudflare.com", npm: "@ai-sdk/gateway" },
+      },
+      {
+        ...openaiModel,
+        id: "openrouter/anthropic/claude-3.5-sonnet",
+        providerID: "openrouter",
+        api: { id: "anthropic/claude-3.5-sonnet", url: "https://openrouter.ai/api/v1", npm: "@openrouter/ai-sdk-provider" },
+      },
+      {
+        ...openaiModel,
+        id: "zai/glm-4.7",
+        providerID: "zai",
+        api: { id: "glm-4.7", url: "https://open.bigmodel.cn/api/paas/v4", npm: "@ai-sdk/openai-compatible" },
+      },
+    ]
+
+    for (const model of providers) {
+      const msgs = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: [] },
+        { role: "user", content: "World" },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, model as any, {})
+
+      const emptyContentMsgs = result.filter((m) => Array.isArray(m.content) && m.content.length === 0)
+      expect(emptyContentMsgs).toHaveLength(0)
+    }
   })
 })

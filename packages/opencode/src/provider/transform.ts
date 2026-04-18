@@ -346,6 +346,16 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     })
   }
 
+  // Universal empty-content guard: catches any message with content: "" or content: []
+  // that slipped through a transformation pass (Pass 3 tool reorder, Pass 5 interleaved
+  // reasoning, unsupportedParts stripping, or future passes). Providers uniformly reject
+  // these; Bedrock's ConverseAPI crashes the session with ValidationException.
+  msgs = msgs.filter((msg) => {
+    if (typeof msg.content === "string") return msg.content !== ""
+    if (Array.isArray(msg.content)) return msg.content.length > 0
+    return true
+  })
+
   return msgs
 }
 
