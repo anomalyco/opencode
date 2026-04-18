@@ -18,6 +18,19 @@ export const extraAgents = [
     configSection: "claws",
     configPick: "claw:openclaw",
   },
+  {
+    id: "generalagent",
+    label: "GeneralAgent",
+    labelKey: "sidebar.generalagent",
+    icon: "robot" as IconName,
+    emptyIcon: "robot" as IconName,
+    emptySessionTitleKey: "session.new.generalagent.title",
+    sessionListFailedTitleKey: "toast.session.listFailed.generalagent.title",
+    fileListEmptyKey: "toast.file.listFailed.generalagent",
+    directory: "/generalagent",
+    configSection: "agents",
+    configPick: "agent:generalagent",
+  },
 ] as const
 
 export type ExtraAgentId = (typeof extraAgents)[number]["id"]

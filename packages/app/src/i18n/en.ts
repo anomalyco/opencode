@@ -472,6 +472,8 @@ export const dict = {
   "toast.file.listFailed.title": "Failed to list files",
   "toast.file.listFailed.openclaw":
     "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent":
+    "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
@@ -492,6 +494,7 @@ export const dict = {
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
   "error.permission.fileProtected": "This directory is protected by the system and cannot be read.",
   "error.permission.sessionProtected": "This directory is protected by the system and its sessions cannot be loaded.",
@@ -631,6 +634,7 @@ export const dict = {
   "session.new.greeting.3": "Make the next thing",
   "session.new.greeting.4": "Ship the idea",
   "session.new.openclaw.title": "I'm your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.meta.project": "Project",
   "session.new.meta.branch": "Branch",
   "session.new.meta.workspace": "Workspace",
@@ -743,6 +747,7 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
   "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
