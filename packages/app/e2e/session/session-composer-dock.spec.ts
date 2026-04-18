@@ -65,14 +65,11 @@ async function clearPermissionDock(page: any, label: RegExp) {
 }
 
 async function setAutoAccept(page: any, enabled: boolean) {
-  const dialog = await openSettings(page)
-  const toggle = dialog.locator('[data-action="settings-auto-accept-permissions"]').first()
-  const input = toggle.locator('[data-slot="switch-input"]').first()
-  await expect(toggle).toBeVisible()
-  const checked = (await input.getAttribute("aria-checked")) === "true"
-  if (checked !== enabled) await toggle.locator('[data-slot="switch-control"]').click()
-  await expect(input).toHaveAttribute("aria-checked", enabled ? "true" : "false")
-  await closeDialog(page, dialog)
+  const button = page.locator('[data-action="prompt-permissions"]').first()
+  await expect(button).toBeVisible()
+  const pressed = (await button.getAttribute("aria-pressed")) === "true"
+  if (pressed !== enabled) await button.click()
+  await expect(button).toHaveAttribute("aria-pressed", enabled ? "true" : "false")
 }
 
 async function expectQuestionBlocked(page: any) {

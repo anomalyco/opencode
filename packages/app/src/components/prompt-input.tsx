@@ -55,6 +55,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { AutoAcceptButton } from "./auto-accept-button"
 
 interface PromptInputProps {
   class?: string
@@ -1322,7 +1323,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+            if (
+              target.closest(
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+              )
+            ) {
               return
             }
             editorRef?.focus()
@@ -1582,6 +1587,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </TooltipKeybind>
                   </div>
                 </Show>
+                <AutoAcceptButton style={control} />
               </div>
             </div>
           </div>
