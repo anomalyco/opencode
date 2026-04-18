@@ -2,6 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { createResource, createMemo, onMount } from "solid-js"
 import { useSDK } from "../context/sdk"
+import { useSync } from "../context/sync"
 import os from "os"
 
 interface MigrateSession {
@@ -21,6 +22,7 @@ interface DialogSessionRescueProps {
 export function DialogSessionRescue(props: DialogSessionRescueProps) {
   const dialog = useDialog()
   const sdk = useSDK()
+  const sync = useSync()
 
   const [data] = createResource(async () => {
     const [cur, all] = await Promise.all([sdk.client.project.current(), sdk.client.project.list()])
@@ -82,6 +84,7 @@ export function DialogSessionRescue(props: DialogSessionRescueProps) {
           projectID: option.value.projectID,
           body_directory: option.value.directory,
         })
+        await sync.session.refresh()
         props.onDone()
         const { DialogSessionMigrate } = await import("./dialog-session-migrate")
         dialog.replace(() => <DialogSessionMigrate />)
