@@ -417,7 +417,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
       slash: "fork",
-      disabled: !params.id,
+      disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
     }),
   ]

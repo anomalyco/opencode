@@ -12,11 +12,10 @@ import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/shared/util/encode"
 import { useLanguage } from "@/context/language"
 
-interface ForkTarget {
+interface ForkableMessage {
   id: string
   text: string
   time: string
-  messageID?: string
 }
 
 function formatTime(date: Date): string {
@@ -32,17 +31,12 @@ export const DialogFork: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const messages = createMemo((): ForkTarget[] => {
+  const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
     if (!sessionID) return []
 
     const msgs = sync.data.message[sessionID] ?? []
-    const fullSession = {
-      id: "full-session",
-      text: language.t("dialog.fork.fullSession"),
-      time: "",
-    } satisfies ForkTarget
-    const result: ForkTarget[] = []
+    const result: ForkableMessage[] = []
 
     for (const message of msgs) {
       if (message.role !== "user") continue
@@ -52,41 +46,37 @@ export const DialogFork: Component = () => {
       if (!textPart) continue
 
       result.push({
-        id: `message:${message.id}`,
-        messageID: message.id,
+        id: message.id,
         text: textPart.text.replace(/\n/g, " ").slice(0, 200),
         time: formatTime(new Date(message.time.created)),
       })
     }
 
-    return [fullSession, ...result.reverse()]
+    return result.reverse()
   })
 
-  const handleSelect = (item: ForkTarget | undefined) => {
+  const handleSelect = (item: ForkableMessage | undefined) => {
     if (!item) return
 
     const sessionID = params.id
     if (!sessionID) return
 
+    const parts = sync.data.part[item.id] ?? []
+    const restored = extractPromptFromParts(parts, {
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+    })
     const dir = base64Encode(sdk.directory)
-    const restored = item.messageID
-      ? extractPromptFromParts(sync.data.part[item.messageID] ?? [], {
-          directory: sdk.directory,
-          attachmentName: language.t("common.attachment"),
-        })
-      : undefined
 
     sdk.client.session
-      .fork({ sessionID, ...(item.messageID ? { messageID: item.messageID } : {}) })
+      .fork({ sessionID, messageID: item.id })
       .then((forked) => {
         if (!forked.data) {
           showToast({ title: language.t("common.requestFailed") })
           return
         }
         dialog.close()
-        if (restored) {
-          prompt.set(restored, undefined, { dir, id: forked.data.id })
-        }
+        prompt.set(restored, undefined, { dir, id: forked.data.id })
         navigate(`/${dir}/session/${forked.data.id}`)
       })
       .catch((err: unknown) => {
@@ -96,7 +86,7 @@ export const DialogFork: Component = () => {
   }
 
   return (
-    <Dialog title={language.t("dialog.fork.title")}>
+    <Dialog title={language.t("command.session.fork")}>
       <List
         class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
         search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}

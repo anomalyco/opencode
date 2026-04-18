@@ -305,8 +305,6 @@ export const dict = {
   "mcp.status.disabled": "deaktivert",
 
   "dialog.fork.empty": "Ingen meldinger å forgrene fra",
-  "dialog.fork.title": "Forgren sesjon",
-  "dialog.fork.fullSession": "Hele sesjonen",
 
   "dialog.directory.search.placeholder": "Søk etter mapper",
   "dialog.directory.empty": "Ingen mapper funnet",

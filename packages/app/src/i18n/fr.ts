@@ -279,8 +279,6 @@ export const dict = {
   "mcp.status.needs_auth": "nécessite auth",
   "mcp.status.disabled": "désactivé",
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
-  "dialog.fork.title": "Bifurquer la session",
-  "dialog.fork.fullSession": "Session complète",
   "dialog.directory.search.placeholder": "Rechercher des dossiers",
   "dialog.directory.empty": "Aucun dossier trouvé",
   "dialog.server.title": "Serveurs",

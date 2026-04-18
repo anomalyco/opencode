@@ -279,8 +279,6 @@ export const dict = {
   "mcp.status.needs_auth": "wymaga autoryzacji",
   "mcp.status.disabled": "wyłączone",
   "dialog.fork.empty": "Brak wiadomości do rozwidlenia",
-  "dialog.fork.title": "Rozwidlij sesję",
-  "dialog.fork.fullSession": "Cała sesja",
   "dialog.directory.search.placeholder": "Szukaj folderów",
   "dialog.directory.empty": "Nie znaleziono folderów",
   "dialog.server.title": "Serwery",

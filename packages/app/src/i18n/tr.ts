@@ -307,8 +307,6 @@ export const dict = {
   "mcp.status.disabled": "devre dışı",
 
   "dialog.fork.empty": "Dallandırılacak mesaj yok",
-  "dialog.fork.title": "Oturumu dallandır",
-  "dialog.fork.fullSession": "Tüm oturum",
 
   "dialog.directory.search.placeholder": "Klasör ara",
   "dialog.directory.empty": "Klasör bulunamadı",

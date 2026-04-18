@@ -284,8 +284,6 @@ export const dict = {
   "mcp.status.needs_auth": "benötigt Authentifizierung",
   "mcp.status.disabled": "deaktiviert",
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
-  "dialog.fork.title": "Sitzung abzweigen",
-  "dialog.fork.fullSession": "Komplette Sitzung",
   "dialog.directory.search.placeholder": "Ordner durchsuchen",
   "dialog.directory.empty": "Keine Ordner gefunden",
   "dialog.server.title": "Server",

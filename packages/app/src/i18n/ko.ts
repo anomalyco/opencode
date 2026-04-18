@@ -277,8 +277,6 @@ export const dict = {
   "mcp.status.needs_auth": "인증 필요",
   "mcp.status.disabled": "비활성화됨",
   "dialog.fork.empty": "분기할 메시지 없음",
-  "dialog.fork.title": "세션 분기",
-  "dialog.fork.fullSession": "전체 세션",
   "dialog.directory.search.placeholder": "폴더 검색",
   "dialog.directory.empty": "폴더 없음",
   "dialog.server.title": "서버",
