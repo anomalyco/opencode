@@ -1,5 +1,4 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import path from "path"
 import { LSP } from "../lsp"
@@ -21,11 +20,15 @@ const operations = [
   "outgoingCalls",
 ] as const
 
-export const Parameters = z.object({
-  operation: z.enum(operations).describe("The LSP operation to perform"),
-  filePath: z.string().describe("The absolute or relative path to the file"),
-  line: z.number().int().min(1).describe("The line number (1-based, as shown in editors)"),
-  character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
+export const Parameters = Schema.Struct({
+  operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
+  filePath: Schema.String.annotate({ description: "The absolute or relative path to the file" }),
+  line: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(1))
+    .annotate({ description: "The line number (1-based, as shown in editors)" }),
+  character: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(1))
+    .annotate({ description: "The character offset (1-based, as shown in editors)" }),
 })
 
 export const LspTool = Tool.define(

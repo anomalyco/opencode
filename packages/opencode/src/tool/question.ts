@@ -1,11 +1,10 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 
-export const Parameters = z.object({
-  questions: z.array(Question.Prompt.zod).describe("Questions to ask"),
+export const Parameters = Schema.Struct({
+  questions: Schema.mutable(Schema.Array(Question.Prompt)).annotate({ description: "Questions to ask" }),
 })
 
 type Metadata = {
@@ -20,7 +19,7 @@ export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Se
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,

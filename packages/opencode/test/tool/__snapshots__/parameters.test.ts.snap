@@ -220,52 +220,6 @@ exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
 }
 `;
 
-exports[`tool parameters JSON Schema (wire shape) multiedit 1`] = `
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "properties": {
-    "edits": {
-      "description": "Array of edit operations to perform sequentially on the file",
-      "items": {
-        "properties": {
-          "filePath": {
-            "description": "The absolute path to the file to modify",
-            "type": "string",
-          },
-          "newString": {
-            "description": "The text to replace it with (must be different from oldString)",
-            "type": "string",
-          },
-          "oldString": {
-            "description": "The text to replace",
-            "type": "string",
-          },
-          "replaceAll": {
-            "description": "Replace all occurrences of oldString (default false)",
-            "type": "boolean",
-          },
-        },
-        "required": [
-          "filePath",
-          "oldString",
-          "newString",
-        ],
-        "type": "object",
-      },
-      "type": "array",
-    },
-    "filePath": {
-      "description": "The absolute path to the file to modify",
-      "type": "string",
-    },
-  },
-  "required": [
-    "filePath",
-    "edits",
-  ],
-  "type": "object",
-}
-`;
 
 exports[`tool parameters JSON Schema (wire shape) plan 1`] = `
 {
