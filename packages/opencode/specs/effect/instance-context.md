@@ -157,7 +157,7 @@ Direct legacy usage means any source file that still calls one of:
 - `Instance.reload(...)`
 - `Instance.dispose()` / `Instance.disposeAll()`
 
-Current total: `54` files in `packages/opencode/src`.
+Current total: `56` files in `packages/opencode/src`.
 
 ### Core bridge and plumbing
 
@@ -177,13 +177,13 @@ Migration rule:
 
 These are the current request-entry seams that still create or consume instance context through the legacy helper.
 
-- `src/server/instance/middleware.ts`
-- `src/server/instance/index.ts`
-- `src/server/instance/project.ts`
-- `src/server/instance/workspace.ts`
-- `src/server/instance/file.ts`
-- `src/server/instance/experimental.ts`
-- `src/server/instance/global.ts`
+- `src/server/routes/instance/middleware.ts`
+- `src/server/routes/instance/index.ts`
+- `src/server/routes/instance/project.ts`
+- `src/server/routes/control/workspace.ts`
+- `src/server/routes/instance/file.ts`
+- `src/server/routes/instance/experimental.ts`
+- `src/server/routes/global.ts`
 
 Migration rule:
 
@@ -239,7 +239,7 @@ Migration rule:
 These modules are already the best near-term migration targets because they are in Effect code but still read sync getters from the legacy helper.
 
 - `src/agent/agent.ts`
-- `src/config/tui-migrate.ts`
+- `src/cli/cmd/tui/config/tui-migrate.ts`
 - `src/file/index.ts`
 - `src/file/watcher.ts`
 - `src/format/formatter.ts`
@@ -250,7 +250,7 @@ These modules are already the best near-term migration targets because they are 
 - `src/project/vcs.ts`
 - `src/provider/provider.ts`
 - `src/pty/index.ts`
-- `src/session/index.ts`
+- `src/session/session.ts`
 - `src/session/instruction.ts`
 - `src/session/llm.ts`
 - `src/session/system.ts`

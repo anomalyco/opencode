@@ -1,12 +1,13 @@
 # Facade removal checklist
 
-Concrete inventory of the remaining `makeRuntime(...)`-backed service facades in `packages/opencode`.
+Concrete inventory of the remaining `makeRuntime(...)`-backed facades in `packages/opencode`.
 
-As of 2026-04-13, latest `origin/dev`:
+Current status on this branch:
 
-- `src/` still has 15 `makeRuntime(...)` call sites.
-- 13 of those are still in scope for facade removal.
-- 2 are excluded from this checklist: `bus/index.ts` and `effect/cross-spawn-spawner.ts`.
+- `src/` has 5 `makeRuntime(...)` call sites total.
+- 2 are intentionally excluded from this checklist: `src/bus/index.ts` and `src/effect/cross-spawn-spawner.ts`.
+- 1 is tracked primarily by the instance-context migration rather than facade removal: `src/project/instance.ts`.
+- That leaves 2 live runtime-backed service facades still worth tracking here: `src/npm/index.ts` and `src/cli/cmd/tui/config/tui.ts`.
 
 Recent progress:
 
@@ -15,8 +16,9 @@ Recent progress:
 
 ## Priority hotspots
 
-- `server/instance/session.ts` still depends on `Session`, `SessionPrompt`, `SessionRevert`, `SessionCompaction`, `SessionSummary`, `ShareSession`, `Agent`, and `Permission` facades.
-- `src/effect/app-runtime.ts` still references many facade namespaces directly, so it should stay in view during each deletion.
+- `src/cli/cmd/tui/config/tui.ts` still exports `makeRuntime(...)` plus async facade helpers for `get()` and `waitForDependencies()`.
+- `src/npm/index.ts` still exports `makeRuntime(...)` plus async facade helpers for `install()`, `add()`, `outdated()`, and `which()`.
+- `src/project/instance.ts` still uses a dedicated runtime for project boot, but that file is really part of the broader legacy instance-context transition tracked in `instance-context.md`.
 
 ## Completed Batches
 
@@ -184,53 +186,34 @@ These were the recurring mistakes and useful corrections from the first two batc
 5. For CLI readability, extract file-local preload helpers when the handler starts doing config load + service load + batched effect fanout inline.
 6. When rebasing a facade branch after nearby merges, prefer the already-cleaned service/test version over older inline facade-era code.
 
-## Next batch
+## Remaining work
 
-Recommended next five, in order:
+Most of the original facade-removal backlog is already done. The practical remaining work is narrower now:
 
-1. `src/permission/index.ts`
-2. `src/agent/agent.ts`
-3. `src/session/summary.ts`
-4. `src/session/revert.ts`
-5. `src/mcp/auth.ts`
-
-Why this batch:
-
-- It keeps pushing the session-adjacent cleanup without jumping straight into `session/index.ts` or `session/prompt.ts`.
-- `Permission`, `Agent`, `SessionSummary`, and `SessionRevert` all reduce fanout in `server/instance/session.ts`.
-- `McpAuth` is small and closely related to the just-landed `MCP` cleanup.
-
-After that batch, the expected follow-up is the main session cluster:
-
-1. `src/session/index.ts`
-2. `src/session/prompt.ts`
-3. `src/session/compaction.ts`
+1. remove the `Npm` runtime-backed facade from `src/npm/index.ts`
+2. remove the `TuiConfig` runtime-backed facade from `src/cli/cmd/tui/config/tui.ts`
+3. keep `src/project/instance.ts` in the separate instance-context migration, not this checklist
 
 ## Checklist
 
-- [ ] `src/session/index.ts` (`Session`) - facades: `create`, `fork`, `get`, `setTitle`, `setArchived`, `setPermission`, `setRevert`, `messages`, `children`, `remove`, `updateMessage`, `removeMessage`, `removePart`, `updatePart`; main callers: `server/instance/session.ts`, `cli/cmd/session.ts`, `cli/cmd/export.ts`, `cli/cmd/github.ts`; tests: `test/server/session-actions.test.ts`, `test/server/session-list.test.ts`, `test/server/global-session-list.test.ts`
-- [ ] `src/session/prompt.ts` (`SessionPrompt`) - facades: `prompt`, `resolvePromptParts`, `cancel`, `loop`, `shell`, `command`; main callers: `server/instance/session.ts`, `cli/cmd/github.ts`; tests: `test/session/prompt.test.ts`, `test/session/prompt-effect.test.ts`, `test/session/structured-output-integration.test.ts`
-- [ ] `src/session/revert.ts` (`SessionRevert`) - facades: `revert`, `unrevert`, `cleanup`; main callers: `server/instance/session.ts`; tests: `test/session/revert-compact.test.ts`
-- [ ] `src/session/compaction.ts` (`SessionCompaction`) - facades: `isOverflow`, `prune`, `create`; main callers: `server/instance/session.ts`; tests: `test/session/compaction.test.ts`
-- [ ] `src/session/summary.ts` (`SessionSummary`) - facades: `summarize`, `diff`; main callers: `session/prompt.ts`, `session/processor.ts`, `server/instance/session.ts`; tests: `test/session/snapshot-tool-race.test.ts`
-- [ ] `src/share/session.ts` (`ShareSession`) - facades: `create`, `share`, `unshare`; main callers: `server/instance/session.ts`, `cli/cmd/github.ts`
-- [ ] `src/agent/agent.ts` (`Agent`) - facades: `get`, `list`, `defaultAgent`, `generate`; main callers: `cli/cmd/agent.ts`, `server/instance/session.ts`, `server/instance/experimental.ts`; tests: `test/agent/agent.test.ts`
-- [ ] `src/permission/index.ts` (`Permission`) - facades: `ask`, `reply`, `list`; main callers: `server/instance/permission.ts`, `server/instance/session.ts`, `session/llm.ts`; tests: `test/permission/next.test.ts`
-- [x] `src/file/index.ts` (`File`) - facades removed and merged.
-- [x] `src/lsp/index.ts` (`LSP`) - facades removed and merged.
-- [x] `src/mcp/index.ts` (`MCP`) - facades removed and merged.
-- [x] `src/config/config.ts` (`Config`) - facades removed and merged.
-- [x] `src/provider/provider.ts` (`Provider`) - facades removed and merged.
-- [x] `src/pty/index.ts` (`Pty`) - facades removed and merged.
-- [x] `src/skill/index.ts` (`Skill`) - facades removed and merged.
-- [x] `src/project/vcs.ts` (`Vcs`) - facades removed and merged.
-- [x] `src/tool/registry.ts` (`ToolRegistry`) - facades removed and merged.
-- [ ] `src/worktree/index.ts` (`Worktree`) - facades: `makeWorktreeInfo`, `createFromInfo`, `create`, `remove`, `reset`; main callers: `control-plane/adaptors/worktree.ts`, `server/instance/experimental.ts`; tests: `test/project/worktree.test.ts`, `test/project/worktree-remove.test.ts`
-- [x] `src/auth/index.ts` (`Auth`) - facades removed and merged.
-- [ ] `src/mcp/auth.ts` (`McpAuth`) - facades: `get`, `getForUrl`, `all`, `set`, `remove`, `updateTokens`, `updateClientInfo`, `updateCodeVerifier`, `updateOAuthState`; main callers: `mcp/oauth-provider.ts`, `cli/cmd/mcp.ts`; tests: `test/mcp/oauth-auto-connect.test.ts`
-- [ ] `src/plugin/index.ts` (`Plugin`) - facades: `trigger`, `list`, `init`; main callers: `agent/agent.ts`, `session/llm.ts`, `project/bootstrap.ts`; tests: `test/plugin/trigger.test.ts`, `test/provider/provider.test.ts`
-- [ ] `src/project/project.ts` (`Project`) - facades: `fromDirectory`, `discover`, `initGit`, `update`, `sandboxes`, `addSandbox`, `removeSandbox`; main callers: `project/instance.ts`, `server/instance/project.ts`, `server/instance/experimental.ts`; tests: `test/project/project.test.ts`, `test/project/migrate-global.test.ts`
-- [ ] `src/snapshot/index.ts` (`Snapshot`) - facades: `init`, `track`, `patch`, `restore`, `revert`, `diff`, `diffFull`; main callers: `project/bootstrap.ts`, `cli/cmd/debug/snapshot.ts`; tests: `test/snapshot/snapshot.test.ts`, `test/session/revert-compact.test.ts`
+- [ ] `src/npm/index.ts` (`Npm`) - still exports runtime-backed async facade helpers on top of `Npm.Service`
+- [ ] `src/cli/cmd/tui/config/tui.ts` (`TuiConfig`) - still exports runtime-backed async facade helpers on top of `TuiConfig.Service`
+- [x] `src/session/session.ts` / `src/session/prompt.ts` / `src/session/revert.ts` / `src/session/summary.ts` - service-local facades removed
+- [x] `src/agent/agent.ts` (`Agent`) - service-local facades removed
+- [x] `src/permission/index.ts` (`Permission`) - service-local facades removed
+- [x] `src/worktree/index.ts` (`Worktree`) - service-local facades removed
+- [x] `src/plugin/index.ts` (`Plugin`) - service-local facades removed
+- [x] `src/snapshot/index.ts` (`Snapshot`) - service-local facades removed
+- [x] `src/file/index.ts` (`File`) - facades removed and merged
+- [x] `src/lsp/index.ts` (`LSP`) - facades removed and merged
+- [x] `src/mcp/index.ts` (`MCP`) - facades removed and merged
+- [x] `src/config/config.ts` (`Config`) - facades removed and merged
+- [x] `src/provider/provider.ts` (`Provider`) - facades removed and merged
+- [x] `src/pty/index.ts` (`Pty`) - facades removed and merged
+- [x] `src/skill/index.ts` (`Skill`) - facades removed and merged
+- [x] `src/project/vcs.ts` (`Vcs`) - facades removed and merged
+- [x] `src/tool/registry.ts` (`ToolRegistry`) - facades removed and merged
+- [x] `src/auth/index.ts` (`Auth`) - facades removed and merged
 
 ## Excluded `makeRuntime(...)` sites
 
