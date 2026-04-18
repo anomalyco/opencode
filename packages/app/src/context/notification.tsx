@@ -312,7 +312,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       const [syncStore] = globalSync.child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
       if (match.found) return syncStore.session[match.index]
-      return globalSDK.client.session
+      const domain = domainFromDirectory(directory)
+      return globalSDK.forDomain(domain).client.session
         .get({ directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
@@ -510,19 +511,27 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       },
       project: {
         all(directory: string) {
-          return domainIndex().project.all[directory] ?? empty
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.all[directory] ?? empty
         },
         unseen(directory: string) {
-          return domainIndex().project.unseen[directory] ?? empty
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.unseen[directory] ?? empty
         },
         unseenCount(directory: string) {
-          return domainIndex().project.unseenCount[directory] ?? 0
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.unseenCount[directory] ?? 0
         },
         unseenHasError(directory: string) {
-          return domainIndex().project.unseenHasError[directory] ?? false
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.unseenHasError[directory] ?? false
         },
         markViewed(directory: string) {
-          const domain = currentDomain()
+          const domain = domainFromDirectory(directory)
           const domainIdx = index.byDomain[domain]
           if (!domainIdx) return
           const unseen = domainIdx.project.unseen[directory] ?? empty
