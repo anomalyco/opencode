@@ -14,6 +14,7 @@ import {
   batch,
   Show,
   on,
+  onCleanup,
 } from "solid-js"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@/flag/flag"
@@ -736,94 +737,97 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     },
   ])
 
-  event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.trigger(evt.properties.command)
-  })
+  const unsubs: Array<() => void> = [
+    event.on(TuiEvent.CommandExecute.type, (evt) => {
+      command.trigger(evt.properties.command)
+    }),
 
-  event.on(TuiEvent.ToastShow.type, (evt) => {
-    toast.show({
-      title: evt.properties.title,
-      message: evt.properties.message,
-      variant: evt.properties.variant,
-      duration: evt.properties.duration,
-    })
-  })
-
-  event.on(TuiEvent.SessionSelect.type, (evt) => {
-    route.navigate({
-      type: "session",
-      sessionID: evt.properties.sessionID,
-    })
-  })
-
-  event.on("session.deleted", (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+    event.on(TuiEvent.ToastShow.type, (evt) => {
       toast.show({
-        variant: "info",
-        message: "The current session was deleted",
+        title: evt.properties.title,
+        message: evt.properties.message,
+        variant: evt.properties.variant,
+        duration: evt.properties.duration,
       })
-    }
-  })
+    }),
 
-  event.on("session.error", (evt) => {
-    const error = evt.properties.error
-    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = errorMessage(error)
+    event.on(TuiEvent.SessionSelect.type, (evt) => {
+      route.navigate({
+        type: "session",
+        sessionID: evt.properties.sessionID,
+      })
+    }),
 
-    toast.show({
-      variant: "error",
-      message,
-      duration: 5000,
-    })
-  })
+    event.on("session.deleted", (evt) => {
+      if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+        route.navigate({ type: "home" })
+        toast.show({
+          variant: "info",
+          message: "The current session was deleted",
+        })
+      }
+    }),
 
-  event.on("installation.update-available", async (evt) => {
-    const version = evt.properties.version
+    event.on("session.error", (evt) => {
+      const error = evt.properties.error
+      if (error && typeof error === "object" && error.name === "MessageAbortedError") return
+      const message = errorMessage(error)
 
-    const skipped = kv.get("skipped_version")
-    if (skipped && !semver.gt(version, skipped)) return
-
-    const choice = await DialogConfirm.show(
-      dialog,
-      `Update Available`,
-      `A new release v${version} is available. Would you like to update now?`,
-      "skip",
-    )
-
-    if (choice === false) {
-      kv.set("skipped_version", version)
-      return
-    }
-
-    if (choice !== true) return
-
-    toast.show({
-      variant: "info",
-      message: `Updating to v${version}...`,
-      duration: 30000,
-    })
-
-    const result = await sdk.client.global.upgrade({ target: version })
-
-    if (result.error || !result.data?.success) {
       toast.show({
         variant: "error",
-        title: "Update Failed",
-        message: "Update failed",
-        duration: 10000,
+        message,
+        duration: 5000,
       })
-      return
-    }
+    }),
 
-    await DialogAlert.show(
-      dialog,
-      "Update Complete",
-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
-    )
+    event.on("installation.update-available", async (evt) => {
+      const version = evt.properties.version
 
-    void exit()
-  })
+      const skipped = kv.get("skipped_version")
+      if (skipped && !semver.gt(version, skipped)) return
+
+      const choice = await DialogConfirm.show(
+        dialog,
+        `Update Available`,
+        `A new release v${version} is available. Would you like to update now?`,
+        "skip",
+      )
+
+      if (choice === false) {
+        kv.set("skipped_version", version)
+        return
+      }
+
+      if (choice !== true) return
+
+      toast.show({
+        variant: "info",
+        message: `Updating to v${version}...`,
+        duration: 30000,
+      })
+
+      const result = await sdk.client.global.upgrade({ target: version })
+
+      if (result.error || !result.data?.success) {
+        toast.show({
+          variant: "error",
+          title: "Update Failed",
+          message: "Update failed",
+          duration: 10000,
+        })
+        return
+      }
+
+      await DialogAlert.show(
+        dialog,
+        "Update Complete",
+        `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+      )
+
+      void exit()
+    }),
+  ]
+  onCleanup(() => { for (const unsub of unsubs) unsub() })
 
   const plugin = createMemo(() => {
     if (!ready()) return

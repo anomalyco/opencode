@@ -27,7 +27,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onMount, onCleanup } from "solid-js"
 import { Log } from "@/util"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 
@@ -111,7 +111,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const fullSyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
 
-    event.subscribe((event) => {
+    const unsubSync = event.subscribe((event) => {
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -349,6 +349,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
       }
     })
+    onCleanup(() => { unsubSync() })
 
     const exit = useExit()
     const args = useArgs()

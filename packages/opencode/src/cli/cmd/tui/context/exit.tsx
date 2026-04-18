@@ -1,4 +1,5 @@
 import { useRenderer } from "@opentui/solid"
+import { onCleanup } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { win32FlushInputBuffer } from "../win32"
@@ -54,7 +55,9 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         message: store,
       },
     )
-    process.on("SIGHUP", () => exit())
+    const sighupHandler = () => exit()
+    process.on("SIGHUP", sighupHandler)
+    onCleanup(() => process.off("SIGHUP", sighupHandler))
     return exit
   },
 })
