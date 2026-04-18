@@ -1,4 +1,4 @@
-import { Schema, SchemaAST } from "effect"
+import { Effect, Option, Schema, SchemaAST } from "effect"
 import z from "zod"
 
 /**
@@ -8,19 +8,220 @@ import z from "zod"
  */
 export const ZodOverride: unique symbol = Symbol.for("effect-zod/override")
 
+/**
+ * Annotation key for a pre-parse transform that runs on the raw input before
+ * the derived Zod schema validates it.  The walker emits
+ * `z.preprocess(fn, inner)` when this annotation is present.
+ *
+ * Models zod's `z.preprocess(fn, schema)` pattern — useful when the schema
+ * needs to inspect the user's raw input (e.g. to capture insertion order)
+ * before `Schema.Struct` canonicalises the object.
+ *
+ * TODO: This exists to paper over a missing Effect Schema feature.  The
+ * parser canonicalises open struct output (known fields first in
+ * declaration order, then catchall fields) before any user-defined
+ * transform sees the value, and there is no pre-parse hook — so the
+ * user's original property insertion order is gone by the time
+ * `Schema.decodeTo` or `middlewareDecoding` runs.
+ *
+ * That canonicalisation is a reasonable default, but `config/permission.ts`
+ * encodes rule precedence in the user's JSON key order (`evaluate.ts`
+ * uses `findLast`, so later entries win), which the canonicalisation
+ * silently destroys.
+ *
+ * The cleanest upstream fix would be either:
+ *
+ *   1. A `preserveInputOrder` option on `Schema.Struct` /
+ *      `Schema.StructWithRest` that keeps the input's insertion order in
+ *      the parsed object (opt-in; canonical order stays default).
+ *   2. A generic pre-parse hook (`Schema.preprocess(schema, fn)` or a
+ *      transformation whose decode receives the raw `unknown`).
+ *
+ * Either of those would let us delete `ZodPreprocess` and the
+ * `__originalKeys` hack.  Alternatively, the permission model could move
+ * to specificity-based precedence (exact keys beat wildcards) or an
+ * explicit ordered array of rules, which removes the ordering
+ * dependency at the data-model level.
+ */
+export const ZodPreprocess: unique symbol = Symbol.for("effect-zod/preprocess")
+
+// AST nodes are immutable and frequently shared across schemas (e.g. a single
+// Schema.Class embedded in multiple parents). Memoizing by node identity
+// avoids rebuilding equivalent Zod subtrees and keeps derived children stable
+// by reference across callers.
+const walkCache = new WeakMap<SchemaAST.AST, z.ZodTypeAny>()
+
+// Shared empty ParseOptions for the rare callers that need one — avoids
+// allocating a fresh object per parse inside refinements and transforms.
+const EMPTY_PARSE_OPTIONS = {} as SchemaAST.ParseOptions
+
 export function zod<S extends Schema.Top>(schema: S): z.ZodType<Schema.Schema.Type<S>> {
   return walk(schema.ast) as z.ZodType<Schema.Schema.Type<S>>
 }
 
 function walk(ast: SchemaAST.AST): z.ZodTypeAny {
+  const cached = walkCache.get(ast)
+  if (cached) return cached
+  const result = walkUncached(ast)
+  walkCache.set(ast, result)
+  return result
+}
+
+function walkUncached(ast: SchemaAST.AST): z.ZodTypeAny {
   const override = (ast.annotations as any)?.[ZodOverride] as z.ZodTypeAny | undefined
   if (override) return override
 
-  const out = body(ast)
+  // Schema.Class wraps its fields in a Declaration AST plus an encoding that
+  // constructs the class instance. For the Zod derivation we want the plain
+  // field shape (the decoded/consumer view), not the class instance — so
+  // Declarations fall through to body(), not encoded(). User-level
+  // Schema.decodeTo / Schema.transform attach encoding to non-Declaration
+  // nodes, where we do apply the transform.
+  //
+  // Schema.withDecodingDefault also attaches encoding, but we want `.default(v)`
+  // on the inner Zod rather than a transform wrapper — so optional ASTs whose
+  // encoding resolves a default from Option.none() route through body()/opt().
+  const hasEncoding = ast.encoding?.length && ast._tag !== "Declaration"
+  const hasTransform = hasEncoding && !(SchemaAST.isOptional(ast) && extractDefault(ast) !== undefined)
+  const base = hasTransform ? encoded(ast) : body(ast)
+  const checked = ast.checks?.length ? applyChecks(base, ast.checks, ast) : base
+  const preprocess = (ast.annotations as { [ZodPreprocess]?: (val: unknown) => unknown } | undefined)?.[ZodPreprocess]
+  const out = preprocess ? z.preprocess(preprocess, checked) : checked
   const desc = SchemaAST.resolveDescription(ast)
   const ref = SchemaAST.resolveIdentifier(ast)
-  const next = desc ? out.describe(desc) : out
-  return ref ? next.meta({ ref }) : next
+  const described = desc ? out.describe(desc) : out
+  return ref ? described.meta({ ref }) : described
+}
+
+// Walk the encoded side and apply each link's decode to produce the decoded
+// shape. A node `Target` produced by `from.decodeTo(Target)` carries
+// `Target.encoding = [Link(from, transformation)]`. Chained decodeTo calls
+// nest the encoding via `Link.to` so walking it recursively threads all
+// prior transforms — typical encoding.length is 1.
+function encoded(ast: SchemaAST.AST): z.ZodTypeAny {
+  const encoding = ast.encoding!
+  return encoding.reduce<z.ZodTypeAny>(
+    (acc, link) => acc.transform((v) => decode(link.transformation, v)),
+    walk(encoding[0].to),
+  )
+}
+
+// Transformations built via pure `SchemaGetter.transform(fn)` (the common
+// decodeTo case) resolve synchronously, so running with no services is safe.
+// Effectful / middleware-based transforms will surface as Effect defects.
+function decode(transformation: SchemaAST.Link["transformation"], value: unknown): unknown {
+  const exit = Effect.runSyncExit(
+    (transformation.decode as any).run(Option.some(value), EMPTY_PARSE_OPTIONS) as Effect.Effect<
+      Option.Option<unknown>
+    >,
+  )
+  if (exit._tag === "Failure") throw new Error(`effect-zod: transform failed: ${String(exit.cause)}`)
+  return Option.getOrElse(exit.value, () => value)
+}
+
+// Flatten FilterGroups and any nested variants into a linear list of Filters.
+// Well-known filters (Schema.isInt, isGreaterThan, isPattern, …) are
+// translated into native Zod methods so their JSON Schema output includes
+// the corresponding constraint (type: integer, exclusiveMinimum, pattern, …).
+// Anything else falls back to a single .superRefine layer — runtime-only,
+// emits no JSON Schema constraint.
+function applyChecks(out: z.ZodTypeAny, checks: SchemaAST.Checks, ast: SchemaAST.AST): z.ZodTypeAny {
+  const filters: SchemaAST.Filter<unknown>[] = []
+  const collect = (c: SchemaAST.Check<unknown>) => {
+    if (c._tag === "FilterGroup") c.checks.forEach(collect)
+    else filters.push(c)
+  }
+  checks.forEach(collect)
+
+  const unhandled: SchemaAST.Filter<unknown>[] = []
+  const translated = filters.reduce<z.ZodTypeAny>((acc, filter) => {
+    const next = translateFilter(acc, filter)
+    if (next) return next
+    unhandled.push(filter)
+    return acc
+  }, out)
+
+  if (unhandled.length === 0) return translated
+
+  return translated.superRefine((value, ctx) => {
+    for (const filter of unhandled) {
+      const issue = filter.run(value, ast, EMPTY_PARSE_OPTIONS)
+      if (!issue) continue
+      const message = issueMessage(issue) ?? (filter.annotations as any)?.message ?? "Validation failed"
+      ctx.addIssue({ code: "custom", message })
+    }
+  })
+}
+
+// Translate a well-known Effect Schema filter into a native Zod method call on
+// `out`. Dispatch is keyed on `filter.annotations.meta._tag`, which every
+// built-in check factory (isInt, isGreaterThan, isPattern, …) attaches at
+// construction time. Returns `undefined` for unrecognised filters so the
+// caller can fall back to the generic .superRefine path.
+function translateFilter(out: z.ZodTypeAny, filter: SchemaAST.Filter<unknown>): z.ZodTypeAny | undefined {
+  const meta = (filter.annotations as { meta?: Record<string, unknown> } | undefined)?.meta
+  if (!meta || typeof meta._tag !== "string") return undefined
+  switch (meta._tag) {
+    case "isInt":
+      return call(out, "int")
+    case "isFinite":
+      return call(out, "finite")
+    case "isGreaterThan":
+      return call(out, "gt", meta.exclusiveMinimum)
+    case "isGreaterThanOrEqualTo":
+      return call(out, "gte", meta.minimum)
+    case "isLessThan":
+      return call(out, "lt", meta.exclusiveMaximum)
+    case "isLessThanOrEqualTo":
+      return call(out, "lte", meta.maximum)
+    case "isBetween": {
+      const lo = meta.exclusiveMinimum ? call(out, "gt", meta.minimum) : call(out, "gte", meta.minimum)
+      if (!lo) return undefined
+      return meta.exclusiveMaximum ? call(lo, "lt", meta.maximum) : call(lo, "lte", meta.maximum)
+    }
+    case "isMultipleOf":
+      return call(out, "multipleOf", meta.divisor)
+    case "isMinLength":
+      return call(out, "min", meta.minLength)
+    case "isMaxLength":
+      return call(out, "max", meta.maxLength)
+    case "isLengthBetween": {
+      const lo = call(out, "min", meta.minimum)
+      if (!lo) return undefined
+      return call(lo, "max", meta.maximum)
+    }
+    case "isPattern":
+      return call(out, "regex", meta.regExp)
+    case "isStartsWith":
+      return call(out, "startsWith", meta.startsWith)
+    case "isEndsWith":
+      return call(out, "endsWith", meta.endsWith)
+    case "isIncludes":
+      return call(out, "includes", meta.includes)
+    case "isUUID":
+      return call(out, "uuid")
+    case "isULID":
+      return call(out, "ulid")
+    case "isBase64":
+      return call(out, "base64")
+    case "isBase64Url":
+      return call(out, "base64url")
+  }
+  return undefined
+}
+
+// Invoke a named Zod method on `target` if it exists, otherwise return
+// undefined so the caller can fall back. Using this helper instead of a
+// typed cast keeps `translateFilter` free of per-case narrowing noise.
+function call(target: z.ZodTypeAny, method: string, ...args: unknown[]): z.ZodTypeAny | undefined {
+  const fn = (target as unknown as Record<string, ((...a: unknown[]) => z.ZodTypeAny) | undefined>)[method]
+  return typeof fn === "function" ? fn.apply(target, args) : undefined
+}
+
+function issueMessage(issue: any): string | undefined {
+  if (typeof issue?.annotations?.message === "string") return issue.annotations.message
+  if (typeof issue?.message === "string") return issue.message
+  return undefined
 }
 
 function body(ast: SchemaAST.AST): z.ZodTypeAny {
@@ -60,10 +261,43 @@ function body(ast: SchemaAST.AST): z.ZodTypeAny {
 function opt(ast: SchemaAST.AST): z.ZodTypeAny {
   if (ast._tag !== "Union") return fail(ast)
   const items = ast.types.filter((item) => item._tag !== "Undefined")
-  if (items.length === 1) return walk(items[0]).optional()
-  if (items.length > 1)
-    return z.union(items.map(walk) as [z.ZodTypeAny, z.ZodTypeAny, ...Array<z.ZodTypeAny>]).optional()
-  return z.undefined().optional()
+  const inner =
+    items.length === 1
+      ? walk(items[0])
+      : items.length > 1
+        ? z.union(items.map(walk) as [z.ZodTypeAny, z.ZodTypeAny, ...Array<z.ZodTypeAny>])
+        : z.undefined()
+  // Schema.withDecodingDefault attaches an encoding `Link` whose transformation
+  // decode Getter resolves `Option.none()` to `Option.some(default)`.  Invoke
+  // it to extract the default and emit `.default(...)` instead of `.optional()`.
+  const fallback = extractDefault(ast)
+  if (fallback !== undefined) return inner.default(fallback.value)
+  return inner.optional()
+}
+
+type DecodeLink = {
+  readonly transformation: {
+    readonly decode: {
+      readonly run: (
+        input: Option.Option<unknown>,
+        options: SchemaAST.ParseOptions,
+      ) => Effect.Effect<Option.Option<unknown>, unknown>
+    }
+  }
+}
+
+function extractDefault(ast: SchemaAST.AST): { value: unknown } | undefined {
+  const encoding = (ast as { encoding?: ReadonlyArray<DecodeLink> }).encoding
+  if (!encoding?.length) return undefined
+  // Walk the chain of encoding Links in order; the first Getter that produces
+  // a value from Option.none wins.  withDecodingDefault always puts its
+  // defaulting Link adjacent to the optional Union.
+  for (const link of encoding) {
+    const probe = Effect.runSyncExit(link.transformation.decode.run(Option.none(), {}))
+    if (probe._tag !== "Success") continue
+    if (Option.isSome(probe.value)) return { value: probe.value.value }
+  }
+  return undefined
 }
 
 function union(ast: SchemaAST.Union): z.ZodTypeAny {
@@ -86,21 +320,40 @@ function union(ast: SchemaAST.Union): z.ZodTypeAny {
 }
 
 function object(ast: SchemaAST.Objects): z.ZodTypeAny {
+  // Pure record: { [k: string]: V }
   if (ast.propertySignatures.length === 0 && ast.indexSignatures.length === 1) {
     const sig = ast.indexSignatures[0]
     if (sig.parameter._tag !== "String") return fail(ast)
     return z.record(z.string(), walk(sig.type))
   }
 
-  if (ast.indexSignatures.length > 0) return fail(ast)
+  // Pure object with known fields and no index signatures.
+  if (ast.indexSignatures.length === 0) {
+    return z.object(Object.fromEntries(ast.propertySignatures.map((sig) => [String(sig.name), walk(sig.type)])))
+  }
 
-  return z.object(Object.fromEntries(ast.propertySignatures.map((sig) => [String(sig.name), walk(sig.type)])))
+  // Struct with a catchall (StructWithRest): known fields + index signature.
+  // Only supports a single string-keyed index signature; multi-signature or
+  // symbol/number keys fall through to fail.
+  if (ast.indexSignatures.length !== 1) return fail(ast)
+  const sig = ast.indexSignatures[0]
+  if (sig.parameter._tag !== "String") return fail(ast)
+  return z
+    .object(Object.fromEntries(ast.propertySignatures.map((p) => [String(p.name), walk(p.type)])))
+    .catchall(walk(sig.type))
 }
 
 function array(ast: SchemaAST.Arrays): z.ZodTypeAny {
-  if (ast.elements.length > 0) return fail(ast)
-  if (ast.rest.length !== 1) return fail(ast)
-  return z.array(walk(ast.rest[0]))
+  // Pure variadic arrays: { elements: [], rest: [item] }
+  if (ast.elements.length === 0) {
+    if (ast.rest.length !== 1) return fail(ast)
+    return z.array(walk(ast.rest[0]))
+  }
+  // Fixed-length tuples: { elements: [a, b, ...], rest: [] }
+  // Tuples with a variadic tail (...rest) are not yet supported.
+  if (ast.rest.length > 0) return fail(ast)
+  const items = ast.elements.map(walk)
+  return z.tuple(items as [z.ZodTypeAny, ...Array<z.ZodTypeAny>])
 }
 
 function decl(ast: SchemaAST.Declaration): z.ZodTypeAny {
