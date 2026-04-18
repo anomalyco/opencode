@@ -17,6 +17,7 @@ const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+const MIME_SAMPLE_BYTES = 12
 
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
 
@@ -34,6 +35,19 @@ const sniffAttachmentMime = (bytes: Uint8Array, fallback: string) => {
   }
 
   return fallback
+}
+
+async function readSample(filepath: string, fileSize: number, sampleSize: number) {
+  if (fileSize === 0) return new Uint8Array()
+
+  const fh = await open(filepath, "r")
+  try {
+    const bytes = Buffer.alloc(Math.min(sampleSize, fileSize))
+    const result = await fh.read(bytes, 0, bytes.length, 0)
+    return bytes.subarray(0, result.bytesRead)
+  } finally {
+    await fh.close()
+  }
 }
 
 const parameters = z.object({
@@ -160,12 +174,14 @@ export const ReadTool = Tool.define(
 
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
-      const mime = AppFileSystem.mimeType(filepath)
+      const mime = sniffAttachmentMime(
+        yield* Effect.promise(() => readSample(filepath, Number(stat.size), MIME_SAMPLE_BYTES)),
+        AppFileSystem.mimeType(filepath),
+      )
       const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
       const isPdf = mime === "application/pdf"
       if (isImage || isPdf) {
         const bytes = yield* fs.readFile(filepath)
-        const attachmentMime = sniffAttachmentMime(bytes, mime)
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
         return {
           title,
@@ -178,8 +194,8 @@ export const ReadTool = Tool.define(
           attachments: [
             {
               type: "file" as const,
-              mime: attachmentMime,
-              url: `data:${attachmentMime};base64,${Buffer.from(bytes).toString("base64")}`,
+              mime,
+              url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
             },
           ],
         }
@@ -321,23 +337,17 @@ async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean
 
   if (fileSize === 0) return false
 
-  const fh = await open(filepath, "r")
-  try {
-    const sampleSize = Math.min(4096, fileSize)
-    const bytes = Buffer.alloc(sampleSize)
-    const result = await fh.read(bytes, 0, sampleSize, 0)
-    if (result.bytesRead === 0) return false
+  const bytes = await readSample(filepath, fileSize, 4096)
+  if (bytes.length === 0) return false
 
-    let nonPrintableCount = 0
-    for (let i = 0; i < result.bytesRead; i++) {
-      if (bytes[i] === 0) return true
-      if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
-        nonPrintableCount++
-      }
+  let nonPrintableCount = 0
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) return true
+    if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
+      nonPrintableCount++
     }
-    // If >30% non-printable characters, consider it binary
-    return nonPrintableCount / result.bytesRead > 0.3
-  } finally {
-    await fh.close()
   }
+
+  // If >30% non-printable characters, consider it binary
+  return nonPrintableCount / bytes.length > 0.3
 }
