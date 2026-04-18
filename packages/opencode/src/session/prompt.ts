@@ -784,7 +784,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const shellName = (
         process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
       ).toLowerCase()
-      const invocations: Record<string, { args: string[] }> = {
+      // Pass the command via __OPENCODE_CMD env var instead of embedding it
+      // in the -c script string. This avoids double-expansion: JSON.stringify
+      // wraps in double quotes, causing ${VAR} inside single-quoted user input
+      // to be expanded by the outer shell before eval sees it. (#23152)
+      // With an env var, eval "$__OPENCODE_CMD" preserves the user's original
+      // quoting exactly as a real interactive shell would.
+      const invocations: Record<string, { args: string[]; env?: Record<string, string> }> = {
         nu: { args: ["-c", input.command] },
         fish: { args: ["-c", input.command] },
         zsh: {
@@ -796,9 +802,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
               [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
               cd "$__oc_cwd"
-              eval ${JSON.stringify(input.command)}
+              eval "$__OPENCODE_CMD"
             `,
           ],
+          env: { __OPENCODE_CMD: input.command },
         },
         bash: {
           args: [
@@ -809,9 +816,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               shopt -s expand_aliases
               [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
               cd "$__oc_cwd"
-              eval ${JSON.stringify(input.command)}
+              eval "$__OPENCODE_CMD"
             `,
           ],
+          env: { __OPENCODE_CMD: input.command },
         },
         cmd: { args: ["/c", input.command] },
         powershell: { args: ["-NoProfile", "-Command", input.command] },
@@ -819,7 +827,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         "": { args: ["-c", input.command] },
       }
 
-      const args = (invocations[shellName] ?? invocations[""]).args
+      const invocation = invocations[shellName] ?? invocations[""]
+      const args = invocation.args
       const cwd = ctx.directory
       const shellEnv = yield* plugin.trigger(
         "shell.env",
@@ -830,7 +839,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const cmd = ChildProcess.make(sh, args, {
         cwd,
         extendEnv: true,
-        env: { ...shellEnv.env, TERM: "dumb" },
+        env: { ...shellEnv.env, ...invocation.env, TERM: "dumb" },
         stdin: "ignore",
         forceKillAfter: "3 seconds",
       })
