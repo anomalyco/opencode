@@ -1,0 +1,128 @@
+---
+title: Udostępnianie
+description: Udostępnij swoje rozmowy dotyczące opencode.
+---
+
+Funkcja udostępniania opencode umożliwia tworzenie publicznych linków do konwersacji opencode, dzięki czemu możesz współpracować z członkami zespołu lub uzyskać pomoc od innych.
+
+:::note
+Udostępnione konwersacje są publicznie dostępne dla każdej osoby mającej link.
+:::
+
+---
+
+## Jak to działa
+
+Kiedy udostępniasz rozmowę, opencode:
+
+1. Tworzy unikalny publiczny adres URL sesji
+2. Synchronizuje historię rozmów z naszymi serwerami
+3. Udostępnia rozmowę za pośrednictwem łącza do udostępniania — `opncd.ai/s/<share-id>`
+
+---
+
+## Udostępnianie
+
+opencode obsługuje trzy tryby udostępniania, które kontrolują sposób udostępniania rozmów:
+
+---
+
+### Ręczne (domyślne)
+
+Domyślnie opencode korzysta z ręcznego trybu udostępniania. Sesje nie są udostępniane automatycznie, ale możesz je udostępnić ręcznie za pomocą polecenia `/share`:
+
+```
+/share
+```
+
+Spowoduje to wygenerowanie unikalnego adresu URL, który zostanie skopiowany do schowka.
+
+Aby jawnie ustawić tryb ręczny w [pliku konfiguracyjnym] (./config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Automatyczne udostępnianie
+
+Możesz włączyć automatyczne udostępnianie dla wszystkich nowych rozmów, ustawiając opcję `share` na `"auto"` w [pliku konfiguracyjnym] (./config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Po włączeniu automatycznego udostępniania każda nowa rozmowa będzie automatycznie udostępniana i generowany będzie link.
+
+---
+
+### Wyłączone
+
+Możesz całkowicie wyłączyć udostępnianie, ustawiając opcję `share` na `"disabled"` w [pliku konfiguracyjnym] (./config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+Aby wymusić to w całym zespole dla danego projektu, dodaj go do `opencode.json` w swoim projekcie i sprawdź w Git.
+
+---
+
+## Cofnięcie udostępnienia
+
+Aby zatrzymać udostępnianie rozmowy i usunąć ją z dostępu publicznego:
+
+```
+/unshare
+```
+
+Spowoduje to usunięcie łącza udostępniania i danych związanych z rozmową.
+
+---
+
+## Prywatność
+
+Podczas udostępniania rozmowy należy pamiętać o kilku rzeczach.
+
+---
+
+### Przechowywanie danych
+
+Udostępnione rozmowy pozostają dostępne, dopóki wyraźnie ich nie udostępnisz. Ten
+includes:
+
+- Pełna historia rozmów
+- Wszystkie wiadomości i odpowiedzi
+- Metadane sesji
+
+---
+
+### Zalecenia
+
+- Udostępniaj tylko rozmowy, które nie zawierają poufnych informacji.
+- Przejrzyj treść rozmowy przed udostępnieniem.
+- Cofnij udostępnianie rozmów po zakończeniu współpracy.
+- Unikaj udostępniania rozmów zawierających zastrzeżony kod lub poufne dane.
+- W przypadku wrażliwych projektów całkowicie wyłącz udostępnianie.
+
+---
+
+## Dla przedsiębiorstw
+
+W przypadku wdrożeń korporacyjnych funkcją udostępniania może być:
+
+- **Wyłączone** całkowicie ze względu na bezpieczeństwo
+- **Restricted** to users authenticated through SSO only
+- **Własny hosting** na własnej infrastrukturze
+
+[Dowiedz się więcej](/docs/enterprise) o używaniu opencode w Twojej organizacji.

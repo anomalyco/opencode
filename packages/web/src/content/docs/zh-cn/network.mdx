@@ -1,0 +1,57 @@
+---
+title: 网络
+description: 配置代理和自定义证书。
+---
+
+OpenCode 支持标准代理环境变量和自定义证书，适用于企业网络环境。
+
+---
+
+## 代理
+
+OpenCode 遵循标准代理环境变量。
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI 与本地 HTTP 服务器进行通信。你必须为此连接绕过代理，以防止路由循环。
+:::
+
+你可以使用 [CLI 标志](/docs/cli#run)来配置服务器的端口和主机名。
+
+---
+
+### 身份验证
+
+如果你的代理需要基本身份验证，请在 URL 中包含凭据。
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+避免将密码硬编码在代码中。请使用环境变量或安全的凭据存储方式。
+:::
+
+对于需要高级身份验证（如 NTLM 或 Kerberos）的代理，建议使用支持相应身份验证方式的 LLM 网关。
+
+---
+
+## 自定义证书
+
+如果你的企业使用自定义 CA 进行 HTTPS 连接，请配置 OpenCode 以信任这些证书。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+此配置同时适用于代理连接和直接 API 访问。

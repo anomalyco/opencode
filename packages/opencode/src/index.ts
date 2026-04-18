@@ -2,17 +2,20 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import { Log } from "./util/log"
-import { AuthCommand } from "./cli/cmd/auth"
+import { Log } from "./util"
+import { ConsoleCommand } from "./cli/cmd/account"
+import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
-import { NamedError } from "@opencode-ai/util/error"
+import { InstallationVersion } from "./installation/version"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
+import { Filesystem } from "./util"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -26,26 +29,50 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { DbCommand } from "./cli/cmd/db"
+import path from "path"
+import { Global } from "./global"
+import { JsonMigration } from "./storage"
+import { Database } from "./storage"
+import { errorMessage } from "./util/error"
+import { PluginCommand } from "./cli/cmd/plug"
+import { Heap } from "./cli/heap"
+import { drizzle } from "drizzle-orm/bun-sqlite"
+import { ensureProcessMetadata } from "./util/opencode-process"
+
+const processMetadata = ensureProcessMetadata("main")
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
-const cli = yargs(hideBin(process.argv))
+const args = hideBin(process.argv)
+
+function show(out: string) {
+  const text = out.trimStart()
+  if (!text.startsWith("opencode ")) {
+    process.stderr.write(UI.logo() + EOL + EOL)
+    process.stderr.write(text)
+    return
+  }
+  process.stderr.write(out)
+}
+
+const cli = yargs(args)
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
-  .version("version", "show version number", Installation.VERSION)
+  .version("version", "show version number", InstallationVersion)
   .alias("version", "v")
   .option("print-logs", {
     describe: "print logs to stderr",
@@ -56,7 +83,15 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("pure", {
+    describe: "run without external plugins",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
+    if (opts.pure) {
+      process.env.OPENCODE_PURE = "1"
+    }
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
@@ -67,15 +102,57 @@ const cli = yargs(hideBin(process.argv))
       })(),
     })
 
+    Heap.start()
+
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    process.env.OPENCODE_PID = String(process.pid)
 
     Log.Default.info("opencode", {
-      version: Installation.VERSION,
+      version: InstallationVersion,
       args: process.argv.slice(2),
+      process_role: processMetadata.processRole,
+      run_id: processMetadata.runID,
     })
+
+    const marker = path.join(Global.Path.data, "opencode.db")
+    if (!(await Filesystem.exists(marker))) {
+      const tty = process.stderr.isTTY
+      process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
+      const width = 36
+      const orange = "\x1b[38;5;214m"
+      const muted = "\x1b[0;2m"
+      const reset = "\x1b[0m"
+      let last = -1
+      if (tty) process.stderr.write("\x1b[?25l")
+      try {
+        await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
+          progress: (event) => {
+            const percent = Math.floor((event.current / event.total) * 100)
+            if (percent === last && event.current !== event.total) return
+            last = percent
+            if (tty) {
+              const fill = Math.round((percent / 100) * width)
+              const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
+              process.stderr.write(
+                `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
+              )
+              if (event.current === event.total) process.stderr.write("\n")
+            } else {
+              process.stderr.write(`sqlite-migration:${percent}${EOL}`)
+            }
+          },
+        })
+      } finally {
+        if (tty) process.stderr.write("\x1b[?25h")
+        else {
+          process.stderr.write(`sqlite-migration:done${EOL}`)
+        }
+      }
+      process.stderr.write("Database migration complete." + EOL)
+    }
   })
-  .usage("\n" + UI.logo())
+  .usage("")
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
@@ -84,7 +161,8 @@ const cli = yargs(hideBin(process.argv))
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
-  .command(AuthCommand)
+  .command(ConsoleCommand)
+  .command(ProvidersCommand)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)
@@ -97,6 +175,8 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
+  .command(PluginCommand)
+  .command(DbCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
@@ -104,7 +184,7 @@ const cli = yargs(hideBin(process.argv))
       msg?.startsWith("Invalid values:")
     ) {
       if (err) throw err
-      cli.showHelp("log")
+      cli.showHelp(show)
     }
     if (err) throw err
     process.exit(1)
@@ -112,7 +192,15 @@ const cli = yargs(hideBin(process.argv))
   .strict()
 
 try {
-  await cli.parse()
+  if (args.includes("-h") || args.includes("--help")) {
+    await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
+      if (err) throw err
+      if (!out) return
+      show(out)
+    })
+  } else {
+    await cli.parse()
+  }
 } catch (e) {
   let data: Record<string, any> = {}
   if (e instanceof NamedError) {
@@ -147,7 +235,7 @@ try {
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
     UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    console.error(e instanceof Error ? e.message : String(e))
+    process.stderr.write(errorMessage(e) + EOL)
   }
   process.exitCode = 1
 } finally {

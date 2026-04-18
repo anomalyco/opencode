@@ -27,6 +27,37 @@ describe("file watcher invalidation", () => {
     expect(refresh).toEqual(["src"])
   })
 
+  test("reloads files that are open in tabs", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: "src/open.ts",
+          event: "change",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        isOpen: (path) => path === "src/open.ts",
+        loadFile: (path) => loads.push(path),
+        node: () => ({
+          path: "src/open.ts",
+          type: "file",
+          name: "open.ts",
+          absolute: "/repo/src/open.ts",
+          ignored: false,
+        }),
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual(["src/open.ts"])
+  })
+
   test("refreshes only changed loaded directory nodes", () => {
     const refresh: string[] = []
 

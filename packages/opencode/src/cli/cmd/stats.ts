@@ -2,9 +2,11 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
 import { bootstrap } from "../bootstrap"
-import { Storage } from "../../storage/storage"
-import { Project } from "../../project/project"
+import { Database } from "../../storage"
+import { SessionTable } from "../../session/session.sql"
+import { Project } from "../../project"
 import { Instance } from "../../project/instance"
+import { AppRuntime } from "@/effect/app-runtime"
 
 interface SessionStats {
   totalSessions: number
@@ -87,25 +89,8 @@ async function getCurrentProject(): Promise<Project.Info> {
 }
 
 async function getAllSessions(): Promise<Session.Info[]> {
-  const sessions: Session.Info[] = []
-
-  const projectKeys = await Storage.list(["project"])
-  const projects = await Promise.all(projectKeys.map((key) => Storage.read<Project.Info>(key)))
-
-  for (const project of projects) {
-    if (!project) continue
-
-    const sessionKeys = await Storage.list(["session", project.id])
-    const projectSessions = await Promise.all(sessionKeys.map((key) => Storage.read<Session.Info>(key)))
-
-    for (const session of projectSessions) {
-      if (session) {
-        sessions.push(session)
-      }
-    }
-  }
-
-  return sessions
+  const rows = Database.use((db) => db.select().from(SessionTable).all())
+  return rows.map((row) => Session.fromRow(row))
 }
 
 export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
@@ -183,7 +168,9 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
     const batch = filteredSessions.slice(i, i + BATCH_SIZE)
 
     const batchPromises = batch.map(async (session) => {
-      const messages = await Session.messages({ sessionID: session.id })
+      const messages = await AppRuntime.runPromise(
+        Session.Service.use((svc) => svc.messages({ sessionID: session.id })),
+      )
 
       let sessionCost = 0
       let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }

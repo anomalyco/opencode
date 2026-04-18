@@ -1,0 +1,223 @@
+---
+title: 모델
+description: LLM 공급자 및 모델 구성.
+---
+
+opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
+
+---
+
+## 공급자
+
+가장 인기 있는 공급자는 기본적으로 미리 로드되어 있습니다. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 opencode를 시작할 때 사용할 수 있습니다.
+
+자세히 알아보기 [providers](/docs/providers).
+
+---
+
+## 모델 선택
+
+공급자를 구성하면 입력하여 원하는 모델을 선택할 수 있습니다.
+
+```bash frame="none"
+/models
+```
+
+---
+
+## 추천 모델
+
+수많은 모델이 있으며, 매주 새로운 모델이 출시됩니다.
+
+:::tip
+우리가 추천하는 모델 중 하나를 사용하여 고려하십시오.
+:::
+
+하지만 코드 작성과 도구 호출 모두에서 뛰어난 성능을 보이는 모델들이 있습니다.
+
+특별한 순서는 없습니다. (이 목록은 전체 목록이 아니며 최신 상태가 아닐 수 있습니다):
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- M2.1
+- Gemini 3 Pro
+
+---
+
+## 기본값 설정
+
+기본 모델로 설정하려면 `model` 키를 설정할 수 있습니다.
+opencode 설정.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+전체 ID는 `provider_id/model_id`입니다. 예를 들어, [OpenCode Zen](/docs/zen)을 사용한다면, GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용할 수 있습니다.
+
+[custom Provider](/docs/providers#custom)를 구성하면 `provider_id`는 구성의 `provider` 부분에서 키이며 `model_id`는 `provider.models`에서 키입니다.
+
+---
+
+## 모델 구성
+
+config를 통해 모델의 옵션을 구성할 수 있습니다.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+여기서는 두 개의 내장 모델에 대한 전역 설정을 구성합니다: `gpt-5`를 통해 액세스 할 때 `openai` 공급자 및 `claude-sonnet-4-20250514`는 `anthropic` 공급자를 통해 액세스 할 때.
+내장 공급자 및 모델 이름은 [Models.dev](https://models.dev)에서 찾을 수 있습니다.
+
+사용중인 에이전트에 이러한 옵션을 구성할 수 있습니다. 에이전트 구성은 여기에 모든 글로벌 옵션을 overrides. [더 알아보기](/docs/agents/#additional).
+
+내장 된 것을 확장하는 사용자 정의 변형을 정의 할 수 있습니다. Variants는 중복 항목 생성 없이 동일한 모델을 위한 다른 설정을 구성할 수 있습니다:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## 변형
+
+많은 모델이 다양한 구성의 변형(variant)을 지원합니다. opencode는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
+
+## 내장 변형
+
+opencode는 많은 공급자를 위한 기본 변종으로 발송합니다:
+
+**Anthropic**:
+
+- `high` - 높은 생각(Thinking) 예산 (기본)
+- `max` - 최대 생각 예산
+
+** OpenAI **:
+
+모델에 따라 다릅니다.
+
+- `none` - 추론(Reasoning) 없음
+- `minimal` - 최소 추론 노력
+- `low` - 낮은 이유 노력
+- `medium` - 중간 이유 노력
+- `high` - 높은 이유 노력
+- `xhigh` - 추가 높은 이유 노력
+
+** 구글 **:
+
+- `low` - 더 낮은 노력/토큰 예산
+- `high` - 더 높은 노력 / 토큰 예산
+
+:::tip
+이 목록은 포괄적이지 않습니다. 다른 많은 공급자는 기본적으로 내장되어 있습니다.
+:::
+
+### 사용자 정의 변형
+
+기존의 변형을 과도하게 할 수 있거나 자신에게 추가 할 수 있습니다.
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+## 변형 순환
+
+keybind `variant_cycle`를 사용하여 변형 사이 신속하게 전환합니다. [더 알아보기](/docs/keybinds).
+
+---
+
+## 모델 로딩 순서
+
+opencode가 시작될 때, 다음의 우선순위 순서에 있는 모형을 검사합니다:
+
+1. `--model` 또는 `-m` 명령 선 깃발. 형식은 구성 파일과 동일합니다. `provider_id/model_id`.
+
+2. opencode config의 모델 목록.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+여기에 형식은 `provider/model`입니다.
+
+3. 마지막 사용된 모형.
+
+4. 내부 우선 순위를 사용하는 첫 번째 모델.

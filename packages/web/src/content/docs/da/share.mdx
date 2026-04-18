@@ -1,0 +1,128 @@
+---
+title: Deling
+description: Del dine OpenCode-samtaler.
+---
+
+OpenCodes delingsfunksjon lar deg lage offentlige lenker til dine OpenCode-samtaler, slik at du kan samarbeide med lagkamerater eller få hjelp fra andre.
+
+:::note
+Delte samtaler er offentlig tilgængelige for alle med linken.
+:::
+
+---
+
+## Sådan fungerer det
+
+Når du deler en samtale, OpenCode:
+
+1. Opreter en unik offentlig URL for sessionen din
+2. Synkroniserer samtaleloggen din til serverne våre
+3. Gør samtalen tilgængelig via den delbare lenken — `opncd.ai/s/<share-id>`
+
+---
+
+## Tilstande
+
+OpenCode støtter tre delingsmoduser som kontrollerer hvordan samtaler deles:
+
+---
+
+### Manuel (standard)
+
+Som standard bruger OpenCode manuell delingsmodus. Sessioner deles ikke automatisk, men du kan dele dem manuelt ved at bruge kommandoen `/share`:
+
+```
+/share
+```
+
+Dette vil generere en unik URL som vil bli kopiert til utklippstavlen din.
+
+For at eksplisitt angi manuell modus i [konfigurasjonsfilen](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Automatisk deling
+
+Du kan aktivere automatisk deling for alle nye samtaler ved at sette alternativet `share` til `"auto"` i [konfigurasjonsfilen](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Med automatisk deling aktivert, vil hver nye samtale automatisk bli delt og en kobling vil bli generert.
+
+---
+
+### Deaktiveret
+
+Du kan deaktivere deling helt ved at sette alternativet `share` til `"disabled"` i [konfigurasjonsfilen](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+For at håndheve dette på tvers av teamet ditt for et gitt prosjekt, tilføj det til `opencode.json` i prosjektet ditt og tjek inn i Git.
+
+---
+
+## Ophæv deling
+
+Slik slutter du at dele en samtale og fjerner den fra offentlig tilgang:
+
+```
+/unshare
+```
+
+Dette vil fjerne delelinken og slette dataene knyttet til samtalen.
+
+---
+
+## Privatliv
+
+Det er et par ting du må huske på når du deler en samtale.
+
+---
+
+### Datalagring
+
+Delte samtaler forblir tilgængelige til du eksplisitt opphever deling av dem. Dette
+inkluderer:
+
+- Full samtalehistorikk
+- Alle meldinger og svar
+- Metadata for sessioner
+
+---
+
+### Anbefalinger
+
+- Del kun samtaler som ikke inneholder sensitiv informasjon.
+- Se gjennom samtaleinnholdet før du deler.
+- Opphev deling av samtaler når samarbeidet er fullført.
+- Unngå at dele samtaler med proprietær kode eller konfidensielle data.
+- For sensitive prosjekter, deaktiver deling helt.
+
+---
+
+## For virksomheder
+
+For bedriftsimplementeringer kan delingsfunksjonen være:
+
+- **Deaktivert** helt for overholdelse av sikkerhet
+- **Begrenset** til brugere som kun er autentisert gjennom SSO
+- **Selvvert** på din egen infrastruktur
+
+[Finn ut mer](/docs/enterprise) om brug av opencode i organisasjonen din.

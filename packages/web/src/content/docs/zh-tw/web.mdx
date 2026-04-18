@@ -1,0 +1,142 @@
+---
+title: Web
+description: 在瀏覽器中使用 OpenCode。
+---
+
+OpenCode 可以作為 Web 應用程式在瀏覽器中執行，無需終端機即可獲得同樣強大的 AI 編碼體驗。
+
+![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+
+## 快速開始
+
+執行以下指令啟動 Web 介面：
+
+```bash
+opencode web
+```
+
+這會在 `127.0.0.1` 上啟動一個本地伺服器，使用隨機可用連接埠，並自動在預設瀏覽器中開啟 OpenCode。
+
+:::caution
+如果未設定 `OPENCODE_SERVER_PASSWORD`，伺服器將沒有安全保護。本地使用沒有問題，但在網路存取時應當設定密碼。
+:::
+
+:::tip[Windows 使用者]
+為獲得最佳體驗，建議從 [WSL](/docs/windows-wsl) 而非 PowerShell 執行 `opencode web`。這可以確保正確的檔案系統存取和終端機整合。
+:::
+
+---
+
+## 設定
+
+你可以透過命令列旗標或[設定檔](/docs/config)來設定 Web 伺服器。
+
+### 連接埠
+
+預設情況下，OpenCode 會選擇一個可用連接埠。你也可以指定連接埠：
+
+```bash
+opencode web --port 4096
+```
+
+### 主機名稱
+
+預設情況下，伺服器繫結到 `127.0.0.1`（僅限本地存取）。要使 OpenCode 在網路中可存取：
+
+```bash
+opencode web --hostname 0.0.0.0
+```
+
+使用 `0.0.0.0` 時，OpenCode 會同時顯示本地位址和網路位址：
+
+```
+  Local access:       http://localhost:4096
+  Network access:     http://192.168.1.100:4096
+```
+
+### mDNS 探索
+
+啟用 mDNS 可以讓你的伺服器在本地網路中被自動探索：
+
+```bash
+opencode web --mdns
+```
+
+這會自動將主機名稱設定為 `0.0.0.0`，並將伺服器廣播為 `opencode.local`。
+
+你可以自訂 mDNS 網域名稱，以便在同一網路中執行多個實例：
+
+```bash
+opencode web --mdns --mdns-domain myproject.local
+```
+
+### CORS
+
+要為 CORS 新增額外的允許網域（適用於自訂前端）：
+
+```bash
+opencode web --cors https://example.com
+```
+
+### 身分驗證
+
+要保護伺服器存取，可以透過 `OPENCODE_SERVER_PASSWORD` 環境變數設定密碼：
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode web
+```
+
+使用者名稱預設為 `opencode`，可以透過 `OPENCODE_SERVER_USERNAME` 進行更改。
+
+---
+
+## 使用 Web 介面
+
+啟動後，Web 介面提供對 OpenCode 工作階段的存取。
+
+### 工作階段
+
+在主頁上查看和管理你的工作階段。你可以查看進行中的工作階段，也可以建立新的工作階段。
+
+![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+
+### 伺服器狀態
+
+點擊「See Servers」可以查看已連線的伺服器及其狀態。
+
+![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+
+---
+
+## 連接終端機
+
+你可以將終端機 TUI 連接到正在執行的 Web 伺服器：
+
+```bash
+# 啟動 Web 伺服器
+opencode web --port 4096
+
+# 在另一個終端機中連接 TUI
+opencode attach http://localhost:4096
+```
+
+這樣你就可以同時使用 Web 介面和終端機，共享相同的工作階段和狀態。
+
+---
+
+## 設定檔
+
+你也可以在 `opencode.json` 設定檔中設定伺服器選項：
+
+```json
+{
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "cors": ["https://example.com"]
+  }
+}
+```
+
+命令列旗標的優先順序高於設定檔中的設定。

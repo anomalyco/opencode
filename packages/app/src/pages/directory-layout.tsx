@@ -1,30 +1,66 @@
-import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
-import { SDKProvider, useSDK } from "@/context/sdk"
-import { SyncProvider, useSync } from "@/context/sync"
-import { LocalProvider } from "@/context/local"
-
 import { DataProvider } from "@opencode-ai/ui/context"
-import { iife } from "@opencode-ai/util/iife"
-import type { QuestionAnswer } from "@opencode-ai/sdk/v2"
-import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
+import { LocalProvider } from "@/context/local"
+import { SDKProvider } from "@/context/sdk"
+import { SyncProvider, useSync } from "@/context/sync"
+import { decode64 } from "@/utils/base64"
+
+function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const params = useParams()
+  const sync = useSync()
+  const slug = createMemo(() => base64Encode(props.directory))
+
+  createEffect(() => {
+    const next = sync.data.path.directory
+    if (!next || next === props.directory) return
+    const path = location.pathname.slice(slug().length + 1)
+    navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void sync.session.sync(id)
+  })
+
+  return (
+    <DataProvider
+      data={sync.data}
+      directory={props.directory}
+      onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
+      onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+    >
+      <LocalProvider>{props.children}</LocalProvider>
+    </DataProvider>
+  )
+}
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
-  const navigate = useNavigate()
   const language = useLanguage()
+  const navigate = useNavigate()
   let invalid = ""
-  const directory = createMemo(() => {
+
+  const resolved = createMemo(() => {
+    if (!params.dir) return ""
     return decode64(params.dir) ?? ""
   })
 
   createEffect(() => {
-    if (!params.dir) return
-    if (directory()) return
-    if (invalid === params.dir) return
-    invalid = params.dir
+    const dir = params.dir
+    if (!dir) return
+    if (resolved()) {
+      invalid = ""
+      return
+    }
+    if (invalid === dir) return
+    invalid = dir
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
@@ -32,43 +68,16 @@ export default function Layout(props: ParentProps) {
     })
     navigate("/", { replace: true })
   })
+
   return (
-    <Show when={directory()}>
-      <SDKProvider directory={directory}>
-        <SyncProvider>
-          {iife(() => {
-            const sync = useSync()
-            const sdk = useSDK()
-            const respond = (input: {
-              sessionID: string
-              permissionID: string
-              response: "once" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
-
-            const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
-              sdk.client.question.reply(input)
-
-            const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
-
-            const navigateToSession = (sessionID: string) => {
-              navigate(`/${params.dir}/session/${sessionID}`)
-            }
-
-            return (
-              <DataProvider
-                data={sync.data}
-                directory={directory()}
-                onPermissionRespond={respond}
-                onQuestionReply={replyToQuestion}
-                onQuestionReject={rejectQuestion}
-                onNavigateToSession={navigateToSession}
-              >
-                <LocalProvider>{props.children}</LocalProvider>
-              </DataProvider>
-            )
-          })}
-        </SyncProvider>
-      </SDKProvider>
+    <Show when={resolved()} keyed>
+      {(resolved) => (
+        <SDKProvider directory={() => resolved}>
+          <SyncProvider>
+            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+          </SyncProvider>
+        </SDKProvider>
+      )}
     </Show>
   )
 }

@@ -1,0 +1,327 @@
+---
+title: Modes
+description: Différents modes pour différents cas d'utilisation.
+---
+
+:::caution
+Les modes sont désormais configurés via l'option `agent` dans la configuration opencode.
+L’option `mode` est désormais obsolète. [En savoir plus](/docs/agents).
+:::
+
+Les modes dans opencode vous permettent de personnaliser le comportement, les outils et les prompts pour différents cas d'utilisation.
+
+Il est livré avec deux modes intégrés : **build** et **plan**. Vous pouvez personnaliser ceux-ci ou configurez les vôtres via la configuration opencode.
+
+Vous pouvez basculer entre les modes au cours d'une session ou les configurer dans votre fichier de configuration.
+
+---
+
+## Modes intégrés
+
+opencode est livré avec deux modes intégrés.
+
+---
+
+### Build
+
+Build est le mode **par défaut** avec tous les outils activés. Il s'agit du mode standard pour le travail de développement dans lequel vous avez besoin d'un accès complet aux opérations sur les fichiers et aux commandes système.
+
+---
+
+### Plan
+
+Un mode restreint conçu pour la planification et l’analyse. En mode plan, les outils suivants sont désactivés par défaut :
+
+- `write` - Impossible de créer de nouveaux fichiers
+- `edit` - Impossible de modifier les fichiers existants, à l'exception des fichiers situés à `.opencode/plans/*.md` pour détailler le plan lui-même
+- `patch` - Impossible d'appliquer les correctifs
+- `bash` - Impossible d'exécuter les commandes shell
+
+Ce mode est utile lorsque vous souhaitez que l'IA analyse le code, suggère des modifications ou crée des plans sans apporter de modifications réelles à votre base de code.
+
+---
+
+## Changement de mode
+
+Vous pouvez basculer entre les modes au cours d'une session à l'aide de la touche _Tab_. Ou votre raccourci clavier `switch_mode` configuré.
+
+Voir également : [Formatters](/docs/formatters) pour plus d'informations sur la configuration du formatage du code.
+
+---
+
+## Configuration
+
+Vous pouvez personnaliser les modes intégrés ou créer les vôtres via la configuration. Les modes peuvent être configurés de deux manières :
+
+### Configuration JSON
+
+Configurez les modes dans votre fichier de configuration `opencode.json` :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "build": {
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+### Configuration Markdown
+
+Vous pouvez également définir des modes à l'aide de fichiers markdown. Placez-les dans :
+
+- Global : `~/.config/opencode/modes/`
+- Projet : `.opencode/modes/`
+
+```markdown title="~/.config/opencode/modes/review.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Le nom du fichier markdown devient le nom du mode (par exemple, `review.md` crée un mode `review`).
+
+Examinons ces options de configuration en détail.
+
+---
+
+### Modèle
+
+Utilisez la configuration `model` pour remplacer le modèle par défaut pour ce mode. Utile pour utiliser différents modèles optimisés pour différentes tâches. Par exemple, un modèle de planification plus rapide, un modèle de mise en œuvre plus performant.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+---
+
+### Température
+
+Contrôlez le caractère aléatoire et la créativité des réponses de l'IA avec la configuration `temperature`. Des valeurs faibles rendent les réponses plus ciblées et déterministes, tandis que des valeurs plus élevées augmentent la créativité et la variabilité.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Les valeurs de température varient généralement de 0,0 à 1,0 :
+
+- **0,0-0,2** : réponses très ciblées et déterministes, idéales pour l'analyse et la planification du code
+- **0,3-0,5** : réponses équilibrées avec une certaine créativité, idéales pour les tâches de développement générales
+- **0,6-1,0** : réponses plus créatives et variées, utiles pour le brainstorming et l'exploration
+
+```json title="opencode.json"
+{
+  "mode": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+Si aucune température n'est spécifiée, opencode utilise les valeurs par défaut spécifiques au modèle (généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen).
+
+---
+
+### Invite
+
+Spécifiez un fichier de prompt système personnalisé pour ce mode avec la configuration `prompt`. Le fichier de prompt doit contenir des instructions spécifiques à l'objectif du mode.
+
+```json title="opencode.json"
+{
+  "mode": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+Ce chemin est relatif à l'emplacement du fichier de configuration. Donc ça marche pour à la fois la configuration globale opencode et la configuration spécifique au projet.
+
+---
+
+### Outils
+
+Contrôlez quels outils sont disponibles dans ce mode avec la configuration `tools`. Vous pouvez activer ou désactiver des outils spécifiques en les définissant sur `true` ou `false`.
+
+```json
+{
+  "mode": {
+    "readonly": {
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false,
+        "read": true,
+        "grep": true,
+        "glob": true
+      }
+    }
+  }
+}
+```
+
+Si aucun outil n'est spécifié, tous les outils sont activés par défaut.
+
+---
+
+#### Outils disponibles
+
+Voici tous les outils pouvant être contrôlés via le mode config.
+
+| Outil       | Description                           |
+| ----------- | ------------------------------------- |
+| `bash`      | Exécuter des commandes shell          |
+| `edit`      | Modifier des fichiers existants       |
+| `write`     | Créer de nouveaux fichiers            |
+| `read`      | Lire le contenu du fichier            |
+| `grep`      | Rechercher le contenu du fichier      |
+| `glob`      | Rechercher des fichiers par modèle    |
+| `patch`     | Appliquer des correctifs aux fichiers |
+| `todowrite` | Gérer les listes de tâches            |
+| `webfetch`  | Récupérer du contenu Web              |
+
+---
+
+## Modes personnalisés
+
+Vous pouvez créer vos propres modes personnalisés en les ajoutant à la configuration. Voici des exemples utilisant les deux approches :
+
+### Utilisation de la configuration JSON
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "docs": {
+      "prompt": "{file:./prompts/documentation.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": false,
+        "read": true,
+        "grep": true,
+        "glob": true
+      }
+    }
+  }
+}
+```
+
+### Utiliser des fichiers Markdown
+
+Créez des fichiers de mode dans `.opencode/modes/` pour les modes spécifiques au projet ou `~/.config/opencode/modes/` pour les modes globaux :
+
+```markdown title=".opencode/modes/debug.md"
+---
+temperature: 0.1
+tools:
+  bash: true
+  read: true
+  grep: true
+  write: false
+  edit: false
+---
+
+You are in debug mode. Your primary goal is to help investigate and diagnose issues.
+
+Focus on:
+
+- Understanding the problem through careful analysis
+- Using bash commands to inspect system state
+- Reading relevant files and logs
+- Searching for patterns and anomalies
+- Providing clear explanations of findings
+
+Do not make any changes to files. Only investigate and report.
+```
+
+```markdown title="~/.config/opencode/modes/refactor.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.2
+tools:
+  edit: true
+  read: true
+  grep: true
+  glob: true
+---
+
+You are in refactoring mode. Focus on improving code quality without changing functionality.
+
+Priorities:
+
+- Improve code readability and maintainability
+- Apply consistent naming conventions
+- Reduce code duplication
+- Optimize performance where appropriate
+- Ensure all tests continue to pass
+```
+
+---
+
+### Cas d'utilisation
+
+Voici quelques cas d’utilisation courants pour différents modes.
+
+- **Mode Build** : travail de développement complet avec tous les outils activés
+- **Mode Plan** : Analyse et planification sans apporter de modifications
+- **Mode Review** : révision du code avec accès en lecture seule et outils de documentation
+- **Mode Debug** : axé sur l'investigation avec les outils bash et read activés
+- **Mode Docs** : écriture de documentation avec des opérations sur les fichiers mais pas de commandes système
+
+Vous constaterez peut-être également que différents modèles conviennent à différents cas d’utilisation.

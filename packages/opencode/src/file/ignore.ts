@@ -1,83 +1,81 @@
-import { sep } from "node:path"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
-export namespace FileIgnore {
-  const FOLDERS = new Set([
-    "node_modules",
-    "bower_components",
-    ".pnpm-store",
-    "vendor",
-    ".npm",
-    "dist",
-    "build",
-    "out",
-    ".next",
-    "target",
-    "bin",
-    "obj",
-    ".git",
-    ".svn",
-    ".hg",
-    ".vscode",
-    ".idea",
-    ".turbo",
-    ".output",
-    "desktop",
-    ".sst",
-    ".cache",
-    ".webkit-cache",
-    "__pycache__",
-    ".pytest_cache",
-    "mypy_cache",
-    ".history",
-    ".gradle",
-  ])
+const FOLDERS = new Set([
+  "node_modules",
+  "bower_components",
+  ".pnpm-store",
+  "vendor",
+  ".npm",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  "target",
+  "bin",
+  "obj",
+  ".git",
+  ".svn",
+  ".hg",
+  ".vscode",
+  ".idea",
+  ".turbo",
+  ".output",
+  "desktop",
+  ".sst",
+  ".cache",
+  ".webkit-cache",
+  "__pycache__",
+  ".pytest_cache",
+  "mypy_cache",
+  ".history",
+  ".gradle",
+])
 
-  const FILES = [
-    "**/*.swp",
-    "**/*.swo",
+const FILES = [
+  "**/*.swp",
+  "**/*.swo",
 
-    "**/*.pyc",
+  "**/*.pyc",
 
-    // OS
-    "**/.DS_Store",
-    "**/Thumbs.db",
+  // OS
+  "**/.DS_Store",
+  "**/Thumbs.db",
 
-    // Logs & temp
-    "**/logs/**",
-    "**/tmp/**",
-    "**/temp/**",
-    "**/*.log",
+  // Logs & temp
+  "**/logs/**",
+  "**/tmp/**",
+  "**/temp/**",
+  "**/*.log",
 
-    // Coverage/test outputs
-    "**/coverage/**",
-    "**/.nyc_output/**",
-  ]
+  // Coverage/test outputs
+  "**/coverage/**",
+  "**/.nyc_output/**",
+]
 
-  const FILE_GLOBS = FILES.map((p) => new Bun.Glob(p))
+export const PATTERNS = [...FILES, ...FOLDERS]
 
-  export const PATTERNS = [...FILES, ...FOLDERS]
-
-  export function match(
-    filepath: string,
-    opts?: {
-      extra?: Bun.Glob[]
-      whitelist?: Bun.Glob[]
-    },
-  ) {
-    for (const glob of opts?.whitelist || []) {
-      if (glob.match(filepath)) return false
-    }
-
-    const parts = filepath.split(sep)
-    for (let i = 0; i < parts.length; i++) {
-      if (FOLDERS.has(parts[i])) return true
-    }
-
-    const extra = opts?.extra || []
-    for (const glob of [...FILE_GLOBS, ...extra]) {
-      if (glob.match(filepath)) return true
-    }
-
-    return false
+export function match(
+  filepath: string,
+  opts?: {
+    extra?: string[]
+    whitelist?: string[]
+  },
+) {
+  for (const pattern of opts?.whitelist || []) {
+    if (Glob.match(pattern, filepath)) return false
   }
+
+  const parts = filepath.split(/[/\\]/)
+  for (let i = 0; i < parts.length; i++) {
+    if (FOLDERS.has(parts[i])) return true
+  }
+
+  const extra = opts?.extra || []
+  for (const pattern of [...FILES, ...extra]) {
+    if (Glob.match(pattern, filepath)) return true
+  }
+
+  return false
 }
+
+export * as FileIgnore from "./ignore"

@@ -35,9 +35,44 @@ describe("buildRequestParts", () => {
       result.requestParts.some((part) => part.type === "file" && part.url.startsWith("file:///repo/src/foo.ts")),
     ).toBe(true)
     expect(result.requestParts.some((part) => part.type === "text" && part.synthetic)).toBe(true)
+    expect(
+      result.requestParts.some(
+        (part) =>
+          part.type === "text" &&
+          part.synthetic &&
+          part.metadata?.opencodeComment &&
+          (part.metadata.opencodeComment as { comment?: string }).comment === "check this",
+      ),
+    ).toBe(true)
 
     expect(result.optimisticParts).toHaveLength(result.requestParts.length)
     expect(result.optimisticParts.every((part) => part.sessionID === "ses_1" && part.messageID === "msg_1")).toBe(true)
+  })
+
+  test("keeps multiple uploaded attachments in order", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],
+      context: [],
+      images: [
+        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
+        {
+          type: "image",
+          id: "img_2",
+          filename: "b.pdf",
+          mime: "application/pdf",
+          dataUrl: "data:application/pdf;base64,BBB",
+        },
+      ],
+      text: "check these",
+      messageID: "msg_multi",
+      sessionID: "ses_multi",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file" && part.url.startsWith("data:"))
+
+    expect(files).toHaveLength(2)
+    expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
   test("deduplicates context files when prompt already includes same path", () => {
@@ -63,6 +98,30 @@ describe("buildRequestParts", () => {
 
     expect(fooFiles).toHaveLength(2)
     expect(synthetic).toHaveLength(1)
+  })
+
+  test("adds file parts for @mentions inside comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Compare with @src/shared.ts and @src/review.ts.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_mentions",
+      sessionID: "ses_comment_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(2)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/shared.ts")).toBe(true)
   })
 
   test("handles Windows paths correctly (simulated on macOS)", () => {
@@ -112,7 +171,7 @@ describe("buildRequestParts", () => {
       // Special chars should be encoded
       expect(filePart.url).toContain("file%23name.txt")
       // Should have Windows drive letter properly encoded
-      expect(filePart.url).toMatch(/file:\/\/\/[A-Z]%3A/)
+      expect(filePart.url).toMatch(/file:\/\/\/[A-Z]:/)
     }
   })
 
@@ -210,7 +269,7 @@ describe("buildRequestParts", () => {
     if (filePart?.type === "file") {
       // Should handle absolute path that differs from sessionDirectory
       expect(() => new URL(filePart.url)).not.toThrow()
-      expect(filePart.url).toContain("/D%3A/other/project/file.ts")
+      expect(filePart.url).toContain("/D:/other/project/file.ts")
     }
   })
 

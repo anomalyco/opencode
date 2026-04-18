@@ -1,0 +1,180 @@
+---
+title: Reglas
+description: Establezca instrucciones personalizadas para opencode.
+---
+
+Puede proporcionar instrucciones personalizadas a opencode creando un archivo `AGENTS.md`. Esto es similar a las reglas del Cursor. Contiene instrucciones que se incluirán en el contexto de LLM para personalizar su comportamiento para su proyecto específico.
+
+---
+
+## Inicializar
+
+Para crear un nuevo archivo `AGENTS.md`, puede ejecutar el comando `/init` en opencode.
+
+:::tip
+Debes enviar el archivo `AGENTS.md` de tu proyecto a Git.
+:::
+
+Esto escaneará su proyecto y todo su contenido para comprender de qué se trata y generar un archivo `AGENTS.md` con él. Esto ayuda a opencode a navegar mejor por el proyecto.
+
+Si tiene un archivo `AGENTS.md` existente, intentará agregarlo.
+
+---
+
+## Ejemplo
+
+También puedes crear este archivo manualmente. A continuación se muestra un ejemplo de algunas cosas que puede colocar en un archivo `AGENTS.md`.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+Estamos agregando instrucciones específicas del proyecto aquí y esto se compartirá con todo su equipo.
+
+---
+
+## Tipos
+
+opencode también admite la lectura del archivo `AGENTS.md` desde múltiples ubicaciones. Y esto tiene diferentes propósitos.
+
+### Proyecto
+
+Coloque un `AGENTS.md` en la raíz de su proyecto para reglas específicas del proyecto. Estos solo se aplican cuando trabaja en este directorio o sus subdirectorios.
+
+### Global
+
+También puedes tener reglas globales en un archivo `~/.config/opencode/AGENTS.md`. Esto se aplica en todas las sesiones opencode.
+
+Dado que esto no está comprometido con Git ni se comparte con su equipo, recomendamos usarlo para especificar las reglas personales que debe seguir LLM.
+
+### Compatibilidad con Claude Code
+
+Para los usuarios que migran desde Claude Code, OpenCode admite las convenciones de archivos de Claude Code como alternativas:
+
+- **Reglas del proyecto**: `CLAUDE.md` en el directorio de tu proyecto (se usa si no existe `AGENTS.md`)
+- **Reglas globales**: `~/.claude/CLAUDE.md` (se usa si no existe `~/.config/opencode/AGENTS.md`)
+- **Habilidades**: `~/.claude/skills/`; consulte [Habilidades del agente](/docs/skills/) para obtener más detalles.
+
+Para deshabilitar la compatibilidad de Claude Code, configure una de estas variables de entorno:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## Prioridad
+
+Cuando se inicia opencode, busca archivos de reglas en este orden:
+
+1. **Archivos locales** atravesando desde el directorio actual (`AGENTS.md`, `CLAUDE.md`)
+2. **Archivo global** en `~/.config/opencode/AGENTS.md`
+3. **Archivo de Claude Code** en `~/.claude/CLAUDE.md` (a menos que esté deshabilitado)
+
+El primer archivo coincidente gana en cada categoría. Por ejemplo, si tiene `AGENTS.md` y `CLAUDE.md`, solo se usa `AGENTS.md`. De manera similar, `~/.config/opencode/AGENTS.md` tiene prioridad sobre `~/.claude/CLAUDE.md`.
+
+---
+
+## Instrucciones personalizadas
+
+Puede especificar archivos de instrucciones personalizados en su `opencode.json` o el `~/.config/opencode/opencode.json` global. Esto le permite a usted y a su equipo reutilizar las reglas existentes en lugar de tener que duplicarlas en AGENTS.md.
+
+Ejemplo:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+También puede utilizar URL remotas para cargar instrucciones desde la web.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Las instrucciones remotas se recuperan con un tiempo de espera de 5 segundos.
+
+Todos los archivos de instrucciones se combinan con sus archivos `AGENTS.md`.
+
+---
+
+## Hacer referencia a archivos externos
+
+Si bien opencode no analiza automáticamente las referencias de archivos en `AGENTS.md`, puedes lograr una funcionalidad similar de dos maneras:
+
+### Usar opencode.json
+
+El enfoque recomendado es utilizar el campo `instructions` en `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### Instrucciones manuales en AGENTS.md
+
+Puede enseñarle a opencode a leer archivos externos proporcionando instrucciones explícitas en su `AGENTS.md`. He aquí un ejemplo práctico:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+Este enfoque le permite:
+
+- Crear archivos de reglas modulares y reutilizables
+- Compartir reglas entre proyectos a través de enlaces simbólicos o submódulos de git
+- Mantenga AGENTS.md conciso mientras hace referencia a pautas detalladas
+- Asegúrese de que opencode cargue archivos solo cuando sea necesario para la tarea específica
+
+:::tip
+Para monorepos o proyectos con estándares compartidos, usar `opencode.json` con patrones globales (como `packages/*/AGENTS.md`) es más fácil de mantener que las instrucciones manuales.
+:::

@@ -1,0 +1,222 @@
+---
+title: Modelli
+description: Configurare un provider LLM e un modello.
+---
+
+OpenCode usa [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) per supportare **75+ provider LLM** e supporta anche l'esecuzione di modelli locali.
+
+---
+
+## Provider
+
+I provider piu popolari sono precaricati per impostazione predefinita. Se hai aggiunto le credenziali di un provider tramite il comando `/connect`, saranno disponibili quando avvii OpenCode.
+
+[Scopri di piu](/docs/providers) sui provider.
+
+---
+
+## Seleziona un modello
+
+Dopo aver configurato il provider, puoi selezionare il modello che vuoi digitando:
+
+```bash frame="none"
+/models
+```
+
+---
+
+## Modelli consigliati
+
+Esistono moltissimi modelli, e ne escono di nuovi ogni settimana.
+
+:::tip
+Valuta di usare uno dei modelli che consigliamo.
+:::
+
+Tuttavia, solo alcuni sono davvero bravi sia a generare codice sia a chiamare strumenti.
+
+Ecco alcuni modelli che funzionano bene con OpenCode, in nessun ordine particolare. (Non e una lista esaustiva e potrebbe non essere aggiornata):
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## Imposta un predefinito
+
+Per impostarne uno come modello predefinito, puoi impostare la chiave `model` nella config di OpenCode.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+Qui l'ID completo e `provider_id/model_id`. Per esempio, se usi [OpenCode Zen](/docs/zen), useresti `opencode/gpt-5.1-codex` per GPT 5.1 Codex.
+
+Se hai configurato un [provider personalizzato](/docs/providers#custom), `provider_id` e la chiave nella sezione `provider` della config e `model_id` e la chiave in `provider.models`.
+
+---
+
+## Configurazione modelli
+
+Puoi configurare globalmente le opzioni di un modello tramite la config.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Qui stiamo configurando impostazioni globali per due modelli integrati: `gpt-5` quando viene usato tramite il provider `openai` e `claude-sonnet-4-20250514` quando viene usato tramite il provider `anthropic`.
+I nomi di provider e modelli integrati si trovano su [Models.dev](https://models.dev).
+
+Puoi anche configurare queste opzioni per gli agenti che usi. La config dell'agente sovrascrive le opzioni globali definite qui. [Scopri di piu](/docs/agents/#additional).
+
+Puoi anche definire varianti personalizzate che estendono quelle integrate. Le varianti ti permettono di configurare impostazioni diverse per lo stesso modello senza creare voci duplicate:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## Varianti
+
+Molti modelli supportano piu varianti con configurazioni diverse. OpenCode include varianti predefinite integrate per i provider piu comuni.
+
+### Varianti integrate
+
+OpenCode include varianti predefinite per molti provider:
+
+**Anthropic**:
+
+- `high` - High thinking budget (default)
+- `max` - Maximum thinking budget
+
+**OpenAI**:
+
+Varies by model but roughly:
+
+- `none` - No reasoning
+- `minimal` - Minimal reasoning effort
+- `low` - Low reasoning effort
+- `medium` - Medium reasoning effort
+- `high` - High reasoning effort
+- `xhigh` - Extra high reasoning effort
+
+**Google**:
+
+- `low` - Lower effort/token budget
+- `high` - Higher effort/token budget
+
+:::tip
+Questa lista non e completa. Anche molti altri provider hanno default integrati.
+:::
+
+### Varianti personalizzate
+
+Puoi sovrascrivere varianti esistenti o aggiungerne di tue:
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### Ciclare tra varianti
+
+Usa il keybind `variant_cycle` per passare rapidamente tra le varianti. [Scopri di piu](/docs/keybinds).
+
+---
+
+## Caricamento modelli
+
+Quando OpenCode si avvia, controlla i modelli in questo ordine di priorita:
+
+1. Il flag da riga di comando `--model` o `-m`. Il formato e lo stesso della config: `provider_id/model_id`.
+
+2. La lista dei modelli nella config di OpenCode.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+   Qui il formato e `provider/model`.
+
+3. L'ultimo modello usato.
+
+4. Il primo modello in base a una priorita interna.

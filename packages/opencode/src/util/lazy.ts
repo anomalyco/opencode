@@ -4,8 +4,8 @@ export function lazy<T>(fn: () => T) {
 
   const result = (): T => {
     if (loaded) return value as T
-    loaded = true
     value = fn()
+    loaded = true
     return value as T
   }
 
