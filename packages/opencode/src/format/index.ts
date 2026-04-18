@@ -37,18 +37,14 @@ export const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
     const state = yield* InstanceState.make(
-      Effect.fn("Format.state")(function* (_ctx) {
+      Effect.fn("Format.state")(function* (ctx) {
         const commands: Record<string, string[] | false> = {}
         const formatters: Record<string, Formatter.Info> = {}
-        const context = {
-          directory: _ctx.directory,
-          worktree: _ctx.worktree,
-        }
 
         async function getCommand(item: Formatter.Info) {
           let cmd = commands[item.name]
           if (cmd === false || cmd === undefined) {
-            cmd = await item.enabled(context)
+            cmd = await item.enabled(ctx)
             commands[item.name] = cmd
           }
           return cmd
