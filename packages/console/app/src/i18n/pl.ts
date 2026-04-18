@@ -565,6 +565,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Aktualne użycie za",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "wynosi $",
 
+  "workspace.redeem.title": "Zrealizuj kupon",
+  "workspace.redeem.subtitle": "Zrealizuj kod kuponu, aby otrzymać środki lub korzyści.",
+  "workspace.redeem.placeholder": "Wpisz kod kuponu",
+  "workspace.redeem.redeem": "Zrealizuj",
+  "workspace.redeem.redeeming": "Realizowanie...",
+  "workspace.redeem.success": "Kupon został zrealizowany.",
+
   "workspace.reload.title": "Automatyczne doładowanie",
   "workspace.reload.disabled.before": "Automatyczne doładowanie jest",
   "workspace.reload.disabled.state": "wyłączone",

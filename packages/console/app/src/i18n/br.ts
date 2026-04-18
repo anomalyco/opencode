@@ -567,6 +567,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Uso atual para",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "é $",
 
+  "workspace.redeem.title": "Resgatar Cupom",
+  "workspace.redeem.subtitle": "Resgate um código de cupom para receber créditos ou vantagens.",
+  "workspace.redeem.placeholder": "Digite o código do cupom",
+  "workspace.redeem.redeem": "Resgatar",
+  "workspace.redeem.redeeming": "Resgatando...",
+  "workspace.redeem.success": "Cupom resgatado com sucesso.",
+
   "workspace.reload.title": "Recarga Automática",
   "workspace.reload.disabled.before": "A recarga automática está",
   "workspace.reload.disabled.state": "desativada",
