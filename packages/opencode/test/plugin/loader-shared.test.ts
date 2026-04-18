@@ -1,9 +1,10 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
@@ -29,9 +30,11 @@ afterEach(async () => {
 async function load(dir: string) {
   return Instance.provide({
     directory: dir,
-    fn: async () => {
-      await Plugin.list()
-    },
+    fn: async () =>
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.list()
+      }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
   })
 }
 
@@ -45,7 +48,7 @@ describe("plugin.loader.shared", () => {
           file,
           [
             "export default async () => {",
-            `  await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            `  await Bun.write(${JSON.stringify(mark)}, "called")`,
             "  return {}",
             "}",
             "",
@@ -75,8 +78,8 @@ describe("plugin.loader.shared", () => {
           file,
           [
             "const run = async () => {",
-            `  const text = await Bun.file(${JSON.stringify(mark)}).text().catch(() => \"\")`,
-            `  await Bun.write(${JSON.stringify(mark)}, text + \"1\")`,
+            `  const text = await Bun.file(${JSON.stringify(mark)}).text().catch(() => "")`,
+            `  await Bun.write(${JSON.stringify(mark)}, text + "1")`,
             "  return {}",
             "}",
             "export default run",
@@ -236,8 +239,8 @@ describe("plugin.loader.shared", () => {
     })
 
     const add = spyOn(Npm, "add").mockImplementation(async (pkg) => {
-      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: tmp.extra.acme }
-      return { directory: tmp.extra.scope, entrypoint: tmp.extra.scope }
+      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: undefined }
+      return { directory: tmp.extra.scope, entrypoint: undefined }
     })
 
     try {
@@ -298,7 +301,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -355,7 +358,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -407,7 +410,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -452,7 +455,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -515,7 +518,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -545,7 +548,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: "" })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: undefined })
 
     try {
       await load(tmp.path)
@@ -712,7 +715,7 @@ describe("plugin.loader.shared", () => {
             "const plugin = {",
             '  id: "demo.object",',
             "  server: async () => {",
-            `    await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
             "    return {}",
             "  },",
             "}",
@@ -830,7 +833,7 @@ export default {
             "export default {",
             '  id: "demo.pure",',
             "  server: async () => {",
-            `    await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
             "    return {}",
             "  },",
             "}",
@@ -924,7 +927,7 @@ export default {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
     const missing: string[] = []
 
     try {
@@ -993,7 +996,7 @@ export default {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: undefined })
 
     try {
       const loaded = await PluginLoader.loadExternal({

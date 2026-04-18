@@ -3,16 +3,16 @@ import { AppRuntime } from "../../effect/app-runtime"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { ModelsDev } from "../../provider/models"
+import { ModelsDev } from "../../provider"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
-import { Config } from "../../config/config"
+import { Config } from "../../config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
-import { Process } from "../../util/process"
+import { Process } from "../../util"
 import { text } from "node:stream/consumers"
 import { Effect } from "effect"
 
@@ -40,12 +40,10 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   } else if (plugin.auth.methods.length > 1) {
     const method = await prompts.select({
       message: "Login method",
-      options: [
-        ...plugin.auth.methods.map((x, index) => ({
-          label: x.label,
-          value: index.toString(),
-        })),
-      ],
+      options: plugin.auth.methods.map((x, index) => ({
+        label: x.label,
+        value: index.toString(),
+      })),
     })
     if (prompts.isCancel(method)) throw new UI.CancelledError()
     index = parseInt(method)
@@ -158,13 +156,13 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   }
 
   if (method.type === "api") {
-    const key = await prompts.password({
-      message: "Enter your API key",
-      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-    })
-    if (prompts.isCancel(key)) throw new UI.CancelledError()
-
     if (method.authorize) {
+      const key = await prompts.password({
+        message: "Enter your API key",
+        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+      })
+      if (prompts.isCancel(key)) throw new UI.CancelledError()
+
       const result = await method.authorize(inputs)
       if (result.type === "failed") {
         prompts.log.error("Failed to authorize")
@@ -299,7 +297,9 @@ export const ProvidersLoginCommand = cmd({
         prompts.intro("Add credential")
         if (args.url) {
           const url = args.url.replace(/\/+$/, "")
-          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
+          const wellknown = (await fetch(`${url}/.well-known/opencode`).then((x) => x.json())) as {
+            auth: { command: string[]; env: string }
+          }
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
@@ -340,6 +340,12 @@ export const ProvidersLoginCommand = cmd({
           }
           return filtered
         })
+        const hooks = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const plugin = yield* Plugin.Service
+            return yield* plugin.list()
+          }),
+        )
 
         const priority: Record<string, number> = {
           opencode: 0,
@@ -351,7 +357,7 @@ export const ProvidersLoginCommand = cmd({
           vercel: 6,
         }
         const pluginProviders = resolvePluginProviders({
-          hooks: await Plugin.list(),
+          hooks,
           existingProviders: providers,
           disabled,
           enabled,
@@ -408,7 +414,7 @@ export const ProvidersLoginCommand = cmd({
           provider = selected as string
         }
 
-        const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
+        const plugin = hooks.findLast((x) => x.auth?.provider === provider)
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method)
           if (handled) return
@@ -422,7 +428,7 @@ export const ProvidersLoginCommand = cmd({
           if (prompts.isCancel(custom)) throw new UI.CancelledError()
           provider = custom.replace(/^@ai-sdk\//, "")
 
-          const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
+          const customPlugin = hooks.findLast((x) => x.auth?.provider === provider)
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
             if (handled) return

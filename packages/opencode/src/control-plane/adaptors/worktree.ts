@@ -1,4 +1,5 @@
 import z from "zod"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Worktree } from "@/worktree"
 import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
 
@@ -12,7 +13,7 @@ export const WorktreeAdaptor: WorkspaceAdaptor = {
   name: "Worktree",
   description: "Create a git worktree",
   async configure(info) {
-    const worktree = await Worktree.makeWorktreeInfo(undefined)
+    const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
     return {
       ...info,
       name: worktree.name,
@@ -22,15 +23,19 @@ export const WorktreeAdaptor: WorkspaceAdaptor = {
   },
   async create(info) {
     const config = WorktreeConfig.parse(info)
-    await Worktree.createFromInfo({
-      name: config.name,
-      directory: config.directory,
-      branch: config.branch,
-    })
+    await AppRuntime.runPromise(
+      Worktree.Service.use((svc) =>
+        svc.createFromInfo({
+          name: config.name,
+          directory: config.directory,
+          branch: config.branch,
+        }),
+      ),
+    )
   },
   async remove(info) {
     const config = WorktreeConfig.parse(info)
-    await Worktree.remove({ directory: config.directory })
+    await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
   },
   target(info) {
     const config = WorktreeConfig.parse(info)
