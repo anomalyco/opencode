@@ -23,6 +23,11 @@ export interface Settings {
     autoSave: boolean
     releaseNotes: boolean
     followup: "queue" | "steer"
+    showFileTree: boolean
+    showNavigation: boolean
+    showSearch: boolean
+    showStatus: boolean
+    showTerminal: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
@@ -89,6 +94,11 @@ const defaultSettings: Settings = {
     autoSave: true,
     releaseNotes: true,
     followup: "steer",
+    showFileTree: false,
+    showNavigation: false,
+    showSearch: false,
+    showStatus: false,
+    showTerminal: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
@@ -136,6 +146,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
     })
 
+    createEffect(() => {
+      if (store.general?.followup !== "queue") return
+      setStore("general", "followup", "steer")
+    })
+
     return {
       ready,
       get current() {
@@ -150,9 +165,32 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
         },
-        followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
+        followup: withFallback(
+          () => (store.general?.followup === "queue" ? "steer" : store.general?.followup),
+          defaultSettings.general.followup,
+        ),
         setFollowup(value: "queue" | "steer") {
-          setStore("general", "followup", value)
+          setStore("general", "followup", value === "queue" ? "steer" : value)
+        },
+        showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),
+        setShowFileTree(value: boolean) {
+          setStore("general", "showFileTree", value)
+        },
+        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
+        setShowNavigation(value: boolean) {
+          setStore("general", "showNavigation", value)
+        },
+        showSearch: withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch),
+        setShowSearch(value: boolean) {
+          setStore("general", "showSearch", value)
+        },
+        showStatus: withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus),
+        setShowStatus(value: boolean) {
+          setStore("general", "showStatus", value)
+        },
+        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
+        setShowTerminal(value: boolean) {
+          setStore("general", "showTerminal", value)
         },
         showReasoningSummaries: withFallback(
           () => store.general?.showReasoningSummaries,

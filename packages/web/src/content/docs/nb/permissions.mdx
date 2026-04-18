@@ -88,7 +88,7 @@ Du kan bruke `~` eller `$HOME` i starten av et mønster for å referere til hjem
 
 ### Eksterne kataloger
 
-Bruk `external_directory` for å tillate verktøyanrop som berører stier utenfor arbeidskatalogen der OpenCode ble startet. Dette gjelder alle verktøy som tar en bane som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash`-kommandoer).
+Bruk `external_directory` for å tillate verktøyanrop som berører stier utenfor arbeidskatalogen der OpenCode ble startet. Dette gjelder alle verktøy som tar en bane som input (for eksempel `read`, `edit`, `glob`, `grep` og mange `bash`-kommandoer).
 
 Hjemmeutvidelse (som `~/...`) påvirker bare hvordan et mønster skrives. Den gjør ikke en ekstern bane til en del av det gjeldende arbeidsområdet, så stier utenfor arbeidskatalogen må fortsatt tillates via `external_directory`.
 
@@ -133,7 +133,6 @@ OpenCode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakte
 - `edit` — alle filendringer (dekker `edit`, `write`, `patch`, `multiedit`)
 - `glob` — fil-globing (tilsvarer glob-mønsteret)
 - `grep` — innholdssøk (samsvarer med regex-mønsteret)
-- `list` — viser filer i en katalog (tilsvarer katalogbanen)
 - `bash` — kjører skallkommandoer (matcher analyserte kommandoer som `git status --porcelain`)
 - `task` — start av subagenter (tilsvarer subagenttypen)
 - `skill` — laster en ferdighet (tilsvarer navnet på ferdigheten)

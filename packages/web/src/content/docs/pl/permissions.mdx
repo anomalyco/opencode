@@ -88,7 +88,7 @@ Możesz używać `~` lub `$HOME` na początku wzorca, aby zastosować się do sw
 
 ### Katalogi zewnętrzne
 
-Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem opencode. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `list`, `glob`, `grep` i wiele założycieli `bash`).
+Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem opencode. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `glob`, `grep` i wiele założycieli `bash`).
 
 Rozszerzenie domu (jak `~/...`) wpływa tylko na sposób za zwyczajowy wzorca. Nie powoduje to, że strategie zewnętrzne stają się stosowane przez `external_directory`.
 
@@ -133,7 +133,6 @@ Uprawnienia opencode są określane na podstawie nazwy narzędzia i kilku zabezp
 - `edit` — wszystkie modyfikacje plików (obejmuje `edit`, `write`, `patch`, `multiedit`)
 - `glob` — maglowanie plików (pasuje do wzorców globowania)
 - `grep` — wyszukiwanie treści (pasuje do wzorca regularnego)
-- `list` — wyświetlanie listy plików w katalogu (pasuje do katalogu)
 - `bash` — uruchamianie poleceń shell (pasuje do poleceń przeanalizowanych, takich jak `git status --porcelain`)
 - `task` — uruchamianie podagentów (odpowiada typowi podagenta)
 - `skill` — ładowanie umiejętności (pasuje do nazwy umiejętności)

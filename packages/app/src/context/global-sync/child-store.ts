@@ -243,8 +243,8 @@ export function createChildStoreManager(input: {
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,

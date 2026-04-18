@@ -1,7 +1,7 @@
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { createResource, createMemo, onMount } from "solid-js"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { DialogSessionRescue } from "./dialog-session-rescue"

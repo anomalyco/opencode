@@ -1,11 +1,12 @@
-import { createEffect, createMemo, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
-import { sampledChecksum } from "@opencode-ai/util/encode"
+import { sampledChecksum } from "@opencode-ai/shared/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -59,7 +60,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   let scrollFrame: number | undefined
   let restoreFrame: number | undefined
   let pending: ScrollPos | undefined
-  let code: HTMLElement[] = []
+  const [code, setCode] = createSignal<HTMLElement[]>([])
 
   const getCode = () => {
     const el = scroll
@@ -106,17 +107,9 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
   const sync = () => {
     const next = getCode()
-    if (next.length === code.length && next.every((el, i) => el === code[i])) return
-
-    for (const item of code) {
-      item.removeEventListener("scroll", onCodeScroll)
-    }
-
-    code = next
-
-    for (const item of code) {
-      item.addEventListener("scroll", onCodeScroll)
-    }
+    const current = code()
+    if (next.length === current.length && next.every((el, i) => el === current[i])) return
+    setCode(next)
   }
 
   const restore = () => {
@@ -128,14 +121,14 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
     sync()
 
-    if (code.length > 0) {
-      for (const item of code) {
+    if (code().length > 0) {
+      for (const item of code()) {
         if (item.scrollLeft !== pos.x) item.scrollLeft = pos.x
       }
     }
 
     if (el.scrollTop !== pos.y) el.scrollTop = pos.y
-    if (code.length > 0) return
+    if (code().length > 0) return
     if (el.scrollLeft !== pos.x) el.scrollLeft = pos.x
   }
 
@@ -149,13 +142,17 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    if (code.length === 0) sync()
+    if (code().length === 0) sync()
 
     save({
-      x: code[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
+      x: code()[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
       y: event.currentTarget.scrollTop,
     })
   }
+
+  createEffect(() => {
+    for (const item of code()) makeEventListener(item, "scroll", onCodeScroll)
+  })
 
   const setViewport = (el: HTMLDivElement) => {
     scroll = el
@@ -163,10 +160,6 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   }
 
   onCleanup(() => {
-    for (const item of code) {
-      item.removeEventListener("scroll", onCodeScroll)
-    }
-
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
   })
@@ -302,6 +295,9 @@ export function FileTabContent(props: { tab: string }) {
     comments: fileComments,
     label: language.t("ui.lineComment.submit"),
     draftKey: () => path() ?? props.tab,
+    mention: {
+      items: file.searchFilesAndDirectories,
+    },
     state: {
       opened: () => note.openedComment,
       setOpened: (id) => setNote("openedComment", id),
@@ -355,8 +351,7 @@ export function FileTabContent(props: { tab: string }) {
       find?.focus()
     }
 
-    window.addEventListener("keydown", onKeyDown, { capture: true })
-    onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
   createEffect(
@@ -382,12 +377,6 @@ export function FileTabContent(props: { tab: string }) {
     commentsUi.note.openComment(target.id, target.selection, { cancelDraft: true })
     requestAnimationFrame(() => comments.clearFocus())
   })
-
-  const cancelCommenting = () => {
-    const p = path()
-    if (p) file.setSelectedLines(p, null)
-    setNote("commenting", null)
-  }
 
   let prev = {
     loaded: false,

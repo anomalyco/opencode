@@ -2,7 +2,7 @@ import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
-import { onMount, Show, type JSX } from "solid-js"
+import { onMount, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 
 export type DialogExportOptionsProps = {
@@ -100,7 +100,10 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           }}
           height={3}
           keyBindings={[{ name: "return", action: "submit" }]}
-          ref={(val: TextareaRenderable) => (textarea = val)}
+          ref={(val: TextareaRenderable) => {
+            textarea = val
+            val.traits = { status: "FILENAME" }
+          }}
           initialValue={props.defaultFilename}
           placeholder="Enter filename"
           placeholderColor={theme.textMuted}

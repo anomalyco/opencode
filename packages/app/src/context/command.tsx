@@ -2,6 +2,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type Accessor, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { dict as en } from "@/i18n/en"
@@ -378,11 +379,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     onMount(() => {
-      document.addEventListener("keydown", handleKeyDown)
-    })
-
-    onCleanup(() => {
-      document.removeEventListener("keydown", handleKeyDown)
+      makeEventListener(document, "keydown", handleKeyDown)
     })
 
     function register(cb: () => CommandOption[]): void

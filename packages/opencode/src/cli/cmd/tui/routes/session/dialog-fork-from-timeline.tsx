@@ -2,7 +2,7 @@ import { createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
@@ -38,7 +38,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             messageID: message.id,
           })
           const parts = sync.data.part[message.id] ?? []
-          const initialPrompt = parts.reduce(
+          const prompt = parts.reduce(
             (agg, part) => {
               if (part.type === "text") {
                 if (!part.synthetic) agg.input += part.text
@@ -51,7 +51,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
           route.navigate({
             sessionID: forked.data!.id,
             type: "session",
-            initialPrompt,
+            prompt,
           })
           dialog.clear()
         },

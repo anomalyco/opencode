@@ -1,16 +1,23 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { fileURLToPath } from "url"
+import { Effect, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
+
+function run<A, E>(fx: Effect.Effect<A, E, SessionPrompt.Service | Session.Service>) {
+  return Effect.runPromise(
+    fx.pipe(Effect.scoped, Effect.provide(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer))),
+  )
+}
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -53,12 +60,11 @@ function chat(text: string) {
 function hanging(ready: () => void) {
   const encoder = new TextEncoder()
   let timer: ReturnType<typeof setTimeout> | undefined
-  const first =
-    `data: ${JSON.stringify({
-      id: "chatcmpl-1",
-      object: "chat.completion.chunk",
-      choices: [{ delta: { role: "assistant" } }],
-    })}` + "\n\n"
+  const first = `data: ${JSON.stringify({
+    id: "chatcmpl-1",
+    object: "chat.completion.chunk",
+    choices: [{ delta: { role: "assistant" } }],
+  })}\n\n`
   const rest =
     [
       `data: ${JSON.stringify({
@@ -104,34 +110,39 @@ describe("session.prompt missing file", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
+      fn: () =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({})
 
-        const missing = path.join(tmp.path, "does-not-exist.ts")
-        const msg = await SessionPrompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [
-            { type: "text", text: "please review @does-not-exist.ts" },
-            {
-              type: "file",
-              mime: "text/plain",
-              url: `file://${missing}`,
-              filename: "does-not-exist.ts",
-            },
-          ],
-        })
+            const missing = path.join(tmp.path, "does-not-exist.ts")
+            const msg = yield* prompt.prompt({
+              sessionID: session.id,
+              agent: "build",
+              noReply: true,
+              parts: [
+                { type: "text", text: "please review @does-not-exist.ts" },
+                {
+                  type: "file",
+                  mime: "text/plain",
+                  url: `file://${missing}`,
+                  filename: "does-not-exist.ts",
+                },
+              ],
+            })
 
-        if (msg.info.role !== "user") throw new Error("expected user message")
+            if (msg.info.role !== "user") throw new Error("expected user message")
 
-        const hasFailure = msg.parts.some(
-          (part) => part.type === "text" && part.synthetic && part.text.includes("Read tool failed to read"),
-        )
-        expect(hasFailure).toBe(true)
+            const hasFailure = msg.parts.some(
+              (part) => part.type === "text" && part.synthetic && part.text.includes("Read tool failed to read"),
+            )
+            expect(hasFailure).toBe(true)
 
-        await Session.remove(session.id)
-      },
+            yield* sessions.remove(session.id)
+          }),
+        ),
     })
   })
 
@@ -149,39 +160,44 @@ describe("session.prompt missing file", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
+      fn: () =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({})
 
-        const missing = path.join(tmp.path, "still-missing.ts")
-        const msg = await SessionPrompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [
-            {
-              type: "file",
-              mime: "text/plain",
-              url: `file://${missing}`,
-              filename: "still-missing.ts",
-            },
-            { type: "text", text: "after-file" },
-          ],
-        })
+            const missing = path.join(tmp.path, "still-missing.ts")
+            const msg = yield* prompt.prompt({
+              sessionID: session.id,
+              agent: "build",
+              noReply: true,
+              parts: [
+                {
+                  type: "file",
+                  mime: "text/plain",
+                  url: `file://${missing}`,
+                  filename: "still-missing.ts",
+                },
+                { type: "text", text: "after-file" },
+              ],
+            })
 
-        if (msg.info.role !== "user") throw new Error("expected user message")
+            if (msg.info.role !== "user") throw new Error("expected user message")
 
-        const stored = await MessageV2.get({
-          sessionID: session.id,
-          messageID: msg.info.id,
-        })
-        const text = stored.parts.filter((part) => part.type === "text").map((part) => part.text)
+            const stored = MessageV2.get({
+              sessionID: session.id,
+              messageID: msg.info.id,
+            })
+            const text = stored.parts.filter((part) => part.type === "text").map((part) => part.text)
 
-        expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
-        expect(text[1]?.includes("Read tool failed to read")).toBe(true)
-        expect(text[2]).toBe("after-file")
+            expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
+            expect(text[1]?.includes("Read tool failed to read")).toBe(true)
+            expect(text[2]).toBe("after-file")
 
-        await Session.remove(session.id)
-      },
+            yield* sessions.remove(session.id)
+          }),
+        ),
     })
   })
 })
@@ -197,31 +213,36 @@ describe("session.prompt special characters", () => {
 
     await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const template = "Read @file#name.txt"
-        const parts = await SessionPrompt.resolvePromptParts(template)
-        const fileParts = parts.filter((part) => part.type === "file")
+      fn: () =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({})
+            const template = "Read @file#name.txt"
+            const parts = yield* prompt.resolvePromptParts(template)
+            const fileParts = parts.filter((part) => part.type === "file")
 
-        expect(fileParts.length).toBe(1)
-        expect(fileParts[0].filename).toBe("file#name.txt")
-        expect(fileParts[0].url).toContain("%23")
+            expect(fileParts.length).toBe(1)
+            expect(fileParts[0].filename).toBe("file#name.txt")
+            expect(fileParts[0].url).toContain("%23")
 
-        const decodedPath = fileURLToPath(fileParts[0].url)
-        expect(decodedPath).toBe(path.join(tmp.path, "file#name.txt"))
+            const decodedPath = fileURLToPath(fileParts[0].url)
+            expect(decodedPath).toBe(path.join(tmp.path, "file#name.txt"))
 
-        const message = await SessionPrompt.prompt({
-          sessionID: session.id,
-          parts,
-          noReply: true,
-        })
-        const stored = await MessageV2.get({ sessionID: session.id, messageID: message.info.id })
-        const textParts = stored.parts.filter((part) => part.type === "text")
-        const hasContent = textParts.some((part) => part.text.includes("special content"))
-        expect(hasContent).toBe(true)
+            const message = yield* prompt.prompt({
+              sessionID: session.id,
+              parts,
+              noReply: true,
+            })
+            const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+            const textParts = stored.parts.filter((part) => part.type === "text")
+            const hasContent = textParts.some((part) => part.text.includes("special content"))
+            expect(hasContent).toBe(true)
 
-        await Session.remove(session.id)
-      },
+            yield* sessions.remove(session.id)
+          }),
+        ),
     })
   })
 })
@@ -273,24 +294,29 @@ describe("session.prompt regression", () => {
 
       await Instance.provide({
         directory: tmp.path,
-        fn: async () => {
-          const session = await Session.create({ title: "Prompt regression" })
-          const result = await SessionPrompt.prompt({
-            sessionID: session.id,
-            agent: "build",
-            parts: [{ type: "text", text: "Where is SessionProcessor?" }],
-          })
+        fn: () =>
+          run(
+            Effect.gen(function* () {
+              const prompt = yield* SessionPrompt.Service
+              const sessions = yield* Session.Service
+              const session = yield* sessions.create({ title: "Prompt regression" })
+              const result = yield* prompt.prompt({
+                sessionID: session.id,
+                agent: "build",
+                parts: [{ type: "text", text: "Where is SessionProcessor?" }],
+              })
 
-          expect(result.info.role).toBe("assistant")
-          expect(result.parts.some((part) => part.type === "text" && part.text.includes("processor.ts"))).toBe(true)
+              expect(result.info.role).toBe("assistant")
+              expect(result.parts.some((part) => part.type === "text" && part.text.includes("processor.ts"))).toBe(true)
 
-          const msgs = await Session.messages({ sessionID: session.id })
-          expect(msgs.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
-          expect(calls).toBe(1)
-        },
+              const msgs = yield* sessions.messages({ sessionID: session.id })
+              expect(msgs.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
+              expect(calls).toBe(1)
+            }),
+          ),
       })
     } finally {
-      server.stop(true)
+      void server.stop(true)
     }
   })
 
@@ -342,39 +368,48 @@ describe("session.prompt regression", () => {
 
       await Instance.provide({
         directory: tmp.path,
-        fn: async () => {
-          const session = await Session.create({ title: "Prompt cancel regression" })
-          const run = SessionPrompt.prompt({
-            sessionID: session.id,
-            agent: "build",
-            parts: [{ type: "text", text: "Cancel me" }],
-          })
+        fn: () =>
+          run(
+            Effect.gen(function* () {
+              const prompt = yield* SessionPrompt.Service
+              const sessions = yield* Session.Service
+              const session = yield* sessions.create({ title: "Prompt cancel regression" })
+              const task = Effect.runPromise(
+                prompt.prompt({
+                  sessionID: session.id,
+                  agent: "build",
+                  parts: [{ type: "text", text: "Cancel me" }],
+                }),
+              )
 
-          await ready.promise
-          await SessionPrompt.cancel(session.id)
+              yield* Effect.promise(() => ready.promise)
+              yield* prompt.cancel(session.id)
 
-          const result = await Promise.race([
-            run,
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("timed out waiting for cancel")), 1000),
-            ),
-          ])
+              const result = yield* Effect.promise(() =>
+                Promise.race([
+                  task,
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("timed out waiting for cancel")), 1000),
+                  ),
+                ]),
+              )
 
-          expect(result.info.role).toBe("assistant")
-          if (result.info.role === "assistant") {
-            expect(result.info.error?.name).toBe("MessageAbortedError")
-          }
+              expect(result.info.role).toBe("assistant")
+              if (result.info.role === "assistant") {
+                expect(result.info.error?.name).toBe("MessageAbortedError")
+              }
 
-          const msgs = await Session.messages({ sessionID: session.id })
-          const last = msgs.findLast((msg) => msg.info.role === "assistant")
-          expect(last?.info.role).toBe("assistant")
-          if (last?.info.role === "assistant") {
-            expect(last.info.error?.name).toBe("MessageAbortedError")
-          }
-        },
+              const msgs = yield* sessions.messages({ sessionID: session.id })
+              const last = msgs.findLast((msg) => msg.info.role === "assistant")
+              expect(last?.info.role).toBe("assistant")
+              if (last?.info.role === "assistant") {
+                expect(last.info.error?.name).toBe("MessageAbortedError")
+              }
+            }),
+          ),
       })
     } finally {
-      server.stop(true)
+      void server.stop(true)
     }
   })
 })
@@ -399,41 +434,50 @@ describe("session.prompt agent variant", () => {
 
       await Instance.provide({
         directory: tmp.path,
-        fn: async () => {
-          const session = await Session.create({})
+        fn: () =>
+          run(
+            Effect.gen(function* () {
+              const prompt = yield* SessionPrompt.Service
+              const sessions = yield* Session.Service
+              const session = yield* sessions.create({})
 
-          const other = await SessionPrompt.prompt({
-            sessionID: session.id,
-            agent: "build",
-            model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
-            noReply: true,
-            parts: [{ type: "text", text: "hello" }],
-          })
-          if (other.info.role !== "user") throw new Error("expected user message")
-          expect(other.info.variant).toBeUndefined()
+              const other = yield* prompt.prompt({
+                sessionID: session.id,
+                agent: "build",
+                model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
+                noReply: true,
+                parts: [{ type: "text", text: "hello" }],
+              })
+              if (other.info.role !== "user") throw new Error("expected user message")
+              expect(other.info.model.variant).toBeUndefined()
 
-          const match = await SessionPrompt.prompt({
-            sessionID: session.id,
-            agent: "build",
-            noReply: true,
-            parts: [{ type: "text", text: "hello again" }],
-          })
-          if (match.info.role !== "user") throw new Error("expected user message")
-          expect(match.info.model).toEqual({ providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.2") })
-          expect(match.info.variant).toBe("xhigh")
+              const match = yield* prompt.prompt({
+                sessionID: session.id,
+                agent: "build",
+                noReply: true,
+                parts: [{ type: "text", text: "hello again" }],
+              })
+              if (match.info.role !== "user") throw new Error("expected user message")
+              expect(match.info.model).toEqual({
+                providerID: ProviderID.make("openai"),
+                modelID: ModelID.make("gpt-5.2"),
+                variant: "xhigh",
+              })
+              expect(match.info.model.variant).toBe("xhigh")
 
-          const override = await SessionPrompt.prompt({
-            sessionID: session.id,
-            agent: "build",
-            noReply: true,
-            variant: "high",
-            parts: [{ type: "text", text: "hello third" }],
-          })
-          if (override.info.role !== "user") throw new Error("expected user message")
-          expect(override.info.variant).toBe("high")
+              const override = yield* prompt.prompt({
+                sessionID: session.id,
+                agent: "build",
+                noReply: true,
+                variant: "high",
+                parts: [{ type: "text", text: "hello third" }],
+              })
+              if (override.info.role !== "user") throw new Error("expected user message")
+              expect(override.info.model.variant).toBe("high")
 
-          await Session.remove(session.id)
-        },
+              yield* sessions.remove(session.id)
+            }),
+          ),
       })
     } finally {
       if (prev === undefined) delete process.env.OPENAI_API_KEY
@@ -447,24 +491,33 @@ describe("session.agent-resolution", () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const err = await SessionPrompt.prompt({
-          sessionID: session.id,
-          agent: "nonexistent-agent-xyz",
-          noReply: true,
-          parts: [{ type: "text", text: "hello" }],
-        }).then(
-          () => undefined,
-          (e) => e,
-        )
-        expect(err).toBeDefined()
-        expect(err).not.toBeInstanceOf(TypeError)
-        expect(NamedError.Unknown.isInstance(err)).toBe(true)
-        if (NamedError.Unknown.isInstance(err)) {
-          expect(err.data.message).toContain('Agent not found: "nonexistent-agent-xyz"')
-        }
-      },
+      fn: () =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({})
+            const err = yield* Effect.promise(() =>
+              Effect.runPromise(
+                prompt.prompt({
+                  sessionID: session.id,
+                  agent: "nonexistent-agent-xyz",
+                  noReply: true,
+                  parts: [{ type: "text", text: "hello" }],
+                }),
+              ).then(
+                () => undefined,
+                (e) => e,
+              ),
+            )
+            expect(err).toBeDefined()
+            expect(err).not.toBeInstanceOf(TypeError)
+            expect(NamedError.Unknown.isInstance(err)).toBe(true)
+            if (NamedError.Unknown.isInstance(err)) {
+              expect(err.data.message).toContain('Agent not found: "nonexistent-agent-xyz"')
+            }
+          }),
+        ),
     })
   }, 30000)
 
@@ -472,22 +525,31 @@ describe("session.agent-resolution", () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const err = await SessionPrompt.prompt({
-          sessionID: session.id,
-          agent: "nonexistent-agent-xyz",
-          noReply: true,
-          parts: [{ type: "text", text: "hello" }],
-        }).then(
-          () => undefined,
-          (e) => e,
-        )
-        expect(NamedError.Unknown.isInstance(err)).toBe(true)
-        if (NamedError.Unknown.isInstance(err)) {
-          expect(err.data.message).toContain("build")
-        }
-      },
+      fn: () =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({})
+            const err = yield* Effect.promise(() =>
+              Effect.runPromise(
+                prompt.prompt({
+                  sessionID: session.id,
+                  agent: "nonexistent-agent-xyz",
+                  noReply: true,
+                  parts: [{ type: "text", text: "hello" }],
+                }),
+              ).then(
+                () => undefined,
+                (e) => e,
+              ),
+            )
+            expect(NamedError.Unknown.isInstance(err)).toBe(true)
+            if (NamedError.Unknown.isInstance(err)) {
+              expect(err.data.message).toContain("build")
+            }
+          }),
+        ),
     })
   }, 30000)
 
@@ -495,24 +557,33 @@ describe("session.agent-resolution", () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const err = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "nonexistent-command-xyz",
-          arguments: "",
-        }).then(
-          () => undefined,
-          (e) => e,
-        )
-        expect(err).toBeDefined()
-        expect(err).not.toBeInstanceOf(TypeError)
-        expect(NamedError.Unknown.isInstance(err)).toBe(true)
-        if (NamedError.Unknown.isInstance(err)) {
-          expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
-          expect(err.data.message).toContain("init")
-        }
-      },
+      fn: () =>
+        run(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const sessions = yield* Session.Service
+            const session = yield* sessions.create({})
+            const err = yield* Effect.promise(() =>
+              Effect.runPromise(
+                prompt.command({
+                  sessionID: session.id,
+                  command: "nonexistent-command-xyz",
+                  arguments: "",
+                }),
+              ).then(
+                () => undefined,
+                (e) => e,
+              ),
+            )
+            expect(err).toBeDefined()
+            expect(err).not.toBeInstanceOf(TypeError)
+            expect(NamedError.Unknown.isInstance(err)).toBe(true)
+            if (NamedError.Unknown.isInstance(err)) {
+              expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
+              expect(err.data.message).toContain("init")
+            }
+          }),
+        ),
     })
   }, 30000)
 })

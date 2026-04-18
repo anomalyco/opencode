@@ -1,6 +1,6 @@
 import { rm } from "fs/promises"
 import { Instance } from "../../src/project/instance"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage"
 
 export async function resetDatabase() {
   await Instance.disposeAll().catch(() => undefined)

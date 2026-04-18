@@ -1,7 +1,8 @@
 import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { batch, onCleanup, onMount } from "solid-js"
 import z from "zod"
 import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
@@ -127,6 +128,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (started) return run
       started = true
       run = (async () => {
+        // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
         while (!abort.signal.aborted && started) {
           attempt = new AbortController()
           lastEventAt = Date.now()
@@ -154,7 +156,12 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               resetHeartbeat()
               streamErrorLogged = false
               const directory = event.directory ?? "global"
-              const payload = event.payload
+              if (event.payload.type === "sync") {
+                continue
+              }
+
+              const payload = event.payload as Event
+
               const k = key(directory, payload)
               if (k) {
                 const i = coalesced.get(k)
@@ -206,21 +213,16 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       clearHeartbeat()
     }
 
-    const onVisibility = () => {
-      if (typeof document === "undefined") return
-      if (document.visibilityState !== "visible") return
-      if (!started) return
-      if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
-      attempt?.abort()
-    }
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibility)
-    }
+    onMount(() => {
+      makeEventListener(document, "visibilitychange", () => {
+        if (document.visibilityState !== "visible") return
+        if (!started) return
+        if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
+        attempt?.abort()
+      })
+    })
 
     onCleanup(() => {
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibility)
-      }
       stop()
       abort.abort()
       flush()

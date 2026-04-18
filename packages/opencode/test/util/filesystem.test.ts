@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 
 describe("filesystem", () => {
@@ -80,6 +80,95 @@ describe("filesystem", () => {
       // Directories have size on some systems
       const size = await Filesystem.size(dirpath)
       expect(typeof size).toBe("number")
+    })
+  })
+
+  describe("findUp()", () => {
+    test("keeps previous nearest-first behavior for single target", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "marker"), "root", "utf-8")
+      await fs.writeFile(path.join(parent, "marker"), "parent", "utf-8")
+
+      const result = await Filesystem.findUp("marker", child, tmp.path)
+
+      expect(result).toEqual([path.join(parent, "marker"), path.join(tmp.path, "marker")])
+    })
+
+    test("respects stop boundary", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "marker"), "root", "utf-8")
+      await fs.writeFile(path.join(parent, "marker"), "parent", "utf-8")
+
+      const result = await Filesystem.findUp("marker", child, parent)
+
+      expect(result).toEqual([path.join(parent, "marker")])
+    })
+
+    test("supports multiple targets with nearest-first default ordering", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+
+      await fs.writeFile(path.join(parent, "cfg.jsonc"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.jsonc"), "{}", "utf-8")
+
+      const result = await Filesystem.findUp(["cfg.json", "cfg.jsonc"], child, tmp.path)
+
+      expect(result).toEqual([
+        path.join(parent, "cfg.jsonc"),
+        path.join(tmp.path, "cfg.json"),
+        path.join(tmp.path, "cfg.jsonc"),
+      ])
+    })
+
+    test("supports rootFirst ordering for multiple targets", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+
+      await fs.writeFile(path.join(parent, "cfg.jsonc"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.jsonc"), "{}", "utf-8")
+
+      const result = await Filesystem.findUp(["cfg.json", "cfg.jsonc"], child, tmp.path, { rootFirst: true })
+
+      expect(result).toEqual([
+        path.join(tmp.path, "cfg.json"),
+        path.join(tmp.path, "cfg.jsonc"),
+        path.join(parent, "cfg.jsonc"),
+      ])
+    })
+
+    test("rootFirst preserves json then jsonc order per directory", async () => {
+      await using tmp = await tmpdir()
+      const project = path.join(tmp.path, "project")
+      const nested = path.join(project, "nested")
+      await fs.mkdir(nested, { recursive: true })
+
+      await fs.writeFile(path.join(tmp.path, "opencode.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "opencode.jsonc"), "{}", "utf-8")
+      await fs.writeFile(path.join(project, "opencode.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(project, "opencode.jsonc"), "{}", "utf-8")
+
+      const result = await Filesystem.findUp(["opencode.json", "opencode.jsonc"], nested, tmp.path, {
+        rootFirst: true,
+      })
+
+      expect(result).toEqual([
+        path.join(tmp.path, "opencode.json"),
+        path.join(tmp.path, "opencode.jsonc"),
+        path.join(project, "opencode.json"),
+        path.join(project, "opencode.jsonc"),
+      ])
     })
   })
 
@@ -258,31 +347,31 @@ describe("filesystem", () => {
   })
 
   describe("mimeType()", () => {
-    test("returns correct MIME type for JSON", () => {
-      expect(Filesystem.mimeType("test.json")).toContain("application/json")
+    test("returns correct MIME type for JSON", async () => {
+      expect(await Filesystem.mimeType("test.json")).toContain("application/json")
     })
 
-    test("returns correct MIME type for JavaScript", () => {
-      expect(Filesystem.mimeType("test.js")).toContain("javascript")
+    test("returns correct MIME type for JavaScript", async () => {
+      expect(await Filesystem.mimeType("test.js")).toContain("javascript")
     })
 
-    test("returns MIME type for TypeScript (or video/mp2t due to extension conflict)", () => {
-      const mime = Filesystem.mimeType("test.ts")
+    test("returns MIME type for TypeScript (or video/mp2t due to extension conflict)", async () => {
+      const mime = await Filesystem.mimeType("test.ts")
       // .ts is ambiguous: TypeScript vs MPEG-2 TS video
       expect(mime === "video/mp2t" || mime === "application/typescript" || mime === "text/typescript").toBe(true)
     })
 
-    test("returns correct MIME type for images", () => {
-      expect(Filesystem.mimeType("test.png")).toContain("image/png")
-      expect(Filesystem.mimeType("test.jpg")).toContain("image/jpeg")
+    test("returns correct MIME type for images", async () => {
+      expect(await Filesystem.mimeType("test.png")).toContain("image/png")
+      expect(await Filesystem.mimeType("test.jpg")).toContain("image/jpeg")
     })
 
-    test("returns default for unknown extension", () => {
-      expect(Filesystem.mimeType("test.unknown")).toBe("application/octet-stream")
+    test("returns default for unknown extension", async () => {
+      expect(await Filesystem.mimeType("test.unknown")).toBe("application/octet-stream")
     })
 
-    test("handles files without extension", () => {
-      expect(Filesystem.mimeType("Makefile")).toBe("application/octet-stream")
+    test("handles files without extension", async () => {
+      expect(await Filesystem.mimeType("Makefile")).toBe("application/octet-stream")
     })
   })
 

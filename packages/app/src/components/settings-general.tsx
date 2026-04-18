@@ -8,7 +8,9 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
+import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import {
   monoDefault,
@@ -19,6 +21,7 @@ import {
   sansInput,
   useSettings,
 } from "@/context/settings"
+import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
@@ -64,7 +67,9 @@ const playDemoSound = (id: string | undefined) => {
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
+  const permission = usePermission()
   const platform = usePlatform()
+  const params = useParams()
   const settings = useSettings()
 
   onMount(() => {
@@ -76,6 +81,32 @@ export const SettingsGeneral: Component = () => {
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
+  const dir = createMemo(() => decode64(params.dir))
+  const accepting = createMemo(() => {
+    const value = dir()
+    if (!value) return false
+    if (!params.id) return permission.isAutoAcceptingDirectory(value)
+    return permission.isAutoAccepting(params.id, value)
+  })
+
+  const toggleAccept = (checked: boolean) => {
+    const value = dir()
+    if (!value) return
+
+    if (!params.id) {
+      if (permission.isAutoAcceptingDirectory(value) === checked) return
+      permission.toggleAutoAcceptDirectory(value)
+      return
+    }
+
+    if (checked) {
+      permission.enableAutoAccept(params.id, value)
+      return
+    }
+
+    permission.disableAutoAccept(params.id, value)
+  }
+  const desktop = createMemo(() => platform.platform === "desktop")
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -137,11 +168,6 @@ export const SettingsGeneral: Component = () => {
     { value: "system", label: language.t("theme.scheme.system") },
     { value: "light", label: language.t("theme.scheme.light") },
     { value: "dark", label: language.t("theme.scheme.dark") },
-  ])
-
-  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
-    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
-    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
   ])
 
   const languageOptions = createMemo(() =>
@@ -207,6 +233,15 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("command.permissions.autoaccept.enable")}
+          description={language.t("toast.permissions.autoaccept.on.description")}
+        >
+          <div data-action="settings-auto-accept-permissions">
+            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >
@@ -241,23 +276,73 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
+  const AdvancedSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.advanced")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.showFileTree.title")}
+          description={language.t("settings.general.row.showFileTree.description")}
+        >
+          <div data-action="settings-show-file-tree">
+            <Switch
+              checked={settings.general.showFileTree()}
+              onChange={(checked) => settings.general.setShowFileTree(checked)}
+            />
+          </div>
+        </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.followup.title")}
-          description={language.t("settings.general.row.followup.description")}
+          title={language.t("settings.general.row.showNavigation.title")}
+          description={language.t("settings.general.row.showNavigation.description")}
         >
-          <Select
-            data-action="settings-followup"
-            options={followupOptions()}
-            current={followupOptions().find((o) => o.value === settings.general.followup())}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && settings.general.setFollowup(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
-          />
+          <div data-action="settings-show-navigation">
+            <Switch
+              checked={settings.general.showNavigation()}
+              onChange={(checked) => settings.general.setShowNavigation(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showSearch.title")}
+          description={language.t("settings.general.row.showSearch.description")}
+        >
+          <div data-action="settings-show-search">
+            <Switch
+              checked={settings.general.showSearch()}
+              onChange={(checked) => settings.general.setShowSearch(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showTerminal.title")}
+          description={language.t("settings.general.row.showTerminal.description")}
+        >
+          <div data-action="settings-show-terminal">
+            <Switch
+              checked={settings.general.showTerminal()}
+              onChange={(checked) => settings.general.setShowTerminal(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showStatus.title")}
+          description={language.t("settings.general.row.showStatus.description")}
+        >
+          <div data-action="settings-show-status">
+            <Switch
+              checked={settings.general.showStatus()}
+              onChange={(checked) => settings.general.setShowStatus(checked)}
+            />
+          </div>
         </SettingsRow>
       </SettingsList>
     </div>
@@ -511,6 +596,7 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  console.log(import.meta.env)
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -592,6 +678,10 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
+        </Show>
+
+        <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"}>
+          <AdvancedSection />
         </Show>
       </div>
     </div>
