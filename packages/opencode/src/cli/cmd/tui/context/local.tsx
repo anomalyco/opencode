@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -158,17 +158,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const args = useArgs()
-      const fallbackModel = createMemo(() => {
-        if (args.model) {
-          const { providerID, modelID } = parseModel(args.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
 
+      // CLI --model override: resolved reactively once providers load.
+      // Highest priority — beats agent config and per-agent selections.
+      const [cliOverride, setCliOverride] = createSignal<{ providerID: string; modelID: string } | undefined>(undefined)
+      let cliOverrideApplied = false
+      createEffect(() => {
+        if (cliOverrideApplied || !args.model) return
+        const { providerID, modelID } = parseModel(args.model)
+        if (!providerID || !modelID) return
+        if (isModelValid({ providerID, modelID })) {
+          cliOverrideApplied = true
+          setCliOverride({ providerID, modelID })
+        }
+      })
+
+      const fallbackModel = createMemo(() => {
         if (sync.data.config.model) {
           const { providerID, modelID } = parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
@@ -201,6 +206,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const a = agent.current()
         return (
           getFirstValidModel(
+            cliOverride,
             () => a && modelStore.model[a.name],
             () => a && a.model,
             fallbackModel,
@@ -397,10 +403,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    // Automatically update model when agent changes
+    // Automatically update model when agent changes (skip when CLI override is active)
     createEffect(() => {
       const value = agent.current()
       if (!value) return
+      if (cliOverride()) return
       if (value.model) {
         if (isModelValid(value.model))
           model.set({
