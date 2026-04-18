@@ -574,6 +574,8 @@ export const dict = {
   "settings.general.row.font.description": "Dostosuj czcionkę używaną w blokach kodu i terminalach",
   "settings.general.row.uiFont.title": "Czcionka interfejsu",
   "settings.general.row.uiFont.description": "Dostosuj czcionkę używaną w całym interfejsie",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "Zachowanie kontynuacji",
   "settings.general.row.followup.description": "Wybierz, czy kontynuacja ma być natychmiastowa, czy czekać w kolejce",
   "settings.general.row.followup.option.queue": "Kolejka",

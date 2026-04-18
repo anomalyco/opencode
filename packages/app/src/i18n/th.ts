@@ -634,6 +634,8 @@ export const dict = {
   "settings.general.row.font.description": "ปรับแต่งฟอนต์ที่ใช้ในบล็อกโค้ดและเทอร์มินัล",
   "settings.general.row.uiFont.title": "ฟอนต์ UI",
   "settings.general.row.uiFont.description": "ปรับแต่งฟอนต์ที่ใช้ทั่วทั้งอินเทอร์เฟซ",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "พฤติกรรมการติดตามผล",
   "settings.general.row.followup.description": "เลือกว่าจะให้พร้อมท์ติดตามผลทำงานทันทีหรือรอในคิว",
   "settings.general.row.followup.option.queue": "คิว",

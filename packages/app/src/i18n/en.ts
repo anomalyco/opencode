@@ -738,6 +738,8 @@ export const dict = {
   "settings.general.row.font.description": "Customise the font used in code blocks and terminals",
   "settings.general.row.uiFont.title": "UI Font",
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "Follow-up behavior",
   "settings.general.row.followup.description": "Choose whether follow-up prompts steer immediately or wait in a queue",
   "settings.general.row.followup.option.queue": "Queue",

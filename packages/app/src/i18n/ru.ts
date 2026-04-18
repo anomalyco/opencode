@@ -640,6 +640,8 @@ export const dict = {
   "settings.general.row.font.description": "Настройте шрифт, используемый в блоках кода и терминалах",
   "settings.general.row.uiFont.title": "Шрифт интерфейса",
   "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всем интерфейсе",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "Поведение уточняющих вопросов",
   "settings.general.row.followup.description":
     "Выберите, отправлять ли уточняющие вопросы сразу или помещать их в очередь",

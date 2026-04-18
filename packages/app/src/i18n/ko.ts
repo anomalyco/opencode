@@ -569,6 +569,8 @@ export const dict = {
   "settings.general.row.font.description": "코드 블록과 터미널에 사용되는 글꼴을 사용자 지정",
   "settings.general.row.uiFont.title": "UI 글꼴",
   "settings.general.row.uiFont.description": "인터페이스 전반에 사용되는 글꼴을 사용자 지정",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "후속 조치 동작",
   "settings.general.row.followup.description": "후속 프롬프트를 즉시 실행할지 대기열에 넣을지 선택하세요",
   "settings.general.row.followup.option.queue": "대기열",

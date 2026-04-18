@@ -585,6 +585,8 @@ export const dict = {
   "settings.general.row.font.description": "Die in Codeblöcken und Terminals verwendete Schriftart anpassen",
   "settings.general.row.uiFont.title": "UI-Schriftart",
   "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "Verhalten bei Folgefragen",
   "settings.general.row.followup.description":
     "Wählen Sie, ob Folgefragen sofort steuern oder in einer Warteschlange warten",

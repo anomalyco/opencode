@@ -568,6 +568,8 @@ export const dict = {
   "settings.general.row.font.description": "خصّص الخط المستخدم في كتل التعليمات البرمجية والطرفيات",
   "settings.general.row.uiFont.title": "خط الواجهة",
   "settings.general.row.uiFont.description": "خصّص الخط المستخدم في الواجهة بأكملها",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "سلوك المتابعة",
   "settings.general.row.followup.description": "اختر ما إذا كانت طلبات المتابعة توجه فورًا أو تنتظر في قائمة انتظار",
   "settings.general.row.followup.option.queue": "قائمة انتظار",

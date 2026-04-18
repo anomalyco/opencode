@@ -582,6 +582,8 @@ export const dict = {
   "settings.general.row.font.description": "Personnaliser la police utilisée dans les blocs de code et les terminaux",
   "settings.general.row.uiFont.title": "Police de l'interface",
   "settings.general.row.uiFont.description": "Personnaliser la police utilisée dans toute l'interface",
+  "settings.general.row.showSessionProgress.title": "Activity Indicators",
+  "settings.general.row.showSessionProgress.description": "Show an animated progress bar while a session is running",
   "settings.general.row.followup.title": "Comportement de suivi",
   "settings.general.row.followup.description":
     "Choisissez si les messages de suivi dirigent immédiatement ou attendent dans une file d'attente",
