@@ -151,23 +151,6 @@ Desen eşleştirme ile dosya bulur.
 
 ---
 
-### list
-
-Verilen yoldaki dosya ve dizinleri listeler.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Bu araç dizin içeriğini listeler. Sonuçları filtrelemek için glob desenlerini kabul eder.
-
----
-
 ### lsp (deneysel)
 
 Tanım, referans, hover bilgisi ve çağrılar hiyerarşisi gibi kod zekası özellikleri için yapılandırdığınız LSP sunucularıyla etkileşir.
@@ -341,7 +324,7 @@ MCP sunucularını yapılandırma için [daha fazla bilgi alın](/docs/mcp-serve
 
 ## Dahili detaylar
 
-Dahilde `grep`, `glob` ve `list` gibi araçlar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanır. Varsayılan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` içindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
+Dahilde `grep` ve `glob` gibi araçlar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanır. Varsayılan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` içindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
 
 ---
 

@@ -7,9 +7,14 @@ import { tmpdir } from "../fixture/fixture"
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
+const { Flag } = await import("../../src/flag/flag")
 const { Plugin } = await import("../../src/plugin/index")
 const { Workspace } = await import("../../src/control-plane/workspace")
 const { Instance } = await import("../../src/project/instance")
+
+const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+
+Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -18,9 +23,11 @@ afterEach(async () => {
 afterAll(() => {
   if (disableDefault === undefined) {
     delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-    return
+  } else {
+    process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
   }
-  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
+
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
 })
 
 describe("plugin.workspace", () => {
@@ -39,7 +46,7 @@ describe("plugin.workspace", () => {
             '    name: "plug",',
             '    description: "plugin workspace adaptor",',
             "    configure(input) {",
-            `      return { ...input, name: \"plug\", branch: \"plug/main\", directory: ${JSON.stringify(space)} }`,
+            `      return { ...input, name: "plug", branch: "plug/main", directory: ${JSON.stringify(space)} }`,
             "    },",
             "    async create(input) {",
             `      await Bun.write(${JSON.stringify(mark)}, JSON.stringify(input))`,

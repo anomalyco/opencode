@@ -25,20 +25,6 @@ export type ViewDiff = {
 
 const cache = new Map<string, FileDiffMetadata>()
 
-function empty(file: string, key: string) {
-  return {
-    name: file,
-    type: "change",
-    hunks: [],
-    splitLineCount: 0,
-    unifiedLineCount: 0,
-    isPartial: true,
-    deletionLines: [],
-    additionLines: [],
-    cacheKey: key,
-  } satisfies FileDiffMetadata
-}
-
 function patch(diff: ReviewDiff) {
   if (typeof diff.patch === "string") {
     const [patch] = parsePatch(diff.patch)

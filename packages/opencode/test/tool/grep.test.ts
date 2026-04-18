@@ -5,10 +5,10 @@ import { GrepTool } from "../../src/tool/grep"
 import { provideInstance, provideTmpdirInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { Truncate } from "../../src/tool/truncate"
+import { Truncate } from "../../src/tool"
 import { Agent } from "../../src/agent/agent"
 import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
@@ -32,18 +32,18 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const projectRoot = path.join(__dirname, "../..")
+const root = path.join(__dirname, "../..")
 
 describe("tool.grep", () => {
   it.live("basic search", () =>
     Effect.gen(function* () {
       const info = yield* GrepTool
       const grep = yield* info.init()
-      const result = yield* provideInstance(projectRoot)(
+      const result = yield* provideInstance(root)(
         grep.execute(
           {
             pattern: "export",
-            path: path.join(projectRoot, "src/tool"),
+            path: path.join(root, "src/tool"),
             include: "*.ts",
           },
           ctx,
