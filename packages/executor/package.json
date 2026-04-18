@@ -5,7 +5,9 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "build-vm": "bash scripts/build-vm.sh",
-    "test": "bun run test.ts",
+    "test": "bun run src/test.ts",
+    "test:e2e": "bun run src/e2e-test.ts",
+    "test:integration": "bun run src/integration-test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

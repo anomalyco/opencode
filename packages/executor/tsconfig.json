@@ -12,8 +12,8 @@
     "declarationMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "types": ["bun-types"]
+    "types": ["bun"]
   },
-  "include": ["src/**/*", "test.ts"],
+  "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }
