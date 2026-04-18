@@ -22,7 +22,7 @@ import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
-import { ProjectProvider } from "@tui/context/project"
+import { ProjectProvider, useProject } from "@tui/context/project"
 import { EditorContextProvider } from "@tui/context/editor"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -60,6 +60,8 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { DialogPrompt } from "./ui/dialog-prompt"
+import { changeDirectory } from "@tui/util/change-directory"
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
@@ -215,6 +217,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
+  const project = useProject()
   const exit = useExit()
   const promptRef = usePromptRef()
   const routes: RouteMap = new Map()
@@ -397,6 +400,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     ),
   )
+
+  const initialDirectory = sdk.directory ?? process.cwd()
+  const cdDeps = {
+    getCurrentDirectory: () => sdk.directory ?? process.cwd(),
+    getWorktree: () => project.instance.path().worktree,
+    setDirectory: (dir: string) => sdk.setDirectory(dir),
+    syncProject: () => project.sync(),
+    showToast: toast.show,
+  }
 
   const connected = useConnected()
   command.register(() => [
@@ -587,6 +599,32 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
+      },
+      category: "System",
+    },
+    {
+      title: "Change directory",
+      value: "directory.cd",
+      slash: {
+        name: "cd",
+        aliases: ["chdir"],
+      },
+      description: "Change working directory",
+      onSelect: async (dlg) => {
+        const cdInput = await DialogPrompt.show(dlg, "Change Directory", {
+          placeholder: "Enter path (relative, absolute, or ~)",
+        })
+        if (!cdInput) return
+        const resolved = await changeDirectory(cdInput, initialDirectory, cdDeps, dlg)
+        if (resolved && route.data.type === "session") {
+          const currentAgent = local.agent.current()
+          void sdk.client.session.shell({
+            sessionID: route.data.sessionID,
+            agent: currentAgent?.name ?? "code",
+            command: "pwd",
+            display: `cd ${cdInput}`,
+          })
+        }
       },
       category: "System",
     },

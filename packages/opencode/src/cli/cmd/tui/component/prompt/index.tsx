@@ -35,6 +35,7 @@ import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { changeDirectory } from "@tui/util/change-directory"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -651,6 +652,15 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
+  const initialDirectory = sdk.directory ?? process.cwd()
+  const cdDeps = {
+    getCurrentDirectory: () => sdk.directory ?? process.cwd(),
+    getWorktree: () => project.instance.path().worktree,
+    setDirectory: (dir: string) => sdk.setDirectory(dir),
+    syncProject: () => project.sync(),
+    showToast: toast.show,
+  }
+
   async function submit() {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
@@ -662,6 +672,32 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return false
     if (autocomplete?.visible) return false
     if (!store.prompt.input) return false
+
+    // Intercept built-in /cd command early (no model/agent needed)
+    if (store.prompt.input.match(/^\/(?:cd|chdir)(?:\s|$)/)) {
+      const cdArg = store.prompt.input.replace(/^\/(?:cd|chdir)\s*/, "").trim()
+      history.append({ ...store.prompt, mode: store.mode })
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+      input.clear()
+
+      // Run cd then record the result as a shell entry in the session
+      const resolved = await changeDirectory(cdArg, initialDirectory, cdDeps, dialog)
+      if (resolved && props.sessionID) {
+        const currentAgent = local.agent.current()
+        // display shows "cd .." in the session, command executes "pwd" to produce the new path as output
+        void sdk.client.session.shell({
+          sessionID: props.sessionID,
+          agent: currentAgent?.name ?? "code",
+          command: "pwd",
+          display: `cd ${cdArg || "~"}`,
+        })
+      }
+      return true
+    }
+
     const agent = local.agent.current()
     if (!agent) return false
     const trimmed = store.prompt.input.trim()

@@ -778,7 +778,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         state: {
           status: "running",
           time: { start: Date.now() },
-          input: { command: input.command },
+          input: { command: input.display ?? input.command },
         },
       }
       yield* sessions.updatePart(part)
@@ -1758,6 +1758,7 @@ export const ShellInput = Schema.Struct({
   agent: Schema.String,
   model: Schema.optional(ModelRef),
   command: Schema.String,
+  display: Schema.optional(Schema.String),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>
 

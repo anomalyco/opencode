@@ -25,12 +25,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       return createOpencodeClient({
         baseUrl: props.url,
         signal: abort.signal,
-        directory: props.directory,
+        directory: currentDirectory,
         fetch: props.fetch,
         headers: props.headers,
       })
     }
 
+    let currentDirectory = props.directory
     let sdk = createSDK()
 
     const emitter = createGlobalEmitter<{
@@ -133,7 +134,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       get client() {
         return sdk
       },
-      directory: props.directory,
+      get directory() {
+        return currentDirectory
+      },
+      setDirectory(dir: string) {
+        currentDirectory = dir
+        sdk = createSDK()
+      },
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,
