@@ -10,6 +10,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
+import { isImageAttachment, mediaKind, sniffAttachmentMime } from "@/util/media"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -17,24 +18,6 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const MIME_SAMPLE_BYTES = 12
-
-const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
-
-const sniffAttachmentMime = (bytes: Uint8Array, fallback: string) => {
-  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
-  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
-  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
-  if (startsWith(bytes, [0x42, 0x4d])) return "image/bmp"
-  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"
-  if (
-    startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
-    startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50])
-  ) {
-    return "image/webp"
-  }
-
-  return fallback
-}
 
 const parameters = z.object({
   filePath: z.string().describe("The absolute path to the file or directory to read"),
@@ -223,11 +206,10 @@ export const ReadTool = Tool.define(
         yield* readSample(filepath, Number(stat.size), MIME_SAMPLE_BYTES),
         AppFileSystem.mimeType(filepath),
       )
-      const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-      const isPdf = mime === "application/pdf"
-      if (isImage || isPdf) {
+      const kind = mediaKind(mime)
+      if (isImageAttachment(mime) || kind === "pdf") {
         const bytes = yield* fs.readFile(filepath)
-        const msg = `${isImage ? "Image" : "PDF"} read successfully`
+        const msg = `${kind === "image" ? "Image" : "PDF"} read successfully`
         return {
           title,
           output: msg,
