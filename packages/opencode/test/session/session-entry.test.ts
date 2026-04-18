@@ -591,7 +591,64 @@ describe("session-entry step", () => {
       )
     })
 
-    test.failing("records synthetic events", () => {
+    test("routes tool events by callID when tool streams interleave", () => {
+      FastCheck.assert(
+        FastCheck.property(dict, dict, word, word, text, text, (a, b, titleA, titleB, deltaA, deltaB) => {
+          const next = run(
+            [
+              SessionEvent.Tool.Input.Started.create({ callID: "a", name: "bash", timestamp: time(1) }),
+              SessionEvent.Tool.Input.Started.create({ callID: "b", name: "grep", timestamp: time(2) }),
+              SessionEvent.Tool.Input.Delta.create({ callID: "a", delta: deltaA, timestamp: time(3) }),
+              SessionEvent.Tool.Input.Delta.create({ callID: "b", delta: deltaB, timestamp: time(4) }),
+              SessionEvent.Tool.Called.create({
+                callID: "a",
+                tool: "bash",
+                input: a,
+                provider: { executed: true },
+                timestamp: time(5),
+              }),
+              SessionEvent.Tool.Called.create({
+                callID: "b",
+                tool: "grep",
+                input: b,
+                provider: { executed: true },
+                timestamp: time(6),
+              }),
+              SessionEvent.Tool.Success.create({
+                callID: "a",
+                title: titleA,
+                output: "done-a",
+                provider: { executed: true },
+                timestamp: time(7),
+              }),
+              SessionEvent.Tool.Success.create({
+                callID: "b",
+                title: titleB,
+                output: "done-b",
+                provider: { executed: true },
+                timestamp: time(8),
+              }),
+            ],
+            active(),
+          )
+
+          const first = tool(next, "a")
+          const second = tool(next, "b")
+
+          expect(first?.state.status).toBe("completed")
+          expect(second?.state.status).toBe("completed")
+          if (first?.state.status !== "completed" || second?.state.status !== "completed") return
+
+          expect(first.state.input).toEqual(a)
+          expect(second.state.input).toEqual(b)
+          expect(first.state.title).toBe(titleA)
+          expect(second.state.title).toBe(titleB)
+        }),
+        { numRuns: 50 },
+      )
+    })
+
+    test("records synthetic events", () => {
       FastCheck.assert(
         FastCheck.property(word, (body) => {
           const next = SessionEntry.step(history(), SessionEvent.Synthetic.create({ text: body, timestamp: time(1) }))
@@ -604,7 +661,7 @@ describe("session-entry step", () => {
       )
     })
 
-    test.failing("records compaction events", () => {
+    test("records compaction events", () => {
       FastCheck.assert(
         FastCheck.property(FastCheck.boolean(), maybe(FastCheck.boolean()), (auto, overflow) => {
           const next = SessionEntry.step(

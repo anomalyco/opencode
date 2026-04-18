@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { SessionEvent } from "./session-event"
-import { produce } from "immer"
+import { castDraft, produce } from "immer"
 
 export const ID = SessionEvent.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -70,7 +70,9 @@ export class ToolStateError extends Schema.Class<ToolStateError>("Session.Entry.
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}
 
-export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
+export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
+  Schema.toTaggedUnion("status"),
+)
 export type ToolState = Schema.Schema.Type<typeof ToolState>
 
 export class AssistantTool extends Schema.Class<AssistantTool>("Session.Entry.Assistant.Tool")({
@@ -96,7 +98,9 @@ export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Sessio
   text: Schema.String,
 }) {}
 
-export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool])
+export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
+  Schema.toTaggedUnion("type"),
+)
 export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
 
 export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant")({
@@ -126,7 +130,7 @@ export class Compaction extends Schema.Class<Compaction>("Session.Entry.Compacti
   ...Base,
 }) {}
 
-export const Entry = Schema.Union([User, Synthetic, Assistant, Compaction])
+export const Entry = Schema.Union([User, Synthetic, Assistant, Compaction]).pipe(Schema.toTaggedUnion("type"))
 
 export type Entry = Schema.Schema.Type<typeof Entry>
 
@@ -141,19 +145,29 @@ export function step(old: History, event: SessionEvent.Event): History {
   return produce(old, (draft) => {
     const lastAssistant = draft.entries.findLast((x) => x.type === "assistant")
     const pendingAssistant = lastAssistant && !lastAssistant.time.completed ? lastAssistant : undefined
+    type DraftContent = NonNullable<typeof pendingAssistant>["content"][number]
+    type DraftTool = Extract<DraftContent, { type: "tool" }>
 
-    switch (event.type) {
-      case "prompt": {
+    const latestTool = (callID?: string) =>
+      pendingAssistant?.content.findLast(
+        (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.callID === callID),
+      )
+    const latestText = () => pendingAssistant?.content.findLast((item) => item.type === "text")
+    const latestReasoning = () => pendingAssistant?.content.findLast((item) => item.type === "reasoning")
+
+    SessionEvent.Event.match(event, {
+      prompt: (event) => {
+        const entry = User.fromEvent(event)
         if (pendingAssistant) {
-          // @ts-expect-error
-          draft.pending.push(User.fromEvent(event))
-          break
+          draft.pending.push(castDraft(entry))
+          return
         }
-        // @ts-expect-error
-        draft.entries.push(User.fromEvent(event))
-        break
-      }
-      case "step.started": {
+        draft.entries.push(castDraft(entry))
+      },
+      synthetic: (event) => {
+        draft.entries.push(new Synthetic({ ...event, time: { created: event.timestamp } }))
+      },
+      "step.started": (event) => {
         if (pendingAssistant) pendingAssistant.time.completed = event.timestamp
         draft.entries.push({
           id: event.id,
@@ -163,27 +177,28 @@ export function step(old: History, event: SessionEvent.Event): History {
           },
           content: [],
         })
-        break
-      }
-      case "text.started": {
-        if (!pendingAssistant) break
+      },
+      "step.ended": (event) => {
+        if (!pendingAssistant) return
+        pendingAssistant.time.completed = event.timestamp
+        pendingAssistant.cost = event.cost
+        pendingAssistant.tokens = event.tokens
+      },
+      "text.started": () => {
+        if (!pendingAssistant) return
         pendingAssistant.content.push({
           type: "text",
           text: "",
         })
-        break
-      }
-      case "text.delta": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "text")
+      },
+      "text.delta": (event) => {
+        if (!pendingAssistant) return
+        const match = latestText()
         if (match) match.text += event.delta
-        break
-      }
-      case "text.ended": {
-        break
-      }
-      case "tool.input.started": {
-        if (!pendingAssistant) break
+      },
+      "text.ended": () => {},
+      "tool.input.started": (event) => {
+        if (!pendingAssistant) return
         pendingAssistant.content.push({
           type: "tool",
           callID: event.callID,
@@ -196,21 +211,17 @@ export function step(old: History, event: SessionEvent.Event): History {
             input: "",
           },
         })
-        break
-      }
-      case "tool.input.delta": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "tool")
+      },
+      "tool.input.delta": (event) => {
+        if (!pendingAssistant) return
+        const match = latestTool(event.callID)
         // oxlint-disable-next-line no-base-to-string -- event.delta is a Schema.String (runtime string)
         if (match) match.state.input += event.delta
-        break
-      }
-      case "tool.input.ended": {
-        break
-      }
-      case "tool.called": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "tool")
+      },
+      "tool.input.ended": () => {},
+      "tool.called": (event) => {
+        if (!pendingAssistant) return
+        const match = latestTool(event.callID)
         if (match) {
           match.time.ran = event.timestamp
           match.state = {
@@ -218,11 +229,10 @@ export function step(old: History, event: SessionEvent.Event): History {
             input: event.input,
           }
         }
-        break
-      }
-      case "tool.success": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "tool")
+      },
+      "tool.success": (event) => {
+        if (!pendingAssistant) return
+        const match = latestTool(event.callID)
         if (match && match.state.status === "running") {
           match.state = {
             status: "completed",
@@ -230,15 +240,13 @@ export function step(old: History, event: SessionEvent.Event): History {
             output: event.output ?? "",
             title: event.title,
             metadata: event.metadata ?? {},
-            // @ts-expect-error
-            attachments: event.attachments ?? [],
+            attachments: [...(event.attachments ?? [])],
           }
         }
-        break
-      }
-      case "tool.error": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "tool")
+      },
+      "tool.error": (event) => {
+        if (!pendingAssistant) return
+        const match = latestTool(event.callID)
         if (match && match.state.status === "running") {
           match.state = {
             status: "error",
@@ -247,36 +255,29 @@ export function step(old: History, event: SessionEvent.Event): History {
             metadata: event.metadata ?? {},
           }
         }
-        break
-      }
-      case "reasoning.started": {
-        if (!pendingAssistant) break
+      },
+      "reasoning.started": () => {
+        if (!pendingAssistant) return
         pendingAssistant.content.push({
           type: "reasoning",
           text: "",
         })
-        break
-      }
-      case "reasoning.delta": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "reasoning")
+      },
+      "reasoning.delta": (event) => {
+        if (!pendingAssistant) return
+        const match = latestReasoning()
         if (match) match.text += event.delta
-        break
-      }
-      case "reasoning.ended": {
-        if (!pendingAssistant) break
-        const match = pendingAssistant.content.findLast((x) => x.type === "reasoning")
+      },
+      "reasoning.ended": (event) => {
+        if (!pendingAssistant) return
+        const match = latestReasoning()
         if (match) match.text = event.text
-        break
-      }
-      case "step.ended": {
-        if (!pendingAssistant) break
-        pendingAssistant.time.completed = event.timestamp
-        pendingAssistant.cost = event.cost
-        pendingAssistant.tokens = event.tokens
-        break
-      }
-    }
+      },
+      retried: () => {},
+      compacted: (event) => {
+        draft.entries.push(new Compaction({ ...event, type: "compaction", time: { created: event.timestamp } }))
+      },
+    })
   })
 }
 
