@@ -13,7 +13,6 @@ import { type LanguageModelV3 } from "@ai-sdk/provider"
 import * as ModelsDev from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import { Instance } from "../project/instance"
 import { InstallationVersion } from "../installation/version"
 import { Flag } from "../flag/flag"
 import { zod } from "@/util/effect-zod"
@@ -390,6 +389,17 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
+    llmgateway: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+            "X-Source": "opencode",
+          },
+        },
+      }),
     openrouter: () =>
       Effect.succeed({
         autoload: false,
@@ -526,6 +536,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const token = apiKey ?? (yield* dep.get("GITLAB_TOKEN"))
 
       const providerConfig = (yield* dep.config()).provider?.["gitlab"]
+      const directory = yield* InstanceState.directory
 
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${InstallationVersion} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
@@ -580,10 +591,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
             log.info("gitlab model discovery starting", { instanceUrl })
-            const result = await discoverWorkflowModels(
-              { instanceUrl, getHeaders },
-              { workingDirectory: Instance.directory },
-            )
+            const result = await discoverWorkflowModels({ instanceUrl, getHeaders }, { workingDirectory: directory })
 
             if (!result.models.length) {
               log.info("gitlab model discovery skipped: no models found", {
@@ -957,7 +965,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     family: model.family,
     api: {
       id: model.id,
-      url: model.provider?.api ?? provider.api!,
+      url: model.provider?.api ?? provider.api ?? "",
       npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
     },
     status: model.status ?? "active",
@@ -970,10 +978,10 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       output: model.limit.output,
     },
     capabilities: {
-      temperature: model.temperature,
-      reasoning: model.reasoning,
-      attachment: model.attachment,
-      toolcall: model.tool_call,
+      temperature: model.temperature ?? false,
+      reasoning: model.reasoning ?? false,
+      attachment: model.attachment ?? false,
+      toolcall: model.tool_call ?? true,
       input: {
         text: model.modalities?.input?.includes("text") ?? false,
         audio: model.modalities?.input?.includes("audio") ?? false,
@@ -990,7 +998,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       },
       interleaved: model.interleaved ?? false,
     },
-    release_date: model.release_date,
+    release_date: model.release_date ?? "",
     variants: {},
   }
 
@@ -1132,7 +1140,7 @@ const layer: Layer.Layer<
                   existingModel?.api.npm ??
                   modelsDev[providerID]?.npm ??
                   "@ai-sdk/openai-compatible",
-                url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+                url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
               },
               status: model.status ?? existingModel?.status ?? "active",
               name,

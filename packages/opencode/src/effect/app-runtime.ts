@@ -1,5 +1,5 @@
 import { Layer, ManagedRuntime } from "effect"
-import { attach, memoMap } from "./run-service"
+import { attach } from "./run-service"
 import * as Observability from "./observability"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -46,7 +46,8 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share"
 import { SessionShare } from "@/share"
-import { Npm } from "@opencode-ai/shared/npm"
+import { Npm } from "@/npm"
+import { memoMap } from "./memo-map"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,

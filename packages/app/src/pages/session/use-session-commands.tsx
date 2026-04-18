@@ -70,7 +70,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const shown = () => platform.platform !== "desktop" || settings.general.showFileTree()
+  const shown = () =>
+    platform.platform !== "desktop" ||
+    import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" ||
+    settings.general.showFileTree()
 
   const idle = { type: "idle" as const }
   const status = () => sync.data.session_status[params.id ?? ""] ?? idle
