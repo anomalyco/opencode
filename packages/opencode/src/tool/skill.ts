@@ -8,7 +8,7 @@ import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
 
-const Parameters = z.object({
+export const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
 })
 

@@ -17,6 +17,8 @@ function getLastModel(sessionID: SessionID) {
   return undefined
 }
 
+export const Parameters = z.object({})
+
 export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
@@ -26,7 +28,7 @@ export const PlanExitTool = Tool.define(
 
     return {
       description: EXIT_DESCRIPTION,
-      parameters: z.object({}),
+      parameters: Parameters,
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const info = yield* session.get(ctx.sessionID)

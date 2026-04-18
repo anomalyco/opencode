@@ -50,7 +50,7 @@ const FILES = new Set([
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
-const Parameters = z.object({
+export const Parameters = z.object({
   command: z.string().describe("The command to execute"),
   timeout: z.number().describe("Optional timeout in milliseconds").optional(),
   workdir: z

@@ -5,6 +5,22 @@ import * as Tool from "./tool"
 import * as McpExa from "./mcp-exa"
 import DESCRIPTION from "./codesearch.txt"
 
+export const Parameters = z.object({
+  query: z
+    .string()
+    .describe(
+      "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
+    ),
+  tokensNum: z
+    .number()
+    .min(1000)
+    .max(50000)
+    .default(5000)
+    .describe(
+      "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
+    ),
+})
+
 export const CodeSearchTool = Tool.define(
   "codesearch",
   Effect.gen(function* () {
@@ -12,21 +28,7 @@ export const CodeSearchTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters: z.object({
-        query: z
-          .string()
-          .describe(
-            "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
-          ),
-        tokensNum: z
-          .number()
-          .min(1000)
-          .max(50000)
-          .default(5000)
-          .describe(
-            "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
-          ),
-      }),
+      parameters: Parameters,
       execute: (params: { query: string; tokensNum: number }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           yield* ctx.ask({

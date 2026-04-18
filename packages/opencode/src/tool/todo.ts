@@ -9,7 +9,7 @@ import { Todo } from "../session/todo"
 // and zodObject(Todo.Info) returns ZodObject<any> — reaching into .shape would
 // erase field types. Tool schemas migrate to Effect Schema as a separate slice
 // per specs/effect/schema.md.
-const parameters = z.object({
+export const Parameters = z.object({
   todos: z
     .array(
       z.object({
@@ -25,15 +25,15 @@ type Metadata = {
   todos: Todo.Info[]
 }
 
-export const TodoWriteTool = Tool.define<typeof parameters, Metadata, Todo.Service>(
+export const TodoWriteTool = Tool.define<typeof Parameters, Metadata, Todo.Service>(
   "todowrite",
   Effect.gen(function* () {
     const todo = yield* Todo.Service
 
     return {
       description: DESCRIPTION_WRITE,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) =>
+      parameters: Parameters,
+      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           yield* ctx.ask({
             permission: "todowrite",
@@ -55,6 +55,6 @@ export const TodoWriteTool = Tool.define<typeof parameters, Metadata, Todo.Servi
             },
           }
         }),
-    } satisfies Tool.DefWithoutID<typeof parameters, Metadata>
+    } satisfies Tool.DefWithoutID<typeof Parameters, Metadata>
   }),
 )

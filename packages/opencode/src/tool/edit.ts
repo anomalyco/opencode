@@ -45,7 +45,7 @@ function lock(filePath: string) {
   return next
 }
 
-const Parameters = z.object({
+export const Parameters = z.object({
   filePath: z.string().describe("The absolute path to the file to modify"),
   oldString: z.string().describe("The text to replace"),
   newString: z.string().describe("The text to replace it with (must be different from oldString)"),

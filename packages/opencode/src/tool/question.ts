@@ -4,7 +4,7 @@ import * as Tool from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 
-const parameters = z.object({
+export const Parameters = z.object({
   questions: z.array(Question.Prompt.zod).describe("Questions to ask"),
 })
 
@@ -12,15 +12,15 @@ type Metadata = {
   answers: ReadonlyArray<Question.Answer>
 }
 
-export const QuestionTool = Tool.define<typeof parameters, Metadata, Question.Service>(
+export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Service>(
   "question",
   Effect.gen(function* () {
     const question = yield* Question.Service
 
     return {
       description: DESCRIPTION,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) =>
+      parameters: Parameters,
+      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,

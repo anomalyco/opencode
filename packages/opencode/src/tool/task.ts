@@ -17,7 +17,7 @@ export interface TaskPromptOps {
 
 const id = "task"
 
-const parameters = z.object({
+export const Parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
@@ -37,7 +37,7 @@ export const TaskTool = Tool.define(
     const config = yield* Config.Service
     const sessions = yield* Session.Service
 
-    const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
+    const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof Parameters>, ctx: Tool.Context) {
       const cfg = yield* config.get()
 
       if (!ctx.extra?.bypassAgentCheck) {
@@ -168,8 +168,8 @@ export const TaskTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
+      parameters: Parameters,
+      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

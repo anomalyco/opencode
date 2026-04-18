@@ -5,7 +5,7 @@ import * as Tool from "./tool"
 import * as McpExa from "./mcp-exa"
 import DESCRIPTION from "./websearch.txt"
 
-const Parameters = z.object({
+export const Parameters = z.object({
   query: z.string().describe("Websearch query"),
   numResults: z.number().optional().describe("Number of search results to return (default: 8)"),
   livecrawl: z
