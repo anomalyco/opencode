@@ -1,6 +1,5 @@
 import { Schema } from "effect"
 import { SessionEvent } from "./session-event"
-import { castDraft, produce } from "immer"
 
 export const ID = SessionEvent.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -40,7 +39,14 @@ export class Synthetic extends Schema.Class<Synthetic>("Session.Entry.Synthetic"
   ...SessionEvent.Synthetic.fields,
   ...Base,
   type: Schema.Literal("synthetic"),
-}) {}
+}) {
+  static fromEvent(event: SessionEvent.Synthetic) {
+    return new Synthetic({
+      ...event,
+      time: { created: event.timestamp },
+    })
+  }
+}
 
 export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.Entry.ToolState.Pending")({
   status: Schema.Literal("pending"),
@@ -122,164 +128,38 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
     created: Schema.DateTimeUtc,
     completed: Schema.DateTimeUtc.pipe(Schema.optional),
   }),
-}) {}
+}) {
+  static fromEvent(event: SessionEvent.Step.Started) {
+    return new Assistant({
+      id: event.id,
+      type: "assistant",
+      time: {
+        created: event.timestamp,
+      },
+      content: [],
+    })
+  }
+}
 
 export class Compaction extends Schema.Class<Compaction>("Session.Entry.Compaction")({
   ...SessionEvent.Compacted.fields,
   type: Schema.Literal("compaction"),
   ...Base,
-}) {}
+}) {
+  static fromEvent(event: SessionEvent.Compacted) {
+    return new Compaction({
+      ...event,
+      type: "compaction",
+      time: { created: event.timestamp },
+    })
+  }
+}
 
 export const Entry = Schema.Union([User, Synthetic, Assistant, Compaction]).pipe(Schema.toTaggedUnion("type"))
 
 export type Entry = Schema.Schema.Type<typeof Entry>
 
 export type Type = Entry["type"]
-
-export type History = {
-  entries: Entry[]
-  pending: Entry[]
-}
-
-export function step(old: History, event: SessionEvent.Event): History {
-  return produce(old, (draft) => {
-    const lastAssistant = draft.entries.findLast((x) => x.type === "assistant")
-    const pendingAssistant = lastAssistant && !lastAssistant.time.completed ? lastAssistant : undefined
-    type DraftContent = NonNullable<typeof pendingAssistant>["content"][number]
-    type DraftTool = Extract<DraftContent, { type: "tool" }>
-
-    const latestTool = (callID?: string) =>
-      pendingAssistant?.content.findLast(
-        (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.callID === callID),
-      )
-    const latestText = () => pendingAssistant?.content.findLast((item) => item.type === "text")
-    const latestReasoning = () => pendingAssistant?.content.findLast((item) => item.type === "reasoning")
-
-    SessionEvent.Event.match(event, {
-      prompt: (event) => {
-        const entry = User.fromEvent(event)
-        if (pendingAssistant) {
-          draft.pending.push(castDraft(entry))
-          return
-        }
-        draft.entries.push(castDraft(entry))
-      },
-      synthetic: (event) => {
-        draft.entries.push(new Synthetic({ ...event, time: { created: event.timestamp } }))
-      },
-      "step.started": (event) => {
-        if (pendingAssistant) pendingAssistant.time.completed = event.timestamp
-        draft.entries.push({
-          id: event.id,
-          type: "assistant",
-          time: {
-            created: event.timestamp,
-          },
-          content: [],
-        })
-      },
-      "step.ended": (event) => {
-        if (!pendingAssistant) return
-        pendingAssistant.time.completed = event.timestamp
-        pendingAssistant.cost = event.cost
-        pendingAssistant.tokens = event.tokens
-      },
-      "text.started": () => {
-        if (!pendingAssistant) return
-        pendingAssistant.content.push({
-          type: "text",
-          text: "",
-        })
-      },
-      "text.delta": (event) => {
-        if (!pendingAssistant) return
-        const match = latestText()
-        if (match) match.text += event.delta
-      },
-      "text.ended": () => {},
-      "tool.input.started": (event) => {
-        if (!pendingAssistant) return
-        pendingAssistant.content.push({
-          type: "tool",
-          callID: event.callID,
-          name: event.name,
-          time: {
-            created: event.timestamp,
-          },
-          state: {
-            status: "pending",
-            input: "",
-          },
-        })
-      },
-      "tool.input.delta": (event) => {
-        if (!pendingAssistant) return
-        const match = latestTool(event.callID)
-        // oxlint-disable-next-line no-base-to-string -- event.delta is a Schema.String (runtime string)
-        if (match) match.state.input += event.delta
-      },
-      "tool.input.ended": () => {},
-      "tool.called": (event) => {
-        if (!pendingAssistant) return
-        const match = latestTool(event.callID)
-        if (match) {
-          match.time.ran = event.timestamp
-          match.state = {
-            status: "running",
-            input: event.input,
-          }
-        }
-      },
-      "tool.success": (event) => {
-        if (!pendingAssistant) return
-        const match = latestTool(event.callID)
-        if (match && match.state.status === "running") {
-          match.state = {
-            status: "completed",
-            input: match.state.input,
-            output: event.output ?? "",
-            title: event.title,
-            metadata: event.metadata ?? {},
-            attachments: [...(event.attachments ?? [])],
-          }
-        }
-      },
-      "tool.error": (event) => {
-        if (!pendingAssistant) return
-        const match = latestTool(event.callID)
-        if (match && match.state.status === "running") {
-          match.state = {
-            status: "error",
-            error: event.error,
-            input: match.state.input,
-            metadata: event.metadata ?? {},
-          }
-        }
-      },
-      "reasoning.started": () => {
-        if (!pendingAssistant) return
-        pendingAssistant.content.push({
-          type: "reasoning",
-          text: "",
-        })
-      },
-      "reasoning.delta": (event) => {
-        if (!pendingAssistant) return
-        const match = latestReasoning()
-        if (match) match.text += event.delta
-      },
-      "reasoning.ended": (event) => {
-        if (!pendingAssistant) return
-        const match = latestReasoning()
-        if (match) match.text = event.text
-      },
-      retried: () => {},
-      compacted: (event) => {
-        draft.entries.push(new Compaction({ ...event, type: "compaction", time: { created: event.timestamp } }))
-      },
-    })
-  })
-}
 
 /*
 export interface Interface {
