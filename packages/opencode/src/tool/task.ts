@@ -54,7 +54,17 @@ export const TaskTool = Tool.define(
 
       const next = yield* agent.get(params.subagent_type)
       if (!next) {
-        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
+        const available = (yield* agent.list())
+          .filter((a) => a.mode !== "primary")
+          .map((a) => a.name)
+          .sort()
+        return yield* Effect.fail(
+          new Error(
+            `Unknown agent type: "${params.subagent_type}" is not a valid agent type. ` +
+              `Available agents: ${available.length ? available.join(", ") : "(none)"}. ` +
+              `Retry with one of the available names exactly as listed.`,
+          ),
+        )
       }
 
       const canTask = next.permission.some((rule) => rule.permission === id)
