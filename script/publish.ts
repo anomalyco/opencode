@@ -15,9 +15,21 @@ const pkgjsons = await Array.fromAsync(
 ).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
 
 const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
+const publishPackageJsons = ["packages/plugin/package.json", "packages/sdk/js/package.json"]
 
 async function hasChanges() {
   return (await $`git diff --quiet && git diff --cached --quiet`.nothrow()).exitCode !== 0
+}
+
+async function hasPublishPackageJsonChanges() {
+  if ((await $`git diff --quiet -- ${publishPackageJsons}`.nothrow()).exitCode !== 0) return true
+  return (await $`git diff --cached --quiet -- ${publishPackageJsons}`.nothrow()).exitCode !== 0
+}
+
+async function logPublishPackageJsonChanges() {
+  await $`git status --short -- ${publishPackageJsons}`
+  await $`git diff -- ${publishPackageJsons}`
+  await $`git diff --cached -- ${publishPackageJsons}`
 }
 
 async function releaseTagExists() {
@@ -76,6 +88,11 @@ if (Script.release) {
 
 if (Script.release && !Script.preview) {
   await $`git fetch origin`
+  if (await hasPublishPackageJsonChanges()) {
+    console.error("publish scripts left package.json changes before syncing dev")
+    await logPublishPackageJsonChanges()
+    throw new Error("packages/plugin/package.json or packages/sdk/js/package.json changed during publish")
+  }
   await $`git checkout -B dev origin/dev`
   await prepareReleaseFiles()
   if (await hasChanges()) {
