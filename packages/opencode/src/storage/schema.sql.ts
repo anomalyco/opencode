@@ -6,5 +6,5 @@ export const Timestamps = {
     .$default(() => Date.now()),
   time_updated: integer()
     .notNull()
-    .$onUpdate(() => Date.now()),
+    .$default(() => Date.now()),
 }
