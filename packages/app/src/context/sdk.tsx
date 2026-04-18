@@ -15,8 +15,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const globalSDK = useGlobalSDK()
 
     const directory = createMemo(props.directory)
+    const domain = createMemo(() => domainFromDirectory(directory()))
     const client = createMemo(() =>
-      globalSDK.createClient({
+      globalSDK.forDomain(domain()).createClient({
         directory: directory(),
         throwOnError: true,
       }),
@@ -41,10 +42,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       },
       event: emitter,
       get url() {
-        return globalSDK.url
+        return globalSDK.forDomain(domain()).url
       },
       createClient(opts: Parameters<typeof globalSDK.createClient>[0]) {
-        return globalSDK.createClient(opts)
+        return globalSDK.forDomain(domain()).createClient(opts)
       },
     }
   },

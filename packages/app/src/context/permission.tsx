@@ -14,7 +14,7 @@ import {
   autoRespondsPermission,
 } from "./permission-auto-respond"
 import { useServer } from "./server"
-import { mainDomain, type DomainId } from "@/pages/layout/extra-agents"
+import { domainFromDirectory, mainDomain, type DomainId } from "@/pages/layout/extra-agents"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -137,7 +137,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     const respond: PermissionRespondFn = (input) => {
-      globalSDK.client.permission.respond(input).catch(() => {
+      const domain = input.directory ? domainFromDirectory(input.directory) : currentDomain()
+      globalSDK.forDomain(domain).client.permission.respond(input).catch(() => {
         responded.delete(input.permissionID)
       })
     }
@@ -190,7 +191,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     onCleanup(unsubscribe)
 
     function enableDirectory(directory: string) {
-      const domain = currentDomain()
+      const domain = domainFromDirectory(directory)
       const key = directoryAcceptKey(directory)
       setStore(
         produce((draft) => {
@@ -201,7 +202,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      globalSDK.client.permission
+      globalSDK.forDomain(domain).client.permission
         .list({ directory })
         .then((x) => {
           if (!isAutoAcceptingDirectory(directory)) return
@@ -215,7 +216,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function disableDirectory(directory: string) {
-      const domain = currentDomain()
+      const domain = domainFromDirectory(directory)
       const key = directoryAcceptKey(directory)
       setStore(
         produce((draft) => {
@@ -228,7 +229,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function enable(sessionID: string, directory: string) {
-      const domain = currentDomain()
+      const domain = domainFromDirectory(directory)
       const key = acceptKey(sessionID, directory)
       const version = bumpEnableVersion(sessionID, directory)
       setStore(
@@ -241,7 +242,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      globalSDK.client.permission
+      globalSDK.forDomain(domain).client.permission
         .list({ directory })
         .then((x) => {
           if (enableVersion.get(key) !== version) return
@@ -256,7 +257,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function disable(sessionID: string, directory?: string) {
-      const domain = currentDomain()
+      const domain = directory ? domainFromDirectory(directory) : currentDomain()
       bumpEnableVersion(sessionID, directory)
       const key = directory ? acceptKey(sessionID, directory) : sessionID
       setStore(

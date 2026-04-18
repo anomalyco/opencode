@@ -18,17 +18,14 @@ import type { State, VcsCache } from "./types"
 import { cmp, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 
-type GlobalStore = {
+// Minimal type for bootstrap - actual GlobalStore has more fields (rootByDomain, projectByDomain, etc.)
+// but bootstrap only needs to set these core fields
+type GlobalStoreMinimal = {
   ready: boolean
   path: Path
   project: Project[]
-  session_todo: {
-    [sessionID: string]: Todo[]
-  }
-  provider: ProviderListResponse
-  provider_auth: ProviderAuthResponse
   config: Config
-  reload: undefined | "pending" | "complete"
+  provider: ProviderListResponse
 }
 
 function waitForPaint() {
@@ -77,7 +74,11 @@ export async function bootstrapGlobal(input: {
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
   formatMoreCount: (count: number) => string
-  setGlobalStore: SetStoreFunction<GlobalStore>
+  // Accept any SetStoreFunction-like function that can set the minimal fields
+  // In practice this is SetStoreFunction<GlobalStore> which includes more fields
+  setGlobalStore: ((...args: unknown[]) => unknown) & {
+    <K extends keyof GlobalStoreMinimal>(key: K, value: GlobalStoreMinimal[K]): void
+  }
 }) {
   const fast = [
     () =>
