@@ -2045,3 +2045,100 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+const loadGlobalWithOverrides = () =>
+  Effect.runPromise(
+    Config.Service.use((svc) => svc.getGlobalWithOverrides()).pipe(Effect.scoped, Effect.provide(layer)),
+  )
+
+describe("getGlobalWithOverrides", () => {
+  const origConfig = process.env["OPENCODE_CONFIG"]
+  const origContent = process.env["OPENCODE_CONFIG_CONTENT"]
+
+  afterEach(async () => {
+    if (origConfig === undefined) delete process.env["OPENCODE_CONFIG"]
+    else process.env["OPENCODE_CONFIG"] = origConfig
+    if (origContent === undefined) delete process.env["OPENCODE_CONFIG_CONTENT"]
+    else process.env["OPENCODE_CONFIG_CONTENT"] = origContent
+    await clear(true)
+  })
+
+  test("returns global config when no env vars are set", async () => {
+    await using globalTmp = await tmpdir()
+    const prevConfigPath = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    delete process.env["OPENCODE_CONFIG"]
+    delete process.env["OPENCODE_CONFIG_CONTENT"]
+    try {
+      await writeConfig(globalTmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        server: { port: 4096, hostname: "127.0.0.1" },
+      })
+      await clear(true)
+      const config = await loadGlobalWithOverrides()
+      expect(config.server?.port).toBe(4096)
+      expect(config.server?.hostname).toBe("127.0.0.1")
+    } finally {
+      ;(Global.Path as { config: string }).config = prevConfigPath
+      await clear(true)
+    }
+  })
+
+  test("OPENCODE_CONFIG merges on top of global config", async () => {
+    await using globalTmp = await tmpdir()
+    await using overrideTmp = await tmpdir()
+    const prevConfigPath = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    try {
+      await writeConfig(globalTmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        server: { port: 4096, hostname: "127.0.0.1" },
+      })
+      await writeConfig(overrideTmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        server: { port: 9090 },
+      })
+      process.env["OPENCODE_CONFIG"] = path.join(overrideTmp.path, "opencode.json")
+      await clear(true)
+      const config = await loadGlobalWithOverrides()
+      // OPENCODE_CONFIG port wins
+      expect(config.server?.port).toBe(9090)
+      // global hostname is preserved since OPENCODE_CONFIG doesn't define it
+      expect(config.server?.hostname).toBe("127.0.0.1")
+    } finally {
+      ;(Global.Path as { config: string }).config = prevConfigPath
+      await clear(true)
+    }
+  })
+
+  test("OPENCODE_CONFIG_CONTENT merges on top of global and OPENCODE_CONFIG", async () => {
+    await using globalTmp = await tmpdir()
+    await using overrideTmp = await tmpdir()
+    const prevConfigPath = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    try {
+      await writeConfig(globalTmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        server: { port: 4096, hostname: "127.0.0.1" },
+      })
+      await writeConfig(overrideTmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        server: { port: 9090, hostname: "0.0.0.0" },
+      })
+      process.env["OPENCODE_CONFIG"] = path.join(overrideTmp.path, "opencode.json")
+      process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        server: { port: 7777 },
+      })
+      await clear(true)
+      const config = await loadGlobalWithOverrides()
+      // OPENCODE_CONFIG_CONTENT port wins over both
+      expect(config.server?.port).toBe(7777)
+      // OPENCODE_CONFIG hostname is preserved since OPENCODE_CONFIG_CONTENT doesn't define it
+      expect(config.server?.hostname).toBe("0.0.0.0")
+    } finally {
+      ;(Global.Path as { config: string }).config = prevConfigPath
+      await clear(true)
+    }
+  })
+})
