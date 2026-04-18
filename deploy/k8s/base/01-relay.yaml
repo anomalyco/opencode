@@ -6,7 +6,12 @@ metadata:
   labels:
     app: relay
 spec:
-  replicas: 2
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: relay
@@ -16,38 +21,36 @@ spec:
         app: relay
     spec:
       containers:
-      - name: relay
-        image: opencode-veritly-relay:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8080
-          name: http
-        env:
-        - name: PORT
-          value: "8080"
-        - name: RELAY_BACKEND_HEALTH_URL
-          value: "http://opencode-api:3000/healthz"
-        - name: VERITLY_WS_DEBUG
-          value: "0"
-        livenessProbe:
-          httpGet:
-            path: /livez
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 2
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        - name: relay
+          image: opencode-veritly-relay:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: VERITLY_WS_DEBUG
+              value: "0"
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
 ---
 apiVersion: v1
 kind: Service
@@ -58,9 +61,9 @@ spec:
   selector:
     app: relay
   ports:
-  - port: 8080
-    targetPort: 8080
-    name: http
+    - port: 8080
+      targetPort: 8080
+      name: http
   sessionAffinity: ClientIP
   sessionAffinityConfig:
     clientIP:
@@ -76,12 +79,12 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: relay
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 4
   metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

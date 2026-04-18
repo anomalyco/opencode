@@ -1,5 +1,6 @@
 import { Installation } from "@/installation"
 import { Log } from "@/util/log"
+import { SystemPrompt } from "../session/system"
 import { Database as SqliteDatabase } from "../storage/db"
 import { getPool } from "../storage/db.pg"
 
@@ -92,6 +93,13 @@ function relayHealthUrl() {
   }
 }
 
+function executorUrl() {
+  const explicit = process.env.VERITLY_EXECUTOR_URL?.trim()
+  if (explicit) return explicit
+  if (explicit === "") return undefined
+  return "http://executor:7777"
+}
+
 function univerHealthTargets() {
   const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim()
   if (!raw) return []
@@ -143,11 +151,40 @@ async function checkOptionalRelay() {
   return checkHttpTarget("relay", target)
 }
 
+export function instructionCheck(): HealthCheckResult {
+  const text = SystemPrompt.hosted().join("\n")
+  if (!text) {
+    return {
+      name: "instructions",
+      ok: true,
+      detail: "skipped (hosted executor instructions not required)",
+      latencyMs: 0,
+    }
+  }
+
+  const miss = ["$WORKSPACE", "veritly_univer_sdk", "UniverSDK"].filter((item) => !text.includes(item))
+  return {
+    name: "instructions",
+    ok: miss.length === 0,
+    detail: miss.length ? `missing hosted instructions: ${miss.join(", ")}` : "executor/univer instructions present",
+    latencyMs: 0,
+  }
+}
+
 async function checkExecutor() {
-  const executorUrl = process.env.VERITLY_EXECUTOR_URL ?? "http://executor:7777"
-  return timedCheck("executor", executorUrl, async (signal) => {
+  const target = executorUrl()
+  if (!target) {
+    return {
+      name: "executor",
+      ok: true,
+      detail: "skipped (executor url not configured)",
+      latencyMs: 0,
+    } satisfies HealthCheckResult
+  }
+
+  return timedCheck("executor", target, async (signal) => {
     // First check basic executor health
-    const healthResponse = await fetch(`${executorUrl}/health`, {
+    const healthResponse = await fetch(`${target}/healthz`, {
       method: "GET",
       headers: { accept: "application/json" },
       signal,
@@ -162,8 +199,8 @@ async function checkExecutor() {
     }
 
     // Now test Python3 and Univer SDK via executor
-    const testSessionId = `health-check-${Date.now()}`
-    const execResponse = await fetch(`${executorUrl}/v1/sessions/${testSessionId}/exec`, {
+    const id = `health-${Date.now()}`
+    const execResponse = await fetch(`${target}/v1/sessions/${id}/exec`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -185,7 +222,11 @@ async function checkExecutor() {
       }
     }
 
-    const result = await execResponse.json()
+    const result = (await execResponse.json()) as {
+      output?: string
+      exitCode?: number
+      mode?: string
+    }
 
     if (result.exitCode !== 0) {
       return {
@@ -260,7 +301,13 @@ export async function apiHealthReportSimple(): Promise<ApiHealthReport> {
 
 // Comprehensive health check including all dependencies
 export async function apiHealthReport(): Promise<ApiHealthReport> {
-  const checks = await Promise.all([checkDatabase(), checkOptionalUniver(), checkOptionalRelay(), checkExecutor()])
+  const checks = await Promise.all([
+    checkDatabase(),
+    checkOptionalUniver(),
+    checkOptionalRelay(),
+    checkExecutor(),
+    Promise.resolve(instructionCheck()),
+  ])
   return {
     service: "opencode-api",
     ok: checks.every((check) => check.ok),
@@ -270,5 +317,5 @@ export async function apiHealthReport(): Promise<ApiHealthReport> {
 }
 
 export function isPublicHealthPath(path: string) {
-  return path === "/health" || path === "/healthz" || path === "/livez"
+  return path === "/health" || path === "/healthz" || path === "/livez" || path === "/global/health"
 }

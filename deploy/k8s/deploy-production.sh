@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "🚀 Veritly Kubernetes Deployment"
 echo "================================="
@@ -12,9 +12,26 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-REGISTRY="registry.digitalocean.com/veritly"
+REGISTRY="registry.digitalocean.com/veritly-registry"
 CLUSTER_ID="602c73dd-37fe-4c00-a23e-1aa027878fa2"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPOS=("relay" "opencode-api" "opencode-frontend" "executor")
+APPS=("relay" "opencode-api" "opencode-frontend" "executor")
+
+clean_repo() {
+    local repo="$1"
+    while read -r digest tags; do
+        if [ -z "${digest:-}" ]; then
+            continue
+        fi
+        case ",${tags:-}," in
+            *,latest,*)
+                continue
+                ;;
+        esac
+        doctl registry repository delete-manifest "veritly-registry/$repo" "$digest" --force >/dev/null 2>&1 || true
+    done < <(doctl registry repository list-manifests "veritly-registry/$repo" --format Digest,Tags --no-header 2>/dev/null || true)
+}
 
 echo "Step 1: Checking prerequisites..."
 if ! command -v kubectl &> /dev/null; then
@@ -43,7 +60,7 @@ echo ""
 echo "Step 3: Checking container registry..."
 if ! doctl registry get &> /dev/null; then
     echo -e "${YELLOW}⚠️  Container Registry not found. Creating...${NC}"
-    doctl registry create veritly || echo "Registry might already exist"
+    doctl registry create veritly-registry || echo "Registry might already exist"
 fi
 echo -e "${GREEN}✅ Registry ready${NC}"
 echo ""
@@ -53,25 +70,51 @@ doctl registry login
 echo -e "${GREEN}✅ Logged in${NC}"
 echo ""
 
-echo "Step 5: Building images..."
+echo "Step 5: Cleaning up old images from registry..."
+echo -e "${YELLOW}⚠️  Deleting old images to save space...${NC}"
+for repo in "${REPOS[@]}"; do
+    clean_repo "$repo"
+done
+echo -e "${GREEN}✅ Old images cleaned up${NC}"
+echo ""
+
+echo "Step 6: Building images for linux/amd64..."
 cd "$ROOT"
 
-docker compose --env-file .env.production -f docker-compose.selfhost.yml build relay opencode executor-api
+echo "Building frontend dist..."
+bun --env-file=.env.production --cwd packages/app build
+
+# Enable buildx for multi-platform builds
+docker buildx create --use --name veritly-builder 2>/dev/null || docker buildx use veritly-builder
+docker buildx inspect --bootstrap >/dev/null
+
+# Build relay
+echo "Building relay..."
+docker buildx build --platform linux/amd64 -f deploy/relay/Dockerfile -t $REGISTRY/relay:latest --push .
+
+# Build executor (new one)
+echo "Building executor..."
+docker buildx build --platform linux/amd64 -f Dockerfile.executor -t $REGISTRY/executor:latest --push .
+
+# Build opencode API
+echo "Building opencode-api..."
+docker buildx build --platform linux/amd64 -f Dockerfile.api -t $REGISTRY/opencode-api:latest --push .
+
+# Build opencode frontend
+echo "Building opencode-frontend..."
+docker buildx build --platform linux/amd64 -f Dockerfile.frontend -t $REGISTRY/opencode-frontend:latest --push .
+
 echo -e "${GREEN}✅ Images built${NC}"
 echo ""
 
-echo "Step 6: Tagging and pushing images..."
-docker tag opencode-veritly-relay:latest $REGISTRY/relay:latest
-docker tag opencode-veritly-opencode:latest $REGISTRY/opencode:latest
-docker tag opencode-veritly-executor-api:latest $REGISTRY/executor-api:latest
-
-docker push $REGISTRY/relay:latest
-docker push $REGISTRY/opencode:latest
-docker push $REGISTRY/executor-api:latest
+echo "Step 7: Cleaning registry after push..."
+for repo in "${REPOS[@]}"; do
+    clean_repo "$repo"
+done
 echo -e "${GREEN}✅ Images pushed${NC}"
 echo ""
 
-echo "Step 7: Installing NGINX Ingress Controller..."
+echo "Step 8: Installing NGINX Ingress Controller..."
 if ! kubectl get pods -n ingress-nginx &> /dev/null; then
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/do/deploy.yaml
     echo "Waiting for ingress controller..."
@@ -83,51 +126,32 @@ fi
 echo -e "${GREEN}✅ Ingress controller ready${NC}"
 echo ""
 
-echo "Step 8: Updating kustomization with registry..."
-cat > deploy/k8s/base/kustomization.yaml << EOF
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-namespace: veritly
-
-resources:
-  - 00-namespace.yaml
-  - 01-relay.yaml
-  - 02-opencode.yaml
-  - 03-executor.yaml
-  - 04-ingress.yaml
-
-commonLabels:
-  app.kubernetes.io/part-of: veritly
-  app.kubernetes.io/managed-by: kubectl
-
-images:
-  - name: opencode-veritly-relay
-    newName: $REGISTRY/relay
-    newTag: latest
-  - name: opencode-veritly-opencode
-    newName: $REGISTRY/opencode
-    newTag: latest
-  - name: opencode-veritly-executor-api
-    newName: $REGISTRY/executor-api
-    newTag: latest
-EOF
-echo -e "${GREEN}✅ Kustomization updated${NC}"
-echo ""
-
 echo "Step 9: Syncing env from .env.production..."
 "$ROOT/deploy/k8s/sync-env.sh"
 echo -e "${GREEN}✅ Env synced${NC}"
 echo ""
 
-echo "Step 10: Deploying to Kubernetes..."
+echo "Step 10: Removing legacy workloads..."
+kubectl delete deployment executor-api opencode -n veritly --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete service executor-api opencode -n veritly --ignore-not-found >/dev/null 2>&1 || true
+echo -e "${GREEN}✅ Legacy workloads removed${NC}"
+echo ""
+
+echo "Step 11: Deploying to Kubernetes..."
 kubectl apply -k deploy/k8s/base/
 echo ""
 
-echo "Step 11: Waiting for rollout..."
-kubectl rollout status deployment/relay -n veritly --timeout=300s || true
-kubectl rollout status deployment/opencode -n veritly --timeout=300s || true
-kubectl rollout status deployment/executor-api -n veritly --timeout=300s || true
+echo "Step 12: Restarting deployments so :latest is pulled..."
+for app in "${APPS[@]}"; do
+    kubectl rollout restart deployment/$app -n veritly >/dev/null
+done
+echo -e "${GREEN}✅ Rollouts restarted${NC}"
+echo ""
+
+echo "Step 13: Waiting for rollout..."
+for app in "${APPS[@]}"; do
+    kubectl rollout status deployment/$app -n veritly --timeout=300s || true
+done
 echo ""
 
 echo -e "${GREEN}✅ Deployment complete!${NC}"

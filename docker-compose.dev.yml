@@ -23,7 +23,6 @@ services:
       - .env.development
     environment:
       - PORT=8080
-      - RELAY_BACKEND_HEALTH_URL=http://opencode-api:3000/healthz
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
       interval: 10s

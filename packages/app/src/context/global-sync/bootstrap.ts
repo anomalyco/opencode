@@ -17,6 +17,7 @@ import { reconcile, type SetStoreFunction, type Store } from "solid-js/store";
 import type { State, VcsCache } from "./types";
 import { cmp, normalizeProviderList } from "./utils";
 import { formatServerError } from "@/utils/server-errors";
+import { healthOk } from "@/utils/server-health";
 
 type GlobalStore = {
 	ready: boolean;
@@ -60,7 +61,7 @@ export async function bootstrapGlobal(input: {
 		.health()
 		.then((x) => x.data)
 		.catch(() => undefined);
-	if (!health?.healthy) {
+	if (!healthOk(health)) {
 		showToast({
 			variant: "error",
 			title: input.connectErrorTitle,

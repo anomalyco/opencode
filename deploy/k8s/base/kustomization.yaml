@@ -5,6 +5,7 @@ namespace: veritly
 
 resources:
   - 00-namespace.yaml
+  - postgres.yaml
   - 01-relay.yaml
   - 02-opencode-api.yaml
   - 02b-opencode-frontend.yaml
@@ -21,6 +22,6 @@ images:
   - name: opencode-veritly-frontend
     newName: registry.digitalocean.com/veritly-registry/opencode-frontend
     newTag: latest
-  - name: opencode-veritly-executor-api
-    newName: registry.digitalocean.com/veritly-registry/opencode-executor
+  - name: opencode-veritly-executor
+    newName: registry.digitalocean.com/veritly-registry/executor
     newTag: latest

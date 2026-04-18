@@ -76,7 +76,6 @@ services:
       - .env.development
     environment:
       - PORT=8080
-      - RELAY_BACKEND_HEALTH_URL=http://opencode-api:3000/healthz
     depends_on:
       opencode-api:
         condition: service_started
@@ -98,6 +97,7 @@ services:
       - VM_INACTIVITY_TIMEOUT_MS=300000
       - KERNEL_PATH=/opt/veritly/vmlinux
       - ROOTFS_PATH=/opt/veritly/rootfs.ext4
+      - UNIVER_SDK_WS=ws://relay:8080/ws
     privileged: true
     cap_add:
       - NET_ADMIN

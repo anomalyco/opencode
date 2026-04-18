@@ -1,69 +1,76 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: executor-api
+  name: executor
   namespace: veritly
   labels:
-    app: executor-api
+    app: executor
 spec:
-  replicas: 2
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
-      app: executor-api
+      app: executor
   template:
     metadata:
       labels:
-        app: executor-api
+        app: executor
     spec:
       containers:
-      - name: executor-api
-        image: opencode-veritly-executor-api:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 7777
-          name: http
-        env:
-        - name: PORT
-          value: "7777"
-        - name: EXECUTOR_DRIVER
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: EXECUTOR_DRIVER
-        - name: EXECUTOR_DEFAULT_TIMEOUT_MS
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: EXECUTOR_DEFAULT_TIMEOUT_MS
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 7777
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 7777
-          initialDelaySeconds: 2
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "256Mi"
-            cpu: "250m"
+        - name: executor
+          image: opencode-veritly-executor:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 7777
+              name: http
+          env:
+            - name: PORT
+              value: "7777"
+            - name: VM_INACTIVITY_TIMEOUT_MS
+              value: "300000"
+            - name: KERNEL_PATH
+              value: "/opt/veritly/vmlinux"
+            - name: ROOTFS_PATH
+              value: "/opt/veritly/rootfs.ext4"
+            - name: FIRECRACKER_BINARY
+              value: "/usr/local/bin/firecracker"
+            - name: UNIVER_SDK_WS
+              value: "ws://relay:8080/ws"
+            - name: VM_DATA_DIR
+              value: "/tmp/veritly-vms"
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 7777
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 7777
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: executor-api
+  name: executor
   namespace: veritly
 spec:
   selector:
-    app: executor-api
+    app: executor
   ports:
-  - port: 7777
-    targetPort: 7777
-    name: http
+    - port: 7777
+      targetPort: 7777
+      name: http

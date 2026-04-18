@@ -7,6 +7,11 @@ metadata:
     app: opencode-api
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: opencode-api
@@ -16,105 +21,109 @@ spec:
         app: opencode-api
     spec:
       containers:
-      - name: opencode-api
-        image: registry.digitalocean.com/veritly-registry/opencode-api:workos-test
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 3000
-          name: http
-        env:
-        - name: PORT
-          value: "3000"
-        - name: OPENCODE_SERVER_USERNAME
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: OPENCODE_SERVER_USERNAME
-        - name: OPENCODE_SERVER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: veritly-secrets
-              key: OPENCODE_SERVER_PASSWORD
-        - name: OPENCODE_DISABLE_LOCAL_FILESYSTEM
-          value: "false"
-        - name: DEPLOYMENT_ENVIRONMENT
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: DEPLOYMENT_ENVIRONMENT
-        - name: VITE_UNIVER_BACKEND_URL
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: VITE_UNIVER_BACKEND_URL
-        - name: VERITLY_HEALTH_UNIVER_URL
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: VITE_UNIVER_BACKEND_URL
-        - name: VERITLY_WS_DEBUG
-          value: "0"
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: veritly-secrets
-              key: DATABASE_URL
-        - name: VERITLY_TENANT_USER_ID
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: VERITLY_TENANT_USER_ID
-        - name: WORKOS_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: veritly-secrets
-              key: WORKOS_API_KEY
-        - name: WORKOS_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: veritly-secrets
-              key: WORKOS_CLIENT_ID
-        - name: WORKOS_REDIRECT_URI
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: WORKOS_REDIRECT_URI
-        - name: COOKIE_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: veritly-secrets
-              key: COOKIE_PASSWORD
-        - name: OPENCODE_WORKOS_ENABLED
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: OPENCODE_WORKOS_ENABLED
-        - name: PUBLIC_BASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: PUBLIC_BASE_URL
-        - name: VERITLY_HEALTH_RELAY_URL
-          value: ""
-        livenessProbe:
-          httpGet:
-            path: /livez
-            port: 3000
-          initialDelaySeconds: 30
-          periodSeconds: 15
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 3000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
+        - name: opencode-api
+          image: opencode-veritly-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NODE_ENV
+              value: "production"
+            - name: OPENCODE_SERVER_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: OPENCODE_SERVER_USERNAME
+            - name: OPENCODE_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: veritly-secrets
+                  key: OPENCODE_SERVER_PASSWORD
+            - name: OPENCODE_DISABLE_LOCAL_FILESYSTEM
+              value: "false"
+            - name: DEPLOYMENT_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: DEPLOYMENT_ENVIRONMENT
+            - name: VITE_UNIVER_BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: VITE_UNIVER_BACKEND_URL
+            - name: VERITLY_HEALTH_UNIVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: VITE_UNIVER_BACKEND_URL
+            - name: VERITLY_WS_DEBUG
+              value: "0"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: veritly-secrets
+                  key: DATABASE_URL
+            - name: VERITLY_TENANT_USER_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: VERITLY_TENANT_USER_ID
+            - name: WORKOS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veritly-secrets
+                  key: WORKOS_API_KEY
+            - name: WORKOS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: veritly-secrets
+                  key: WORKOS_CLIENT_ID
+            - name: WORKOS_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: WORKOS_REDIRECT_URI
+            - name: COOKIE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: veritly-secrets
+                  key: COOKIE_PASSWORD
+            - name: OPENCODE_WORKOS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: OPENCODE_WORKOS_ENABLED
+            - name: PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: PUBLIC_BASE_URL
+            - name: VERITLY_HEALTH_RELAY_URL
+              value: "http://relay:8080/healthz"
+            - name: VERITLY_EXECUTOR_URL
+              value: "http://executor:7777"
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
 ---
 apiVersion: v1
 kind: Service
@@ -125,6 +134,6 @@ spec:
   selector:
     app: opencode-api
   ports:
-  - port: 3000
-    targetPort: 3000
-    name: http
+    - port: 3000
+      targetPort: 3000
+      name: http

@@ -66,6 +66,20 @@ function isUnauthorized(error: unknown): boolean {
 	return false;
 }
 
+export function healthOk(input: unknown) {
+	if (!input || typeof input !== "object") return false;
+	const value = input as Record<string, unknown>;
+	if ("healthy" in value) return value.healthy === true;
+	if ("ok" in value) return value.ok === true;
+	return false;
+}
+
+export function healthVersion(input: unknown) {
+	if (!input || typeof input !== "object") return undefined;
+	const value = input as Record<string, unknown>;
+	return typeof value.version === "string" ? value.version : undefined;
+}
+
 export async function checkServerHealth(
 	server: ServerConnection.HttpBase,
 	fetch: typeof globalThis.fetch,
@@ -76,11 +90,12 @@ export async function checkServerHealth(
 	const retryCount = opts?.retryCount ?? defaultRetryCount;
 	const retryDelayMs = opts?.retryDelayMs ?? defaultRetryDelayMs;
 	const next = (count: number, error: unknown, unauth = false) => {
+		const fail = () => (unauth ? ({ healthy: false, unauthorized: true } as const) : ({ healthy: false } as const));
 		if (count >= retryCount || !retryable(error, signal))
-			return Promise.resolve({ healthy: false, unauthorized: unauth } as const);
+			return Promise.resolve(fail());
 		return wait(retryDelayMs * (count + 1), signal)
 			.then(() => attempt(count + 1))
-			.catch(() => ({ healthy: false, unauthorized: unauth }));
+			.catch(() => fail());
 	};
 	const attempt = (count: number): Promise<ServerHealth> =>
 		createSdkForServer({
@@ -94,7 +109,7 @@ export async function checkServerHealth(
 					const unauth = isUnauthorized(x.error);
 					return next(count, x.error, unauth);
 				}
-				return { healthy: x.data?.healthy === true, version: x.data?.version };
+				return { healthy: healthOk(x.data), version: healthVersion(x.data) };
 			})
 			.catch((error) => next(count, error));
 	return attempt(0).finally(() => timeout?.clear?.());

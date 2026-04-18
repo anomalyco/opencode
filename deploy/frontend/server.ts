@@ -171,8 +171,31 @@ async function relayWsCheck(target: string): Promise<HealthCheckResult> {
 	});
 }
 
+async function staticCheck(): Promise<HealthCheckResult> {
+	const target = path.join(root, "index.html");
+	const startedAt = performance.now();
+	const ok = await Bun.file(target).exists();
+	return {
+		name: "assets",
+		ok,
+		target,
+		detail: ok ? "index.html present" : "index.html missing",
+		latencyMs: Math.round(performance.now() - startedAt),
+	};
+}
+
+async function frontendHealthReportSimple(): Promise<FrontendHealthReport> {
+	const checks = await Promise.all([staticCheck()]);
+	return {
+		service: "opencode-frontend",
+		ok: checks.every((check) => check.ok),
+		checks,
+	};
+}
+
 async function frontendHealthReport(): Promise<FrontendHealthReport> {
 	const checks = await Promise.all([
+		staticCheck(),
 		timedHttpCheck("backend", backendHealthUrl),
 		timedHttpCheck("relay-http", relayHealthUrl),
 		relayWsCheck(relayWsHealthUrl),
@@ -415,7 +438,15 @@ Bun.serve({
 			});
 		}
 
-		if (url.pathname === "/healthz" || url.pathname === "/health.json") {
+		if (url.pathname === "/healthz") {
+			const report = await frontendHealthReportSimple();
+			return new Response(JSON.stringify(report), {
+				status: report.ok ? 200 : 503,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+
+		if (url.pathname === "/health.json") {
 			const report = await frontendHealthReport();
 			return new Response(JSON.stringify(report), {
 				status: report.ok ? 200 : 503,

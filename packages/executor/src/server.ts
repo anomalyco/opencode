@@ -1,7 +1,6 @@
 import { Hono } from "hono"
-import { v4 as uuidv4 } from "uuid"
 import { spawn } from "child_process"
-import { writeFile, mkdir, unlink, access, rmdir } from "fs/promises"
+import { access, mkdir, rm } from "fs/promises"
 import { join } from "path"
 
 // Configuration
@@ -10,6 +9,32 @@ const VM_DATA_DIR = process.env.VM_DATA_DIR ?? "/tmp/veritly-vms"
 const FIRECRACKER_BINARY = process.env.FIRECRACKER_BINARY ?? "/usr/local/bin/firecracker"
 const KERNEL_PATH = process.env.KERNEL_PATH ?? "/opt/veritly/vmlinux"
 const ROOTFS_PATH = process.env.ROOTFS_PATH ?? "/opt/veritly/rootfs.ext4"
+const KEEP = new Set([
+  "ALL_PROXY",
+  "COLORTERM",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "LANG",
+  "LC_ALL",
+  "NODE",
+  "NO_PROXY",
+  "PATH",
+  "PYTHONHOME",
+  "PYTHONPATH",
+  "PYTHONUNBUFFERED",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "TERM",
+  "TMP",
+  "TEMP",
+  "TMPDIR",
+  "TZ",
+  "UNIVER_SDK_WS",
+  "all_proxy",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+])
 
 const app = new Hono()
 
@@ -49,11 +74,7 @@ async function cleanupInactiveSessions() {
     if (now - session.lastActivity > VM_INACTIVITY_TIMEOUT_MS) {
       log("info", "Cleaning up inactive session", { id })
       sessions.delete(id)
-      try {
-        await rmdir(session.workspaceDir, { recursive: true })
-      } catch {
-        // Ignore
-      }
+      await drop(session)
     }
   }
 }
@@ -77,6 +98,40 @@ async function createSession(sessionId: string): Promise<Session> {
   return session
 }
 
+async function drop(session: Session) {
+  await rm(session.workspaceDir, { recursive: true, force: true }).catch(() => undefined)
+}
+
+async function self() {
+  const firecracker = await firecrackerAvailable()
+  return {
+    ok: true,
+    service: "executor",
+    mode: firecracker ? "firecracker" : "container",
+    activeSessions: sessions.size,
+  }
+}
+
+function vars(session: Session) {
+  return {
+    ...Object.fromEntries(
+      Object.entries(process.env).flatMap(([key, value]) => {
+        if (!value) return []
+        if (KEEP.has(key)) return [[key, value]]
+        if (key.startsWith("BUN_")) return [[key, value]]
+        if (key.startsWith("npm_config_")) return [[key, value]]
+        return []
+      }),
+    ),
+    HOME: "/root",
+    LOGNAME: "root",
+    SHELL: "/bin/sh",
+    USER: "root",
+    VERITLY_SESSION_ID: session.id,
+    WORKSPACE: session.workspaceDir,
+  }
+}
+
 // Execute command in session
 async function executeCommand(
   session: Session,
@@ -92,11 +147,7 @@ async function executeCommand(
     const proc = spawn(adjustedCommand, {
       shell: true,
       cwd: session.workspaceDir,
-      env: {
-        ...process.env,
-        HOME: "/root",
-        WORKSPACE: session.workspaceDir,
-      },
+      env: vars(session),
     })
 
     let output = ""
@@ -144,15 +195,9 @@ app.use("*", async (c, next) => {
   log("info", `${c.req.method} ${c.req.path}`, { status: c.res.status, duration })
 })
 
-// Health check
-app.get("/health", async (c) => {
-  const useFirecracker = await firecrackerAvailable()
-  return c.json({
-    status: "ok",
-    mode: useFirecracker ? "firecracker" : "container",
-    activeSessions: sessions.size,
-  })
-})
+app.get("/livez", (c) => c.text("ok"))
+app.get("/healthz", async (c) => c.json(await self()))
+app.get("/health", async (c) => c.json(await self()))
 
 // Execute bash command
 app.post("/v1/sessions/:sessionId/exec", async (c) => {
@@ -223,11 +268,7 @@ app.post("/v1/sessions/:sessionId/close", async (c) => {
   }
 
   sessions.delete(sessionId)
-  try {
-    await rmdir(session.workspaceDir, { recursive: true })
-  } catch {
-    // Ignore
-  }
+  await drop(session)
 
   return c.json({ status: "closed" })
 })
@@ -246,11 +287,7 @@ app.get("/v1/admin/sessions", (c) => {
 async function shutdown() {
   log("info", "Shutting down executor...")
   for (const [id, session] of sessions) {
-    try {
-      await rmdir(session.workspaceDir, { recursive: true })
-    } catch {
-      // Ignore
-    }
+    await drop(session)
   }
   process.exit(0)
 }

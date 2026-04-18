@@ -25,6 +25,18 @@ describe("checkServerHealth", () => {
     expect(result).toEqual({ healthy: true, version: "1.2.3" })
   })
 
+  test("accepts api health payloads with ok", async () => {
+    const fetch = (async () =>
+      new Response(JSON.stringify({ ok: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof globalThis.fetch
+
+    const result = await checkServerHealth(server, fetch)
+
+    expect(result).toEqual({ healthy: true, version: "1.2.3" })
+  })
+
   test("returns unhealthy when request fails", async () => {
     const fetch = (async () => {
       throw new Error("network")

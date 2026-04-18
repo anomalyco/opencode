@@ -18,6 +18,9 @@ secret="$tmp/secret.env"
 config="$tmp/config.env"
 touch "$secret" "$config"
 
+env_name=""
+workos_api_key=""
+
 while IFS= read -r row || [ -n "$row" ]; do
   line="$(printf '%s' "$row" | sed 's/\r$//')"
   case "$line" in
@@ -26,6 +29,15 @@ while IFS= read -r row || [ -n "$row" ]; do
       ;;
   esac
   key="${line%%=*}"
+  value="${line#*=}"
+  case "$key" in
+    DEPLOYMENT_ENVIRONMENT)
+      env_name="$value"
+      ;;
+    WORKOS_API_KEY)
+      workos_api_key="$value"
+      ;;
+  esac
   case "$key" in
     OPENCODE_SERVER_PASSWORD|DATABASE_URL|WORKOS_API_KEY|WORKOS_CLIENT_ID|COOKIE_PASSWORD|OTEL_EXPORTER_OTLP_HEADERS|AXIOM_TOKEN|VITE_PUBLIC_AXIOM_TOKEN|VITE_UNIVER_LICENSE)
       printf '%s\n' "$line" >> "$secret"
@@ -35,6 +47,11 @@ while IFS= read -r row || [ -n "$row" ]; do
       ;;
   esac
 done < "$file"
+
+if [ "$env_name" = "production" ] && printf '%s' "$workos_api_key" | grep -q '^sk_test_'; then
+  echo "refusing to sync test WorkOS credentials into production" >&2
+  exit 1
+fi
 
 kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
 

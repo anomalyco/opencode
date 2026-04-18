@@ -36,7 +36,10 @@ export async function registerPosthogDeploymentFromOpenCodeServer(http: ServerCo
   if (!inited || typeof window === "undefined") return
   const base = http.url.replace(/\/$/, "")
   try {
-    const res = await fetch(`${base}/global/veritly-deployment`, { headers: authHeadersForServer(http) })
+    const res = await fetch(`${base}/global/veritly-deployment`, {
+      headers: authHeadersForServer(http),
+      credentials: "include",
+    })
     if (!res.ok) return
     const data = (await res.json()) as Record<string, unknown>
     const registerProps: Record<string, string> = {}

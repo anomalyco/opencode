@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 backend_username="${OPENCODE_SERVER_USERNAME:-opencode}"
 backend_password="${OPENCODE_SERVER_PASSWORD:-}"

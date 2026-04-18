@@ -22,7 +22,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: frontend
+            name: opencode-frontend
             port:
               number: 80
 ---
@@ -49,7 +49,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: api
+            name: opencode-api
             port:
               number: 3000
 ---

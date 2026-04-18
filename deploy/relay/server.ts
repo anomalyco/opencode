@@ -2,8 +2,6 @@ import { ServerWebSocket } from "bun"
 
 const port = Number(process.env.PORT ?? process.env.UNIVER_SDK_PORT ?? "8080")
 const wsDebug = process.env.VERITLY_WS_DEBUG === "1"
-const backendHealthUrl = process.env.RELAY_BACKEND_HEALTH_URL?.trim() || "http://opencode-api:3000/healthz"
-const healthTimeoutMs = Number(process.env.VERITLY_HEALTH_TIMEOUT_MS ?? "5000")
 
 const MESSAGING_SYSTEM = "veritly_relay"
 
@@ -78,47 +76,7 @@ function closeWithReason(ws: RelayWebSocket, reason: string) {
   ws.close(1008, reason)
 }
 
-function timeoutSignal(timeoutMs: number) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort("timeout"), timeoutMs)
-  return {
-    signal: controller.signal,
-    done() {
-      clearTimeout(timer)
-    },
-  }
-}
-
-async function backendHealthCheck() {
-  const timeout = timeoutSignal(healthTimeoutMs)
-  const startedAt = performance.now()
-  try {
-    const response = await fetch(backendHealthUrl, {
-      method: "GET",
-      headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.1" },
-      signal: timeout.signal,
-    })
-    return {
-      ok: response.ok,
-      target: backendHealthUrl,
-      status: response.status,
-      detail: response.ok ? "reachable" : `unexpected status ${response.status}`,
-      latencyMs: Math.round(performance.now() - startedAt),
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      target: backendHealthUrl,
-      detail: error instanceof Error ? error.message : String(error),
-      latencyMs: Math.round(performance.now() - startedAt),
-    }
-  } finally {
-    timeout.done()
-  }
-}
-
-async function relayHealthPayload() {
-  // Relay only reports its own health - doesn't check other services
+function relayHealthPayload() {
   return {
     ok: true,
     service: "relay",
@@ -154,14 +112,13 @@ Bun.serve({
     }
 
     if (url.pathname === "/relay/health" || url.pathname === "/health" || url.pathname === "/healthz") {
-      return relayHealthPayload().then((payload) => {
-        return new Response(JSON.stringify(payload), {
-          status: payload.ok ? 200 : 503,
-          headers: {
-            "content-type": "application/json; charset=utf-8",
-            ...corsHeaders(origin),
-          },
-        })
+      const payload = relayHealthPayload()
+      return new Response(JSON.stringify(payload), {
+        status: payload.ok ? 200 : 503,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          ...corsHeaders(origin),
+        },
       })
     }
 

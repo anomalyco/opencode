@@ -7,6 +7,11 @@ metadata:
     app: opencode-frontend
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: opencode-frontend
@@ -16,52 +21,60 @@ spec:
         app: opencode-frontend
     spec:
       containers:
-      - name: opencode-frontend
-        image: registry.digitalocean.com/veritly-registry/opencode-frontend:workos-test
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 80
-          name: http
-        env:
-        - name: PORT
-          value: "80"
-        - name: FRONTEND_BACKEND_HEALTH_URL
-          value: "http://opencode-api:3000/healthz"
-        - name: FRONTEND_RELAY_HEALTH_URL
-          value: "http://relay:8080/healthz"
-        - name: FRONTEND_RELAY_WS_HEALTH_URL
-          value: "ws://relay:8080/health/ws"
-        - name: FRONTEND_PUBLIC_BACKEND_HEALTH_URL
-          value: "https://api.veritly.co.uk/healthz"
-        - name: FRONTEND_PUBLIC_RELAY_HEALTH_URL
-          value: "https://relay.veritly.co.uk/healthz"
-        - name: FRONTEND_PUBLIC_RELAY_WS_HEALTH_URL
-          value: "wss://relay.veritly.co.uk/health/ws"
-        - name: FRONTEND_PUBLIC_OPENCODE_SERVER_URL
-          value: "https://api.veritly.co.uk"
-        - name: FRONTEND_PUBLIC_UNIVER_BACKEND_URL
-          value: "https://univer.veritly.co.uk"
-        - name: FRONTEND_PUBLIC_UNIVER_SDK_WS
-          value: "wss://relay.veritly.co.uk/ws"
-        livenessProbe:
-          httpGet:
-            path: /livez
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "200m"
+        - name: opencode-frontend
+          image: opencode-veritly-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: PORT
+              value: "80"
+            - name: NODE_ENV
+              value: "production"
+            - name: FRONTEND_BACKEND_HEALTH_URL
+              value: "http://opencode-api:3000/healthz"
+            - name: FRONTEND_RELAY_HEALTH_URL
+              value: "http://relay:8080/healthz"
+            - name: FRONTEND_RELAY_WS_HEALTH_URL
+              value: "ws://relay:8080/health/ws"
+            - name: FRONTEND_PUBLIC_OPENCODE_SERVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: VITE_OPENCODE_SERVER_URL
+                  optional: true
+            - name: FRONTEND_PUBLIC_UNIVER_BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: VITE_UNIVER_BACKEND_URL
+                  optional: true
+            - name: FRONTEND_PUBLIC_UNIVER_SDK_WS
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: VITE_UNIVER_SDK_WS
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
 ---
 apiVersion: v1
 kind: Service
