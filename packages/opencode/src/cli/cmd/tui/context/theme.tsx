@@ -397,7 +397,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (store.lock) return
       apply(mode)
     }
-    renderer.on(CliRenderEvents.THEME_MODE, handle)
+    // renderer.on(CliRenderEvents.THEME_MODE, handle)
 
     const refresh = () => {
       renderer.clearPaletteCache()

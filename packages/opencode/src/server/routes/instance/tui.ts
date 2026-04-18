@@ -4,10 +4,10 @@ import z from "zod"
 import { Bus } from "@/bus"
 import { Session } from "@/session"
 import { TuiEvent } from "@/cli/cmd/tui/event"
-import { AppRuntime } from "@/effect/app-runtime"
 import { AsyncQueue } from "@/util/queue"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
+import { runRequest } from "./trace"
 
 const TuiRequest = z.object({
   path: z.string(),
@@ -371,7 +371,11 @@ export const TuiRoutes = lazy(() =>
       validator("json", TuiEvent.SessionSelect.properties),
       async (c) => {
         const { sessionID } = c.req.valid("json")
-        await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID)))
+        await runRequest(
+          "TuiRoutes.sessionSelect",
+          c,
+          Session.Service.use((svc) => svc.get(sessionID)),
+        )
         await Bus.publish(TuiEvent.SessionSelect, { sessionID })
         return c.json(true)
       },

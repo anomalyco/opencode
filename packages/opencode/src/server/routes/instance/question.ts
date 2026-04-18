@@ -3,10 +3,10 @@ import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { QuestionID } from "@/question/schema"
 import { Question } from "@/question"
-import { AppRuntime } from "@/effect/app-runtime"
 import z from "zod"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
+import { jsonRequest } from "./trace"
 
 const Reply = z.object({
   answers: Question.Answer.zod
@@ -33,10 +33,11 @@ export const QuestionRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        const questions = await AppRuntime.runPromise(Question.Service.use((svc) => svc.list()))
-        return c.json(questions)
-      },
+      async (c) =>
+        jsonRequest("QuestionRoutes.list", c, function* () {
+          const svc = yield* Question.Service
+          return yield* svc.list()
+        }),
     )
     .post(
       "/:requestID/reply",
@@ -63,19 +64,17 @@ export const QuestionRoutes = lazy(() =>
         }),
       ),
       validator("json", Reply),
-      async (c) => {
-        const params = c.req.valid("param")
-        const json = c.req.valid("json")
-        await AppRuntime.runPromise(
-          Question.Service.use((svc) =>
-            svc.reply({
-              requestID: params.requestID,
-              answers: json.answers,
-            }),
-          ),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("QuestionRoutes.reply", c, function* () {
+          const params = c.req.valid("param")
+          const json = c.req.valid("json")
+          const svc = yield* Question.Service
+          yield* svc.reply({
+            requestID: params.requestID,
+            answers: json.answers,
+          })
+          return true
+        }),
     )
     .post(
       "/:requestID/reject",
@@ -101,10 +100,12 @@ export const QuestionRoutes = lazy(() =>
           requestID: QuestionID.zod,
         }),
       ),
-      async (c) => {
-        const params = c.req.valid("param")
-        await AppRuntime.runPromise(Question.Service.use((svc) => svc.reject(params.requestID)))
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("QuestionRoutes.reject", c, function* () {
+          const params = c.req.valid("param")
+          const svc = yield* Question.Service
+          yield* svc.reject(params.requestID)
+          return true
+        }),
     ),
 )

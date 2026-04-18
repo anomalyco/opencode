@@ -571,6 +571,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Текущее использование за",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "составляет $",
 
+  "workspace.redeem.title": "Активировать купон",
+  "workspace.redeem.subtitle": "Активируйте код купона, чтобы получить кредит или бонусы.",
+  "workspace.redeem.placeholder": "Введите код купона",
+  "workspace.redeem.redeem": "Активировать",
+  "workspace.redeem.redeeming": "Активация...",
+  "workspace.redeem.success": "Купон успешно активирован.",
+
   "workspace.reload.title": "Автопополнение",
   "workspace.reload.disabled.before": "Автопополнение",
   "workspace.reload.disabled.state": "отключено",

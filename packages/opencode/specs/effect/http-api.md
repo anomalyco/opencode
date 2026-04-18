@@ -76,7 +76,7 @@ Many route boundaries still use Zod-first validators. That does not block all ex
 
 ### Mixed handler styles
 
-Many current `server/instance/*.ts` handlers still call async facades directly. Migrating those to composed `Effect.gen(...)` handlers is the low-risk step to do first.
+Many current `server/routes/instance/*.ts` handlers still mix composed Effect code with smaller Promise- or ALS-backed seams. Migrating those to consistent `Effect.gen(...)` handlers is the low-risk step to do first.
 
 ### Non-JSON routes
 
@@ -90,7 +90,7 @@ The current server composition, middleware, and docs flow are Hono-centered toda
 
 ### 1. Finish the prerequisites first
 
-- continue route-handler effectification in `server/instance/*.ts`
+- continue route-handler effectification in `server/routes/instance/*.ts`
 - continue schema migration toward Effect Schema-first DTOs and errors
 - keep removing service facades
 
@@ -98,9 +98,9 @@ The current server composition, middleware, and docs flow are Hono-centered toda
 
 Introduce one small `HttpApi` group for plain JSON endpoints only. Good initial candidates are the least stateful endpoints in:
 
-- `server/instance/question.ts`
-- `server/instance/provider.ts`
-- `server/instance/permission.ts`
+- `server/routes/instance/question.ts`
+- `server/routes/instance/provider.ts`
+- `server/routes/instance/permission.ts`
 
 Avoid `session.ts`, SSE, websocket, and TUI-facing routes first.
 
@@ -155,9 +155,9 @@ This gives:
 
 As each route group is ported to `HttpApi`:
 
-1. change its `root` path from `/experimental/httpapi/<group>` to `/<group>`
-2. add `.all("/<group>", handler)` / `.all("/<group>/*", handler)` to the flag block in `instance/index.ts`
-3. for partial ports (e.g. only `GET /provider/auth`), bridge only the specific path
+1. add `.get(...)` / `.post(...)` bridge entries to the flag block in `server/routes/instance/index.ts`
+2. for partial ports (e.g. only `GET /provider/auth`), bridge only the specific path
+3. keep the legacy Hono route registered behind it for OpenAPI / SDK generation until the spec pipeline changes
 4. verify SDK output is unchanged
 
 Leave streaming-style endpoints on Hono until there is a clear reason to move them.
@@ -189,10 +189,46 @@ Ordering for a route-group migration:
 
 SDK shape rule:
 
-- every schema migration must preserve the generated SDK output byte-for-byte
-- `Schema.Class` emits a named `$ref` in OpenAPI via its identifier — use it only for types that already had `.meta({ ref })` in the old Zod schema
-- inner / nested types that were anonymous in the old Zod schema should stay as `Schema.Struct` (not `Schema.Class`) to avoid introducing new named components in the OpenAPI spec
-- if a diff appears in `packages/sdk/js/src/v2/gen/types.gen.ts`, the migration introduced an unintended API surface change — fix it before merging
+- every schema migration must preserve the generated SDK output byte-for-byte **unless the new ref is intentional** (see Schema.Class vs Schema.Struct below)
+- if an unintended diff appears in `packages/sdk/js/src/v2/gen/types.gen.ts`, the migration introduced an unintended API surface change — fix it before merging
+
+### Schema.Class vs Schema.Struct
+
+The pattern choice determines whether a schema becomes a **named** export in the SDK or stays **anonymous inline**.
+
+**Schema.Class** emits a named `$ref` in OpenAPI via its identifier → produces a named `export type Foo = ...` in `types.gen.ts`:
+
+```ts
+export class Info extends Schema.Class<Info>("FooConfig")({ ... }) {
+  static readonly zod = zod(this)
+}
+```
+
+**Schema.Struct** stays anonymous and is inlined everywhere it is referenced:
+
+```ts
+export const Info = Schema.Struct({ ... }).pipe(
+  withStatics((s) => ({ zod: zod(s) })),
+)
+export type Info = Schema.Schema.Type<typeof Info>
+```
+
+When to use each:
+
+- Use **Schema.Class** when:
+  - the original Zod had `.meta({ ref: ... })` (preserve the existing named SDK type byte-for-byte)
+  - the schema is a top-level endpoint request or response (SDK consumers benefit from a stable importable name)
+- Use **Schema.Struct** when:
+  - the type is only used as a nested field inside another named schema
+  - the original Zod was anonymous and promoting it would bloat SDK types with no import value
+
+Promoting a previously-anonymous schema to Schema.Class is acceptable when it is top-level or endpoint-facing, but call it out in the PR — it is an additive SDK change (`export type Foo = ...` newly appears) even if it preserves the JSON shape.
+
+Schemas that are **not** pure objects (enums, unions, records, tuples) cannot use Schema.Class. For those, add `.annotate({ identifier: "FooName" })` to get the same named-ref behavior:
+
+```ts
+export const Action = Schema.Literals(["ask", "allow", "deny"]).annotate({ identifier: "PermissionActionConfig" })
+```
 
 Temporary exception:
 
@@ -231,7 +267,7 @@ Use the same sequence for each route group.
 3. Apply the schema migration ordering above so those types are Effect Schema-first.
 4. Define the `HttpApi` contract separately from the handlers.
 5. Implement handlers by yielding the existing service from context.
-6. Mount the new surface in parallel under an experimental prefix.
+6. Mount the new surface in parallel behind the `OPENCODE_EXPERIMENTAL_HTTPAPI` bridge.
 7. Regenerate the SDK and verify zero diff against `dev` (see SDK shape rule above).
 8. Add one end-to-end test and one OpenAPI-focused test.
 9. Compare ergonomics before migrating the next endpoint.
@@ -250,20 +286,20 @@ Placement rule:
 - keep `HttpApi` code under `src/server`, not `src/effect`
 - `src/effect` should stay focused on runtimes, layers, instance state, and shared Effect plumbing
 - place each `HttpApi` slice next to the HTTP boundary it serves
-- for instance-scoped routes, prefer `src/server/instance/httpapi/*`
-- if control-plane routes ever migrate, prefer `src/server/control/httpapi/*`
+- for instance-scoped routes, prefer `src/server/routes/instance/httpapi/*`
+- if control-plane routes ever migrate, prefer `src/server/routes/control/httpapi/*`
 
 Suggested file layout for a repeatable spike:
 
-- `src/server/instance/httpapi/question.ts` — contract and handler layer for one route group
-- `src/server/instance/httpapi/server.ts` — standalone Effect HTTP server that composes all groups
-- `test/server/question-httpapi.test.ts` — end-to-end test against the real service
+- `src/server/routes/instance/httpapi/question.ts` — contract and handler layer for one route group
+- `src/server/routes/instance/httpapi/server.ts` — bridged Effect HTTP layer that composes all groups
+- route or OpenAPI verification should live alongside the existing server tests; there is no dedicated `question-httpapi` test file on this branch
 
 Suggested responsibilities:
 
 - `question.ts` defines the `HttpApi` contract and `HttpApiBuilder.group(...)` handlers
-- `server.ts` composes all route groups into one `HttpRouter.serve` layer with shared middleware (auth, instance lookup)
-- tests use `ExperimentalHttpApiServer.layerTest` to run against a real in-process HTTP server
+- `server.ts` composes all route groups into one `HttpRouter.toWebHandler(...)` bridge with shared middleware (auth, instance lookup)
+- tests should verify the bridged routes through the normal server surface
 
 ## Example migration shape
 
@@ -283,33 +319,33 @@ Each route-group spike should follow the same shape.
 - keep handler bodies thin
 - keep transport mapping at the HTTP boundary only
 
-### 3. Standalone server
+### 3. Bridged server
 
-- the Effect HTTP server is self-contained in `httpapi/server.ts`
-- it is **not** mounted into the Hono app — no bridge, no `toWebHandler`
-- route paths use the `/experimental/httpapi` prefix so they match the eventual cutover
-- each route group exposes its own OpenAPI doc endpoint
+- the Effect HTTP layer is composed in `httpapi/server.ts`
+- it is mounted into the Hono app via `HttpRouter.toWebHandler(...)`
+- routes keep their normal instance paths and are gated by the `OPENCODE_EXPERIMENTAL_HTTPAPI` flag
+- the legacy Hono handlers stay registered after the bridge so current OpenAPI / SDK generation still works
 
 ### 4. Verification
 
 - seed real state through the existing service
-- call the experimental endpoints
+- call the bridged endpoints with the flag enabled
 - assert that the service behavior is unchanged
 - assert that the generated OpenAPI contains the migrated paths and schemas
 
 ## Boundary composition
 
-The standalone Effect server owns its own middleware stack. It does not share middleware with the Hono server.
+The Effect `HttpApi` layer owns its own auth and instance middleware, but it is currently mounted inside the existing Hono server.
 
 ### Auth
 
-- the standalone server implements auth as an `HttpApiMiddleware.Service` using `HttpApiSecurity.basic`
+- the bridged `HttpApi` layer implements auth as an `HttpApiMiddleware.Service` using `HttpApiSecurity.basic`
 - each route group's `HttpApi` is wrapped with `.middleware(Authorization)` before being served
-- this is independent of the Hono `AuthMiddleware` — when the Effect server eventually replaces Hono, this becomes the only auth layer
+- this is independent of the Hono auth layer; the current bridge keeps the responsibility local to the `HttpApi` slice
 
 ### Instance and workspace lookup
 
-- the standalone server resolves instance context via an `HttpRouter.middleware` that reads `x-opencode-directory` headers and `directory` query params
+- the bridged `HttpApi` layer resolves instance context via an `HttpRouter.middleware` that reads `x-opencode-directory` headers and `directory` query params
 - this is the Effect equivalent of the Hono `WorkspaceRouterMiddleware`
 - `HttpApi` handlers yield services from context and assume the correct instance has already been provided
 
@@ -324,7 +360,7 @@ The standalone Effect server owns its own middleware stack. It does not share mi
 
 The first slice is successful if:
 
-- the standalone Effect server starts and serves the endpoints independently of the Hono server
+- the bridged endpoints serve correctly through the existing Hono host when the flag is enabled
 - the handlers reuse the existing Effect service
 - request decoding and response shapes are schema-defined from canonical Effect schemas
 - any remaining Zod boundary usage is derived from `.zod` or clearly temporary
@@ -365,17 +401,16 @@ Current instance route inventory:
   endpoints: `GET /question`, `POST /question/:requestID/reply`, `POST /question/:requestID/reject`
 - `permission` - `bridged`
   endpoints: `GET /permission`, `POST /permission/:requestID/reply`
-- `provider` - `bridged` (partial)
-  bridged endpoint: `GET /provider/auth`
-  not yet ported: `GET /provider`, OAuth mutations
-- `config` - `next`
-  best next endpoint: `GET /config/providers`
+- `provider` - `bridged`
+  endpoints: `GET /provider`, `GET /provider/auth`, `POST /provider/:providerID/oauth/authorize`, `POST /provider/:providerID/oauth/callback`
+- `config` - `bridged` (partial)
+  bridged endpoint: `GET /config/providers`
   later endpoint: `GET /config`
   defer `PATCH /config` for now
-- `project` - `later`
-  best small reads: `GET /project`, `GET /project/current`
+- `project` - `bridged` (partial)
+  bridged endpoints: `GET /project`, `GET /project/current`
   defer git-init mutation first
-- `workspace` - `later`
+- `workspace` - `next`
   best small reads: `GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`
   defer create/remove mutations first
 - `file` - `later`
@@ -393,12 +428,12 @@ Current instance route inventory:
 - `tui` - `defer`
   queue-style UI bridge, weak early `HttpApi` fit
 
-Recommended near-term sequence after the first spike:
+Recommended near-term sequence:
 
-1. `provider` auth read endpoint
-2. `config` providers read endpoint
-3. `project` read endpoints
-4. `workspace` read endpoints
+1. `workspace` read endpoints (`GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`)
+2. `config` full read endpoint (`GET /config`)
+3. `file` JSON read endpoints
+4. `mcp` JSON read endpoints
 
 ## Checklist
 
@@ -411,8 +446,12 @@ Recommended near-term sequence after the first spike:
 - [x] gate behind `OPENCODE_EXPERIMENTAL_HTTPAPI` flag
 - [x] verify OTEL spans and HTTP logs flow to motel
 - [x] bridge question, permission, and provider auth routes
-- [ ] port remaining provider endpoints (`GET /provider`, OAuth mutations)
-- [ ] port `config` read endpoints
+- [x] port remaining provider endpoints (`GET /provider`, OAuth mutations)
+- [x] port `config` providers read endpoint
+- [x] port `project` read endpoints (`GET /project`, `GET /project/current`)
+- [ ] port `workspace` read endpoints
+- [ ] port `GET /config` full read endpoint
+- [ ] port `file` JSON read endpoints
 - [ ] decide when to remove the flag and make Effect routes the default
 
 ## Rule of thumb

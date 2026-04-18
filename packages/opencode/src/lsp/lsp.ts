@@ -7,12 +7,12 @@ import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
 import z from "zod"
 import { Config } from "../config"
-import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Process } from "../util"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 const log = Log.create({ service: "lsp" })
 
@@ -162,7 +162,7 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
 
     const state = yield* InstanceState.make<State>(
-      Effect.fn("LSP.state")(function* () {
+      Effect.fn("LSP.state")(function* (ctx) {
         const cfg = yield* config.get()
 
         const servers: Record<string, LSPServer.Info> = {}
@@ -187,7 +187,7 @@ export const layer = Layer.effect(
               servers[name] = {
                 ...existing,
                 id: name,
-                root: existing?.root ?? (async () => Instance.directory),
+                root: existing?.root ?? (async (_file, ctx) => ctx.directory),
                 extensions: item.extensions ?? existing?.extensions ?? [],
                 spawn: async (root) => ({
                   process: lspspawn(item.command[0], item.command.slice(1), {
@@ -225,7 +225,13 @@ export const layer = Layer.effect(
     )
 
     const getClients = Effect.fnUntraced(function* (file: string) {
-      if (!Instance.containsPath(file)) return [] as LSPClient.Info[]
+      const ctx = yield* InstanceState.context
+      if (
+        !AppFileSystem.contains(ctx.directory, file) &&
+        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
+      ) {
+        return [] as LSPClient.Info[]
+      }
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
@@ -233,7 +239,7 @@ export const layer = Layer.effect(
 
         async function schedule(server: LSPServer.Info, root: string, key: string) {
           const handle = await server
-            .spawn(root)
+            .spawn(root, ctx)
             .then((value) => {
               if (!value) s.broken.add(key)
               return value
@@ -251,6 +257,7 @@ export const layer = Layer.effect(
             serverID: server.id,
             server: handle,
             root,
+            directory: ctx.directory,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)
@@ -273,7 +280,7 @@ export const layer = Layer.effect(
         for (const server of Object.values(s.servers)) {
           if (server.extensions.length && !server.extensions.includes(extension)) continue
 
-          const root = await server.root(file)
+          const root = await server.root(file, ctx)
           if (!root) continue
           if (s.broken.has(root + server.id)) continue
 
@@ -326,13 +333,14 @@ export const layer = Layer.effect(
     })
 
     const status = Effect.fn("LSP.status")(function* () {
+      const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
       const result: Status[] = []
       for (const client of s.clients) {
         result.push({
           id: client.serverID,
           name: s.servers[client.serverID].id,
-          root: path.relative(Instance.directory, client.root),
+          root: path.relative(ctx.directory, client.root),
           status: "connected",
         })
       }
@@ -340,12 +348,13 @@ export const layer = Layer.effect(
     })
 
     const hasClients = Effect.fn("LSP.hasClients")(function* (file: string) {
+      const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
         for (const server of Object.values(s.servers)) {
           if (server.extensions.length && !server.extensions.includes(extension)) continue
-          const root = await server.root(file)
+          const root = await server.root(file, ctx)
           if (!root) continue
           if (s.broken.has(root + server.id)) continue
           return true

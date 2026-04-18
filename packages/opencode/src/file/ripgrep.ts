@@ -7,6 +7,7 @@ import { ripgrep } from "ripgrep"
 
 import { Filesystem } from "@/util"
 import { Log } from "@/util"
+import { sanitizedProcessEnv } from "@/util/opencode-process"
 
 const log = Log.create({ service: "ripgrep" })
 
@@ -157,9 +158,7 @@ type WorkerError = {
 }
 
 function env() {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter((item): item is [string, string] => item[1] !== undefined),
-  )
+  const env = sanitizedProcessEnv()
   delete env.RIPGREP_CONFIG_PATH
   return env
 }

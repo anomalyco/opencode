@@ -542,6 +542,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "当前",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "的使用量为 $",
 
+  "workspace.redeem.title": "兑换优惠券",
+  "workspace.redeem.subtitle": "兑换优惠码以领取充值额度或权益。",
+  "workspace.redeem.placeholder": "输入优惠码",
+  "workspace.redeem.redeem": "兑换",
+  "workspace.redeem.redeeming": "兑换中...",
+  "workspace.redeem.success": "优惠券兑换成功。",
+
   "workspace.reload.title": "自动充值",
   "workspace.reload.disabled.before": "自动充值已",
   "workspace.reload.disabled.state": "禁用",
