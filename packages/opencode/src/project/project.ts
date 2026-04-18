@@ -231,7 +231,7 @@ export const layer: Layer.Layer<
         }
 
         if (!id) {
-          return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
+          return { id: ProjectID.global, worktree: "/", sandbox, vcs: "git" as const }
         }
 
         const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })

@@ -6,6 +6,8 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
+import { ProjectTable } from "../../src/project/project.sql"
+import { Database, eq } from "../../src/storage"
 import { Effect, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
@@ -78,7 +80,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).toBe(ProjectID.global)
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe("/")
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     expect(await Bun.file(opencodeFile).exists()).toBe(false)
@@ -110,6 +112,27 @@ describe("Project.fromDirectory", () => {
     const { project: b } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(b.id).toBe(a.id)
   })
+
+  test("git init without commits must not overwrite global worktree", async () => {
+    // Step 1: non-git directory creates global project with worktree="/"
+    await using dirA = await tmpdir()
+    const { project: p1 } = await run((svc) => svc.fromDirectory(dirA.path))
+    expect(p1.id).toBe(ProjectID.global)
+    expect(p1.worktree).toBe("/")
+
+    const row1 = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, ProjectID.global)).get())
+    expect(row1?.worktree).toBe("/")
+
+    // Step 2: git init (no commits) in a different directory
+    await using dirB = await tmpdir()
+    await $`git init`.cwd(dirB.path).quiet()
+    const { project: p2 } = await run((svc) => svc.fromDirectory(dirB.path))
+    expect(p2.id).toBe(ProjectID.global)
+
+    // The global project worktree must remain "/"
+    const row2 = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, ProjectID.global)).get())
+    expect(row2?.worktree).toBe("/")
+  })
 })
 
 describe("Project.fromDirectory git failure paths", () => {
@@ -121,7 +144,7 @@ describe("Project.fromDirectory git failure paths", () => {
     const { project } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(project.vcs).toBe("git")
     expect(project.id).toBe(ProjectID.global)
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe("/")
   })
 
   test("handles show-toplevel failure gracefully", async () => {
