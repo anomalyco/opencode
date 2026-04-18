@@ -2801,15 +2801,25 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
       expect(result.xhigh).toEqual({
-        reasoningConfig: {
-          type: "adaptive",
-          maxReasoningEffort: "xhigh",
+        additionalModelRequestFields: {
+          thinking: {
+            type: "adaptive",
+            display: "summarized",
+          },
+          output_config: {
+            effort: "xhigh",
+          },
         },
       })
       expect(result.max).toEqual({
-        reasoningConfig: {
-          type: "adaptive",
-          maxReasoningEffort: "max",
+        additionalModelRequestFields: {
+          thinking: {
+            type: "adaptive",
+            display: "summarized",
+          },
+          output_config: {
+            effort: "max",
+          },
         },
       })
     })

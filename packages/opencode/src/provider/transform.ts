@@ -628,6 +628,30 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/amazon-bedrock":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
       if (adaptiveEfforts) {
+        const isOpus47 = ["opus-4-7", "opus-4.7"].some((v) => model.api.id.includes(v))
+        // Opus 4.7 defaults thinking.display to "omitted", which sends empty
+        // thinking blocks that crash the Vercel AI SDK streaming transform
+        // ("reasoning part 0 not found"). The Bedrock SDK ignores `display`
+        // in reasoningConfig, so we bypass it and set additionalModelRequestFields
+        // directly to include display: "summarized".
+        if (isOpus47) {
+          return Object.fromEntries(
+            adaptiveEfforts.map((effort) => [
+              effort,
+              {
+                additionalModelRequestFields: {
+                  thinking: {
+                    type: "adaptive",
+                    display: "summarized",
+                  },
+                  output_config: {
+                    effort,
+                  },
+                },
+              },
+            ]),
+          )
+        }
         return Object.fromEntries(
           adaptiveEfforts.map((effort) => [
             effort,
