@@ -37,10 +37,11 @@ export function DialogSessionRescue(props: DialogSessionRescueProps) {
 
     const proj = data()?.current
     if (proj) {
+      const dir = sdk.directory ?? proj.worktree
       result.push({
         title: proj.name ?? proj.worktree,
-        value: { projectID: proj.id, directory: proj.worktree },
-        description: proj.worktree,
+        value: { projectID: proj.id, directory: dir },
+        description: dir,
         category: "Current",
       })
     }
