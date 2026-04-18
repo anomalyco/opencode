@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Schema, SchemaGetter } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import z from "zod"
 
 import { zod, ZodOverride } from "../../src/util/effect-zod"
@@ -667,6 +667,91 @@ describe("util.effect-zod", () => {
       const shape = json(schema) as any
       expect(shape.properties.port.type).toBe("integer")
       expect(shape.properties.port.exclusiveMinimum).toBe(0)
+    })
+  })
+
+  describe("Schema.optionalWith defaults", () => {
+    test("parsing undefined returns the default value", () => {
+      const schema = zod(
+        Schema.Struct({
+          mode: Schema.String.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("ctrl-x"))),
+        }),
+      )
+      expect(schema.parse({})).toEqual({ mode: "ctrl-x" })
+      expect(schema.parse({ mode: undefined })).toEqual({ mode: "ctrl-x" })
+    })
+
+    test("parsing a real value returns that value (default does not fire)", () => {
+      const schema = zod(
+        Schema.Struct({
+          mode: Schema.String.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("ctrl-x"))),
+        }),
+      )
+      expect(schema.parse({ mode: "ctrl-y" })).toEqual({ mode: "ctrl-y" })
+    })
+
+    test("default on a number field", () => {
+      const schema = zod(
+        Schema.Struct({
+          count: Schema.Number.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(42))),
+        }),
+      )
+      expect(schema.parse({})).toEqual({ count: 42 })
+      expect(schema.parse({ count: 7 })).toEqual({ count: 7 })
+    })
+
+    test("multiple defaulted fields inside a struct", () => {
+      const schema = zod(
+        Schema.Struct({
+          leader: Schema.String.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("ctrl-x"))),
+          quit: Schema.String.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("ctrl-c"))),
+          inner: Schema.String,
+        }),
+      )
+      expect(schema.parse({ inner: "hi" })).toEqual({
+        leader: "ctrl-x",
+        quit: "ctrl-c",
+        inner: "hi",
+      })
+      expect(schema.parse({ leader: "a", quit: "b", inner: "c" })).toEqual({
+        leader: "a",
+        quit: "b",
+        inner: "c",
+      })
+    })
+
+    test("JSON Schema output includes the default key", () => {
+      const schema = zod(
+        Schema.Struct({
+          mode: Schema.String.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("ctrl-x"))),
+        }),
+      )
+      const shape = json(schema) as any
+      expect(shape.properties.mode.default).toBe("ctrl-x")
+    })
+
+    test("default referencing a computed value resolves when evaluated", () => {
+      // Simulates `keybinds.ts` style of per-platform defaults: the default is
+      // produced by an Effect that computes a value at decode time.
+      const platform = "darwin"
+      const fallback = platform === "darwin" ? "cmd-k" : "ctrl-k"
+      const schema = zod(
+        Schema.Struct({
+          command_palette: Schema.String.pipe(
+            Schema.optional,
+            Schema.withDecodingDefault(Effect.sync(() => fallback)),
+          ),
+        }),
+      )
+      expect(schema.parse({})).toEqual({ command_palette: "cmd-k" })
+      const shape = json(schema) as any
+      expect(shape.properties.command_palette.default).toBe("cmd-k")
+    })
+
+    test("plain Schema.optional (no default) still emits .optional() (regression)", () => {
+      const schema = zod(Schema.Struct({ foo: Schema.optional(Schema.String) }))
+      expect(schema.parse({})).toEqual({})
+      expect(schema.parse({ foo: "hi" })).toEqual({ foo: "hi" })
     })
   })
 })

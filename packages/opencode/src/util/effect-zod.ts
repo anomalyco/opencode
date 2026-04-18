@@ -40,7 +40,12 @@ function walkUncached(ast: SchemaAST.AST): z.ZodTypeAny {
   // Declarations fall through to body(), not encoded(). User-level
   // Schema.decodeTo / Schema.transform attach encoding to non-Declaration
   // nodes, where we do apply the transform.
-  const hasTransform = ast.encoding?.length && ast._tag !== "Declaration"
+  //
+  // Schema.withDecodingDefault also attaches encoding, but we want `.default(v)`
+  // on the inner Zod rather than a transform wrapper — so optional ASTs whose
+  // encoding resolves a default from Option.none() route through body()/opt().
+  const hasEncoding = ast.encoding?.length && ast._tag !== "Declaration"
+  const hasTransform = hasEncoding && !(SchemaAST.isOptional(ast) && extractDefault(ast) !== undefined)
   const base = hasTransform ? encoded(ast) : body(ast)
   const out = ast.checks?.length ? applyChecks(base, ast.checks, ast) : base
   const desc = SchemaAST.resolveDescription(ast)
@@ -217,10 +222,43 @@ function body(ast: SchemaAST.AST): z.ZodTypeAny {
 function opt(ast: SchemaAST.AST): z.ZodTypeAny {
   if (ast._tag !== "Union") return fail(ast)
   const items = ast.types.filter((item) => item._tag !== "Undefined")
-  if (items.length === 1) return walk(items[0]).optional()
-  if (items.length > 1)
-    return z.union(items.map(walk) as [z.ZodTypeAny, z.ZodTypeAny, ...Array<z.ZodTypeAny>]).optional()
-  return z.undefined().optional()
+  const inner =
+    items.length === 1
+      ? walk(items[0])
+      : items.length > 1
+        ? z.union(items.map(walk) as [z.ZodTypeAny, z.ZodTypeAny, ...Array<z.ZodTypeAny>])
+        : z.undefined()
+  // Schema.withDecodingDefault attaches an encoding `Link` whose transformation
+  // decode Getter resolves `Option.none()` to `Option.some(default)`.  Invoke
+  // it to extract the default and emit `.default(...)` instead of `.optional()`.
+  const fallback = extractDefault(ast)
+  if (fallback !== undefined) return inner.default(fallback.value)
+  return inner.optional()
+}
+
+type DecodeLink = {
+  readonly transformation: {
+    readonly decode: {
+      readonly run: (
+        input: Option.Option<unknown>,
+        options: SchemaAST.ParseOptions,
+      ) => Effect.Effect<Option.Option<unknown>, unknown>
+    }
+  }
+}
+
+function extractDefault(ast: SchemaAST.AST): { value: unknown } | undefined {
+  const encoding = (ast as { encoding?: ReadonlyArray<DecodeLink> }).encoding
+  if (!encoding?.length) return undefined
+  // Walk the chain of encoding Links in order; the first Getter that produces
+  // a value from Option.none wins.  withDecodingDefault always puts its
+  // defaulting Link adjacent to the optional Union.
+  for (const link of encoding) {
+    const probe = Effect.runSyncExit(link.transformation.decode.run(Option.none(), {}))
+    if (probe._tag !== "Success") continue
+    if (Option.isSome(probe.value)) return { value: probe.value.value }
+  }
+  return undefined
 }
 
 function union(ast: SchemaAST.Union): z.ZodTypeAny {
