@@ -2,8 +2,6 @@ import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
-// Positive integer: emits JSON Schema `type: integer, exclusiveMinimum: 0`
-// via the effect-zod walker's well-known refinement translation.
 const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
 
 export const Model = Schema.Struct({

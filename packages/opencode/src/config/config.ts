@@ -25,18 +25,20 @@ import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 import { InstanceRef } from "@/effect/instance-ref"
 import { ConfigAgent } from "./agent"
+import { ConfigCommand } from "./command"
+import { ConfigFormatter } from "./formatter"
+import { ConfigLayout } from "./layout"
+import { ConfigLSP } from "./lsp"
+import { ConfigManaged } from "./managed"
 import { ConfigMCP } from "./mcp"
 import { ConfigModelID } from "./model-id"
-import { ConfigPlugin } from "./plugin"
-import { ConfigManaged } from "./managed"
-import { ConfigCommand } from "./command"
 import { ConfigParse } from "./parse"
-import { ConfigPermission } from "./permission"
-import { ConfigProvider } from "./provider"
-import { ConfigSkills } from "./skills"
 import { ConfigPaths } from "./paths"
-import { ConfigFormatter } from "./formatter"
-import { ConfigLSP } from "./lsp"
+import { ConfigPermission } from "./permission"
+import { ConfigPlugin } from "./plugin"
+import { ConfigProvider } from "./provider"
+import { ConfigServer } from "./server"
+import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@/npm"
 
@@ -73,23 +75,9 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(
   return config
 }
 
-export const Server = z
-  .object({
-    port: z.number().int().positive().optional().describe("Port to listen on"),
-    hostname: z.string().optional().describe("Hostname to listen on"),
-    mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-    mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
-    cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
-  })
-  .strict()
-  .meta({
-    ref: "ServerConfig",
-  })
-
-export const Layout = z.enum(["auto", "stretch"]).meta({
-  ref: "LayoutConfig",
-})
-export type Layout = z.infer<typeof Layout>
+export const Server = ConfigServer.Server.zod
+export const Layout = ConfigLayout.Layout.zod
+export type Layout = ConfigLayout.Layout
 
 export const Info = z
   .object({
