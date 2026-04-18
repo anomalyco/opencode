@@ -18,6 +18,24 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
+const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
+
+const sniffAttachmentMime = (bytes: Uint8Array, fallback: string) => {
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
+  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
+  if (startsWith(bytes, [0x42, 0x4d])) return "image/bmp"
+  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"
+  if (
+    startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
+    startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50])
+  ) {
+    return "image/webp"
+  }
+
+  return fallback
+}
+
 const parameters = z.object({
   filePath: z.string().describe("The absolute path to the file or directory to read"),
   offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
@@ -146,6 +164,8 @@ export const ReadTool = Tool.define(
       const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
       const isPdf = mime === "application/pdf"
       if (isImage || isPdf) {
+        const bytes = yield* fs.readFile(filepath)
+        const attachmentMime = sniffAttachmentMime(bytes, mime)
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
         return {
           title,
@@ -158,8 +178,8 @@ export const ReadTool = Tool.define(
           attachments: [
             {
               type: "file" as const,
-              mime,
-              url: `data:${mime};base64,${Buffer.from(yield* fs.readFile(filepath)).toString("base64")}`,
+              mime: attachmentMime,
+              url: `data:${attachmentMime};base64,${Buffer.from(bytes).toString("base64")}`,
             },
           ],
         }
