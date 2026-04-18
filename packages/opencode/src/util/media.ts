@@ -1,16 +1,15 @@
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
 
-export function mediaKind(mime: string) {
-  if (mime.startsWith("image/")) return "image" as const
-  if (mime === "application/pdf") return "pdf" as const
+export function isPdfAttachment(mime: string) {
+  return mime === "application/pdf"
 }
 
 export function isMedia(mime: string) {
-  return mediaKind(mime) !== undefined
+  return mime.startsWith("image/") || isPdfAttachment(mime)
 }
 
 export function isImageAttachment(mime: string) {
-  return mediaKind(mime) === "image" && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
+  return mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
 }
 
 export function sniffAttachmentMime(bytes: Uint8Array, fallback: string) {

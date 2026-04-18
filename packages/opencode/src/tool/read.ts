@@ -10,14 +10,14 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
-import { isImageAttachment, mediaKind, sniffAttachmentMime } from "@/util/media"
+import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
-const MIME_SAMPLE_BYTES = 12
+const SAMPLE_BYTES = 4096
 
 const parameters = z.object({
   filePath: z.string().describe("The absolute path to the file or directory to read"),
@@ -89,7 +89,7 @@ export const ReadTool = Tool.define(
       )
     })
 
-    const isBinaryFile = Effect.fn("ReadTool.isBinaryFile")(function* (filepath: string, fileSize: number) {
+    const isBinaryFile = (filepath: string, bytes: Uint8Array) => {
       const ext = path.extname(filepath).toLowerCase()
       switch (ext) {
         case ".zip":
@@ -123,7 +123,6 @@ export const ReadTool = Tool.define(
           return true
       }
 
-      const bytes = yield* readSample(filepath, fileSize, 4096)
       if (bytes.length === 0) return false
 
       let nonPrintableCount = 0
@@ -135,7 +134,7 @@ export const ReadTool = Tool.define(
       }
 
       return nonPrintableCount / bytes.length > 0.3
-    })
+    }
 
     const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
       if (params.offset !== undefined && params.offset < 1) {
@@ -201,15 +200,12 @@ export const ReadTool = Tool.define(
       }
 
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
+      const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
-      const mime = sniffAttachmentMime(
-        yield* readSample(filepath, Number(stat.size), MIME_SAMPLE_BYTES),
-        AppFileSystem.mimeType(filepath),
-      )
-      const kind = mediaKind(mime)
-      if (isImageAttachment(mime) || kind === "pdf") {
+      const mime = sniffAttachmentMime(sample, AppFileSystem.mimeType(filepath))
+      if (isImageAttachment(mime) || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
-        const msg = `${kind === "image" ? "Image" : "PDF"} read successfully`
+        const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
         return {
           title,
           output: msg,
@@ -228,7 +224,7 @@ export const ReadTool = Tool.define(
         }
       }
 
-      if (yield* isBinaryFile(filepath, Number(stat.size))) {
+      if (isBinaryFile(filepath, sample)) {
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
