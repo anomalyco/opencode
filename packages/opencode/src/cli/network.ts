@@ -1,6 +1,5 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import type { Config } from "@/config/config"
 import { Effect } from "effect"
 
 const options = {
@@ -55,7 +54,7 @@ function networkArgs() {
 
 export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {
   const { Config } = yield* Effect.promise(() => import("@/config/config"))
-  const config = yield* Config.Service.use((cfg) => cfg.getGlobal())
+  const config = yield* Config.Service.use((cfg) => cfg.getGlobalWithOverrides())
   return resolveNetworkOptionsNoConfig(args, config)
 })
 
