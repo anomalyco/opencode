@@ -7,6 +7,20 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+async function published(name: string, version: string) {
+  return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
+}
+
+async function publish(dir: string, name: string, version: string) {
+  if (await published(name, version)) {
+    console.log(`already published ${name}@${version}`)
+    return
+  }
+  if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
+  await $`bun pm pack`.cwd(dir)
+  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
+}
+
 const binaries: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
   const pkg = await Bun.file(`./dist/${filepath}`).json()
@@ -40,14 +54,10 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
-  if (process.platform !== "win32") {
-    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
-  }
-  await $`bun pm pack`.cwd(`./dist/${name}`)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
+  await publish(`./dist/${name}`, name, binaries[name])
 })
 await Promise.all(tasks)
-await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`
+await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
 
 const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"
@@ -104,6 +114,7 @@ if (!Script.preview) {
         await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
         await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
         await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
+        if ((await $`cd ./dist/aur-${pkg} && git diff --cached --quiet`.nothrow()).exitCode === 0) break
         await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${Script.version}"`
         await $`cd ./dist/aur-${pkg} && git push`
         break
@@ -176,6 +187,8 @@ if (!Script.preview) {
   await $`git clone ${tap} ./dist/homebrew-tap`
   await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
-  await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
-  await $`cd ./dist/homebrew-tap && git push`
+  if ((await $`cd ./dist/homebrew-tap && git diff --cached --quiet`.nothrow()).exitCode !== 0) {
+    await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
+    await $`cd ./dist/homebrew-tap && git push`
+  }
 }

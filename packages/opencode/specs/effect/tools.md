@@ -36,7 +36,7 @@ This keeps tool tests aligned with the production service graph and makes follow
 
 ## Exported tools
 
-These exported tool definitions already exist in `src/tool` and are on the current Effect-native `Tool.define(...)` path:
+These exported tool definitions currently use `Tool.define(...)` in `src/tool`:
 
 - [x] `apply_patch.ts`
 - [x] `bash.ts`
@@ -45,7 +45,6 @@ These exported tool definitions already exist in `src/tool` and are on the curre
 - [x] `glob.ts`
 - [x] `grep.ts`
 - [x] `invalid.ts`
-- [x] `ls.ts`
 - [x] `lsp.ts`
 - [x] `multiedit.ts`
 - [x] `plan.ts`
@@ -60,7 +59,7 @@ These exported tool definitions already exist in `src/tool` and are on the curre
 
 Notes:
 
-- `batch.ts` is no longer a current tool file and should not be tracked here.
+- There is no current `ls.ts` tool file on this branch.
 - `truncate.ts` is an Effect service used by tools, not a tool definition itself.
 - `mcp-exa.ts`, `external-directory.ts`, and `schema.ts` are support modules, not standalone tool definitions.
 
@@ -73,7 +72,7 @@ Current spot cleanups worth tracking:
 - [ ] `read.ts` — still bridges to Node stream / `readline` helpers and Promise-based binary detection
 - [ ] `bash.ts` — already uses Effect child-process primitives; only keep tracking shell-specific platform bridges and parser/loading details as they come up
 - [ ] `webfetch.ts` — already uses `HttpClient`; remaining work is limited to smaller boundary helpers like HTML text extraction
-- [ ] `file/ripgrep.ts` — adjacent to tool migration; still has raw fs/process usage that affects `grep.ts` and `ls.ts`
+- [ ] `file/ripgrep.ts` — adjacent to tool migration; still has raw fs/process usage that affects `grep.ts` and file-search routes
 - [ ] `patch/index.ts` — adjacent to tool migration; still has raw fs usage behind patch application
 
 Notable items that are already effectively on the target path and do not need separate migration bullets right now:
@@ -83,7 +82,6 @@ Notable items that are already effectively on the target path and do not need se
 - `write.ts`
 - `codesearch.ts`
 - `websearch.ts`
-- `ls.ts`
 - `multiedit.ts`
 - `edit.ts`
 

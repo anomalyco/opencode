@@ -1,7 +1,6 @@
-import { Observability } from "@/effect/observability"
+import { Observability } from "./observability"
 import { Layer, type Context, ManagedRuntime, type Effect } from "effect"
-
-export const memoMap = Layer.makeMemoMapUnsafe()
+import { memoMap } from "./memo-map"
 
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined

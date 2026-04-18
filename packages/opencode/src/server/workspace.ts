@@ -10,6 +10,7 @@ import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Effect } from "effect"
 import { Log } from "@/util"
 import { ServerProxy } from "./proxy"
 
@@ -42,7 +43,9 @@ async function getSessionWorkspace(url: URL) {
   const id = getSessionID(url)
   if (!id) return null
 
-  const session = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(id))).catch(() => undefined)
+  const session = await AppRuntime.runPromise(
+    Session.Service.use((svc) => svc.get(id)).pipe(Effect.withSpan("WorkspaceRouter.lookup")),
+  ).catch(() => undefined)
   return session?.workspaceID
 }
 
