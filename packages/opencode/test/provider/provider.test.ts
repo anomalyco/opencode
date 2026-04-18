@@ -226,6 +226,99 @@ test("model blacklist excludes specific models", async () => {
   })
 })
 
+test("model whitelist supports regex filters", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              whitelist: ["/^claude-sonnet-/"],
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).toContain("claude-sonnet-4-20250514")
+      expect(models.every((model) => model.startsWith("claude-sonnet-"))).toBeTrue()
+    },
+  })
+})
+
+test("model blacklist supports regex filters", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              blacklist: ["/^claude-opus-/"],
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).not.toContain("claude-opus-4-20250514")
+      expect(models.some((model) => model.startsWith("claude-sonnet-"))).toBeTrue()
+    },
+  })
+})
+
+test("invalid regex filters are ignored", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              blacklist: ["/[abc/"],
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).toContain("claude-sonnet-4-20250514")
+      expect(models).toContain("claude-opus-4-20250514")
+    },
+  })
+})
+
 test("custom model alias via config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -885,6 +978,39 @@ test("whitelist and blacklist can be combined", async () => {
       expect(models).toContain("claude-sonnet-4-20250514")
       expect(models).not.toContain("claude-opus-4-20250514")
       expect(models.length).toBe(1)
+    },
+  })
+})
+
+test("whitelist and blacklist can be combined with regex filters", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              whitelist: ["/^claude-/"],
+              blacklist: ["/^claude-opus-/"],
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).toContain("claude-sonnet-4-20250514")
+      expect(models).not.toContain("claude-opus-4-20250514")
+      expect(models.every((model) => model.startsWith("claude-"))).toBeTrue()
     },
   })
 })

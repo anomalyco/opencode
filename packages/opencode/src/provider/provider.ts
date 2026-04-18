@@ -37,6 +37,18 @@ function shouldUseCopilotResponsesApi(modelID: string): boolean {
   return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
 }
 
+function matchesModelFilter(entry: string, modelID: string) {
+  if (entry.startsWith("/") && entry.endsWith("/") && entry.length >= 2) {
+    try {
+      return new RegExp(entry.slice(1, -1)).test(modelID)
+    } catch {
+      return false
+    }
+  }
+
+  return entry === modelID
+}
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -1336,8 +1348,8 @@ const layer: Layer.Layer<
             if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
             if (model.status === "deprecated") delete provider.models[modelID]
             if (
-              (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-              (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+              (configProvider?.blacklist && configProvider.blacklist.some((entry) => matchesModelFilter(entry, modelID))) ||
+              (configProvider?.whitelist && !configProvider.whitelist.some((entry) => matchesModelFilter(entry, modelID)))
             )
               delete provider.models[modelID]
 

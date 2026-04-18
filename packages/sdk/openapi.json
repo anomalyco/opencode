@@ -11147,12 +11147,14 @@
             "type": "string"
           },
           "whitelist": {
+            "description": "Allowed model filters. Plain strings match exact model IDs. Entries wrapped in /.../ are regex patterns matched against model IDs. Invalid regex patterns are ignored. Regex flags are not supported.",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "blacklist": {
+            "description": "Blocked model filters. Plain strings match exact model IDs. Entries wrapped in /.../ are regex patterns matched against model IDs. Invalid regex patterns are ignored. Regex flags are not supported.",
             "type": "array",
             "items": {
               "type": "string"
