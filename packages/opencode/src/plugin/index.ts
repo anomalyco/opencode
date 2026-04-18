@@ -30,6 +30,7 @@ const log = Log.create({ service: "plugin" })
 
 type State = {
   hooks: Hooks[]
+  pendingEvents: Set<Promise<void>>
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -49,6 +50,7 @@ export interface Interface {
   ) => Effect.Effect<Output>
   readonly list: () => Effect.Effect<Hooks[]>
   readonly init: () => Effect.Effect<void>
+  readonly waitForPendingEvents: (timeoutMs?: number) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -111,6 +113,7 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const pendingEvents = new Set<Promise<void>>()
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -245,14 +248,21 @@ export const layer = Layer.effect(
           Stream.runForEach((input) =>
             Effect.sync(() => {
               for (const hook of hooks) {
-                void hook["event"]?.({ event: input as any })
+                const eventHandler = hook["event"]
+                if (!eventHandler) continue
+                const promise = Promise.resolve()
+                  .then(() => eventHandler({ event: input as any }))
+                  .finally(() => {
+                    pendingEvents.delete(promise)
+                  })
+                pendingEvents.add(promise)
               }
             }),
           ),
           Effect.forkScoped,
         )
 
-        return { hooks }
+        return { hooks, pendingEvents }
       }),
     )
 
@@ -280,7 +290,25 @@ export const layer = Layer.effect(
       yield* InstanceState.get(state)
     })
 
-    return Service.of({ trigger, list, init })
+    const waitForPendingEvents = Effect.fn("Plugin.waitForPendingEvents")(function* (timeoutMs?: number) {
+      const s = yield* InstanceState.get(state)
+      const timeout = timeoutMs ?? Flag.OPENCODE_EXPERIMENTAL_PLUGIN_EXIT_DEFAULT_TIMEOUT_MS ?? 60000
+
+      yield* Effect.tryPromise({
+        try: async () => {
+          // Wait a tick to let event handlers be added to pendingEvents
+          await Promise.resolve()
+          const pending = Array.from(s.pendingEvents)
+          if (pending.length === 0) return
+          await Promise.race([Promise.all(pending), new Promise<void>((resolve) => setTimeout(resolve, timeout))])
+        },
+        catch: (err) => {
+          log.error("failed to wait for pending plugin events", { error: err })
+        },
+      }).pipe(Effect.ignore)
+    })
+
+    return Service.of({ trigger, list, init, waitForPendingEvents })
   }),
 )
 
