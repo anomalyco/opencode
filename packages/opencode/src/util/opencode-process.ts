@@ -17,8 +17,17 @@ export function ensureProcessMetadata(fallback: "main" | "worker") {
 }
 
 export function sanitizedProcessEnv(overrides?: Record<string, string>) {
-  const env = Object.fromEntries(
+  const env: Record<string, string> = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
   )
+
+  if (process.platform === "win32") {
+    const value = env.PATH ?? env.Path
+    if (value) {
+      env.PATH = value
+      env.Path = value
+    }
+  }
+
   return overrides ? Object.assign(env, overrides) : env
 }
