@@ -44,7 +44,7 @@ export const CodeSearchTool = Tool.define(
             McpExa.CodeArgs,
             {
               query: params.query,
-              tokensNum: params.tokensNum || 5000,
+              tokensNum: params.tokensNum,
             },
             "30 seconds",
           )

@@ -90,7 +90,7 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
           ...(ctx.callID ? { "tool.call_id": ctx.callID } : {}),
         }
         return Effect.gen(function* () {
-          yield* decode(args).pipe(
+          const decoded = yield* decode(args).pipe(
             Effect.mapError((error) =>
               toolInfo.formatValidationError
                 ? new Error(toolInfo.formatValidationError(error), { cause: error })
@@ -100,7 +100,7 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
                   ),
             ),
           )
-          const result = yield* execute(args, ctx)
+          const result = yield* execute(decoded as Schema.Schema.Type<Parameters>, ctx)
           if (result.metadata.truncated !== undefined) {
             return result
           }
