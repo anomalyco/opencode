@@ -1,12 +1,8 @@
 import { Schema } from "effect"
-import z from "zod"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
-// Positive integer preserving exact Zod JSON Schema (type: integer, exclusiveMinimum: 0).
-const PositiveInt = Schema.Number.annotate({
-  [ZodOverride]: z.number().int().positive(),
-})
+const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),

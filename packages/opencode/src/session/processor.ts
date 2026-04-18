@@ -123,7 +123,7 @@ export const layer: Layer.Layer<
         reasoningMap: {},
       }
       let aborted = false
-      const slog = log.clone().tag("sessionID", input.sessionID).tag("messageID", input.assistantMessage.id)
+      const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {

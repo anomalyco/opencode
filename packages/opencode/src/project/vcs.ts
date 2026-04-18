@@ -8,7 +8,6 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import { Log } from "@/util"
-import { Instance } from "./instance"
 import z from "zod"
 
 const log = Log.create({ service: "vcs" })
@@ -205,21 +204,17 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
       }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
         const value = yield* InstanceState.get(state)
-        if (Instance.project.vcs !== "git") return []
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return []
         if (mode === "git") {
-          return yield* track(
-            fs,
-            git,
-            Instance.directory,
-            (yield* git.hasHead(Instance.directory)) ? "HEAD" : undefined,
-          )
+          return yield* track(fs, git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined)
         }
 
         if (!value.root) return []
         if (value.current && value.current === value.root.name) return []
-        const ref = yield* git.mergeBase(Instance.directory, value.root.ref)
+        const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
         if (!ref) return []
-        return yield* compare(fs, git, Instance.directory, ref)
+        return yield* compare(fs, git, ctx.directory, ref)
       }),
     })
   }),

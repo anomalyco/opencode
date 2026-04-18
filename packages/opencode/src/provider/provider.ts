@@ -13,7 +13,6 @@ import { type LanguageModelV3 } from "@ai-sdk/provider"
 import * as ModelsDev from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import { Instance } from "../project/instance"
 import { InstallationVersion } from "../installation/version"
 import { Flag } from "../flag/flag"
 import { zod } from "@/util/effect-zod"
@@ -537,6 +536,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const token = apiKey ?? (yield* dep.get("GITLAB_TOKEN"))
 
       const providerConfig = (yield* dep.config()).provider?.["gitlab"]
+      const directory = yield* InstanceState.directory
 
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${InstallationVersion} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
@@ -591,10 +591,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
             log.info("gitlab model discovery starting", { instanceUrl })
-            const result = await discoverWorkflowModels(
-              { instanceUrl, getHeaders },
-              { workingDirectory: Instance.directory },
-            )
+            const result = await discoverWorkflowModels({ instanceUrl, getHeaders }, { workingDirectory: directory })
 
             if (!result.models.length) {
               log.info("gitlab model discovery skipped: no models found", {
