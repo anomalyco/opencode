@@ -560,6 +560,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "การใช้งานปัจจุบันสำหรับ",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "คือ $",
 
+  "workspace.redeem.title": "แลกคูปอง",
+  "workspace.redeem.subtitle": "แลกรหัสคูปองเพื่อรับเครดิตหรือสิทธิพิเศษ",
+  "workspace.redeem.placeholder": "กรอกรหัสคูปอง",
+  "workspace.redeem.redeem": "แลก",
+  "workspace.redeem.redeeming": "กำลังแลก...",
+  "workspace.redeem.success": "แลกคูปองสำเร็จ",
+
   "workspace.reload.title": "โหลดซ้ำอัตโนมัติ",
   "workspace.reload.disabled.before": "การโหลดซ้ำอัตโนมัติ",
   "workspace.reload.disabled.state": "ปิดใช้งานอยู่",
