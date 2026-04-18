@@ -326,25 +326,7 @@ export namespace LLM {
             })
           },
           async experimental_repairToolCall(failed) {
-            const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && tools[lower]) {
-              l.info("repairing tool call", {
-                tool: failed.toolCall.toolName,
-                repaired: lower,
-              })
-              return {
-                ...failed.toolCall,
-                toolName: lower,
-              }
-            }
-            return {
-              ...failed.toolCall,
-              input: JSON.stringify({
-                tool: failed.toolCall.toolName,
-                error: failed.error.message,
-              }),
-              toolName: "invalid",
-            }
+            return repairToolCall(failed, tools, l)
           },
           temperature: params.temperature,
           topP: params.topP,
@@ -430,6 +412,32 @@ export namespace LLM {
       Layer.provide(Plugin.defaultLayer),
     ),
   )
+
+  /** Exported for testing. */
+  export function repairToolCall<T extends { toolName: string }>(
+    failed: { toolCall: T; error: unknown },
+    tools: Record<string, unknown>,
+    l?: { info: (msg: string, meta: Record<string, unknown>) => void },
+  ) {
+    const name = failed.toolCall.toolName
+    const lower = name.toLowerCase()
+    if (lower !== name && tools[lower]) {
+      l?.info("repairing tool call", { tool: name, repaired: lower })
+      return { ...failed.toolCall, toolName: lower }
+    }
+    // Build a clean error that never leaks internal tool names or the
+    // raw "Available tools: ..." list from the AI SDK's NoSuchToolError.
+    const isNoSuchTool =
+      typeof failed.error === "object" && failed.error !== null && "toolName" in failed.error
+    const msg = isNoSuchTool
+      ? `Tool "${name}" is not available. Please use one of the tools provided to you.`
+      : `Tool "${name}" was called with invalid arguments. Please review the tool schema and retry.`
+    return {
+      ...failed.toolCall,
+      input: JSON.stringify({ tool: name, error: msg }),
+      toolName: "invalid",
+    }
+  }
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(

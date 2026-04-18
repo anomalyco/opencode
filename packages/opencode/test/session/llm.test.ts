@@ -119,6 +119,62 @@ describe("session.llm.hasToolCalls", () => {
   })
 })
 
+describe("session.llm.repairToolCall", () => {
+  test("case-insensitive match repairs tool name", () => {
+    const result = LLM.repairToolCall(
+      { toolCall: { toolName: "Read" }, error: { message: "...", toolName: "Read" } },
+      { read: {}, bash: {} },
+    )
+    expect(result).toMatchObject({ toolName: "read" })
+    expect((result as any).input).toBeUndefined()
+  })
+
+  test("unknown tool produces clean error without Available tools list", () => {
+    const result = LLM.repairToolCall(
+      {
+        toolCall: { toolName: "nonexistent" },
+        error: {
+          message: "Model tried to call unavailable tool 'nonexistent'. Available tools: invalid, bash, read.",
+          toolName: "nonexistent",
+        },
+      },
+      { bash: {}, read: {}, invalid: {} },
+    )
+    expect(result.toolName).toBe("invalid")
+    const input = JSON.parse((result as any).input)
+    expect(input.tool).toBe("nonexistent")
+    expect(input.error).not.toContain("Available tools")
+    expect(input.error).not.toContain("invalid")
+    expect(input.error).toContain("not available")
+  })
+
+  test("invalid arguments produces argument-specific error", () => {
+    const result = LLM.repairToolCall(
+      {
+        toolCall: { toolName: "bash" },
+        error: {
+          message: "Invalid input for tool bash: expected string got number",
+          toolInput: '{"command": 123}',
+        },
+      },
+      { bash: {}, read: {}, invalid: {} },
+    )
+    expect(result.toolName).toBe("invalid")
+    const input = JSON.parse((result as any).input)
+    expect(input.tool).toBe("bash")
+    expect(input.error).toContain("invalid arguments")
+    expect(input.error).not.toContain("Available tools")
+  })
+
+  test("exact match tool name is not repaired by case logic", () => {
+    const result = LLM.repairToolCall(
+      { toolCall: { toolName: "bash" }, error: { message: "bad args", toolInput: "{}" } },
+      { bash: {}, read: {} },
+    )
+    expect(result.toolName).toBe("invalid")
+  })
+})
+
 type Capture = {
   url: URL
   headers: Headers
