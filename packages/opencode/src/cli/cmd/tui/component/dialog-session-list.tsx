@@ -33,13 +33,16 @@ export function DialogSessionList() {
   const [search, setSearch] = createDebouncedSignal("", 150)
 
   const [searchResults, { refetch }] = createResource(search, async (query) => {
-    if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30 })
+    const result = await sdk.client.session.list({
+      roots: true,
+      limit: query ? 30 : 100,
+      ...(query ? { search: query } : { start: Date.now() - 30 * 24 * 60 * 60 * 1000 }),
+    })
     return result.data ?? []
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const sessions = createMemo(() => searchResults() ?? sync.data.session.filter((x) => x.parentID === undefined))
 
   function createWorkspace() {
     dialog.replace(() => (
@@ -80,7 +83,7 @@ export function DialogSessionList() {
           }
           await project.workspace.sync()
           await sync.session.refresh()
-          if (search()) await refetch()
+          await refetch()
           if (info?.workspaceID === session.workspaceID) {
             route.navigate({ type: "home" })
           }
@@ -233,7 +236,7 @@ export function DialogSessionList() {
               if (status && status !== "connected") {
                 await sync.session.refresh()
               }
-              if (search()) await refetch()
+              await refetch()
               setToDelete(undefined)
               return
             }
