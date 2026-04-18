@@ -1130,16 +1130,27 @@ const layer: Layer.Layer<
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            const resolvedNpm =
+              model.provider?.npm ??
+              provider.npm ??
+              existingModel?.api.npm ??
+              modelsDev[providerID]?.npm ??
+              "@ai-sdk/openai-compatible"
+            // For custom models on OpenAI-compatible providers, default image input
+            // to true since the SDK natively converts file parts to image_url format.
+            // This ensures custom provider models support image attachments out of the
+            // box without requiring explicit modalities configuration.
+            const isOpenAICompatible =
+              resolvedNpm === "@ai-sdk/openai-compatible" ||
+              resolvedNpm === "@ai-sdk/openai" ||
+              resolvedNpm === "@ai-sdk/azure" ||
+              resolvedNpm === "@ai-sdk/github-copilot"
+            const defaultImageInput = isOpenAICompatible ? true : false
             const parsedModel: Model = {
               id: ModelID.make(modelID),
               api: {
                 id: model.id ?? existingModel?.api.id ?? modelID,
-                npm:
-                  model.provider?.npm ??
-                  provider.npm ??
-                  existingModel?.api.npm ??
-                  modelsDev[providerID]?.npm ??
-                  "@ai-sdk/openai-compatible",
+                npm: resolvedNpm,
                 url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
               },
               status: model.status ?? existingModel?.status ?? "active",
@@ -1148,12 +1159,15 @@ const layer: Layer.Layer<
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
                 reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
-                attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
+                attachment: model.attachment ?? existingModel?.capabilities.attachment ?? defaultImageInput,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
                 input: {
                   text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
                   audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+                  image:
+                    model.modalities?.input?.includes("image") ??
+                    existingModel?.capabilities.input.image ??
+                    defaultImageInput,
                   video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
                   pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
                 },

@@ -922,6 +922,55 @@ test("model modalities default correctly", async () => {
       const model = providers[ProviderID.make("test-provider")].models["test-model"]
       expect(model.capabilities.input.text).toBe(true)
       expect(model.capabilities.output.text).toBe(true)
+      // OpenAI-compatible providers should default image input to true
+      expect(model.capabilities.input.image).toBe(true)
+      expect(model.capabilities.attachment).toBe(true)
+    },
+  })
+})
+
+test("custom openai-compatible provider defaults image input to true", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-vision": {
+              name: "Custom Vision Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "vision-model": {
+                  name: "Vision Model",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                  // No modalities specified - should default image to true
+                },
+              },
+              options: {
+                apiKey: "test-key",
+                baseURL: "https://api.custom.com/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const model = providers[ProviderID.make("custom-vision")].models["vision-model"]
+      // Should default to true for OpenAI-compatible providers
+      expect(model.capabilities.input.image).toBe(true)
+      expect(model.capabilities.attachment).toBe(true)
+      // Other modalities should still default to false
+      expect(model.capabilities.input.audio).toBe(false)
+      expect(model.capabilities.input.video).toBe(false)
+      expect(model.capabilities.input.pdf).toBe(false)
     },
   })
 })
