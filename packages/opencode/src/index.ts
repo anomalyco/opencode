@@ -38,6 +38,7 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
+import { generateFishCompletions } from "./cli/cmd/completion"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -185,6 +186,15 @@ const cli = yargs(args)
     process.exit(1)
   })
   .strict()
+
+// Handle fish shell completions before yargs processing
+if (args[0] === "completion" && args.includes("--shell")) {
+  const shellArg = args[args.indexOf("--shell") + 1]
+  if (shellArg === "fish") {
+    process.stdout.write(generateFishCompletions())
+    process.exit(0)
+  }
+}
 
 try {
   if (args.includes("-h") || args.includes("--help")) {

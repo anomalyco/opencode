@@ -75,7 +75,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     # trick yargs into also generating zsh completions
     installShellCompletion --cmd opencode \
       --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion) \
+      --fish <($out/bin/opencode completion --shell fish)
   '';
 
   nativeInstallCheckInputs = [
