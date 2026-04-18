@@ -115,6 +115,8 @@ export const create = fn(CreateInput, async (input) => {
     OPENCODE_AUTH_CONTENT: JSON.stringify(await AppRuntime.runPromise(Auth.Service.use((auth) => auth.all()))),
     OPENCODE_WORKSPACE_ID: config.id,
     OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
+    OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
   }
   await adaptor.create(config, env)
 
