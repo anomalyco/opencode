@@ -322,6 +322,8 @@ export const dict = {
   "mcp.status.disabled": "已禁用",
 
   "dialog.fork.empty": "没有可用于分叉的消息",
+  "dialog.fork.title": "分叉会话",
+  "dialog.fork.fullSession": "完整会话",
 
   "dialog.directory.search.placeholder": "搜索文件夹",
   "dialog.directory.empty": "未找到文件夹",

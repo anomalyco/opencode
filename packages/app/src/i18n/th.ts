@@ -302,6 +302,8 @@ export const dict = {
   "mcp.status.disabled": "ปิดใช้งาน",
 
   "dialog.fork.empty": "ไม่มีข้อความให้แตกแขนง",
+  "dialog.fork.title": "แตกแขนงเซสชัน",
+  "dialog.fork.fullSession": "เซสชันทั้งหมด",
 
   "dialog.directory.search.placeholder": "ค้นหาโฟลเดอร์",
   "dialog.directory.empty": "ไม่พบโฟลเดอร์",

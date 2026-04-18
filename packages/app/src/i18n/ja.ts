@@ -277,6 +277,8 @@ export const dict = {
   "mcp.status.needs_auth": "認証が必要",
   "mcp.status.disabled": "無効",
   "dialog.fork.empty": "フォーク元のメッセージがありません",
+  "dialog.fork.title": "セッションをフォーク",
+  "dialog.fork.fullSession": "セッション全体",
   "dialog.directory.search.placeholder": "フォルダを検索",
   "dialog.directory.empty": "フォルダが見つかりません",
   "dialog.server.title": "サーバー",

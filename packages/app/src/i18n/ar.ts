@@ -278,6 +278,8 @@ export const dict = {
   "mcp.status.needs_auth": "يحتاج إلى مصادقة",
   "mcp.status.disabled": "معطل",
   "dialog.fork.empty": "لا توجد رسائل للتفرع منها",
+  "dialog.fork.title": "تشعيب الجلسة",
+  "dialog.fork.fullSession": "الجلسة كاملة",
   "dialog.directory.search.placeholder": "البحث في المجلدات",
   "dialog.directory.empty": "لم يتم العثور على مجلدات",
   "dialog.server.title": "الخوادم",

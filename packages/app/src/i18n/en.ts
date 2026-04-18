@@ -307,6 +307,8 @@ export const dict = {
   "mcp.status.disabled": "disabled",
 
   "dialog.fork.empty": "No messages to fork from",
+  "dialog.fork.title": "Fork session",
+  "dialog.fork.fullSession": "Full session",
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
