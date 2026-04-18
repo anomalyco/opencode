@@ -332,16 +332,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
-      if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
-        if (!providerID || !modelID)
-          return toast.show({
-            variant: "warning",
-            message: `Invalid model format: ${args.model}`,
-            duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
-      }
+      // --model is now handled reactively in local.tsx (cliOverride) to avoid
+      // validation races — providers may not be loaded yet at mount time.
       if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
