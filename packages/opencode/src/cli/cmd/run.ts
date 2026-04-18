@@ -27,6 +27,7 @@ import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Plugin } from "../../plugin"
 
 type ToolProps<T> = {
   input: Tool.InferParameters<T>
@@ -534,6 +535,12 @@ export const RunCommand = cmd({
             event.properties.sessionID === sessionID &&
             event.properties.status.type === "idle"
           ) {
+            // Wait for plugins to finish processing the session.idle event
+            if (!args.attach) {
+              await AppRuntime.runPromise(Plugin.Service.use((svc) => svc.waitForPendingEvents())).catch((e) => {
+                console.error("Failed to wait for pending plugin events:", e)
+              })
+            }
             break
           }
 
@@ -631,7 +638,7 @@ export const RunCommand = cmd({
       }
       await share(sdk, sessionID)
 
-      loop().catch((e) => {
+      const loopPromise = loop().catch((e) => {
         console.error(e)
         process.exit(1)
       })
@@ -655,6 +662,8 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
+
+      await loopPromise
     }
 
     if (args.attach) {
