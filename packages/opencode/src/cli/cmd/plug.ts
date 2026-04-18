@@ -166,15 +166,14 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
         dep.log.info(`Replaced in ${item.file}`)
         continue
       }
-      dep.log.info(`Added to ${item.file}`)
+dep.log.info(`Added to ${item.file}`)
     }
-
-    dep.log.success(`Installed ${mod}`)
+    const updated = out.items.some((item) => item.mode !== "noop")
+    dep.log.success(updated ? `Installed ${mod}` : `Config unchanged (use --force to replace)`)
     dep.log.info(global ? `Scope: global (${out.dir})` : `Scope: local (${out.dir})`)
     return true
   }
 }
-
 export const PluginCommand = cmd({
   command: "plugin <module>",
   aliases: ["plug"],
