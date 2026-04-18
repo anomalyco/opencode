@@ -26,8 +26,25 @@ import { lazy } from "@/util/lazy"
 import { Bus } from "@/bus"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { jsonRequest, runRequest } from "./trace"
+import { Instance } from "@/project/instance"
+import { AppRuntime } from "@/effect/app-runtime"
 
 const log = Log.create({ service: "server" })
+
+// Session routes receive requests without a `?directory=` query param, so the
+// InstanceMiddleware falls back to `process.cwd()`. Re-enter the correct
+// Instance context using the session's stored directory so downstream Effect
+// code (SessionPrompt, InstanceState.context, etc.) sees the session's cwd
+// rather than the server's.
+async function withSessionDirectory<A>(sessionID: SessionID, fn: () => Promise<A>): Promise<A> {
+  const session = await AppRuntime.runPromise(
+    Effect.gen(function* () {
+      const svc = yield* Session.Service
+      return yield* svc.get(sessionID)
+    }),
+  )
+  return Instance.provide({ directory: session.directory, fn })
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -566,39 +583,41 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) =>
-        jsonRequest("SessionRoutes.summarize", c, function* () {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const session = yield* Session.Service
-          const revert = yield* SessionRevert.Service
-          const compact = yield* SessionCompaction.Service
-          const prompt = yield* SessionPrompt.Service
-          const agent = yield* Agent.Service
+        withSessionDirectory(c.req.valid("param").sessionID, () =>
+          jsonRequest("SessionRoutes.summarize", c, function* () {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const session = yield* Session.Service
+            const revert = yield* SessionRevert.Service
+            const compact = yield* SessionCompaction.Service
+            const prompt = yield* SessionPrompt.Service
+            const agent = yield* Agent.Service
 
-          yield* revert.cleanup(yield* session.get(sessionID))
-          const msgs = yield* session.messages({ sessionID })
-          const defaultAgent = yield* agent.defaultAgent()
-          let currentAgent = defaultAgent
-          for (let i = msgs.length - 1; i >= 0; i--) {
-            const info = msgs[i].info
-            if (info.role === "user") {
-              currentAgent = info.agent || defaultAgent
-              break
+            yield* revert.cleanup(yield* session.get(sessionID))
+            const msgs = yield* session.messages({ sessionID })
+            const defaultAgent = yield* agent.defaultAgent()
+            let currentAgent = defaultAgent
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const info = msgs[i].info
+              if (info.role === "user") {
+                currentAgent = info.agent || defaultAgent
+                break
+              }
             }
-          }
 
-          yield* compact.create({
-            sessionID,
-            agent: currentAgent,
-            model: {
-              providerID: body.providerID,
-              modelID: body.modelID,
-            },
-            auto: body.auto,
-          })
-          yield* prompt.loop({ sessionID })
-          return true
-        }),
+            yield* compact.create({
+              sessionID,
+              agent: currentAgent,
+              model: {
+                providerID: body.providerID,
+                modelID: body.modelID,
+              },
+              auto: body.auto,
+            })
+            yield* prompt.loop({ sessionID })
+            return true
+          }),
+        ),
     )
     .get(
       "/:sessionID/message",
@@ -873,20 +892,21 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
-      async (c) => {
-        c.status(200)
-        c.header("Content-Type", "application/json")
-        return stream(c, async (stream) => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const msg = await runRequest(
-            "SessionRoutes.prompt",
-            c,
-            SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
-          )
-          void stream.write(JSON.stringify(msg))
-        })
-      },
+      async (c) =>
+        withSessionDirectory(c.req.valid("param").sessionID, async () => {
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const msg = await runRequest(
+              "SessionRoutes.prompt",
+              c,
+              SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+            )
+            void stream.write(JSON.stringify(msg))
+          })
+        }),
     )
     .post(
       "/:sessionID/prompt_async",
@@ -912,10 +932,12 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        void runRequest(
-          "SessionRoutes.prompt_async",
-          c,
-          SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+        void withSessionDirectory(sessionID, () =>
+          runRequest(
+            "SessionRoutes.prompt_async",
+            c,
+            SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+          ),
         ).catch((err) => {
           log.error("prompt_async failed", { sessionID, error: err })
           void Bus.publish(Session.Event.Error, {
@@ -958,12 +980,14 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
       async (c) =>
-        jsonRequest("SessionRoutes.command", c, function* () {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const svc = yield* SessionPrompt.Service
-          return yield* svc.command({ ...body, sessionID })
-        }),
+        withSessionDirectory(c.req.valid("param").sessionID, () =>
+          jsonRequest("SessionRoutes.command", c, function* () {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const svc = yield* SessionPrompt.Service
+            return yield* svc.command({ ...body, sessionID })
+          }),
+        ),
     )
     .post(
       "/:sessionID/shell",
@@ -991,12 +1015,14 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
       async (c) =>
-        jsonRequest("SessionRoutes.shell", c, function* () {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const svc = yield* SessionPrompt.Service
-          return yield* svc.shell({ ...body, sessionID })
-        }),
+        withSessionDirectory(c.req.valid("param").sessionID, () =>
+          jsonRequest("SessionRoutes.shell", c, function* () {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const svc = yield* SessionPrompt.Service
+            return yield* svc.shell({ ...body, sessionID })
+          }),
+        ),
     )
     .post(
       "/:sessionID/revert",
