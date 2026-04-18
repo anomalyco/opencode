@@ -31,6 +31,7 @@ export interface Settings {
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
+    showSessionProgress: boolean
   }
   updates: {
     startup: boolean
@@ -102,6 +103,7 @@ const defaultSettings: Settings = {
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
+    showSessionProgress: true,
   },
   updates: {
     startup: true,
@@ -212,6 +214,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
+        },
+        showSessionProgress: withFallback(
+          () => store.general?.showSessionProgress,
+          defaultSettings.general.showSessionProgress,
+        ),
+        setShowSessionProgress(value: boolean) {
+          setStore("general", "showSessionProgress", value)
         },
       },
       updates: {
