@@ -335,7 +335,7 @@ download_and_install() {
     fi
 
     if [ "$os" = "linux" ]; then
-        tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+        tar --no-same-owner -xzf "$tmp_dir/$filename" -C "$tmp_dir"
     else
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
