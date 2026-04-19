@@ -21,6 +21,13 @@ export type PluginRoute = {
 
 export type Route = HomeRoute | SessionRoute | PluginRoute
 
+/**
+ * Placeholder session ID used as the initial route when `--continue` is passed.
+ * Prevents a visual flash to the home screen before the real session is resolved.
+ * Must never be fetched from the server — consumers should guard against it.
+ */
+export const CONTINUE_PLACEHOLDER_ID = "dummy"
+
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: (props: { initialRoute?: Route }) => {

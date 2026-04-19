@@ -3,7 +3,7 @@ import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
 import * as Terminal from "@tui/util/terminal"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
-import { RouteProvider, useRoute } from "@tui/context/route"
+import { CONTINUE_PLACEHOLDER_ID, RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
   Match,
@@ -153,7 +153,7 @@ export function tui(input: {
                       input.args.continue
                         ? {
                             type: "session",
-                            sessionID: "dummy",
+                            sessionID: CONTINUE_PLACEHOLDER_ID,
                           }
                         : undefined
                     }
@@ -358,20 +358,26 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
-    if (match) {
+    if (!match) {
+      // Only give up once the full session list has loaded
+      if (sync.status !== "complete") return
       continued = true
-      if (args.fork) {
-        void sdk.client.session.fork({ sessionID: match }).then((result) => {
-          if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
-          }
-        })
-      } else {
-        route.navigate({ type: "session", sessionID: match })
-      }
+      route.navigate({ type: "home" })
+      return
     }
+    continued = true
+    if (args.fork) {
+      void sdk.client.session.fork({ sessionID: match }).then((result) => {
+        if (result.data?.id) {
+          route.navigate({ type: "session", sessionID: result.data.id })
+          return
+        }
+        toast.show({ message: "Failed to fork session", variant: "error" })
+        route.navigate({ type: "home" })
+      })
+      return
+    }
+    route.navigate({ type: "session", sessionID: match })
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking

@@ -14,7 +14,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
-import { useRoute, useRouteData } from "@tui/context/route"
+import { CONTINUE_PLACEHOLDER_ID, useRoute, useRouteData } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
@@ -181,6 +181,9 @@ export function Session() {
   const sdk = useSDK()
 
   createEffect(async () => {
+    // Skip fetching while the route still holds the placeholder used by --continue.
+    // The continue effect in App() will replace this route with a real session or home.
+    if (route.sessionID === CONTINUE_PLACEHOLDER_ID) return
     const previousWorkspace = project.workspace.current()
     const result = await sdk.client.session.get({ sessionID: route.sessionID }, { throwOnError: true })
     if (!result.data) {
