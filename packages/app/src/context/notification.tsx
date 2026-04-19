@@ -6,6 +6,8 @@ import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
+import { shouldSuppressPageNotification } from "@/context/notification-policy"
+import { usePush } from "@/context/push"
 import { useSettings } from "@/context/settings"
 import { Binary } from "@opencode-ai/shared/util/binary"
 import { base64Encode } from "@opencode-ai/shared/util/encode"
@@ -112,6 +114,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
     const platform = usePlatform()
+    const push = usePush()
     const settings = useSettings()
     const language = useLanguage()
 
@@ -226,6 +229,15 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       return sessionID === activeSession
     }
 
+    const suppressPageNotification = () =>
+      shouldSuppressPageNotification({
+        focused: typeof document === "object" ? document.hasFocus() : true,
+        permission: push.current.permission as NotificationPermission | "unsupported",
+        subscribed: !!push.current.subscriptionID,
+        supportsPush: push.current.supported,
+        visible: typeof document === "object" ? document.visibilityState === "visible" : true,
+      })
+
     const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
       const sessionID = event.properties.sessionID
       void lookup(directory, sessionID).then((session) => {
@@ -233,7 +245,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (!session) return
         if (session.parentID) return
 
-        if (settings.sounds.agentEnabled()) {
+        const suppress = suppressPageNotification()
+
+        if (!suppress && settings.sounds.agentEnabled()) {
           void playSoundById(settings.sounds.agent())
         }
 
@@ -246,7 +260,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         })
 
         const href = `/${base64Encode(directory)}/session/${sessionID}`
-        if (settings.notifications.agent()) {
+        if (!suppress && settings.notifications.agent()) {
           void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, href)
         }
       })
@@ -262,7 +276,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (meta.disposed) return
         if (session?.parentID) return
 
-        if (settings.sounds.errorsEnabled()) {
+        const suppress = suppressPageNotification()
+
+        if (!suppress && settings.sounds.errorsEnabled()) {
           void playSoundById(settings.sounds.errors())
         }
 
@@ -279,7 +295,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           session?.title ??
           (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
         const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
-        if (settings.notifications.errors()) {
+        if (!suppress && settings.notifications.errors()) {
           void platform.notify(language.t("notification.session.error.title"), description, href)
         }
       })
