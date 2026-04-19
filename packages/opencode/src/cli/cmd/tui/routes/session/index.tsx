@@ -7,7 +7,6 @@ import {
   For,
   Match,
   on,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -1946,13 +1945,26 @@ function WebSearch(props: ToolProps<typeof WebSearchTool>) {
 function Task(props: ToolProps<typeof TaskTool>) {
   const { navigate } = useRoute()
   const sync = useSync()
+  const ctx = use()
 
-  onMount(() => {
-    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      void sync.session.sync(props.metadata.sessionId)
+  const childSessionId = createMemo(() => {
+    const id = props.metadata.sessionId
+    if (typeof id === "string" && id) return id
+    const description = props.input.description
+    const subagentType = props.input.subagent_type
+    return sync.data.session
+      .filter((s) => s.parentID === ctx.sessionID)
+      .filter((s) => !description || s.title.startsWith(String(description)))
+      .filter((s) => !subagentType || s.title.includes(`@${String(subagentType)}`))
+      .toSorted((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
   })
 
-  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+  createEffect(() => {
+    const id = childSessionId()
+    if (id && !sync.data.message[id]?.length) void sync.session.sync(id)
+  })
+
+  const messages = createMemo(() => sync.data.message[childSessionId() ?? ""] ?? [])
 
   const tools = createMemo(() => {
     return messages().flatMap((msg) =>
@@ -2003,8 +2015,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
       pending="Delegating..."
       part={props.part}
       onClick={() => {
-        if (props.metadata.sessionId) {
-          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        const id = childSessionId()
+        if (id) {
+          navigate({ type: "session", sessionID: id })
         }
       }}
     >
