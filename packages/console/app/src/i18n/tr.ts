@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Kurumsal",
   "nav.zen": "Zen",
   "nav.login": "Giriş",
-  "nav.free": "Ücretsiz",
+  "nav.free": "İndir",
   "nav.home": "Ana sayfa",
   "nav.openMenu": "Menüyü aç",
   "nav.getStartedFree": "Ücretsiz başla",
