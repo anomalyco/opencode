@@ -123,38 +123,14 @@ function startupShell() {
     window.setTimeout(hide, 140)
   }
 
-  const describe = (value: unknown) => {
-    if (value instanceof Error) return value.stack ?? `${value.name}: ${value.message}`
-    if (typeof value === "string") return value
-    try {
-      return JSON.stringify(value)
-    } catch {
-      return String(value)
-    }
-  }
-
   const onReady = () => complete()
   const onStartup = (event: Event) => {
     const next = event.type === "opencode:startup-ready" ? "signal.ready" : "signal.interactive"
     void profile(next)
   }
-  const onError = (event: Event) => {
-    if (state.hidden) return
-    const detail =
-      event instanceof ErrorEvent
-        ? describe(event.error ?? event.message)
-        : event instanceof PromiseRejectionEvent
-          ? describe(event.reason)
-          : "unknown startup error"
-    console.error("[desktop-startup] frontend startup failed", detail)
-    void profile("phase.crash", detail)
-    fail(detail)
-  }
   window.addEventListener(startupReadyEvent, onReady, { once: true })
   window.addEventListener("opencode:startup-ready", onStartup)
   window.addEventListener(startupReadyEvent, onStartup)
-  window.addEventListener("error", onError)
-  window.addEventListener("unhandledrejection", onError)
   retry.onclick = () => {
     retry.disabled = true
     void relaunch().finally(() => {
@@ -225,8 +201,6 @@ function startupShell() {
     window.removeEventListener(startupReadyEvent, onReady)
     window.removeEventListener("opencode:startup-ready", onStartup)
     window.removeEventListener(startupReadyEvent, onStartup)
-    window.removeEventListener("error", onError)
-    window.removeEventListener("unhandledrejection", onError)
     app.classList.add("is-ready")
     root.dataset.phase = "ready"
     root.classList.add("is-hidden")

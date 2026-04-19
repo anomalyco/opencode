@@ -89,7 +89,6 @@ function createGlobalSync() {
   const bump = (directory: string, why: string) => {
     const next = rev(directory) + 1
     revs.set(directory, next)
-    console.debug(`[global-sync] bump rev dir=${directory} rev=${next} why=${why}`)
     return next
   }
   const blankRoot = () => ({
@@ -341,10 +340,7 @@ function createGlobalSync() {
     const raw = child[1] as (...args: unknown[]) => unknown
     const store = child[0]
     const setStore = ((...input: unknown[]) => {
-      if (rev(directory) !== mark || children.children[directory] !== child) {
-        console.debug(`[global-sync] skip stale load write dir=${directory} rev=${mark}`)
-        return input[0]
-      }
+      if (rev(directory) !== mark || children.children[directory] !== child) return input[0]
       return raw(...input)
     }) as typeof child[1]
     trace("loadSessions.start", {
@@ -473,10 +469,7 @@ function createGlobalSync() {
       const mark = rev(directory)
       const raw = child[1] as (...args: unknown[]) => unknown
       const setStore = ((...input: unknown[]) => {
-        if (rev(directory) !== mark || children.children[directory] !== child) {
-          console.debug(`[global-sync] skip stale boot write dir=${directory} rev=${mark}`)
-          return input[0]
-        }
+        if (rev(directory) !== mark || children.children[directory] !== child) return input[0]
         return raw(...input)
       }) as typeof child[1]
       const cache = children.vcsCache.get(directory)

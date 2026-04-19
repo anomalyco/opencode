@@ -15,35 +15,6 @@ import {
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 
-const snap = (value: unknown) => {
-  if (Array.isArray(value)) {
-    return {
-      kind: "array",
-      size: value.length,
-      ids: value.slice(0, 3).map((item) => {
-        if (!item || typeof item !== "object") return undefined
-        if (!("id" in item)) return undefined
-        return String((item as { id?: unknown }).id ?? "")
-      }),
-      types: value.slice(0, 3).map((item) => {
-        if (!item || typeof item !== "object") return undefined
-        if (!("type" in item)) return undefined
-        return String((item as { type?: unknown }).type ?? "")
-      }),
-    }
-  }
-  if (typeof value === "function") return { kind: "fn" }
-  if (value && typeof value === "object") {
-    return {
-      kind: "object",
-      keys: Object.keys(value as Record<string, unknown>).slice(0, 6),
-    }
-  }
-  return value
-}
-
-const dump = (input: unknown[]) => input.slice(0, 3).map(snap)
-
 export function createChildStoreManager(input: {
   owner: Owner
   isBooting: (directory: string) => boolean
@@ -146,9 +117,6 @@ export function createChildStoreManager(input: {
       return false
     }
 
-    console.debug(
-      `[child-store] dispose dir=${directory} pin=${pins.get(directory) ?? 0} boot=${input.isBooting(directory) ? 1 : 0} load=${input.isLoadingSessions(directory) ? 1 : 0}`,
-    )
     vcsCache.delete(directory)
     metaCache.delete(directory)
     iconCache.delete(directory)
@@ -216,37 +184,8 @@ export function createChildStoreManager(input: {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
           const child = createStore<State>(seed({ meta: initialMeta, icon: initialIcon, vcs: vcsStore.value }))
-          const raw = child[1] as (...args: unknown[]) => unknown
-          const set = ((...args: unknown[]) => {
-            if (args[0] === "part") {
-              const msg = typeof args[1] === "string" ? args[1] : "?"
-              console.debug(
-                `[child-store] part dir=${directory} msg=${msg} alive=${!!children[directory]} same=${children[directory]?.[1] === set ? 1 : 0} value=${JSON.stringify(snap(args[2]))}`,
-              )
-            }
-            try {
-              return raw(...args)
-            } catch (err) {
-              console.error("[child-store] set failed", {
-                directory,
-                alive: !!children[directory],
-                same: children[directory]?.[1] === set,
-                state: {
-                  status: child[0].status,
-                  sessions: child[0].sessions,
-                  path: child[0].path.directory,
-                  part: Object.keys(child[0].part).slice(0, 5),
-                  message: Object.keys(child[0].message).slice(0, 5),
-                },
-                args: dump(args),
-                err,
-              })
-              throw err
-            }
-          }) as typeof child[1]
-          children[directory] = [child[0], set]
+          children[directory] = child
           disposers.set(directory, dispose)
-          console.debug(`[child-store] create dir=${directory}`)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -335,7 +274,6 @@ export function createChildStoreManager(input: {
     const meta = metaCache.get(directory)?.store.value
     const icon = iconCache.get(directory)?.store.value
     // Preserve local persisted project metadata while wiping server-derived state.
-    console.debug(`[child-store] reset dir=${directory}`)
     child[1](reconcile(seed({ meta, icon, vcs })))
   }
 

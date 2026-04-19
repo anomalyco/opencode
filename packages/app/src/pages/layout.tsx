@@ -702,31 +702,9 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    const dir = routeDir()
-    const page = pageReady()
-    const layout = layoutReady()
-    const selecting = autoselecting.loading
-    const child = dir ? globalSync.child(dir, { bootstrap: false })[0] : undefined
-    console.debug("[layout] startup gate", {
-      page,
-      layout,
-      selecting,
-      dir,
-      path: child?.path.directory,
-      status: child?.status,
-      sessions: child?.sessions,
-      sessionCount: child?.session.length,
-      startup: startup(),
-    })
-  })
-
-  createEffect(() => {
     if (booted) return
     if (!startup()) return
     booted = true
-    console.debug("[layout] startup interactive", {
-      dir: routeDir(),
-    })
     queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-interactive")))
   })
 
