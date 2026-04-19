@@ -572,6 +572,7 @@ export function Markdown(
     class?: string
     classList?: Record<string, boolean>
     streaming?: boolean
+    instant?: boolean
     highlight?: "full" | "defer"
     chunked?: boolean
     math?: "full" | "defer"
@@ -585,6 +586,7 @@ export function Markdown(
     "class",
     "classList",
     "streaming",
+    "instant",
     "highlight",
     "chunked",
     "math",
@@ -665,7 +667,7 @@ export function Markdown(
       }
       return safe
     },
-    { initialValue: fallback(local.text) },
+    { initialValue: isServer || local.instant ? fallback(local.text) : "" },
   )
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined

@@ -59,7 +59,7 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
-import { streamsplit } from "./message-part-stream"
+import { hold } from "./message-part-stream"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1565,7 +1565,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const text = renderText()
     if (!text) return { head: "", tail: "" }
     if (!streaming() || !isLastTextPart()) return { head: text, tail: "" }
-    return streamsplit(text)
+    return hold(text)
   })
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
@@ -1592,6 +1592,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             <Markdown
               text={block().head}
               cacheKey={`${part.id}:head`}
+              instant={streaming()}
               eager={props.markdownEager}
               viewport={props.markdownViewport}
               highlight={props.markdownHighlight}
@@ -1603,6 +1604,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
               text={block().tail}
               cacheKey={`${part.id}:tail`}
               streaming
+              instant
               eager={props.markdownEager}
               viewport={props.markdownViewport}
               highlight={props.markdownHighlight}
