@@ -50,6 +50,13 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const SessionListLimit = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1),
+  Schema.isLessThanOrEqualTo(10000),
+).annotate({
+  description: "Maximum number of sessions to display in session list when not searching (default: 150)",
+})
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -63,6 +70,7 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  session_list_limit: Schema.optional(SessionListLimit),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 

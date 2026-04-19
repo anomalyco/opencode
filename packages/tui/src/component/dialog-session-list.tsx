@@ -17,6 +17,8 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
+import { sessionList } from "../util/session-list"
+import { useTuiConfig } from "../config"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -27,6 +29,7 @@ export function DialogSessionList() {
   const sdk = useSDK()
   const local = useLocal()
   const toast = useToast()
+  const tui = useTuiConfig()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
@@ -43,7 +46,13 @@ export function DialogSessionList() {
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const currentRootSessionID = createMemo(() => {
+    const current = currentSessionID()
+    if (!current) return undefined
+    return sync.session.get(current)?.parentID ?? current
+  })
+  const isSearching = createMemo(() => search().length > 0)
+  const sessions = createMemo(() => (isSearching() ? (searchResults() ?? []) : sync.data.session))
 
   function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
     const workspace = project.workspace.get(session.workspaceID!)
@@ -153,16 +162,20 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionMap = new Map(
-      sessions()
-        .filter((x) => x.parentID === undefined)
-        .map((x) => [x.id, x]),
+    const pinnedIDs = [...new Set(local.session.pinned())]
+    const limitedSessions = sessionList(
+      sessions(),
+      tui.session_list_limit ?? 150,
+      currentRootSessionID(),
+      isSearching(),
+      pinnedIDs,
     )
+    const sessionMap = new Map(limitedSessions.map((x) => [x.id, x]))
 
     const searchResult = searchResults()
     const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
 
-    const pinned = local.session.pinned().filter((id) => sessionMap.has(id))
+    const pinned = pinnedIDs.filter((id) => sessionMap.has(id))
     const pinnedSet = new Set(pinned)
     const slotByID = new Map<string, number>(local.session.slots().map((id, i) => [id, i + 1]))
 
@@ -218,7 +231,7 @@ export function DialogSessionList() {
       title="Sessions"
       options={options()}
       skipFilter={true}
-      current={currentSessionID()}
+      current={currentRootSessionID()}
       onFilter={setSearch}
       onMove={() => {
         setToDelete(undefined)
