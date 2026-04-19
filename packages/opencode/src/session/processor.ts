@@ -370,8 +370,10 @@ export namespace SessionProcessor {
                 if (!parsed) break
                 const modelID = ctx.model.id
                 if (parsed.kind === "message_start") {
-                  liveInputTokens = { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite }
-                  const contextLimit = getContextLimit(modelID, false)
+                   liveInputTokens = { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite }
+                   // Use OpenCode's canonical model.limit.context — already accounts for context-1m beta and
+                   // per-model overrides. getContextLimit() is a fallback when model.limit is absent.
+                   const contextLimit = ctx.model.limit?.context ?? getContextLimit(modelID, false)
                   const ctxUtil = computeContextUtilization(
                     { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite },
                     contextLimit,
@@ -405,12 +407,12 @@ export namespace SessionProcessor {
                     out: 0,
                   })
                 } else if (parsed.kind === "message_delta") {
-                  const { input, cacheRead, cacheWrite } = liveInputTokens
-                  const cost = computeUsageCost(
-                    { input, output: parsed.output, cacheRead, cacheWrite },
-                    getModelPricing(modelID),
-                  )
-                  const contextLimit = getContextLimit(modelID, false)
+                   const { input, cacheRead, cacheWrite } = liveInputTokens
+                   const cost = computeUsageCost(
+                     { input, output: parsed.output, cacheRead, cacheWrite },
+                     getModelPricing(modelID),
+                   )
+                   const contextLimit = ctx.model.limit?.context ?? getContextLimit(modelID, false)
                   const ctxUtil = computeContextUtilization({ input, cacheRead, cacheWrite }, contextLimit)
                   const cacheHitPct = computeCacheHitRate({ input, cacheRead, cacheWrite })
                   const payload = MessageV2.buildLiveTokenEvent({
