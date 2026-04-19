@@ -1,11 +1,9 @@
 import type { Message, Part, ProviderListResponse, Session } from "@opencode-ai/sdk/v2/client"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Markdown } from "@opencode-ai/ui/markdown"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo, For, Show } from "solid-js"
+import { batch, createEffect, createMemo, Show } from "solid-js"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -20,7 +18,9 @@ import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
 import { formatServerError } from "@/utils/server-errors"
-import { context, mergeMessages, prompt, render } from "./quick-assistant-helpers"
+import { context, mergeMessages, prompt } from "./helpers"
+import { QuickAssistantInput } from "./input"
+import { QuickAssistantMessages } from "./messages"
 
 function errorName(err: unknown) {
   if (!err || typeof err !== "object") return undefined
@@ -338,8 +338,22 @@ export function QuickAssistant() {
     return created.id
   }
 
+  const open = () => {
+    console.debug("[quick-assistant] panel opened")
+    setSaved("open", true)
+  }
+
+  const close = () => {
+    console.debug("[quick-assistant] panel closed")
+    setSaved("open", false)
+  }
+
   const toggle = () => {
-    setSaved("open", !saved.open)
+    if (saved.open) {
+      close()
+      return
+    }
+    open()
   }
 
   const toggleContext = () => {
@@ -590,7 +604,7 @@ export function QuickAssistant() {
             "bg-background-stronger/92 backdrop-blur-xl": !win(),
             "bg-surface-raised-stronger-non-alpha": win(),
           }}
-          onClick={() => setSaved("open", true)}
+          onClick={open}
         >
           <Icon name="bubble-5" class="size-4 text-icon-base" />
           <span class="text-12-medium text-text-strong">Assistant</span>
@@ -613,112 +627,23 @@ export function QuickAssistant() {
           }}
         >
           <div class="flex flex-col">
-            <div class="flex items-end gap-3 px-4 py-4">
-              <textarea
-                ref={input}
-                rows={3}
-                value={state.text}
-                placeholder="Ask about the current OpenCode session or a quick task..."
-                class="min-h-18 flex-1 resize-none bg-transparent text-14-regular text-text-strong outline-none placeholder:text-text-weaker"
-                onInput={(event) => setState("text", event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault()
-                    setSaved("open", false)
-                    return
-                  }
-                  if (event.key !== "Enter" || event.shiftKey) return
-                  event.preventDefault()
-                  if (busy()) {
-                    void reset()
-                    return
-                  }
-                  void submit()
-                }}
-              />
-              <div class="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  class="flex size-10 items-center justify-center rounded-full border border-border-weak-base bg-background-base text-text-strong shadow-xs-border transition-colors hover:border-border-strong-base hover:bg-surface-base-hover active:bg-surface-base-active"
-                  onClick={() => void reset()}
-                  aria-label={sessionID() || list().length > 0 ? "Clear assistant" : "New assistant"}
-                  title={sessionID() || list().length > 0 ? "Clear" : "New"}
-                >
-                  <Icon name="new-session" class="size-4.5" />
-                </button>
-                <button
-                  type="button"
-                  class="flex size-10 items-center justify-center rounded-full border border-border-weak-base bg-background-base text-text-strong shadow-xs-border transition-colors"
-                  classList={{
-                    "border-border-success-base bg-surface-success-base text-text-on-success-base hover:border-border-success-hover active:border-border-success-selected":
-                      saved.context,
-                    "text-text-weaker hover:border-border-strong-base hover:bg-surface-base-hover hover:text-text-strong active:bg-surface-base-active":
-                      !saved.context,
-                  }}
-                  onClick={toggleContext}
-                  aria-pressed={saved.context}
-                  aria-label={saved.context ? "Disable current session context" : "Enable current session context"}
-                  title={saved.context ? "Current session context on" : "Current session context off"}
-                >
-                  <Icon name="link" class="size-4.5" />
-                </button>
-                <IconButton
-                  type="button"
-                  icon={busy() ? "stop" : "arrow-up-bold"}
-                  variant="primary"
-                  iconSize={busy() ? "normal" : "medium"}
-                  class="size-10 rounded-full shadow-xs-border disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!busy() && (state.loading || !root() || !state.text.trim())}
-                  onClick={() => {
-                    if (busy()) {
-                      void reset()
-                      return
-                    }
-                    void submit()
-                  }}
-                  aria-label={busy() ? "Stop" : "Send"}
-                  title={busy() ? "Stop" : "Send"}
-                />
-              </div>
-            </div>
-
-            <Show when={list().length > 0}>
-              <div class="max-h-[48vh] overflow-y-auto border-t border-border-weak-base bg-background-base/20 px-4 py-4">
-                <div class="flex flex-col gap-3">
-                  <For each={list()}>
-                    {(item) => {
-                      const text = createMemo(() => render(data()?.part[item.id]))
-                      return (
-                        <div
-                          data-component="quick-assistant-message"
-                          data-role={item.role}
-                          classList={{
-                            "px-3.5 py-3": true,
-                            "ml-10 rounded-[18px] border border-border-weak-base bg-surface-panel":
-                              item.role === "user",
-                            "mr-10 rounded-[20px] border border-border-weaker-base bg-background-stronger":
-                              item.role === "assistant",
-                          }}
-                        >
-                          <Show
-                            when={item.role === "assistant"}
-                            fallback={
-                              <div class="whitespace-pre-wrap break-words text-[15px] leading-7 text-text-strong">
-                                {text()}
-                              </div>
-                            }
-                          >
-                            <div class="quick-assistant-markdown text-[15px] leading-7 text-text-base">
-                              <Markdown text={text() || (busy() ? "Thinking..." : "")} math="defer" />
-                            </div>
-                          </Show>
-                        </div>
-                      )
-                    }}
-                  </For>
-                </div>
-              </div>
-            </Show>
+            <QuickAssistantInput
+              setRef={(next) => {
+                input = next
+              }}
+              text={state.text}
+              busy={busy()}
+              loading={state.loading}
+              ready={!!root()}
+              clear={!!sessionID() || list().length > 0}
+              context={saved.context}
+              onText={(next) => setState("text", next)}
+              onClose={close}
+              onReset={() => void reset()}
+              onContext={toggleContext}
+              onSend={() => void submit()}
+            />
+            <QuickAssistantMessages list={list()} parts={data()?.part} busy={busy()} />
           </div>
         </div>
       </Show>
