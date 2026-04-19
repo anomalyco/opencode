@@ -175,6 +175,7 @@
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
+    "@whyops/sdk": "latest",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
   },

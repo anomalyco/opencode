@@ -24,6 +24,7 @@ import { InstallationVersion } from "@/installation/version"
 import { EffectBridge } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { WhyOps } from "@/whyops"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -59,7 +60,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service
+  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | WhyOps.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -68,6 +69,7 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    const whyops = yield* WhyOps.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -422,7 +424,71 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            return Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
+            const base = Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
+
+            if (!whyops.enabled) return base
+
+            const trace = whyops.trace(input.sessionID)
+            const startMs = Date.now()
+            const toolSpans = new Map<string, { spanId: string; startMs: number; args: unknown[] }>()
+            let responseText = ""
+
+            // Emit user message at stream start
+            void trace.userMessage(input.messages, {
+              metadata: { systemPrompt: input.system.join("\n") },
+            })
+
+            return base.pipe(
+              Stream.tap((event) =>
+                Effect.sync(() => {
+                  if (event.type === "text-delta") {
+                    responseText += event.text
+                  } else if (event.type === "tool-call") {
+                    const args = [{ name: event.toolName, arguments: event.input }]
+                    void trace
+                      .toolCallRequest(event.toolName, args)
+                      .then((spanId) => {
+                        toolSpans.set(event.toolCallId, { spanId, startMs: Date.now(), args })
+                      })
+                  } else if (event.type === "tool-result") {
+                    const span = toolSpans.get(event.toolCallId)
+                    if (span) {
+                      void trace.toolCallResponse(
+                        event.toolName,
+                        span.spanId,
+                        span.args,
+                        event.output,
+                        { latencyMs: Date.now() - span.startMs },
+                      )
+                      toolSpans.delete(event.toolCallId)
+                    }
+                  } else if (event.type === "finish") {
+                    const usage = event.totalUsage
+                    void trace.llmResponse(
+                      input.model.id,
+                      input.model.providerID,
+                      responseText,
+                      {
+                        finishReason: event.finishReason,
+                        latencyMs: Date.now() - startMs,
+                        usage: usage
+                          ? {
+                              promptTokens: usage.inputTokens,
+                              completionTokens: usage.outputTokens,
+                              totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+                            }
+                          : undefined,
+                      },
+                    )
+                  } else if (event.type === "error") {
+                    const err = event.error
+                    void trace.error(err instanceof Error ? err.message : String(err), {
+                      stack: err instanceof Error ? err.stack : undefined,
+                    })
+                  }
+                }),
+              ),
+            )
           }),
         ),
       )
@@ -439,6 +505,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(WhyOps.defaultLayer),
   ),
 )
 

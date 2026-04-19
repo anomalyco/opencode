@@ -225,6 +225,18 @@ const InfoSchema = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      whyops: Schema.optional(
+        Schema.Struct({
+          apiKey: Schema.optional(Schema.String).annotate({
+            description: "WhyOps API key for agent observability and tracing",
+          }),
+          agentName: Schema.optional(Schema.String).annotate({
+            description: "Agent name to register with WhyOps (defaults to 'opencode')",
+          }),
+        }),
+      ).annotate({
+        description: "WhyOps observability integration for tracing AI agent sessions",
+      }),
     }),
   ),
 })
