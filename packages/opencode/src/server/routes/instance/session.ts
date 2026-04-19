@@ -942,6 +942,13 @@ export const SessionRoutes = lazy(() =>
             error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
           })
         })
+        void runRequest(
+          "SessionRoutes.prompt_async_title",
+          c,
+          SessionPrompt.Service.use((svc) => svc.ensureTitle(sessionID)),
+        ).catch((err) => {
+          log.error("prompt_async title failed", { sessionID, error: err })
+        })
 
         return c.body(null, 204)
       },
