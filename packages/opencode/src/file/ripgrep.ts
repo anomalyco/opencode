@@ -248,7 +248,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
       }, Effect.scoped)
 
       const extract = Effect.fnUntraced(function* (archive: string, config: (typeof PLATFORM)[keyof typeof PLATFORM]) {
-        const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
+        const dir = yield* fs.makeTempDirectory({ directory: Global.Path.bin, prefix: "ripgrep-" })
 
         if (config.extension === "zip") {
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
@@ -260,6 +260,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
             dir,
           ])
           if (result.code !== 0) {
+            yield* fs.remove(dir, { force: true, recursive: true }).pipe(Effect.ignore)
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
           }
         }
@@ -267,12 +268,13 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
         if (config.extension === "tar.gz") {
           const result = yield* run("tar", ["-xzf", archive, "-C", dir])
           if (result.code !== 0) {
+            yield* fs.remove(dir, { force: true, recursive: true }).pipe(Effect.ignore)
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
           }
         }
 
-        return path.join(dir, `ripgrep-${VERSION}-${config.platform}`, process.platform === "win32" ? "rg.exe" : "rg")
-      }, Effect.scoped)
+        return { executable: path.join(dir, `ripgrep-${VERSION}-${config.platform}`, process.platform === "win32" ? "rg.exe" : "rg"), tempDir: dir }
+      })
 
       const filepath = yield* Effect.cached(
         Effect.gen(function* () {
@@ -305,13 +307,15 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
           }
 
           yield* fs.writeWithDirs(archive, new Uint8Array(bytes)).pipe(Effect.orDie)
-          const extracted = yield* extract(archive, config)
+          const { executable: extracted, tempDir } = yield* extract(archive, config)
           const exists = yield* fs.exists(extracted).pipe(Effect.orDie)
           if (!exists) {
+            yield* fs.remove(tempDir, { force: true, recursive: true }).pipe(Effect.ignore)
             return yield* Effect.fail(new Error(`ripgrep archive did not contain executable: ${extracted}`))
           }
 
           yield* fs.copyFile(extracted, target).pipe(Effect.orDie)
+          yield* fs.remove(tempDir, { force: true, recursive: true }).pipe(Effect.ignore)
           if (process.platform !== "win32") {
             yield* fs.chmod(target, 0o755).pipe(Effect.orDie)
           }
