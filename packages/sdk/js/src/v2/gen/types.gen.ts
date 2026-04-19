@@ -1171,11 +1171,13 @@ export type PushPublicKey = {
 
 export type PushSubscription = {
   id: string
+  deviceLabel?: string
   endpoint: string
   expirationTime?: number | null
   enabled: boolean
   notifyOnCompletion: boolean
   notifyOnError: boolean
+  serverOrigin: string
   userAgent?: string
   time: {
     created: number
@@ -2264,6 +2266,7 @@ export type GlobalListPushSubscriptionsResponse =
 
 export type GlobalUpsertPushSubscriptionData = {
   body?: {
+    deviceLabel?: string
     endpoint: string
     expirationTime?: number | null
     keys: {
@@ -2273,6 +2276,7 @@ export type GlobalUpsertPushSubscriptionData = {
     enabled?: boolean
     notifyOnCompletion?: boolean
     notifyOnError?: boolean
+    serverOrigin: string
     userAgent?: string
   }
   path?: never

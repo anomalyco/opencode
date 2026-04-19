@@ -8,6 +8,17 @@ import { NOTIFICATION_PERMISSION_GRANTED_EVENT } from "@/utils/notification-clic
 
 type PermissionState = NotificationPermission | "unsupported"
 
+function suggestedLabel() {
+  const agent = typeof navigator === "object" ? navigator.userAgent : ""
+  if (/Android/i.test(agent) && /Chrome/i.test(agent)) return "Android Chrome"
+  if (/Android/i.test(agent)) return "Android browser"
+  if (/(iPhone|iPad|iPod)/i.test(agent) && /Safari/i.test(agent)) return "iPhone Safari"
+  if (/Chrome/i.test(agent)) return "Chrome"
+  if (/Safari/i.test(agent)) return "Safari"
+  if (/Firefox/i.test(agent)) return "Firefox"
+  return "This browser"
+}
+
 function serverKey(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
@@ -34,11 +45,13 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
     }
 
     const [store, setStore] = createStore({
+      deviceLabel: suggestedLabel(),
       enabled: false,
       error: undefined as string | undefined,
       permission: permission(),
       publicKey: undefined as string | undefined,
       registered: false,
+      serverOrigin: typeof location === "object" ? location.origin : "",
       subscriptionID: undefined as string | undefined,
       subscribed: false,
       supported,
@@ -56,6 +69,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         requestPermission() {
           return Promise.resolve("unsupported" as const)
         },
+        setDeviceLabel() {},
         test() {
           return Promise.resolve(false)
         },
@@ -66,8 +80,22 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined
+    let labelTimer: ReturnType<typeof setTimeout> | undefined
     let registrationPromise: Promise<ServiceWorkerRegistration | undefined> | undefined
     let syncing: Promise<void> | undefined
+
+    const remember = (item?: {
+      id: string
+      deviceLabel?: string
+      serverOrigin: string
+    }) => {
+      if (!item) return
+      setStore("subscriptionID", item.id)
+      setStore("serverOrigin", item.serverOrigin)
+      if (item.deviceLabel && (store.deviceLabel === suggestedLabel() || !store.deviceLabel.trim())) {
+        setStore("deviceLabel", item.deviceLabel)
+      }
+    }
 
     const wantsPush = () => settings.notifications.agent() || settings.notifications.errors()
 
@@ -93,7 +121,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       const response = await globalSDK.client.global.listPushSubscriptions().catch(() => undefined)
       const match = response?.data?.find((item) => item.endpoint === subscription.endpoint)
       if (!match?.id) return
-      setStore("subscriptionID", match.id)
+      remember(match)
       return match.id
     }
 
@@ -150,6 +178,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           const json = subscription.toJSON()
           if (!json.endpoint || !json.keys?.auth || !json.keys?.p256dh) return
           const result = await globalSDK.client.global.upsertPushSubscription({
+            deviceLabel: store.deviceLabel.trim() || undefined,
             endpoint: json.endpoint,
             expirationTime: json.expirationTime ?? null,
             keys: {
@@ -159,11 +188,10 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
             enabled,
             notifyOnCompletion: settings.notifications.agent(),
             notifyOnError: settings.notifications.errors(),
+            serverOrigin: store.serverOrigin,
             userAgent: navigator.userAgent,
           })
-          if (result.data?.id) {
-            setStore("subscriptionID", result.data.id)
-          }
+          remember(result.data)
           setStore("error", undefined)
         } finally {
           setStore("syncing", false)
@@ -198,12 +226,23 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       }
       const removed = subscription ? await subscription.unsubscribe().catch(() => false) : true
       setStore({
+        deviceLabel: store.deviceLabel,
         enabled: false,
         error: undefined,
+        serverOrigin: store.serverOrigin,
         subscriptionID: undefined,
         subscribed: false,
       })
       return removed
+    }
+
+    const setDeviceLabel = (value: string) => {
+      setStore("deviceLabel", value)
+      if (labelTimer) clearTimeout(labelTimer)
+      labelTimer = setTimeout(() => {
+        labelTimer = undefined
+        void sync()
+      }, 500)
     }
 
     const test = async () => {
@@ -234,6 +273,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       schedule()
       onCleanup(() => {
         if (timer) clearTimeout(timer)
+        if (labelTimer) clearTimeout(labelTimer)
         window.removeEventListener(NOTIFICATION_PERMISSION_GRANTED_EVENT, onPermissionGranted as EventListener)
         document.removeEventListener("visibilitychange", onVisibility)
       })
@@ -244,6 +284,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         return store
       },
       requestPermission,
+      setDeviceLabel,
       sync,
       test,
       unsubscribe,

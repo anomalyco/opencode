@@ -6,6 +6,8 @@ export const PushSubscriptionTable = sqliteTable("push_subscription", {
   endpoint: text().notNull(),
   p256dh: text().notNull(),
   auth: text().notNull(),
+  server_origin: text().notNull(),
+  device_label: text(),
   expiration_time: integer(),
   enabled: integer({ mode: "boolean" })
     .notNull()
@@ -17,6 +19,9 @@ export const PushSubscriptionTable = sqliteTable("push_subscription", {
     .notNull()
     .$default(() => false),
   user_agent: text(),
+  failure_count: integer().notNull().$default(() => 0),
   last_error: text(),
+  last_success_at: integer(),
+  last_failure_at: integer(),
   ...Timestamps,
 })

@@ -573,6 +573,9 @@ export const SettingsGeneral: Component = () => {
             <span class="flex flex-col gap-0.5">
               <span>{language.t("settings.general.notifications.push.description")}</span>
               <span>{pushStatus()}</span>
+              <Show when={push.current.serverOrigin}>
+                {(origin) => <span>{language.t("settings.general.notifications.push.origin", { origin: origin() })}</span>}
+              </Show>
             </span>
           }
         >
@@ -613,6 +616,28 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.notifications.errors()}
               onChange={(checked) => settings.notifications.setErrors(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.notifications.push.device.title")}
+          description={language.t("settings.general.notifications.push.device.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-notifications-push-device"
+              label={language.t("settings.general.notifications.push.device.title")}
+              hideLabel
+              type="text"
+              value={push.current.deviceLabel}
+              onChange={(value) => push.setDeviceLabel(value)}
+              placeholder={language.t("settings.general.notifications.push.device.placeholder")}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="words"
+              class="text-12-regular"
             />
           </div>
         </SettingsRow>

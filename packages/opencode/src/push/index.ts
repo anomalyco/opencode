@@ -28,11 +28,13 @@ export const PublicKey = z
 export const Subscription = z
   .object({
     id: z.string(),
+    deviceLabel: z.string().optional(),
     endpoint: z.string(),
     expirationTime: z.number().nullable().optional(),
     enabled: z.boolean(),
     notifyOnCompletion: z.boolean(),
     notifyOnError: z.boolean(),
+    serverOrigin: z.string(),
     userAgent: z.string().optional(),
     time: z.object({
       created: z.number(),
@@ -42,6 +44,7 @@ export const Subscription = z
   .meta({ ref: "PushSubscription" })
 
 export const SubscriptionUpsert = z.object({
+  deviceLabel: z.string().trim().max(120).optional(),
   endpoint: z.string().url(),
   expirationTime: z.number().nullable().optional(),
   keys: z.object({
@@ -51,6 +54,7 @@ export const SubscriptionUpsert = z.object({
   enabled: z.boolean().optional(),
   notifyOnCompletion: z.boolean().optional(),
   notifyOnError: z.boolean().optional(),
+  serverOrigin: z.string().url(),
   userAgent: z.string().optional(),
 })
 
@@ -113,11 +117,13 @@ function ensureConfigured() {
 function fromRow(row: typeof PushSubscriptionTable.$inferSelect) {
   return {
     id: row.id,
+    deviceLabel: row.device_label ?? undefined,
     endpoint: row.endpoint,
     expirationTime: row.expiration_time ?? undefined,
     enabled: row.enabled,
     notifyOnCompletion: row.notify_on_completion,
     notifyOnError: row.notify_on_error,
+    serverOrigin: row.server_origin,
     userAgent: row.user_agent ?? undefined,
     time: {
       created: row.time_created,
@@ -229,11 +235,15 @@ function remove(id: string) {
 }
 
 function fail(id: string, error: unknown) {
+  const current = Database.use((db) => db.select().from(PushSubscriptionTable).where(eq(PushSubscriptionTable.id, id)).get())
+  if (!current) return
   Database.use((db) => {
     db
       .update(PushSubscriptionTable)
       .set({
+        failure_count: current.failure_count + 1,
         last_error: error instanceof Error ? error.message : String(error),
+        last_failure_at: Date.now(),
         time_updated: Date.now(),
       })
       .where(eq(PushSubscriptionTable.id, id))
@@ -256,6 +266,18 @@ async function send(row: typeof PushSubscriptionTable.$inferSelect, notification
       },
       JSON.stringify(notification),
     )
+    Database.use((db) => {
+      db
+        .update(PushSubscriptionTable)
+        .set({
+          failure_count: 0,
+          last_error: null,
+          last_success_at: Date.now(),
+          time_updated: Date.now(),
+        })
+        .where(eq(PushSubscriptionTable.id, row.id))
+        .run()
+    })
     return true
   } catch (error) {
     const status = typeof error === "object" && error && "statusCode" in error ? error.statusCode : undefined
@@ -323,6 +345,7 @@ export function upsert(input: z.output<typeof SubscriptionUpsert>) {
       db
         .update(PushSubscriptionTable)
         .set({
+          device_label: input.deviceLabel,
           endpoint: input.endpoint,
           p256dh: input.keys.p256dh,
           auth: input.keys.auth,
@@ -330,6 +353,7 @@ export function upsert(input: z.output<typeof SubscriptionUpsert>) {
           enabled: input.enabled ?? true,
           notify_on_completion: input.notifyOnCompletion ?? true,
           notify_on_error: input.notifyOnError ?? false,
+          server_origin: input.serverOrigin,
           user_agent: input.userAgent,
           last_error: null,
           time_updated: Date.now(),
@@ -347,6 +371,7 @@ export function upsert(input: z.output<typeof SubscriptionUpsert>) {
   Database.use((db) => {
     db.insert(PushSubscriptionTable).values({
       id,
+      device_label: input.deviceLabel,
       endpoint: input.endpoint,
       p256dh: input.keys.p256dh,
       auth: input.keys.auth,
@@ -354,7 +379,9 @@ export function upsert(input: z.output<typeof SubscriptionUpsert>) {
       enabled: input.enabled ?? true,
       notify_on_completion: input.notifyOnCompletion ?? true,
       notify_on_error: input.notifyOnError ?? false,
+      server_origin: input.serverOrigin,
       user_agent: input.userAgent,
+      failure_count: 0,
       last_error: null,
     }).run()
   })

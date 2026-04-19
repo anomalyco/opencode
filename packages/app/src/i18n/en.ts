@@ -834,6 +834,7 @@ export const dict = {
   "settings.general.notifications.push.title": "Mobile push",
   "settings.general.notifications.push.description":
     "Uses service worker + Web Push so Android can notify you even when the page is backgrounded.",
+  "settings.general.notifications.push.origin": "Push origin: {{origin}}",
   "settings.general.notifications.push.status.unsupported": "This browser does not support background push.",
   "settings.general.notifications.push.status.unconfigured": "Server Web Push keys are not configured yet.",
   "settings.general.notifications.push.status.permission":
@@ -848,6 +849,10 @@ export const dict = {
     "Browser permission is granted, but this device is not subscribed yet.",
   "settings.general.notifications.push.test.title": "Test notification",
   "settings.general.notifications.push.test.description": "Send a test push to this device through the service worker.",
+  "settings.general.notifications.push.device.title": "Device label",
+  "settings.general.notifications.push.device.description":
+    "Optional label for this browser, so you can recognize which phone or browser is subscribed.",
+  "settings.general.notifications.push.device.placeholder": "Android Chrome",
   "settings.general.notifications.push.unsubscribe.title": "Remove this device",
   "settings.general.notifications.push.unsubscribe.description":
     "Unsubscribe this browser from server-side Web Push delivery.",

@@ -345,6 +345,7 @@ export class Global extends HeyApiClient {
    */
   public upsertPushSubscription<ThrowOnError extends boolean = false>(
     parameters?: {
+      deviceLabel?: string
       endpoint?: string
       expirationTime?: number | null
       keys?: {
@@ -354,6 +355,7 @@ export class Global extends HeyApiClient {
       enabled?: boolean
       notifyOnCompletion?: boolean
       notifyOnError?: boolean
+      serverOrigin?: string
       userAgent?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -363,12 +365,14 @@ export class Global extends HeyApiClient {
       [
         {
           args: [
+            { in: "body", key: "deviceLabel" },
             { in: "body", key: "endpoint" },
             { in: "body", key: "expirationTime" },
             { in: "body", key: "keys" },
             { in: "body", key: "enabled" },
             { in: "body", key: "notifyOnCompletion" },
             { in: "body", key: "notifyOnError" },
+            { in: "body", key: "serverOrigin" },
             { in: "body", key: "userAgent" },
           ],
         },
