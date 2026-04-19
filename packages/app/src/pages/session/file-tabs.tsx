@@ -461,7 +461,7 @@ export function FileTabContent(props: { tab: string }) {
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Show when={state()?.loaded && isMarkdown() && state()?.content?.type !== "binary"}>
-          <div class="sticky top-0 z-10 flex items-center gap-1 bg-surface-base px-4 py-1.5 border-b border-border-base">
+          <div class="sticky top-0 z-10 flex items-center gap-1 bg-background-base px-4 py-1.5 border-b border-border-base">
             <button
               class={"px-2 py-0.5 rounded text-sm " + (preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
               onClick={() => setPreview(true)}
