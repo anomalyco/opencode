@@ -90,19 +90,19 @@ docker buildx inspect --bootstrap >/dev/null
 
 # Build relay
 echo "Building relay..."
-docker buildx build --platform linux/amd64 -f deploy/relay/Dockerfile -t $REGISTRY/relay:latest --push .
+docker buildx build --platform linux/amd64 -f packages/relay/Dockerfile -t $REGISTRY/relay:latest --push .
 
 # Build executor (new one)
 echo "Building executor..."
-docker buildx build --platform linux/amd64 -f Dockerfile.executor -t $REGISTRY/executor:latest --push .
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.executor -t $REGISTRY/executor:latest --push .
 
 # Build opencode API
 echo "Building opencode-api..."
-docker buildx build --platform linux/amd64 -f Dockerfile.api -t $REGISTRY/opencode-api:latest --push .
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.api -t $REGISTRY/opencode-api:latest --push .
 
 # Build opencode frontend
 echo "Building opencode-frontend..."
-docker buildx build --platform linux/amd64 -f Dockerfile.frontend -t $REGISTRY/opencode-frontend:latest --push .
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.frontend -t $REGISTRY/opencode-frontend:latest --push .
 
 echo -e "${GREEN}✅ Images built${NC}"
 echo ""

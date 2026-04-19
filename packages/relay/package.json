@@ -1,0 +1,17 @@
+{
+	"name": "@veritly/relay",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "bun run server.ts",
+		"typecheck": "bun tsc --noEmit"
+	},
+	"dependencies": {
+		"@opentelemetry/api": "^1.9.0",
+		"@veritly/telemetry-veritly": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	}
+}

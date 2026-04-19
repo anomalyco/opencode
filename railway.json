@@ -1,8 +1,0 @@
-{
-	"$schema": "https://railway.com/railway.schema.json",
-	"deploy": {
-		"healthcheckPath": "/healthz",
-		"restartPolicyType": "on_failure",
-		"restartPolicyMaxRetries": 5
-	}
-}

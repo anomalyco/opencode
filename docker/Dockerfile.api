@@ -1,0 +1,42 @@
+FROM oven/bun:1.3.10-slim AS production
+
+WORKDIR /app
+
+ENV BUN_INSTALL_CACHE_DIR=/tmp/bun-cache
+ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+
+COPY package.json bun.lock ./
+COPY tsconfig.json ./
+COPY patches ./patches
+
+COPY packages/opencode ./packages/opencode
+COPY packages/plugin ./packages/plugin
+COPY packages/script ./packages/script
+COPY packages/sdk/js ./packages/sdk/js
+COPY packages/util ./packages/util
+COPY packages/telemetry-veritly ./packages/telemetry-veritly
+COPY packages/auth-shared ./packages/auth-shared
+
+RUN rm -f bun.lock && bun -e 'const fs=require("fs");const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));pkg.workspaces={packages:["packages/opencode","packages/plugin","packages/script","packages/sdk/js","packages/util","packages/telemetry-veritly","packages/auth-shared"],catalog:pkg.workspaces.catalog};fs.writeFileSync("package.json",JSON.stringify(pkg,null,2));'
+
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client libpq-dev && rm -rf /var/lib/apt/lists/*
+
+RUN bun install --production --no-save --ignore-scripts --filter opencode pg drizzle-orm
+
+ENV XDG_DATA_HOME=/data/.local/share
+ENV XDG_CONFIG_HOME=/data/.config
+ENV XDG_CACHE_HOME=/data/.cache
+ENV XDG_STATE_HOME=/data/.local/state
+ENV HOME=/data
+ENV OPENCODE_TEST_HOME=/data
+ENV PORT=3000
+
+RUN mkdir -p /data/.config/opencode /data/workspace
+ENV OPENCODE_PROJECTS_ROOT=/workspace
+
+COPY packages/opencode/scripts/start-api.sh /usr/local/bin/start-opencode-api
+RUN chmod +x /usr/local/bin/start-opencode-api
+
+EXPOSE 3000
+
+CMD ["/usr/local/bin/start-opencode-api"]

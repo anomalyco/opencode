@@ -12,7 +12,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
-import { MarkdownMdx } from "@opencode-ai/ui/markdown-mdx"
+
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
@@ -494,7 +494,7 @@ export function FileTabContent(props: { tab: string }) {
           </div>
           <Show when={markdownView() === "preview"} fallback={renderSource(source)}>
             <div class="px-6 select-text">
-              <MarkdownMdx text={source} />
+              <div textContent={source} />
             </div>
           </Show>
         </Show>
