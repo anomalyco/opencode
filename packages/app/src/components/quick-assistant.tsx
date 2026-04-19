@@ -602,14 +602,18 @@ export function QuickAssistant() {
 
       <Show when={saved.open}>
         <div
-          class="fixed right-5 bottom-5 z-40 w-[min(520px,calc(100vw-24px))] rounded-[24px] shadow-[var(--shadow-lg-border-base)]"
+          class="fixed right-5 bottom-5 z-40 w-[min(520px,calc(100vw-24px))] overflow-hidden rounded-xl border border-border-weak-base shadow-[var(--shadow-lg-border-base)]"
           classList={{
-            "bg-background-stronger/92 backdrop-blur-2xl": !win(),
-            "bg-surface-raised-stronger-non-alpha": win(),
+            "bg-background-stronger/70 backdrop-blur-xl": !win(),
+            "bg-background-stronger": win(),
+          }}
+          style={{
+            "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+            "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
           }}
         >
-          <div class="flex flex-col gap-3 p-3">
-            <div class="flex items-end gap-3 rounded-[24px] border border-border-weak-base bg-surface-panel px-3 py-3">
+          <div class="flex flex-col">
+            <div class="flex items-end gap-3 px-4 py-4">
               <textarea
                 ref={input}
                 rows={3}
@@ -635,7 +639,7 @@ export function QuickAssistant() {
               <div class="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  class="flex size-10 items-center justify-center rounded-full border border-border-weak-base bg-background-base text-text-strong shadow-xs-border"
+                  class="flex size-10 items-center justify-center rounded-full border border-border-weak-base bg-background-base text-text-strong shadow-xs-border transition-colors hover:border-border-strong-base hover:bg-surface-base-hover active:bg-surface-base-active"
                   onClick={() => void reset()}
                   aria-label={sessionID() || list().length > 0 ? "Clear assistant" : "New assistant"}
                   title={sessionID() || list().length > 0 ? "Clear" : "New"}
@@ -646,8 +650,10 @@ export function QuickAssistant() {
                   type="button"
                   class="flex size-10 items-center justify-center rounded-full border border-border-weak-base bg-background-base text-text-strong shadow-xs-border transition-colors"
                   classList={{
-                    "border-border-strong-base bg-surface-panel text-text-strong": saved.context,
-                    "text-text-weaker": !saved.context,
+                    "border-border-success-base bg-surface-success-base text-text-on-success-base hover:border-border-success-hover active:border-border-success-selected":
+                      saved.context,
+                    "text-text-weaker hover:border-border-strong-base hover:bg-surface-base-hover hover:text-text-strong active:bg-surface-base-active":
+                      !saved.context,
                   }}
                   onClick={toggleContext}
                   aria-pressed={saved.context}
@@ -677,7 +683,7 @@ export function QuickAssistant() {
             </div>
 
             <Show when={list().length > 0}>
-              <div class="max-h-[48vh] overflow-y-auto rounded-[24px] border border-border-weak-base bg-background-base/70 px-3 py-3">
+              <div class="max-h-[48vh] overflow-y-auto border-t border-border-weak-base bg-background-base/20 px-4 py-4">
                 <div class="flex flex-col gap-3">
                   <For each={list()}>
                     {(item) => {
