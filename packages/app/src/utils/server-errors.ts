@@ -28,10 +28,27 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
 export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
   if (isConfigInvalidErrorLike(error)) return parseReadableConfigInvalidError(error, translate)
   if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error) return error
+  if (error instanceof Error && error.message) return parseReadableMCPInvalidError(error.message)
+  if (typeof error === "string" && error) return parseReadableMCPInvalidError(error)
+  if (typeof error === "object" && error !== null) {
+    const value = error as {
+      message?: unknown
+      data?: {
+        message?: unknown
+      }
+    }
+    if (typeof value.message === "string" && value.message) return parseReadableMCPInvalidError(value.message)
+    if (typeof value.data?.message === "string" && value.data.message)
+      return parseReadableMCPInvalidError(value.data.message)
+  }
   if (fallback) return fallback
   return tr(translate, "error.chain.unknown", "Unknown error")
+}
+
+function parseReadableMCPInvalidError(message: string) {
+  const match = message.match(/MCP server "([^"]+)" is not properly configured/i)
+  if (!match) return message
+  return `MCP server "${match[1]}" is not properly configured`
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {

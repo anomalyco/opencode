@@ -224,9 +224,9 @@ export interface Interface {
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
-  readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
-  readonly connect: (name: string) => Effect.Effect<void>
-  readonly disconnect: (name: string) => Effect.Effect<void>
+  readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }, Error>
+  readonly connect: (name: string) => Effect.Effect<void, Error>
+  readonly disconnect: (name: string) => Effect.Effect<void, Error>
   readonly getPrompt: (
     clientName: string,
     name: string,
@@ -582,7 +582,6 @@ export const layer = Layer.effect(
       const result: Record<string, Status> = {}
 
       for (const [key, mcp] of Object.entries(config)) {
-        if (!isMcpConfigured(mcp)) continue
         result[key] = s.status[key] ?? { status: "disabled" }
       }
 
@@ -618,7 +617,8 @@ export const layer = Layer.effect(
       const mcp = yield* getMcpConfig(name)
       if (!mcp) {
         log.error("MCP config not found or invalid", { name })
-        return
+        
+        return yield* Effect.fail(new Error(`MCP server "${name}" is not properly configured.`))
       }
       yield* createAndStore(name, { ...mcp, enabled: true })
     })

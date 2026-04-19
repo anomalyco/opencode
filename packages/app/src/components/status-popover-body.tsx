@@ -15,6 +15,7 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
+import { formatServerError } from "@/utils/server-errors"
 
 const pollMs = 10_000
 
@@ -149,7 +150,7 @@ const useMcpToggleMutation = () => {
       showToast({
         variant: "error",
         title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : String(err),
+        description: formatServerError(err),
       })
     },
   }))
@@ -175,7 +176,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
-      description: err instanceof Error ? err.message : String(err),
+      description: formatServerError(err),
     })
   }
 

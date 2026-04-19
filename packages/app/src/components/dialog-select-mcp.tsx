@@ -8,6 +8,7 @@ import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
+import { formatServerError } from "@/utils/server-errors"
 
 const statusLabels = {
   connected: "mcp.status.connected",
@@ -55,7 +56,7 @@ export const DialogSelectMcp: Component = () => {
         showToast({
           variant: "error",
           title: language.t("common.requestFailed"),
-          description: err instanceof Error ? err.message : String(err),
+          description: formatServerError(err),
         })
       })
       .finally(() => {
@@ -80,6 +81,13 @@ export const DialogSelectMcp: Component = () => {
 
       const result = await sdk.client.mcp.status()
       if (result.data) sync.set("mcp", result.data)
+    },
+    onError: (err) => {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: formatServerError(err),
+      })
     },
   }))
 

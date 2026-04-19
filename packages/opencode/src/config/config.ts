@@ -176,11 +176,18 @@ const InfoSchema = Schema.Struct({
   mcp: Schema.optional(
     Schema.Record(
       Schema.String,
-      Schema.Union([
-        ConfigMCP.Info,
-        // Matches the legacy `{ enabled: false }` form used to disable a server.
-        Schema.Any.annotate({ [ZodOverride]: z.object({ enabled: z.boolean() }).strict() }),
-      ]),
+      Schema.Any.annotate({
+        [ZodOverride]: z
+          .union([
+            ConfigMCP.Info.zod as z.ZodType<any>,
+            // Matches the legacy `{ enabled: false }` form used to disable a server.
+            z.object({ enabled: z.boolean() }).strict(),
+          ])
+          .catch((ctx: any) => {
+            console.warn(`Invalid MCP configuration, marking as disabled: ${ctx.error.message}`)
+            return { enabled: false } as any
+          }),
+      }),
     ),
   ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
   formatter: Schema.optional(ConfigFormatter.Info),
