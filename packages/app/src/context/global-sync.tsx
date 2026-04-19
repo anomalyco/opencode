@@ -105,11 +105,19 @@ function createGlobalSync() {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
+  const revs = new Map<string, number>()
   const queues = new Map<DomainId, ReturnType<typeof createRefreshQueue>>()
   const bootedAt = new Map<DomainId, number>()
   const bootingRoot = new Map<DomainId, boolean>()
 
   const currentDomain = () => server.domain
+  const rev = (directory: string) => revs.get(directory) ?? 0
+  const bump = (directory: string, why: string) => {
+    const next = rev(directory) + 1
+    revs.set(directory, next)
+    console.debug(`[global-sync] bump rev dir=${directory} rev=${next} why=${why}`)
+    return next
+  }
   const blankRoot = () => ({
     ready: false,
     error: undefined as InitError | undefined,
@@ -212,7 +220,16 @@ function createGlobalSync() {
   const setProjects = (next: Project[] | ((draft: Project[]) => void)) => setProjectsFor(currentDomain(), next)
 
   const setRoot = (domain: DomainId, key: keyof ReturnType<typeof blankRoot>, value: unknown) => {
-    ;(setGlobalStore as (...args: unknown[]) => unknown)("rootByDomain", domain, key, value)
+    setGlobalStore(
+      "rootByDomain",
+      produce((draft) => {
+        const root = draft[domain] ?? blankRoot()
+        draft[domain] = {
+          ...root,
+          [key]: value,
+        }
+      }),
+    )
     if (domain !== currentDomain()) return
     ;(setGlobalStore as (...args: unknown[]) => unknown)(key, value)
   }
@@ -316,9 +333,12 @@ function createGlobalSync() {
     isBooting: (directory) => booting.has(directory),
     isLoadingSessions: (directory) => sessionLoads.has(directory),
     onBootstrap: (directory) => {
-      void bootstrapInstance(directory)
+      void bootstrapInstance(directory).catch((err) => {
+        console.error("[global-sync] bootstrap trigger failed", { directory, err })
+      })
     },
     onDispose: (directory) => {
+      bump(directory, "dispose")
       queueFor(domainFromDirectory(directory)).clear(directory)
       sessionMeta.delete(directory)
       sdkCache.delete(directory)
@@ -361,8 +381,18 @@ function createGlobalSync() {
       return pending
     }
 
-    children.pin(key)
-    const [store, setStore] = children.child(directory, { bootstrap: false })
+    children.pin(directory)
+    const child = children.child(directory, { bootstrap: false })
+    const mark = rev(directory)
+    const raw = child[1] as (...args: unknown[]) => unknown
+    const store = child[0]
+    const setStore = ((...input: unknown[]) => {
+      if (rev(directory) !== mark || children.children[directory] !== child) {
+        console.debug(`[global-sync] skip stale load write dir=${directory} rev=${mark}`)
+        return input[0]
+      }
+      return raw(...input)
+    }) as typeof child[1]
     trace("loadSessions.start", {
       directory,
       silent: !!opts?.silent,
@@ -487,7 +517,16 @@ function createGlobalSync() {
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
-      const cache = children.vcsCache.get(key)
+      const mark = rev(directory)
+      const raw = child[1] as (...args: unknown[]) => unknown
+      const setStore = ((...input: unknown[]) => {
+        if (rev(directory) !== mark || children.children[directory] !== child) {
+          console.debug(`[global-sync] skip stale boot write dir=${directory} rev=${mark}`)
+          return input[0]
+        }
+        return raw(...input)
+      }) as typeof child[1]
+      const cache = children.vcsCache.get(directory)
       if (!cache) return
       trace("bootstrap.start", {
         directory,
@@ -505,7 +544,7 @@ function createGlobalSync() {
         },
         sdk,
         store: child[0],
-        setStore: child[1],
+        setStore,
         vcsCache: cache,
         translate: language.t,
         queryClient,
@@ -563,18 +602,46 @@ function createGlobalSync() {
     if (!existing) return
     children.mark(key)
     const [store, setStore] = existing
-    applyDirectoryEvent({
-      event,
-      directory,
-      store,
-      setStore,
-      push: queueFor(dirDomain).push,
-      setSessionTodo,
-      vcsCache: children.vcsCache.get(key),
-      loadLsp: () => {
-        void queryClient.fetchQuery(queryOptionsApi.lsp(key))
-      },
-    })
+    try {
+      applyDirectoryEvent({
+        event,
+        directory,
+        store,
+        setStore,
+        push: queueFor(dirDomain).push,
+        setSessionTodo,
+        vcsCache: children.vcsCache.get(directory),
+        loadLsp: () => {
+          sdkFor(directory)
+            .lsp.status()
+            .then((x) => setStore("lsp", x.data ?? []))
+        },
+      })
+    } catch (err) {
+      const props = event.properties as
+        | {
+            messageID?: string
+            partID?: string
+            part?: { id?: string; messageID?: string; type?: string }
+          }
+        | undefined
+      console.error("[global-sync] directory event failed", {
+        directory,
+        domain: dirDomain,
+        type: event.type,
+        recent,
+        status: store.status,
+        sessions: store.sessions,
+        path: store.path.directory,
+        props: {
+          messageID: props?.messageID ?? props?.part?.messageID,
+          partID: props?.partID ?? props?.part?.id,
+          partType: props?.part?.type,
+        },
+        err,
+      })
+      throw err
+    }
   })
 
   onCleanup(unsub)
@@ -634,6 +701,7 @@ function createGlobalSync() {
             booting.delete(dir)
             sessionLoads.delete(dir)
             sessionMeta.delete(dir)
+            bump(dir, "server-reset")
           }
         }
         for (const directory of dirs) {
