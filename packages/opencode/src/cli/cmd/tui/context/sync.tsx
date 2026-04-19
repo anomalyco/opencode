@@ -540,11 +540,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          for (const [id, timeout] of tokensLiveTimeouts) {
-            clearTimeout(timeout)
-            tokensLiveTimeouts.delete(id)
+          const pending = tokensLiveTimeouts.get(sessionID)
+          if (pending) {
+            clearTimeout(pending)
+            tokensLiveTimeouts.delete(sessionID)
           }
-          setStore("tokensLive", reconcile({}))
+          setStore("tokensLive", sessionID, undefined)
 
           if (fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
