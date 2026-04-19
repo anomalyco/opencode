@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -11,6 +11,8 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import type { IconName } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Popover } from "@opencode-ai/ui/popover"
+import { Icon } from "@opencode-ai/ui/icon"
 import { type LocalProject } from "@/context/layout"
 
 export type SidebarExtraAgent = {
@@ -45,6 +47,33 @@ export const SidebarContent = (props: {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
   let panel: HTMLDivElement | undefined
+
+  // Extra agents menu state
+  const [menuOpen, setMenuOpen] = createSignal(false)
+  let closeTimer: number | undefined
+
+  const activeAgent = createMemo(() => props.extraAgents().find((agent) => agent.active?.()))
+  const entryIcon = createMemo(() => activeAgent()?.icon ?? ("grid" as IconName))
+
+  const handleMenuMouseEnter = () => {
+    if (closeTimer) {
+      clearTimeout(closeTimer)
+      closeTimer = undefined
+    }
+    setMenuOpen(true)
+  }
+
+  const handleMenuMouseLeave = () => {
+    closeTimer = window.setTimeout(() => {
+      setMenuOpen(false)
+    }, 200)
+  }
+
+  onCleanup(() => {
+    if (closeTimer) {
+      clearTimeout(closeTimer)
+    }
+  })
 
   createEffect(() => {
     const el = panel
@@ -98,20 +127,48 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
-          <For each={props.extraAgents()}>
-            {(agent) => (
-              <Tooltip placement={placement()} value={agent.label()}>
-                <IconButton
-                  icon={agent.icon}
-                  variant="ghost"
-                  size="large"
-                  classList={{ "bg-surface-base-active": !!agent.active?.() }}
-                  onClick={agent.onOpen}
-                  aria-label={agent.label()}
-                />
-              </Tooltip>
-            )}
-          </For>
+          <Show when={props.extraAgents().length > 0}>
+            <Popover
+              open={menuOpen()}
+              onOpenChange={setMenuOpen}
+              placement={placement()}
+              trigger={
+                <div onMouseEnter={handleMenuMouseEnter} onMouseLeave={handleMenuMouseLeave}>
+                  <IconButton
+                    icon={entryIcon()}
+                    variant="ghost"
+                    size="large"
+                    classList={{ "bg-surface-base-active": !!activeAgent() }}
+                    aria-label="Extra Agents"
+                  />
+                </div>
+              }
+            >
+              <div
+                class="flex flex-col gap-1 p-2 min-w-[160px]"
+                onMouseEnter={handleMenuMouseEnter}
+                onMouseLeave={handleMenuMouseLeave}
+              >
+                <For each={props.extraAgents()}>
+                  {(agent) => (
+                    <button
+                      class="flex items-center gap-2 px-3 py-2 rounded-md text-text-base hover:bg-surface-base-hover transition-colors"
+                      classList={{
+                        "bg-surface-base-active": !!agent.active?.(),
+                      }}
+                      onClick={() => {
+                        agent.onOpen()
+                        setMenuOpen(false)
+                      }}
+                    >
+                      <Icon name={agent.icon} class="size-5 shrink-0" />
+                      <span class="text-14-regular">{agent.label()}</span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Popover>
+          </Show>
           <Tooltip placement={placement()} value={props.configLabel()}>
             <IconButton
               icon="sliders"

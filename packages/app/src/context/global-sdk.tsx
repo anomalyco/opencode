@@ -276,6 +276,12 @@ export function GlobalSDKProvider(props: ParentProps) {
               if (k) {
                 const i = coalesced.get(k)
                 if (i !== undefined) {
+                  if (payload.type === "message.part.updated" && payload.properties.part.type === "text") {
+                    const part = payload.properties.part
+                    console.debug(
+                      `[global-sdk] coalesce part.updated dir=${directory} msg=${part.messageID} part=${part.id} len=${part.text.length} tail=${JSON.stringify(part.text.slice(-40))}`,
+                    )
+                  }
                   queue[i] = { directory, payload }
                   if (payload.type === "message.part.updated") {
                     const part = payload.properties.part
@@ -284,6 +290,18 @@ export function GlobalSDKProvider(props: ParentProps) {
                   continue
                 }
                 coalesced.set(k, queue.length)
+              }
+              if (payload.type === "message.part.updated" && payload.properties.part.type === "text") {
+                const part = payload.properties.part
+                console.debug(
+                  `[global-sdk] queue part.updated dir=${directory} msg=${part.messageID} part=${part.id} len=${part.text.length} tail=${JSON.stringify(part.text.slice(-40))}`,
+                )
+              }
+              if (payload.type === "message.part.delta" && payload.properties.field === "text") {
+                const props = payload.properties
+                console.debug(
+                  `[global-sdk] queue part.delta dir=${directory} msg=${props.messageID} part=${props.partID} len=${props.delta.length} tail=${JSON.stringify(props.delta.slice(-40))}`,
+                )
               }
               queue.push({ directory, payload })
               schedule()
@@ -294,7 +312,7 @@ export function GlobalSDKProvider(props: ParentProps) {
           } catch (error) {
             if (!aborted(error) && !streamErrorLogged) {
               streamErrorLogged = true
-              console.error("[global-sdk] event stream failed", {
+              console.error("[global-sdk] event stream error", {
                 domain,
                 url,
                 fetch: eventFetch ? "platform" : "webview",

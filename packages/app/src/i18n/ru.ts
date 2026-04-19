@@ -427,6 +427,8 @@ export const dict = {
   "toast.file.loadFailed.title": "Не удалось загрузить файл",
 
   "toast.file.listFailed.title": "Не удалось получить список файлов",
+  "toast.file.listFailed.openclaw": "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent": "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
   "toast.context.noLineSelection.title": "Нет выделения строк",
   "toast.context.noLineSelection.description": "Сначала выберите диапазон строк во вкладке файла.",
   "toast.session.share.copyFailed.title": "Не удалось скопировать URL в буфер обмена",
@@ -441,6 +443,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "Произошла ошибка при отмене публикации",
 
   "toast.session.listFailed.title": "Не удалось загрузить сессии для {{project}}",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
 
   "toast.update.title": "Доступно обновление",
   "toast.update.description": "Новая версия OpenCode ({{version}}) доступна для установки.",
@@ -543,6 +547,8 @@ export const dict = {
   "session.revertDock.restore": "Восстановить сообщение",
 
   "session.new.title": "Создавайте что угодно",
+  "session.new.openclaw.title": "Your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.worktree.main": "Основная ветка",
   "session.new.worktree.mainWithBranch": "Основная ветка ({{branch}})",
   "session.new.worktree.create": "Создать новый worktree",
@@ -607,6 +613,8 @@ export const dict = {
   "sidebar.menu.toggle": "Переключить меню",
   "sidebar.nav.projectsAndSessions": "Проекты и сессии",
   "sidebar.settings": "Настройки",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Помощь",
   "sidebar.workspaces.enable": "Включить рабочие пространства",
   "sidebar.workspaces.disable": "Отключить рабочие пространства",
