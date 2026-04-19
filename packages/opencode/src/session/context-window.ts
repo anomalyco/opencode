@@ -31,16 +31,20 @@ export interface ContextUtilization {
 /**
  * Resolves the context window ceiling for a given model.
  *
- * The `context-1m-2025-08-07` beta only applies to Sonnet 4.x at time of
- * writing; Opus/Haiku remain at 200K even with the beta header set.
+ * Opus 4.x has native 1M context (no beta needed per v114 model table).
+ * Sonnet 4.x gets 1M only with context-1m beta.
+ * Haiku remains at 200K.
  */
 export function getContextLimit(
     modelId: string | undefined,
     has1mContextBeta: boolean,
 ): number {
     if (!modelId) return DEFAULT_CONTEXT_LIMIT;
-    if (has1mContextBeta && /sonnet-4/i.test(modelId))
-        return LONG_CONTEXT_LIMIT;
+    const m = modelId.toLowerCase();
+    // Opus 4.x has native 1M context (no beta needed per v114 model table)
+    if (m.includes("opus-4")) return LONG_CONTEXT_LIMIT;
+    // Sonnet 4.x gets 1M only with context-1m beta
+    if (has1mContextBeta && m.includes("sonnet-4")) return LONG_CONTEXT_LIMIT;
     return DEFAULT_CONTEXT_LIMIT;
 }
 

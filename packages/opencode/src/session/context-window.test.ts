@@ -8,16 +8,25 @@ import {
 } from "./context-window";
 
 describe("getContextLimit", () => {
-    it("returns 200K by default", () => {
-        expect(getContextLimit("claude-opus-4-7", false)).toBe(200_000);
+    it("returns 200K by default for non-opus/sonnet models", () => {
+        expect(getContextLimit("claude-haiku-4-5", false)).toBe(200_000);
     });
 
     it("returns 1M for sonnet-4 with context-1m beta", () => {
         expect(getContextLimit("claude-sonnet-4-6", true)).toBe(1_000_000);
     });
 
-    it("keeps Opus at 200K even with context-1m beta", () => {
-        expect(getContextLimit("claude-opus-4-7", true)).toBe(200_000);
+    it("returns 1M for Opus regardless of beta", () => {
+        expect(getContextLimit("claude-opus-4-7", false)).toBe(1_000_000);
+        expect(getContextLimit("claude-opus-4-7", true)).toBe(1_000_000);
+    });
+
+    it("returns 1M for claude-opus-4-7", () => {
+        expect(getContextLimit("claude-opus-4-7", false)).toBe(1_000_000);
+    });
+
+    it("returns 1M for claude-opus-4-6", () => {
+        expect(getContextLimit("claude-opus-4-6", false)).toBe(1_000_000);
     });
 
     it("keeps Haiku at 200K even with context-1m beta", () => {
