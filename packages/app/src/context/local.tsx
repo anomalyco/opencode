@@ -16,6 +16,7 @@ type State = {
   agent?: string
   model?: ModelKey
   variant?: string | null
+  agents?: Record<string, { model?: ModelKey; variant?: string | null }>
 }
 
 type Saved = {
@@ -48,6 +49,11 @@ const clone = (value: State | undefined) => {
   return {
     ...value,
     model: value.model ? { ...value.model } : undefined,
+    agents: value.agents
+      ? Object.fromEntries(
+          Object.entries(value.agents).map(([k, v]) => [k, { ...v, model: v.model ? { ...v.model } : undefined }]),
+        )
+      : undefined,
   } satisfies State
 }
 
@@ -192,10 +198,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             variant: item.variant ?? null,
           })
           const prev = scope()
+          const prevAgent = prev?.agent
+
+          // Save outgoing agent's model selection
+          const agents = { ...(prev?.agents ?? {}) }
+          if (prevAgent && prev?.model) {
+            agents[prevAgent] = { model: prev.model, variant: prev.variant }
+          }
+
+          // Restore saved model for the target agent, or fall back to agent config / previous
+          const savedAgent = agents[item.name]
           const next = {
             agent: item.name,
-            model: item.model ?? prev?.model,
-            variant: item.variant ?? prev?.variant,
+            model: savedAgent?.model ?? item.model ?? prev?.model,
+            variant: savedAgent?.variant ?? item.variant ?? prev?.variant,
+            agents,
           } satisfies State
           const session = id()
           if (session) {
@@ -245,10 +262,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const snapshot = () => {
       const model = current()
+      const s = scope()
       return {
         agent: agent.current()?.name,
         model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
         variant: selected(),
+        agents: s?.agents,
       } satisfies State
     }
 
@@ -383,6 +402,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             agent: msg.agent,
             model: msg.model,
             variant: msg.model.variant ?? null,
+            agents: {
+              [msg.agent]: { model: msg.model, variant: msg.model.variant ?? null },
+            },
           })
         },
       },
