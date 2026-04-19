@@ -89,6 +89,7 @@ import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
+import { getCurrentSessionWithChildren, getFirstDirectChildSession, getSiblingSessions } from "./navigation"
 
 addDefaultParsers(parsers.parsers)
 
@@ -127,12 +128,8 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
-  const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
-    return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  })
+  const children = createMemo(() => getCurrentSessionWithChildren(sync.data.session, session()?.id))
+  const siblingSessions = createMemo(() => getSiblingSessions(sync.data.session, session()))
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
@@ -354,7 +351,7 @@ export function Session() {
 
   function moveFirstChild() {
     if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
+    const next = getFirstDirectChildSession(children(), session()?.id)
     if (next) {
       navigate({
         type: "session",
@@ -364,9 +361,9 @@ export function Session() {
   }
 
   function moveChild(direction: number) {
-    if (children().length === 1) return
+    if (siblingSessions().length <= 1) return
 
-    const sessions = children().filter((x) => !!x.parentID)
+    const sessions = siblingSessions()
     let next = sessions.findIndex((x) => x.id === session()?.id) - direction
 
     if (next >= sessions.length) next = 0
