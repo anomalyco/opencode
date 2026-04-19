@@ -61,22 +61,24 @@ const UNKNOWN_DEFAULT: ModelPricing = SONNET_4X;
 /**
  * Resolves pricing for a given Anthropic model id.
  *
- * Family detection is substring-based and case-insensitive so aliases
- * (`claude-opus-4-5`) and dated releases (`claude-opus-4-5-20251101`) share
- * rates. Unknown models fall back to Sonnet-tier pricing.
+ * Family detection uses regex patterns to match model families anywhere in the
+ * string, handling vendor prefixes (bedrock-, vertex-) and various separators.
+ * Aliases (`claude-opus-4-5`) and dated releases (`claude-opus-4-5-20251101`)
+ * share rates. Unknown models fall back to Sonnet-tier pricing.
  */
 export function getModelPricing(modelId: string | undefined): ModelPricing {
     if (!modelId) return UNKNOWN_DEFAULT;
-    const m = modelId.toLowerCase();
 
     // Order matters: check more specific patterns (3-7-sonnet, 3-5-haiku)
     // BEFORE the generic family matchers to avoid "sonnet-4" matching first.
-    if (m.includes("3-7-sonnet") || m.includes("sonnet-3-7")) return SONNET_3_7;
-    if (m.includes("3-5-haiku") || m.includes("haiku-3-5")) return HAIKU_3_5;
+    if (/3[-_]?7[-_]?sonnet|sonnet[-_]?3[-_]?7/i.test(modelId)) return SONNET_3_7;
+    if (/3[-_]?5[-_]?haiku|haiku[-_]?3[-_]?5/i.test(modelId)) return HAIKU_3_5;
 
-    if (m.includes("opus-4") || m.includes("opus_4")) return OPUS_4X;
-    if (m.includes("haiku-4") || m.includes("haiku_4")) return HAIKU_4X;
-    if (m.includes("sonnet-4") || m.includes("sonnet_4")) return SONNET_4X;
+    // Family matchers — match the model family anywhere in the string (handles bedrock/vertex prefixes)
+    // Opus 4.x: match "opus-4" OR "4-opus" OR "4-x-opus" patterns
+    if (/opus[-_]?4|4[-_]?\d+[-_]?opus|4[-_]opus/i.test(modelId)) return OPUS_4X;
+    if (/haiku[-_]?4|4[-_]?\d+[-_]?haiku|4[-_]haiku/i.test(modelId)) return HAIKU_4X;
+    if (/sonnet[-_]?4|4[-_]?\d+[-_]?sonnet|4[-_]sonnet/i.test(modelId)) return SONNET_4X;
 
     return UNKNOWN_DEFAULT;
 }

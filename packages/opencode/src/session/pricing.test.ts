@@ -59,6 +59,29 @@ describe("getModelPricing", () => {
     it("does not match sonnet-4 when pattern is sonnet-3-7", () => {
         expect(getModelPricing("claude-3-7-sonnet").inputPerMTok).toBe(3);
     });
+
+    it("matches bedrock-claude-4-6-opus as Opus", () => {
+        const pricing = getModelPricing("bedrock-claude-4-6-opus");
+        expect(pricing.inputPerMTok).toBe(15);
+        expect(pricing.outputPerMTok).toBe(75);
+    });
+
+    it("matches bedrock-claude-4-5-haiku as Haiku 4", () => {
+        const pricing = getModelPricing("bedrock-claude-4-5-haiku");
+        expect(pricing.inputPerMTok).toBe(1);
+        expect(pricing.outputPerMTok).toBe(5);
+    });
+
+    it("matches bedrock-claude-sonnet-4-5 as Sonnet 4", () => {
+        const pricing = getModelPricing("bedrock-claude-sonnet-4-5");
+        expect(pricing.inputPerMTok).toBe(3);
+        expect(pricing.outputPerMTok).toBe(15);
+    });
+
+    it("matches vertex-claude-4-6-opus as Opus", () => {
+        const pricing = getModelPricing("vertex-claude-4-6-opus");
+        expect(pricing.inputPerMTok).toBe(15);
+    });
 });
 
 describe("computeUsageCost", () => {
