@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Войти",
-  "nav.free": "Бесплатно",
+  "nav.free": "Скачать",
   "nav.home": "Главная",
   "nav.openMenu": "Открыть меню",
   "nav.getStartedFree": "Начать бесплатно",
@@ -570,6 +570,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "Лимит использования не установлен.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Текущее использование за",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "составляет $",
+
+  "workspace.redeem.title": "Активировать купон",
+  "workspace.redeem.subtitle": "Активируйте код купона, чтобы получить кредит или бонусы.",
+  "workspace.redeem.placeholder": "Введите код купона",
+  "workspace.redeem.redeem": "Активировать",
+  "workspace.redeem.redeeming": "Активация...",
+  "workspace.redeem.success": "Купон успешно активирован.",
 
   "workspace.reload.title": "Автопополнение",
   "workspace.reload.disabled.before": "Автопополнение",

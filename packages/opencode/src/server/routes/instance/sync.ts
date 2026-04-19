@@ -6,6 +6,8 @@ import { Database, asc, and, not, or, lte, eq } from "@/storage"
 import { EventTable } from "@/sync/event.sql"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util"
+import { startWorkspaceSyncing } from "@/control-plane/workspace"
+import { Instance } from "@/project/instance"
 import { errors } from "../../error"
 
 const ReplayEvent = z.object({
@@ -20,6 +22,28 @@ const log = Log.create({ service: "server.sync" })
 
 export const SyncRoutes = lazy(() =>
   new Hono()
+    .post(
+      "/start",
+      describeRoute({
+        summary: "Start workspace sync",
+        description: "Start sync loops for workspaces in the current project that have active sessions.",
+        operationId: "sync.start",
+        responses: {
+          200: {
+            description: "Workspace sync started",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        startWorkspaceSyncing(Instance.project.id)
+        return c.json(true)
+      },
+    )
     .post(
       "/replay",
       describeRoute({
@@ -75,7 +99,7 @@ export const SyncRoutes = lazy(() =>
         })
       },
     )
-    .get(
+    .post(
       "/history",
       describeRoute({
         summary: "List sync events",
