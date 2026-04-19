@@ -6,6 +6,8 @@ import {
   type GrepCursor,
   type GrepMatch,
   type GrepMode,
+  type MixedItem,
+  type MixedSearchResult,
   type SearchResult,
 } from "@ff-labs/fff-bun"
 import z from "zod"
@@ -96,6 +98,17 @@ export namespace Fff {
   export async function files(input: { cwd: string; query: string; page?: number; size?: number; current?: string }) {
     const pick = await picker(input.cwd)
     const out = pick.fileSearch(input.query, {
+      pageIndex: input.page ?? 0,
+      pageSize: input.size ?? 100,
+      currentFile: input.current,
+    })
+    if (!out.ok) throw new Error(out.error)
+    return out.value
+  }
+
+  export async function mixed(input: { cwd: string; query: string; page?: number; size?: number; current?: string }) {
+    const pick = await picker(input.cwd)
+    const out = pick.mixedSearch(input.query, {
       pageIndex: input.page ?? 0,
       pageSize: input.size ?? 100,
       currentFile: input.current,
@@ -253,6 +266,8 @@ export namespace Fff {
   }
 
   export type Search = SearchResult
+  export type Mixed = MixedSearchResult
+  export type MixedEntry = MixedItem
   export type File = FileItem
   export type Hit = GrepMatch
 }

@@ -61,6 +61,7 @@ export type AutocompleteOption = {
   disabled?: boolean
   description?: string
   isDirectory?: boolean
+  gitStatus?: string
   onSelect?: () => void
   path?: string
 }
@@ -228,25 +229,22 @@ export function Autocomplete(props: {
 
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
-      // Get files from SDK
       const result = await sdk.client.find.files({
         query: baseQuery,
       })
 
       const options: AutocompleteOption[] = []
 
-      // Add file options
       if (!result.error && result.data) {
-        // fff already returns results ranked by relevance + frecency
         const width = props.anchor().width - 4
         options.push(
-          ...sortedFiles.map((item): AutocompleteOption => {
+          ...result.data.map((item): AutocompleteOption => {
             const baseDir = (sync.path.directory || process.cwd()).replace(/\/+$/, "")
-            const fullPath = `${baseDir}/${item}`
+            const fullPath = `${baseDir}/${item.path}`
             const urlObj = pathToFileURL(fullPath)
-            let filename = item
-            if (lineRange && !item.endsWith("/")) {
-              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+            let filename = item.path
+            if (lineRange && !item.isDirectory) {
+              filename = `${item.path}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))
@@ -254,12 +252,12 @@ export function Autocomplete(props: {
             }
             const url = urlObj.href
 
-            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
-              isDirectory: isDir,
-              path: item,
+              isDirectory: item.isDirectory,
+              gitStatus: item.gitStatus,
+              path: item.path,
               onSelect: () => {
                 insertPart(filename, {
                   type: "file",
@@ -273,7 +271,7 @@ export function Autocomplete(props: {
                       end: 0,
                       value: "",
                     },
-                    path: item,
+                    path: item.path,
                   },
                 })
               },
@@ -652,6 +650,22 @@ export function Autocomplete(props: {
               }}
               onMouseUp={() => select()}
             >
+              <Show when={option().gitStatus}>
+                <text
+                  fg={
+                    index === store.selected
+                      ? selectedForeground(theme)
+                      : option().gitStatus === "untracked"
+                        ? theme.diffAdded
+                        : option().gitStatus === "modified"
+                          ? theme.warning
+                          : theme.diffAdded
+                  }
+                  flexShrink={0}
+                >
+                  {option().gitStatus === "untracked" ? "U " : option().gitStatus === "modified" ? "M " : "A "}
+                </text>
+              </Show>
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}
               </text>

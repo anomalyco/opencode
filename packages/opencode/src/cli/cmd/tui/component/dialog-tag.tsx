@@ -26,8 +26,8 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
 
   const options = createMemo(() =>
     (files() ?? []).map((file) => ({
-      value: file,
-      title: file,
+      value: file.path,
+      title: file.path,
     })),
   )
 

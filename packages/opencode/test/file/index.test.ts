@@ -710,7 +710,7 @@ describe("file/index Filesystem patterns", () => {
         directory: tmp.path,
         fn: async () => {
           const result = await search({ query: "main", type: "file" })
-          expect(result.some((f) => f.includes("main"))).toBe(true)
+          expect(result.some((f) => f.path.includes("main"))).toBe(true)
         },
       })
     })
@@ -725,9 +725,8 @@ describe("file/index Filesystem patterns", () => {
 
           const result = await search({ query: "", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
-          // Find first hidden dir index
-          const firstHidden = result.findIndex((d) => d.split("/").some((p) => p.startsWith(".") && p.length > 1))
-          const lastVisible = result.findLastIndex((d) => !d.split("/").some((p) => p.startsWith(".") && p.length > 1))
+          const firstHidden = result.findIndex((d) => d.path.split("/").some((p: string) => p.startsWith(".") && p.length > 1))
+          const lastVisible = result.findLastIndex((d) => !d.path.split("/").some((p: string) => p.startsWith(".") && p.length > 1))
           if (firstHidden >= 0 && lastVisible >= 0) {
             expect(firstHidden).toBeGreaterThan(lastVisible)
           }
@@ -744,7 +743,7 @@ describe("file/index Filesystem patterns", () => {
           await init()
 
           const result = await search({ query: "main", type: "file" })
-          expect(result.some((f) => f.includes("main"))).toBe(true)
+          expect(result.some((f) => f.path.includes("main"))).toBe(true)
         },
       })
     })
@@ -760,7 +759,7 @@ describe("file/index Filesystem patterns", () => {
           const result = await search({ query: "", type: "file" })
           // Files don't end with /
           for (const f of result) {
-            expect(f.endsWith("/")).toBe(false)
+            expect(f.path.endsWith("/")).toBe(false)
           }
         },
       })
@@ -777,7 +776,7 @@ describe("file/index Filesystem patterns", () => {
           const result = await search({ query: "", type: "directory" })
           // Directories end with /
           for (const d of result) {
-            expect(d.endsWith("/")).toBe(true)
+            expect(d.path.endsWith("/")).toBe(true)
           }
         },
       })
@@ -807,7 +806,7 @@ describe("file/index Filesystem patterns", () => {
 
           const result = await search({ query: ".hidden", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
-          expect(result[0]).toContain(".hidden")
+          expect(result[0].path).toContain(".hidden")
         },
       })
     })
@@ -824,7 +823,7 @@ describe("file/index Filesystem patterns", () => {
           await fs.writeFile(path.join(tmp.path, "fresh.ts"), "fresh", "utf-8")
 
           const result = await search({ query: "fresh", type: "file" })
-          expect(result).toContain("fresh.ts")
+          expect(result.map((r) => r.path)).toContain("fresh.ts")
         },
       })
     })
@@ -905,9 +904,9 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           await init()
           const results = await search({ query: "a.ts", type: "file" })
-          expect(results).toContain("a.ts")
+          expect(results.map((r) => r.path)).toContain("a.ts")
           const results2 = await search({ query: "b.ts", type: "file" })
-          expect(results2).not.toContain("b.ts")
+          expect(results2.map((r) => r.path)).not.toContain("b.ts")
         },
       })
 
@@ -916,9 +915,9 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           await init()
           const results = await search({ query: "b.ts", type: "file" })
-          expect(results).toContain("b.ts")
+          expect(results.map((r) => r.path)).toContain("b.ts")
           const results2 = await search({ query: "a.ts", type: "file" })
-          expect(results2).not.toContain("a.ts")
+          expect(results2.map((r) => r.path)).not.toContain("a.ts")
         },
       })
     })
@@ -932,7 +931,7 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           await init()
           const results = await search({ query: "before", type: "file" })
-          expect(results).toContain("before.ts")
+          expect(results.map((r) => r.path)).toContain("before.ts")
         },
       })
 
@@ -946,9 +945,9 @@ describe("file/index Filesystem patterns", () => {
         fn: async () => {
           await init()
           const results = await search({ query: "after", type: "file" })
-          expect(results).toContain("after.ts")
+          expect(results.map((r) => r.path)).toContain("after.ts")
           const stale = await search({ query: "before", type: "file" })
-          expect(stale).not.toContain("before.ts")
+          expect(stale.map((r) => r.path)).not.toContain("before.ts")
         },
       })
     })

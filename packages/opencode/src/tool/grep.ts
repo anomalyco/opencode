@@ -81,12 +81,12 @@ function line(text: string, ranges: [number, number][]) {
 function group(rows: Item[]) {
   const out = new Map<string, Item[]>()
   for (const row of rows) {
-    const list = out.get(row.hit.path)
+    const list = out.get(row.hit.relativePath)
     if (list) {
       list.push(row)
       continue
     }
-    out.set(row.hit.path, [row])
+    out.set(row.hit.relativePath, [row])
   }
   return out
 }
@@ -241,7 +241,7 @@ export const GrepTool = Tool.define(
             return {
               title: params.pattern,
               metadata: { matches: 0, truncated: false },
-              output: `0 content matches. But there is a relevant file path:\n${row.path}`,
+              output: `0 content matches. But there is a relevant file path:\n${row.relativePath}`,
             }
           }
         }
@@ -272,9 +272,9 @@ export const GrepTool = Tool.define(
         const total = show.length
         const trim = show.slice(0, MAX_MATCH)
         const over = total > MAX_MATCH
-        const files = new Set(trim.map((row) => row.hit.path)).size
+        const files = new Set(trim.map((row) => row.hit.relativePath)).size
         const budget = files <= 3 ? 5000 : files <= 8 ? 3500 : 2500
-        const read = (trim.find((row) => row.def) ?? trim[0]).hit.path
+        const read = (trim.find((row) => row.def) ?? trim[0]).hit.relativePath
 
         const out: string[] = []
         if (phase === "exact") out.push(`Found ${total} matches${over ? ` (showing first ${MAX_MATCH})` : ""}`)

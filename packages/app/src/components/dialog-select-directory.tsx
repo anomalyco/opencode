@@ -200,7 +200,7 @@ function useDirectorySearch(args: {
     if (!isPath) {
       const results = await find()
       if (!active()) return []
-      return results.map((rel) => joinPath(scopedInput.directory, rel)).slice(0, 50)
+      return results.map((item) => joinPath(scopedInput.directory, item.path)).slice(0, 50)
     }
 
     const segments = query.replace(/^\/+/, "").split("/")

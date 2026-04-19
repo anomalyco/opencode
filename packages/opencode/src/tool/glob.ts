@@ -50,10 +50,10 @@ function allowed(pattern: string, rel: string) {
   return Glob.match(pattern, file)
 }
 
-function pick(items: { path: string; relativePath: string }[]) {
+function pick(items: { relativePath: string }[]) {
   return items
     .map((item) => ({
-      path: item.path,
+      path: item.relativePath,
       rel: norm(item.relativePath),
     }))
     .filter((item) => !hidden(item.rel))

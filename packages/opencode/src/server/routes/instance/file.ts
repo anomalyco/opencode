@@ -51,10 +51,10 @@ export const FileRoutes = lazy(() =>
         operationId: "find.files",
         responses: {
           200: {
-            description: "File paths",
+            description: "File search results",
             content: {
               "application/json": {
-                schema: resolver(z.string().array()),
+                schema: resolver(File.SearchItem.array()),
               },
             },
           },
