@@ -9,6 +9,8 @@ import { type TuiEvent } from "../event"
 
 export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
 
+const DEFAULT_TOAST_DURATION = 5000
+
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
@@ -56,7 +58,7 @@ function init() {
 
   const toast = {
     show(options: ToastOptions) {
-      const duration = options.duration ?? 5000
+      const duration = options.duration ?? DEFAULT_TOAST_DURATION
       setStore("currentToast", options)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {
