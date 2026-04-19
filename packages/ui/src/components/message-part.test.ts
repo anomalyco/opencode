@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { Part, TextPart } from "@opencode-ai/sdk/v2"
 import { skillText } from "./message-skill"
-import { streamsplit } from "./message-part-stream"
+import { hold, streamsplit } from "./message-part-stream"
 
 function text(part: Partial<TextPart> = {}): TextPart {
   return {
@@ -61,6 +61,27 @@ describe("message-part streamsplit", () => {
     expect(streamsplit("Alpha $$x^2$$")).toEqual({
       head: "",
       tail: "Alpha $$x^2$$",
+    })
+  })
+
+  test("holds tiny heading markers in the tail", () => {
+    expect(hold("Alpha\n\n##")).toEqual({
+      head: "",
+      tail: "Alpha\n\n##",
+    })
+  })
+
+  test("holds tiny visible tails until they are substantial", () => {
+    expect(hold("Alpha\n\nBeta")).toEqual({
+      head: "",
+      tail: "Alpha\n\nBeta",
+    })
+  })
+
+  test("splits again once the tail is substantial", () => {
+    expect(hold("Alpha $$x^2$$\n\nBeta with enough text")).toEqual({
+      head: "Alpha $$x^2$$",
+      tail: "Beta with enough text",
     })
   })
 })

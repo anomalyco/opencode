@@ -77,3 +77,16 @@ export function streamsplit(text: string) {
   if (!head || !tail) return { head: body, tail: "" }
   return { head, tail }
 }
+
+const word = /[\p{L}\p{N}]/u
+const min = 8
+
+export function hold(text: string) {
+  const body = text.trim()
+  if (!body) return { head: "", tail: "" }
+  const next = streamsplit(body)
+  if (!next.head || !next.tail) return next
+  if (next.tail.length < min) return { head: "", tail: body }
+  if (!word.test(next.tail)) return { head: "", tail: body }
+  return next
+}
