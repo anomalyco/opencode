@@ -68,6 +68,42 @@ function projectLayerWithFailure(failArg: string) {
   )
 }
 
+function projectLayerWithTimeout(timeoutArg: string) {
+  const timeoutSpawner = Layer.effect(
+    ChildProcessSpawner.ChildProcessSpawner,
+    Effect.gen(function* () {
+      const real = yield* ChildProcessSpawner.ChildProcessSpawner
+      return ChildProcessSpawner.make(
+        Effect.fnUntraced(function* (command) {
+          const std = ChildProcess.isStandardCommand(command) ? command : undefined
+          if (std?.command === "git" && std.args.some((a) => a === timeoutArg)) {
+            return ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(0),
+              exitCode: Effect.never,
+              isRunning: Effect.succeed(true),
+              kill: () => Effect.void,
+              stdin: { [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") } as any,
+              stdout: Stream.empty,
+              stderr: Stream.empty,
+              all: Stream.empty,
+              getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
+              getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
+            })
+          }
+          return yield* real.spawn(command)
+        }),
+      )
+    }),
+  ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+
+  return Project.layer.pipe(
+    Layer.provide(timeoutSpawner),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(NodePath.layer),
+  )
+}
+
 describe("Project.fromDirectory", () => {
   test("should handle git repository with no commits", async () => {
     await using tmp = await tmpdir()
@@ -140,6 +176,23 @@ describe("Project.fromDirectory git failure paths", () => {
     const { project, sandbox } = await run((svc) => svc.fromDirectory(tmp.path), layer)
     expect(project.worktree).toBe(tmp.path)
     expect(sandbox).toBe(tmp.path)
+  })
+
+  test("falls back to deterministic path id when rev-list times out", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const layer = projectLayerWithTimeout("rev-list")
+
+    const started = Date.now()
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path), layer)
+    const elapsed = Date.now() - started
+
+    expect(project.vcs).toBe("git")
+    expect(project.worktree).toBe(tmp.path)
+    expect(project.id).toMatch(/^path-[0-9a-f]{40}$/)
+    expect(elapsed).toBeLessThan(1800)
+
+    const opencodeFile = path.join(tmp.path, ".git", "opencode")
+    expect(await Bun.file(opencodeFile).exists()).toBe(true)
   })
 })
 

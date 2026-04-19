@@ -1,4 +1,5 @@
 import z from "zod"
+import { createHash } from "node:crypto"
 import { and, Database, eq } from "../storage"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
@@ -17,6 +18,7 @@ import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "project" })
+const ROOT_COMMIT_TIMEOUT = "1000 millis" as const
 
 const ProjectVcs = Schema.Literal("git")
 
@@ -156,6 +158,9 @@ export const layer: Layer.Layer<
       return pathSvc.resolve(cwd, name)
     }
 
+    const fallbackProjectId = (worktree: string) =>
+      ProjectID.make(`path-${createHash("sha1").update(worktree).digest("hex")}`)
+
     const scope = yield* Scope.Scope
 
     const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
@@ -217,7 +222,17 @@ export const layer: Layer.Layer<
         }
 
         if (!id) {
-          const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
+          const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox }).pipe(
+            Effect.timeoutOrElse({
+              duration: ROOT_COMMIT_TIMEOUT,
+              orElse: () =>
+                Effect.succeed({
+                  code: 124,
+                  text: "",
+                  stderr: `opencode: timed out after ${ROOT_COMMIT_TIMEOUT}`,
+                } satisfies GitResult),
+            }),
+          )
           const roots = revList.text
             .split("\n")
             .filter(Boolean)
@@ -225,6 +240,10 @@ export const layer: Layer.Layer<
             .toSorted()
 
           id = roots[0] ? ProjectID.make(roots[0]) : undefined
+          if (!id && revList.code === 124) {
+            id = fallbackProjectId(worktree)
+            log.warn("rev-list timed out; using fallback project id", { sandbox, worktree, id })
+          }
           if (id) {
             yield* fs.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
           }
