@@ -319,43 +319,6 @@ export function GlobalSDKProvider(props: ParentProps) {
             if (!aborted(error) && !streamErrorLogged) {
               streamErrorLogged = true
               console.error("[global-sdk] event stream error", {
-                  domain,
-                  url,
-                  fetch: eventFetch ? "platform" : "webview",
-                  error,
-                })
-              },
-            })
-            let yielded = Date.now()
-            resetHeartbeat()
-            for await (const event of events.stream) {
-              resetHeartbeat()
-              streamErrorLogged = false
-              const directory = event.directory ?? "global"
-              const payload = event.payload
-              const k = key(directory, payload)
-              if (k) {
-                const i = coalesced.get(k)
-                if (i !== undefined) {
-                  queue[i] = { directory, payload }
-                  if (payload.type === "message.part.updated") {
-                    const part = payload.properties.part
-                    stale.add(deltaKey(directory, part.messageID, part.id))
-                  }
-                  continue
-                }
-                coalesced.set(k, queue.length)
-              }
-              queue.push({ directory, payload })
-              schedule()
-              if (Date.now() - yielded < STREAM_YIELD_MS) continue
-              yielded = Date.now()
-              await wait(0)
-            }
-          } catch (error) {
-            if (!aborted(error) && !streamErrorLogged) {
-              streamErrorLogged = true
-              console.error("[global-sdk] event stream failed", {
                 domain,
                 url,
                 fetch: eventFetch ? "platform" : "webview",

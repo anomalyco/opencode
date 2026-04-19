@@ -426,6 +426,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Kunne ikke laste fil",
   "toast.file.listFailed.title": "Kunne ikke liste filer",
+  "toast.file.listFailed.openclaw": "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent": "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "Ingen linjevalg",
   "toast.context.noLineSelection.description": "Velg først et linjeområde i en filfane.",
@@ -442,6 +444,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "Det oppstod en feil da delingen av sesjonen skulle stoppes",
 
   "toast.session.listFailed.title": "Kunne ikke laste sesjoner for {{project}}",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
 
   "toast.update.title": "Oppdatering tilgjengelig",
   "toast.update.description": "En ny versjon av OpenCode ({{version}}) er nå tilgjengelig for installasjon.",
@@ -545,6 +549,8 @@ export const dict = {
   "session.revertDock.restore": "Gjenopprett melding",
 
   "session.new.title": "Bygg hva som helst",
+  "session.new.openclaw.title": "Your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",
   "session.new.worktree.create": "Opprett nytt worktree",
@@ -609,6 +615,8 @@ export const dict = {
   "sidebar.menu.toggle": "Veksle meny",
   "sidebar.nav.projectsAndSessions": "Prosjekter og sesjoner",
   "sidebar.settings": "Innstillinger",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Hjelp",
   "sidebar.workspaces.enable": "Aktiver arbeidsområder",
   "sidebar.workspaces.disable": "Deaktiver arbeidsområder",

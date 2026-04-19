@@ -424,6 +424,8 @@ export const dict = {
   "toast.file.loadFailed.title": "Kunne ikke indlæse fil",
 
   "toast.file.listFailed.title": "Kunne ikke liste filer",
+  "toast.file.listFailed.openclaw": "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent": "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
   "toast.context.noLineSelection.title": "Ingen linjevalg",
   "toast.context.noLineSelection.description": "Vælg først et linjeinterval i en filfane.",
   "toast.session.share.copyFailed.title": "Kunne ikke kopiere URL til udklipsholder",
@@ -438,6 +440,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "Der opstod en fejl under stop af sessionsdeling",
 
   "toast.session.listFailed.title": "Kunne ikke indlæse sessioner for {{project}}",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
 
   "toast.update.title": "Opdatering tilgængelig",
   "toast.update.description": "En ny version af OpenCode ({{version}}) er nu tilgængelig til installation.",
@@ -539,6 +543,8 @@ export const dict = {
   "session.revertDock.restore": "Gendan besked",
 
   "session.new.title": "Byg hvad som helst",
+  "session.new.openclaw.title": "Your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.worktree.main": "Hovedgren",
   "session.new.worktree.mainWithBranch": "Hovedgren ({{branch}})",
   "session.new.worktree.create": "Opret nyt worktree",
@@ -602,6 +608,8 @@ export const dict = {
   "sidebar.menu.toggle": "Skift menu",
   "sidebar.nav.projectsAndSessions": "Projekter og sessioner",
   "sidebar.settings": "Indstillinger",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Hjælp",
   "sidebar.workspaces.enable": "Aktiver arbejdsområder",
   "sidebar.workspaces.disable": "Deaktiver arbejdsområder",

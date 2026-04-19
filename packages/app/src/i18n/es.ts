@@ -425,6 +425,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Fallo al cargar archivo",
   "toast.file.listFailed.title": "Fallo al listar archivos",
+  "toast.file.listFailed.openclaw": "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent": "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "Sin selección de líneas",
   "toast.context.noLineSelection.description": "Primero selecciona un rango de líneas en una pestaña de archivo.",
@@ -441,6 +443,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "Ocurrió un error al dejar de compartir la sesión",
 
   "toast.session.listFailed.title": "Fallo al cargar sesiones para {{project}}",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
 
   "toast.update.title": "Actualización disponible",
   "toast.update.description": "Una nueva versión de OpenCode ({{version}}) está disponible para instalar.",
@@ -545,6 +549,8 @@ export const dict = {
   "session.revertDock.restore": "Restaurar mensaje",
 
   "session.new.title": "Construye lo que quieras",
+  "session.new.openclaw.title": "Your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.worktree.main": "Rama principal",
   "session.new.worktree.mainWithBranch": "Rama principal ({{branch}})",
   "session.new.worktree.create": "Crear nuevo árbol de trabajo",
@@ -609,6 +615,8 @@ export const dict = {
   "sidebar.menu.toggle": "Alternar menú",
   "sidebar.nav.projectsAndSessions": "Proyectos y sesiones",
   "sidebar.settings": "Ajustes",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Ayuda",
   "sidebar.workspaces.enable": "Habilitar espacios de trabajo",
   "sidebar.workspaces.disable": "Deshabilitar espacios de trabajo",
