@@ -77,6 +77,7 @@ export interface Interface {
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+  readonly ensureTitle: (sessionID: SessionID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionPrompt") {}
@@ -218,6 +219,68 @@ export const layer = Layer.effect(
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
+        .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
+    })
+
+    const ensureTitleSingle = Effect.fn("SessionPrompt.ensureTitleSingle")(function* (sessionID: SessionID) {
+      const session = yield* sessions.get(sessionID)
+      if (session.parentID) return
+      if (!Session.isDefaultTitle(session.title)) return
+
+      const allMessages = yield* sessions.messages({ sessionID })
+      const history = allMessages.map((m) => ({ info: m.info, parts: m.parts }))
+
+      const real = (m: MessageV2.WithParts) =>
+        m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
+      const idx = history.findIndex(real)
+      if (idx === -1) return
+      if (history.filter(real).length !== 1) return
+
+      const context = history.slice(0, idx + 1)
+      const firstUser = context[idx]
+      if (!firstUser || firstUser.info.role !== "user") return
+      if (!("model" in firstUser.info)) return
+
+      const firstInfo = firstUser.info
+      const userModel = firstUser.info.model
+
+      const subtasks = firstUser.parts.filter((p): p is MessageV2.SubtaskPart => p.type === "subtask")
+      const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
+
+      const ag = yield* agents.get("title")
+      if (!ag) return
+
+      const mdl = yield* provider.getModel(userModel.providerID, userModel.modelID)
+      const msgs = onlySubtasks
+        ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
+        : yield* MessageV2.toModelMessagesEffect(context, mdl)
+      const text = yield* llm
+        .stream({
+          agent: ag,
+          user: firstInfo,
+          system: [],
+          small: true,
+          tools: {},
+          model: mdl,
+          sessionID,
+          retries: 2,
+          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+        })
+        .pipe(
+          Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
+          Stream.map((e) => e.text),
+          Stream.mkString,
+          Effect.orDie,
+        )
+      const cleaned = text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (!cleaned) return
+      const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      yield* sessions
+        .setTitle({ sessionID, title: t })
         .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
     })
 
@@ -1638,6 +1701,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       shell,
       command,
       resolvePromptParts,
+      ensureTitle: ensureTitleSingle,
     })
   }),
 )
