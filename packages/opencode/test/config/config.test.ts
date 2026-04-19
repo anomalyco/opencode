@@ -2354,3 +2354,126 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+describe("global raw config and rules", () => {
+  const runGlobal = <A>(fn: (svc: Config.Interface) => Effect.Effect<A>) =>
+    Effect.runPromise(Config.Service.use(fn).pipe(Effect.scoped, Effect.provide(layer)))
+
+  async function withGlobalTmp<T>(
+    fn: (svc: Config.Interface) => Promise<T> | Effect.Effect<T, any>,
+    options?: { init?: (dir: string) => Promise<void> },
+  ) {
+    await using globalTmp = await tmpdir({ init: options?.init })
+    const prev = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await clear()
+    try {
+      return await Effect.runPromise(
+        Config.Service.use((svc) => {
+          const r = fn(svc)
+          return Effect.isEffect(r) ? r.pipe(Effect.orDie) : Effect.promise(() => r as Promise<T>)
+        }).pipe(Effect.scoped, Effect.provide(layer)),
+      )
+    } finally {
+      await Instance.disposeAll()
+      ;(Global.Path as { config: string }).config = prev
+      await clear()
+    }
+  }
+
+  test("getGlobalConfig returns default content when no config file exists", async () => {
+    const result = await withGlobalTmp((svc) => svc.getGlobalConfig())
+    expect(result.content).toContain('"$schema"')
+  })
+
+  test("updateGlobalConfig succeeds with valid JSONC", async () => {
+    const input = '{\n  "$schema": "https://opencode.ai/config.json"\n}\n'
+    await withGlobalTmp(async (svc) => {
+      const result = await Effect.runPromise(svc.updateGlobalConfig(input).pipe(Effect.orDie))
+      expect(result.content).toBe(input)
+      const onDisk = await Bun.file(result.path).text()
+      expect(onDisk).toBe(input)
+    })
+  })
+
+  test("updateGlobalConfig rejects invalid JSONC", async () => {
+    try {
+      await withGlobalTmp((svc) => svc.updateGlobalConfig("{ invalid json }"))
+      expect.unreachable()
+    } catch (error: any) {
+      expect(error.name).toBe("ConfigJsonError")
+    }
+  })
+
+  test("updateGlobalConfig rejects valid JSON failing schema validation", async () => {
+    try {
+      await withGlobalTmp((svc) => svc.updateGlobalConfig('{ "model": 123 }'))
+      expect.unreachable()
+    } catch (error: any) {
+      expect(error.name).toBe("ConfigInvalidError")
+    }
+  })
+
+  test("updateGlobalConfig rejects JSONC syntax for existing opencode.json", async () => {
+    try {
+      await withGlobalTmp(
+        (svc) => svc.updateGlobalConfig('{\n  // comment\n  "$schema": "https://opencode.ai/config.json",\n}\n'),
+        {
+          init: async (dir) => {
+            await Bun.write(path.join(dir, "opencode.json"), '{\n  "$schema": "https://opencode.ai/config.json"\n}\n')
+          },
+        },
+      )
+      expect.unreachable()
+    } catch (error: any) {
+      expect(error.name).toBe("ConfigJsonError")
+    }
+  })
+
+  test("updateGlobalConfig allows JSONC syntax for existing opencode.jsonc", async () => {
+    const input = '{\n  // comment\n  "$schema": "https://opencode.ai/config.json",\n}\n'
+    const result = await withGlobalTmp(
+      (svc) => svc.updateGlobalConfig(input),
+      {
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "opencode.jsonc"), '{\n  "$schema": "https://opencode.ai/config.json"\n}\n')
+        },
+      },
+    )
+    expect(result.content).toBe(input)
+    expect(result.path).toEndWith("opencode.jsonc")
+  })
+
+  test("updateGlobalConfig preserves JSONC comments and round-trips correctly", async () => {
+    const input = '{\n  // top comment\n  "$schema": "https://opencode.ai/config.json",\n  "model": "anthropic/claude-sonnet-4", // inline\n}\n'
+    await withGlobalTmp(
+      async (svc) => {
+        const writeResult = await Effect.runPromise(svc.updateGlobalConfig(input).pipe(Effect.orDie))
+        const readResult = await Effect.runPromise(svc.getGlobalConfig())
+        expect(readResult.content).toBe(input)
+        expect(writeResult.content).toBe(input)
+      },
+      {
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "opencode.jsonc"), '{\n  "$schema": "https://opencode.ai/config.json"\n}\n')
+        },
+      },
+    )
+  })
+
+  test("getGlobalRules returns empty string when no AGENTS.md exists", async () => {
+    const result = await withGlobalTmp((svc) => svc.getGlobalRules())
+    expect(result.content).toBe("")
+    expect(result.path).toEndWith("AGENTS.md")
+  })
+
+  test("updateGlobalRules writes content and returns it", async () => {
+    const input = "# My Rules\n\nBe nice."
+    await withGlobalTmp(async (svc) => {
+      const result = await Effect.runPromise(svc.updateGlobalRules(input))
+      expect(result.content).toBe(input)
+      const onDisk = await Bun.file(result.path).text()
+      expect(onDisk).toBe(input)
+    })
+  })
+})

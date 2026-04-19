@@ -2247,6 +2247,104 @@ export type GlobalConfigUpdateResponses = {
 
 export type GlobalConfigUpdateResponse = GlobalConfigUpdateResponses[keyof GlobalConfigUpdateResponses]
 
+export type GlobalConfigFileGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/config/file"
+}
+
+export type GlobalConfigFileGetResponses = {
+  /**
+   * Raw config file content and path
+   */
+  200: {
+    path: string
+    content: string
+  }
+}
+
+export type GlobalConfigFileGetResponse = GlobalConfigFileGetResponses[keyof GlobalConfigFileGetResponses]
+
+export type GlobalConfigFileUpdateData = {
+  body?: {
+    content: string
+  }
+  path?: never
+  query?: never
+  url: "/global/config/file"
+}
+
+export type GlobalConfigFileUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalConfigFileUpdateError = GlobalConfigFileUpdateErrors[keyof GlobalConfigFileUpdateErrors]
+
+export type GlobalConfigFileUpdateResponses = {
+  /**
+   * Successfully updated config file
+   */
+  200: {
+    path: string
+    content: string
+  }
+}
+
+export type GlobalConfigFileUpdateResponse = GlobalConfigFileUpdateResponses[keyof GlobalConfigFileUpdateResponses]
+
+export type GlobalRulesFileGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/rules/file"
+}
+
+export type GlobalRulesFileGetResponses = {
+  /**
+   * Raw rules file content and path
+   */
+  200: {
+    path: string
+    content: string
+  }
+}
+
+export type GlobalRulesFileGetResponse = GlobalRulesFileGetResponses[keyof GlobalRulesFileGetResponses]
+
+export type GlobalRulesFileUpdateData = {
+  body?: {
+    content: string
+  }
+  path?: never
+  query?: never
+  url: "/global/rules/file"
+}
+
+export type GlobalRulesFileUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalRulesFileUpdateError = GlobalRulesFileUpdateErrors[keyof GlobalRulesFileUpdateErrors]
+
+export type GlobalRulesFileUpdateResponses = {
+  /**
+   * Successfully updated rules file
+   */
+  200: {
+    path: string
+    content: string
+  }
+}
+
+export type GlobalRulesFileUpdateResponse = GlobalRulesFileUpdateResponses[keyof GlobalRulesFileUpdateResponses]
+
 export type GlobalDisposeData = {
   body?: never
   path?: never

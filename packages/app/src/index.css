@@ -48,6 +48,10 @@
     will-change: clip-path;
   }
 
+  [data-component="tabs"].settings-dialog {
+    height: min(calc(100vh - 32px), 600px);
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;

@@ -6,9 +6,12 @@ import { InvalidError, JsonError } from "./error"
 
 type Schema<T> = z.ZodType<T>
 
-export function jsonc(text: string, filepath: string): unknown {
+export function jsonc(text: string, filepath: string, options?: { jsonc?: boolean }): unknown {
   const errors: JsoncParseError[] = []
-  const data = parseJsoncImpl(text, errors, { allowTrailingComma: true })
+  const data = parseJsoncImpl(text, errors, {
+    allowTrailingComma: options?.jsonc ?? true,
+    disallowComments: !(options?.jsonc ?? true),
+  })
   if (errors.length) {
     const lines = text.split("\n")
     const issues = errors
@@ -26,7 +29,8 @@ export function jsonc(text: string, filepath: string): unknown {
       .join("\n")
     throw new JsonError({
       path: filepath,
-      message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${issues}\n--- End ---`,
+      message: issues,
+      input: text,
     })
   }
 

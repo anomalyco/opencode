@@ -47,12 +47,18 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GlobalConfigFileGetResponses,
+  GlobalConfigFileUpdateErrors,
+  GlobalConfigFileUpdateResponses,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalRulesFileGetResponses,
+  GlobalRulesFileUpdateErrors,
+  GlobalRulesFileUpdateResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
@@ -281,6 +287,90 @@ export class Config extends HeyApiClient {
   }
 }
 
+export class ConfigFile extends HeyApiClient {
+  /**
+   * Get global config file
+   *
+   * Retrieve the raw content and path of the global configuration file.
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalConfigFileGetResponses, unknown, ThrowOnError>({
+      url: "/global/config/file",
+      ...options,
+    })
+  }
+
+  /**
+   * Update global config file
+   *
+   * Write raw content to the global configuration file. Max body size: 100 KB.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      content?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "content" }] }])
+    return (options?.client ?? this.client).put<
+      GlobalConfigFileUpdateResponses,
+      GlobalConfigFileUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/global/config/file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class RulesFile extends HeyApiClient {
+  /**
+   * Get global rules file
+   *
+   * Retrieve the raw content and path of the global AGENTS.md file.
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalRulesFileGetResponses, unknown, ThrowOnError>({
+      url: "/global/rules/file",
+      ...options,
+    })
+  }
+
+  /**
+   * Update global rules file
+   *
+   * Write raw content to the global AGENTS.md file. Max body size: 500 KB.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      content?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "content" }] }])
+    return (options?.client ?? this.client).put<
+      GlobalRulesFileUpdateResponses,
+      GlobalRulesFileUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/global/rules/file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Global extends HeyApiClient {
   /**
    * Get health
@@ -345,6 +435,16 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
+  }
+
+  private _configFile?: ConfigFile
+  get configFile(): ConfigFile {
+    return (this._configFile ??= new ConfigFile({ client: this.client }))
+  }
+
+  private _rulesFile?: RulesFile
+  get rulesFile(): RulesFile {
+    return (this._rulesFile ??= new RulesFile({ client: this.client }))
   }
 }
 

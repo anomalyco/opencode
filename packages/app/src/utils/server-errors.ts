@@ -7,6 +7,14 @@ export type ConfigInvalidError = {
   }
 }
 
+export type ConfigJsonError = {
+  name: "ConfigJsonError"
+  data: {
+    path?: string
+    message?: string
+  }
+}
+
 export type ProviderModelNotFoundError = {
   name: "ProviderModelNotFoundError"
   data: {
@@ -27,6 +35,7 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
 
 export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
   if (isConfigInvalidErrorLike(error)) return parseReadableConfigInvalidError(error, translate)
+  if (isConfigJsonErrorLike(error)) return parseReadableConfigJsonError(error, translate)
   if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
@@ -40,14 +49,24 @@ function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
   return o.name === "ConfigInvalidError" && typeof o.data === "object" && o.data !== null
 }
 
+function isConfigJsonErrorLike(error: unknown): error is ConfigJsonError {
+  if (typeof error !== "object" || error === null) return false
+  const o = error as Record<string, unknown>
+  return o.name === "ConfigJsonError" && typeof o.data === "object" && o.data !== null
+}
+
 function isProviderModelNotFoundErrorLike(error: unknown): error is ProviderModelNotFoundError {
   if (typeof error !== "object" || error === null) return false
   const o = error as Record<string, unknown>
   return o.name === "ProviderModelNotFoundError" && typeof o.data === "object" && o.data !== null
 }
 
+function readablePath(path?: string) {
+  return path && path !== "config" ? path : "config"
+}
+
 export function parseReadableConfigInvalidError(errorInput: ConfigInvalidError, translator?: Translator) {
-  const file = errorInput.data.path && errorInput.data.path !== "config" ? errorInput.data.path : "config"
+  const file = readablePath(errorInput.data.path)
   const detail = errorInput.data.message?.trim() ?? ""
   const issues = (errorInput.data.issues ?? [])
     .map((issue) => {
@@ -59,6 +78,16 @@ export function parseReadableConfigInvalidError(errorInput: ConfigInvalidError, 
   const msg = issues.length ? issues.join("\n") : detail
   if (!msg) return tr(translator, "error.chain.configInvalid", `Config file at ${file} is invalid`, { path: file })
   return tr(translator, "error.chain.configInvalidWithMessage", `Config file at ${file} is invalid: ${msg}`, {
+    path: file,
+    message: msg,
+  })
+}
+
+function parseReadableConfigJsonError(errorInput: ConfigJsonError, translator?: Translator) {
+  const file = readablePath(errorInput.data.path)
+  const msg = errorInput.data.message?.trim() ?? ""
+  if (!msg) return tr(translator, "error.chain.configJsonInvalid", `Config file at ${file} has syntax errors`, { path: file })
+  return tr(translator, "error.chain.configJsonInvalidWithMessage", `Config file at ${file} has syntax errors: ${msg}`, {
     path: file,
     message: msg,
   })

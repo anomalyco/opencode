@@ -182,6 +182,121 @@ export const GlobalRoutes = lazy(() =>
         return c.json(next)
       },
     )
+    .get(
+      "/config/file",
+      describeRoute({
+        summary: "Get global config file",
+        description: "Retrieve the raw content and path of the global configuration file.",
+        operationId: "global.configFile.get",
+        responses: {
+          200: {
+            description: "Raw config file content and path",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    path: z.string(),
+                    content: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobalConfig())))
+      },
+    )
+    .put(
+      "/config/file",
+      describeRoute({
+        summary: "Update global config file",
+        description: "Write raw content to the global configuration file. Max body size: 100 KB.",
+        operationId: "global.configFile.update",
+        responses: {
+          200: {
+            description: "Successfully updated config file",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    path: z.string(),
+                    content: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({ content: z.string().max(100_000, "Content exceeds maximum size of 100 KB") })),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.updateGlobalConfig(body.content))))
+      },
+    )
+    .get(
+      "/rules/file",
+      describeRoute({
+        summary: "Get global rules file",
+        description: "Retrieve the raw content and path of the global AGENTS.md file.",
+        operationId: "global.rulesFile.get",
+        responses: {
+          200: {
+            description: "Raw rules file content and path",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    path: z.string(),
+                    content: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobalRules())))
+      },
+    )
+    .put(
+      "/rules/file",
+      describeRoute({
+        summary: "Update global rules file",
+        description: "Write raw content to the global AGENTS.md file. Max body size: 500 KB.",
+        operationId: "global.rulesFile.update",
+        responses: {
+          200: {
+            description: "Successfully updated rules file",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    path: z.string(),
+                    content: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({
+        content: z
+          .string()
+          .max(500_000, "Content exceeds maximum size of 500 KB")
+          .refine((v) => !v.includes("\0"), "Content contains invalid null bytes"),
+      })),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.updateGlobalRules(body.content))))
+      },
+    )
     .post(
       "/dispose",
       describeRoute({

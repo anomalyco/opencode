@@ -714,6 +714,8 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Shortcuts",
+  "settings.tab.config": "Config",
+  "settings.tab.rules": "Rules",
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "WSL integration",
   "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
@@ -870,12 +872,37 @@ export const dict = {
   "settings.providers.tag.config": "Config",
   "settings.providers.tag.custom": "Custom",
   "settings.providers.tag.other": "Other",
+
   "settings.models.title": "Models",
   "settings.models.description": "Model settings will be configurable here.",
+
+  "settings.config.save": "Save",
+  "settings.config.revert": "Revert",
+  "settings.config.saved": "Config saved",
+  "settings.config.saved.description": "Changes have been applied",
+  "settings.config.error.invalid": "Invalid JSON/JSONC",
+  "settings.config.error.saveFailed": "Failed to save config",
+  "settings.config.loading": "Loading\u2026",
+  "settings.config.loadFailed": "Failed to load config",
+  "settings.config.initFailed": "Failed to initialise editor",
+  "settings.config.unsaved": "You have unsaved changes",
+
+  "settings.rules.save": "Save",
+  "settings.rules.revert": "Revert",
+  "settings.rules.saved": "Rules saved",
+  "settings.rules.saved.description": "Changes will apply to new messages",
+  "settings.rules.error.saveFailed": "Failed to save rules",
+  "settings.rules.loading": "Loading\u2026",
+  "settings.rules.loadFailed": "Failed to load rules",
+  "settings.rules.initFailed": "Failed to initialise editor",
+  "settings.rules.unsaved": "You have unsaved changes",
+
   "settings.agents.title": "Agents",
   "settings.agents.description": "Agent settings will be configurable here.",
+
   "settings.commands.title": "Commands",
   "settings.commands.description": "Command settings will be configurable here.",
+  
   "settings.mcp.title": "MCP",
   "settings.mcp.description": "MCP settings will be configurable here.",
 

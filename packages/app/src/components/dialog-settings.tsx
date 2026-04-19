@@ -8,6 +8,8 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsConfig } from "./settings-config"
+import { SettingsRules } from "./settings-rules"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -15,7 +17,12 @@ export const DialogSettings: Component = () => {
 
   return (
     <Dialog size="x-large" transition>
-      <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
+      <Tabs
+        orientation="vertical"
+        variant="settings"
+        defaultValue="general"
+        class="settings-dialog"
+      >
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-3 w-full pt-3">
@@ -45,6 +52,14 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="config">
+                      <Icon name="code" />
+                      {language.t("settings.tab.config")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="rules">
+                      <Icon name="pencil-line" />
+                      {language.t("settings.tab.rules")}
+                    </Tabs.Trigger>
                   </div>
                 </div>
               </div>
@@ -55,17 +70,23 @@ export const DialogSettings: Component = () => {
             </div>
           </div>
         </Tabs.List>
-        <Tabs.Content value="general" class="no-scrollbar">
+        <Tabs.Content value="general" class="no-scrollbar h-full flex flex-col">
           <SettingsGeneral />
         </Tabs.Content>
-        <Tabs.Content value="shortcuts" class="no-scrollbar">
+        <Tabs.Content value="shortcuts" class="no-scrollbar h-full flex flex-col">
           <SettingsKeybinds />
         </Tabs.Content>
-        <Tabs.Content value="providers" class="no-scrollbar">
+        <Tabs.Content value="providers" class="no-scrollbar h-full flex flex-col">
           <SettingsProviders />
         </Tabs.Content>
-        <Tabs.Content value="models" class="no-scrollbar">
+        <Tabs.Content value="models" class="no-scrollbar h-full flex flex-col">
           <SettingsModels />
+        </Tabs.Content>
+        <Tabs.Content value="config" class="no-scrollbar h-full flex flex-col">
+          <SettingsConfig />
+        </Tabs.Content>
+        <Tabs.Content value="rules" class="no-scrollbar h-full flex flex-col">
+          <SettingsRules />
         </Tabs.Content>
       </Tabs>
     </Dialog>

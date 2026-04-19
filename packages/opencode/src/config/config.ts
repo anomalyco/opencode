@@ -7,6 +7,7 @@ import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fsNode from "fs/promises"
 import { NamedError } from "@opencode-ai/shared/util/error"
+import { InvalidError, JsonError } from "./error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -276,6 +277,10 @@ export interface Interface {
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<Info>
+  readonly getGlobalConfig: () => Effect.Effect<{ path: string; content: string }>
+  readonly updateGlobalConfig: (content: string) => Effect.Effect<{ path: string; content: string }, InstanceType<typeof JsonError> | InstanceType<typeof InvalidError>>
+  readonly getGlobalRules: () => Effect.Effect<{ path: string; content: string }>
+  readonly updateGlobalRules: (content: string) => Effect.Effect<{ path: string; content: string }>
   readonly invalidate: (wait?: boolean) => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -760,12 +765,57 @@ export const layer = Layer.effect(
       return next
     })
 
+    const getGlobalConfig = Effect.fn("Config.getGlobalConfig")(function* () {
+      const file = globalConfigFile()
+      const content = (yield* readConfigFile(file)) ?? '{\n  "$schema": "https://opencode.ai/config.json"\n}\n'
+      return { path: file, content }
+    })
+
+    const updateGlobalConfig = Effect.fn("Config.updateGlobalConfig")(function* (content: string) {
+      const file = globalConfigFile()
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text: content, type: "path", path: file }),
+      )
+      const parsed = yield* Effect.try({
+        try: () => ConfigParse.jsonc(expanded, file, { jsonc: file.endsWith(".jsonc") }),
+        catch: (e) => e as InstanceType<typeof JsonError>,
+      })
+      yield* Effect.try({
+        try: () => ConfigParse.schema(Info, normalizeLoadedConfig(parsed, file), file),
+        catch: (e) => e as InstanceType<typeof InvalidError>,
+      })
+      yield* fs.writeFileString(file, content).pipe(Effect.orDie)
+      yield* invalidate(true)
+      return { path: file, content }
+    })
+
+    function globalRulesFile() {
+      return path.join(Global.Path.config, "AGENTS.md")
+    }
+
+    const getGlobalRules = Effect.fn("Config.getGlobalRules")(function* () {
+      const file = globalRulesFile()
+      const content = (yield* readConfigFile(file)) ?? ""
+      return { path: file, content }
+    })
+
+    const updateGlobalRules = Effect.fn("Config.updateGlobalRules")(function* (content: string) {
+      const file = globalRulesFile()
+      yield* fs.writeFileString(file, content).pipe(Effect.orDie)
+      yield* invalidate(true)
+      return { path: file, content }
+    })
+
     return Service.of({
       get,
       getGlobal,
       getConsoleState,
       update,
       updateGlobal,
+      getGlobalConfig,
+      updateGlobalConfig,
+      getGlobalRules,
+      updateGlobalRules,
       invalidate,
       directories,
       waitForDependencies,

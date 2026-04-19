@@ -22,6 +22,8 @@ export const ErrorMiddleware: ErrorHandler = (err, c) => {
     if (err instanceof NotFoundError) status = 404
     else if (err instanceof Provider.ModelNotFoundError) status = 400
     else if (err.name === "ProviderAuthValidationFailed") status = 400
+    else if (err.name === "ConfigJsonError") status = 400
+    else if (err.name === "ConfigInvalidError") status = 400
     else if (err.name.startsWith("Worktree")) status = 400
     else status = 500
     return c.json(err.toObject(), { status })

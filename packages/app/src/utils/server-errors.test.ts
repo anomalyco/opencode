@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
+import type { ConfigInvalidError, ConfigJsonError, ProviderModelNotFoundError } from "./server-errors"
 import { formatServerError, parseReadableConfigInvalidError } from "./server-errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
@@ -16,6 +16,8 @@ function useLanguageMock() {
     "error.chain.unknown": "Erro desconhecido",
     "error.chain.configInvalid": "Arquivo de config em {{path}} invalido",
     "error.chain.configInvalidWithMessage": "Arquivo de config em {{path}} invalido: {{message}}",
+    "error.chain.configJsonInvalid": "Arquivo de config em {{path}} tem erros de sintaxe",
+    "error.chain.configJsonInvalidWithMessage": "Arquivo de config em {{path}} tem erros de sintaxe: {{message}}",
     "error.chain.modelNotFound": "Modelo nao encontrado: {{provider}}/{{model}}",
     "error.chain.didYouMean": "Voce quis dizer: {{suggestions}}",
     "error.chain.checkConfig": "Revise provider/model no config",
@@ -78,6 +80,31 @@ describe("formatServerError", () => {
     const result = formatServerError(error, language.t)
 
     expect(result).toBe("Arquivo de config em config invalido: Missing host")
+  })
+
+  test("formats config json errors with message", () => {
+    const error = {
+      name: "ConfigJsonError",
+      data: {
+        path: "opencode.jsonc",
+        message: "Unexpected token at line 2",
+      },
+    } satisfies ConfigJsonError
+
+    expect(formatServerError(error, language.t)).toBe(
+      "Arquivo de config em opencode.jsonc tem erros de sintaxe: Unexpected token at line 2",
+    )
+  })
+
+  test("formats config json errors without message", () => {
+    const error = {
+      name: "ConfigJsonError",
+      data: {
+        path: "config",
+      },
+    } satisfies ConfigJsonError
+
+    expect(formatServerError(error, language.t)).toBe("Arquivo de config em config tem erros de sintaxe")
   })
 
   test("returns error messages", () => {
