@@ -584,6 +584,32 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.agentProgressIndicator.title")}
+          description={language.t("settings.general.row.agentProgressIndicator.description")}
+        >
+          <Select
+            data-action="settings-agent-progress-indicator"
+            options={[
+              { value: "border", label: language.t("settings.general.row.agentProgressIndicator.option.border") },
+              { value: "bar", label: language.t("settings.general.row.agentProgressIndicator.option.bar") },
+            ]}
+            current={[
+              { value: "border", label: language.t("settings.general.row.agentProgressIndicator.option.border") },
+              { value: "bar", label: language.t("settings.general.row.agentProgressIndicator.option.bar") },
+            ].find((o) => o.value === settings.appearance.agentProgressIndicator())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) =>
+              option && settings.appearance.setAgentProgressIndicator(option.value as "border" | "bar")
+            }
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "220px" }}
+          />
+        </SettingsRow>
       </SettingsList>
     </div>
   )
@@ -732,7 +758,7 @@ export const SettingsGeneral: Component = () => {
   console.log(import.meta.env)
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+      <div data-component="settings-sticky" class="sticky top-0 z-10">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
         </div>

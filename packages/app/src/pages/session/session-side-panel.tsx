@@ -206,7 +206,8 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
+        data-component="side-panel"
+        class="relative min-w-0 h-full flex shrink-0 overflow-hidden"
         classList={{
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
@@ -214,7 +215,13 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <div class="size-full flex border-l border-border-weaker-base">
+        <div
+          class="size-full flex border-l"
+          style={{
+            "border-left-width": "var(--layout-divider-width, 1px)",
+            "border-left-color": "var(--layout-divider-base, var(--border-weaker-base))",
+          }}
+        >
           <div
             aria-hidden={!reviewOpen()}
             inert={!reviewOpen()}
@@ -281,7 +288,7 @@ export function SessionSidePanel(props: {
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
-                      <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
+                      <div class="h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
                         <TooltipKeybind
                           title={language.t("command.file.open")}
                           keybind={command.keybind("file.open")}
@@ -368,7 +375,13 @@ export function SessionSidePanel(props: {
             >
               <div
                 class="h-full flex flex-col overflow-hidden group/filetree"
-                classList={{ "border-l border-border-weaker-base": reviewOpen() }}
+                classList={{ "border-l": reviewOpen() }}
+                style={{
+                  "border-left-width": reviewOpen() ? "var(--layout-divider-width, 1px)" : undefined,
+                  "border-left-color": reviewOpen()
+                    ? "var(--layout-divider-base, var(--border-weaker-base))"
+                    : undefined,
+                }}
               >
                 <Tabs
                   variant="pill"
@@ -388,7 +401,7 @@ export function SessionSidePanel(props: {
                       {language.t("session.files.all")}
                     </Tabs.Trigger>
                   </Tabs.List>
-                  <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
+                  <Tabs.Content value="changes" class="px-3 py-0">
                     <Switch>
                       <Match when={props.hasReview() || !props.diffsReady()}>
                         <Show
@@ -413,7 +426,7 @@ export function SessionSidePanel(props: {
                       </Match>
                     </Switch>
                   </Tabs.Content>
-                  <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                  <Tabs.Content value="all" class="px-3 py-0">
                     <Switch>
                       <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
                       <Match when={true}>

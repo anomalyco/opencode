@@ -12,12 +12,10 @@ const palette = [
   "var(--icon-agent-plan-base)",
   "var(--syntax-info)",
   "var(--syntax-success)",
-  "var(--syntax-warning)",
   "var(--syntax-property)",
   "var(--syntax-constant)",
   "var(--text-diff-add-base)",
   "var(--text-diff-delete-base)",
-  "var(--icon-warning-base)",
 ]
 
 function tone(name: string) {

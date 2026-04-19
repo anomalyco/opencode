@@ -230,6 +230,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
+    color: var(--border-interactive-base, var(--surface-interactive-base));
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
@@ -239,7 +240,7 @@
   &:hover,
   &:focus-visible {
     border-color: var(--border-weak-base, rgba(255, 255, 255, 0.08));
-    background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
+    background: var(--background-weak);
 
     [data-component="task-tool-action"] {
       opacity: 1;

@@ -642,11 +642,8 @@ export function MessageTimeline(props: {
             onClick={props.onResumeScroll}
           >
             <div
-              class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
-              style={{
-                "box-shadow":
-                  "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
-              }}
+              data-component="session-scroll-resume"
+              class="flex items-center justify-center w-8 h-6 rounded-[8px] transition-colors [--icon-base:var(--icon-base)] group-hover:[--icon-base:var(--icon-strong-base)]"
             >
               <Icon name="arrow-down-to-line" size="small" />
             </div>
@@ -721,7 +718,11 @@ export function MessageTimeline(props: {
                   "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 }}
               >
+<<<<<<< HEAD
                 <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
+=======
+                <Show when={settings.appearance.agentProgressIndicator() === "bar" && workingStatus() !== "hidden"}>
+>>>>>>> ce4e44ccc (chore(improve-ux): improve UX and design)
                   <div
                     data-component="session-progress"
                     data-state={workingStatus()}
@@ -791,7 +792,7 @@ export function MessageTimeline(props: {
                             data-slot="session-title-child"
                             value={title.draft}
                             disabled={titleMutation.isPending}
-                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px] pl-1 -ml-1"
+                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
                             style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
                             onInput={(event) => setTitle("draft", event.currentTarget.value)}
                             onKeyDown={(event) => {
@@ -830,7 +831,7 @@ export function MessageTimeline(props: {
                               as={IconButton}
                               icon="dot-grid"
                               variant="ghost"
-                              class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                              class="size-6 rounded-lg data-[expanded]:bg-surface-base-active"
                               classList={{
                                 "bg-surface-base-active": share.open || title.pendingShare,
                               }}
@@ -963,7 +964,7 @@ export function MessageTimeline(props: {
                                           <Button
                                             size="large"
                                             variant="secondary"
-                                            class="w-full shadow-none border border-border-weak-base"
+                                            class="w-full shadow-none"
                                             onClick={unshareSession}
                                             disabled={unshareMutation.isPending}
                                           >
@@ -1059,7 +1060,10 @@ export function MessageTimeline(props: {
                                   return (
                                     <Show when={comment()}>
                                       {(c) => (
-                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                        <div
+                                          data-component="timeline-comment"
+                                          class="shrink-0 max-w-[260px] rounded-[10px] px-2.5 py-2"
+                                        >
                                           <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
                                             <FileIcon
                                               node={{ path: c().path, type: "file" }}

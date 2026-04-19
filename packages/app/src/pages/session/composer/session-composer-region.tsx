@@ -139,7 +139,7 @@ export function SessionComposerRegion(props: {
     <div
       ref={props.setPromptDockRef}
       data-component="session-prompt-dock"
-      class="shrink-0 w-full pb-3 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
+      class="shrink-0 w-full pb-3 flex flex-col justify-center items-center pointer-events-none"
     >
       <div
         classList={{
@@ -187,7 +187,7 @@ export function SessionComposerRegion(props: {
                     </div>
                   )}
                 </Show>
-                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                <div class="w-full min-h-32 md:min-h-40 rounded-[18px] bg-surface-raised-base px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
                   {handoffPrompt() || language.t("prompt.loading")}
                 </div>
               </>
@@ -266,7 +266,7 @@ export function SessionComposerRegion(props: {
               >
                 <div
                   ref={props.inputRef}
-                  class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
+                  class="w-full rounded-[18px] bg-surface-raised-base px-4 py-3 text-16-regular text-text-weak"
                 >
                   <span>{language.t("session.child.promptDisabled")} </span>
                   <Show when={parentID()}>

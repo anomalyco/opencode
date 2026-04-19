@@ -77,7 +77,9 @@ export const WorkspaceDragOverlay = (props: {
 
   return (
     <Show when={label()}>
-      {(value) => <div class="bg-background-base rounded-md px-2 py-1 text-14-medium text-text-strong">{value()}</div>}
+      {(value) => (
+        <div class="bg-surface-raised-base rounded-lg px-2.5 py-1.5 text-14-medium text-text-strong">{value()}</div>
+      )}
     </Show>
   )
 }
@@ -166,7 +168,13 @@ const WorkspaceActions = (props: {
     <DropdownMenu
       modal={!props.sidebarHovering()}
       open={props.menuOpen()}
-      onOpenChange={(open) => props.setMenuOpen(open)}
+      onOpenChange={(open) => {
+        props.setMenuOpen(open)
+        if (open) return
+        if (!props.pendingRename()) return
+        props.setPendingRename(false)
+        props.openEditor(`workspace:${props.directory}`, props.workspaceValue())
+      }}
     >
       <Tooltip value={props.language.t("common.moreOptions")} placement="top">
         <DropdownMenu.Trigger
@@ -180,14 +188,7 @@ const WorkspaceActions = (props: {
         />
       </Tooltip>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          onCloseAutoFocus={(event) => {
-            if (!props.pendingRename()) return
-            event.preventDefault()
-            props.setPendingRename(false)
-            props.openEditor(`workspace:${props.directory}`, props.workspaceValue())
-          }}
-        >
+        <DropdownMenu.Content>
           <DropdownMenu.Item
             disabled={props.local()}
             onSelect={() => {
@@ -380,9 +381,9 @@ export const SortableWorkspace = (props: {
                 when={workspaceEditActive()}
                 fallback={
                   <Collapsible.Trigger
-                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
+                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-lg transition-[padding,background-color] duration-200 ${
                       menu.open ? "pr-16" : "pr-2"
-                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16 hover:bg-surface-base-hover`}
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
@@ -391,9 +392,9 @@ export const SortableWorkspace = (props: {
                 }
               >
                 <div
-                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md transition-[padding] duration-200 ${
+                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-lg transition-[padding,background-color] duration-200 ${
                     menu.open ? "pr-16" : "pr-2"
-                  } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                  } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16 bg-surface-base`}
                 >
                   {header()}
                 </div>

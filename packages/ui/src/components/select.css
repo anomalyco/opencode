@@ -2,6 +2,7 @@
   [data-slot="select-select-trigger"] {
     padding: 0 4px 0 8px;
     box-shadow: none;
+    cursor: pointer;
 
     [data-slot="select-select-trigger-value"] {
       overflow: hidden;
@@ -48,12 +49,13 @@
     [data-slot="select-select-trigger"] {
       padding: 6px 6px 6px 12px;
       box-shadow: none;
-      border-radius: 6px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-weaker-base);
       min-width: 160px;
       height: 32px;
       justify-content: flex-end;
       gap: 12px;
-      background-color: transparent;
+      background-color: var(--surface-raised-strong);
 
       [data-slot="select-select-trigger-value"] {
         overflow: hidden;
@@ -70,21 +72,27 @@
         justify-content: center;
         flex-shrink: 0;
         color: var(--text-weak);
-        background-color: var(--surface-raised-base);
-        border-radius: 4px;
+        background-color: var(--surface-base);
+        border-radius: 8px;
         transition: transform 0.1s ease-in-out;
       }
 
       &[data-slot="select-select-trigger"]:hover:not(:disabled),
       &[data-slot="select-select-trigger"][data-expanded],
       &[data-slot="select-select-trigger"][data-expanded]:hover:not(:disabled) {
-        background-color: var(--input-base);
-        box-shadow: var(--shadow-xs-border-base);
+        background-color: var(--surface-raised-stronger);
+        border-color: var(--border-weak-hover);
+        box-shadow: none;
       }
 
       &:not([data-expanded]):not(:focus-visible):focus {
-        background-color: transparent;
+        background-color: var(--surface-raised-strong);
         box-shadow: none;
+      }
+
+      &[data-expanded] [data-slot="select-select-trigger-icon"],
+      &:hover:not(:disabled) [data-slot="select-select-trigger-icon"] {
+        background-color: var(--surface-base-hover);
       }
     }
   }
@@ -128,7 +136,7 @@
     padding: 2px 8px;
     gap: 12px;
     border-radius: 4px;
-    cursor: default;
+    cursor: pointer;
 
     /* text-12-medium */
     font-family: var(--font-family-sans);
@@ -172,8 +180,11 @@
 
 [data-component="select-content"][data-trigger-style="settings"] {
   min-width: 160px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
+  border: none;
+  background-color: var(--surface-raised-strong);
   padding: 0;
+  box-shadow: var(--shadow-popover);
 
   [data-slot="select-select-content-list"] {
     padding: 4px;
@@ -187,6 +198,14 @@
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
+
+    &[data-highlighted] {
+      background: var(--surface-raised-stronger);
+    }
+
+    &:hover {
+      background: var(--surface-raised-stronger);
+    }
   }
 }
 

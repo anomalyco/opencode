@@ -11,7 +11,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
-import { displayName, sortedRootSessions } from "./helpers"
+import { displayName, sortedRootSessions, workspaceKey } from "./helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -96,11 +96,12 @@ const ProjectTile = (props: {
       <ContextMenu.Trigger
         as="button"
         type="button"
+        tabIndex={props.selected() ? -1 : undefined}
         aria-label={displayName(props.project)}
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-pointer": true,
           "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
           "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
             !props.selected() && !props.active(),
@@ -119,7 +120,7 @@ const ProjectTile = (props: {
           event.preventDefault()
         }}
         onMouseEnter={(event: MouseEvent) => {
-          if (!props.overlay()) return
+          if (props.overlay()) return
           if (props.suppressHover()) return
           props.onProjectMouseEnter(props.project.worktree, event)
         }}
@@ -129,7 +130,7 @@ const ProjectTile = (props: {
           props.onProjectMouseLeave(props.project.worktree)
         }}
         onFocus={() => {
-          if (!props.overlay()) return
+          if (props.overlay()) return
           if (props.suppressHover()) return
           props.onProjectFocus(props.project.worktree)
         }}
@@ -190,6 +191,7 @@ const ProjectPreviewPanel = (props: {
   selected: Accessor<boolean>
   workspaceEnabled: Accessor<boolean>
   workspaces: Accessor<string[]>
+  dirs: Accessor<string[]>
   label: (directory: string) => string
   projectSessions: Accessor<ReturnType<typeof sortedRootSessions>>
   workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
@@ -220,16 +222,21 @@ const ProjectPreviewPanel = (props: {
           </For>
         }
       >
-        <For each={props.workspaces()}>
+        <Show
+          when={
+            props.dirs().find((directory) => workspaceKey(directory) === workspaceKey(props.ctx.currentDir())) ??
+            props.project.worktree
+          }
+        >
           {(directory) => {
-            const sessions = createMemo(() => props.workspaceSessions(directory))
+            const sessions = createMemo(() => props.workspaceSessions(directory()))
             return (
               <div class="flex flex-col gap-1">
                 <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
                   <div class="shrink-0 size-6 flex items-center justify-center">
                     <Icon name="branch" size="small" class="text-icon-base" />
                   </div>
-                  <span class="truncate text-14-medium text-text-base">{props.label(directory)}</span>
+                  <span class="truncate text-14-medium text-text-base">{props.label(directory())}</span>
                 </div>
                 <For each={sessions().slice(0, 2)}>
                   {(session) => (
@@ -237,7 +244,7 @@ const ProjectPreviewPanel = (props: {
                       {...props.ctx.sessionProps}
                       session={session}
                       list={sessions()}
-                      slug={base64Encode(directory)}
+                      slug={base64Encode(directory())}
                       dense
                       showTooltip
                       mobile={props.mobile}
@@ -247,13 +254,13 @@ const ProjectPreviewPanel = (props: {
               </div>
             )
           }}
-        </For>
+        </Show>
       </Show>
     </div>
-    <div class="px-2 py-2 border-t border-border-weak-base">
+    <div class="px-2 py-2 border-t border-border-weaker-base">
       <Button
         variant="ghost"
-        class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+        class="flex w-full rounded-lg text-left justify-start text-text-base px-2 hover:bg-surface-base-hover active:bg-surface-base-active"
         onClick={() => {
           props.ctx.openSidebar()
           props.ctx.onHoverOpenChanged(props.project.worktree, false)
@@ -354,6 +361,7 @@ export const SortableProject = (props: {
             selected={selected}
             workspaceEnabled={workspaceEnabled}
             workspaces={workspaces}
+            dirs={dirs}
             label={label}
             projectSessions={projectSessions}
             workspaceSessions={workspaceSessions}

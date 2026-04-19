@@ -21,7 +21,7 @@
 
   [data-slot="session-review-header"] {
     z-index: 120;
-    background-color: var(--background-stronger);
+    background-color: var(--review-panel-base, var(--background-stronger));
     height: 40px;
     padding-bottom: 8px;
     flex-shrink: 0;
@@ -67,6 +67,14 @@
     [data-slot="accordion-header"]
     [data-slot="accordion-trigger"] {
     background-color: var(--surface-base-active);
+  }
+
+  [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+    background-color: var(--review-panel-base, var(--background-stronger));
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
+    background-color: var(--review-panel-base, var(--background-stronger));
   }
 
   [data-slot="accordion-item"] {
@@ -211,7 +219,7 @@
 
   [data-slot="session-review-large-diff"] {
     padding: 12px;
-    background: var(--background-stronger);
+    background: var(--review-panel-base, var(--background-stronger));
   }
 
   [data-slot="session-review-large-diff-title"] {

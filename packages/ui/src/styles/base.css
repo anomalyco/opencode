@@ -79,7 +79,7 @@ a {
   color: inherit;
   -webkit-text-decoration: inherit;
   text-decoration: inherit;
-  cursor: default;
+  cursor: pointer;
 }
 
 #root:not([aria-hidden]) *[data-tauri-drag-region] {
