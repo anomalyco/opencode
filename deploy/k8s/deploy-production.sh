@@ -90,7 +90,7 @@ docker buildx inspect --bootstrap >/dev/null
 
 # Build relay
 echo "Building relay..."
-docker buildx build --platform linux/amd64 -f packages/relay/Dockerfile -t $REGISTRY/relay:latest --push .
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.relay -t $REGISTRY/relay:latest --push .
 
 # Build executor (new one)
 echo "Building executor..."

@@ -19,7 +19,7 @@ services:
     image: opencode-veritly-relay:latest
     build:
       context: ..
-      dockerfile: packages/relay/Dockerfile
+      dockerfile: docker/Dockerfile.relay
     ports:
       - "18766:8080"
     env_file:
