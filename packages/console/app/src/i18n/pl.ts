@@ -10,7 +10,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Zaloguj się",
-  "nav.free": "Darmowe",
+  "nav.free": "Pobierz",
   "nav.home": "Strona główna",
   "nav.openMenu": "Otwórz menu",
   "nav.getStartedFree": "Zacznij za darmo",

@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop-electron",
   "private": true,
-  "version": "1.4.11",
+  "version": "1.14.18",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -30,6 +30,7 @@
     "electron-store": "^10",
     "electron-updater": "^6",
     "electron-window-state": "^5.0.3",
+    "drizzle-orm": "catalog:",
     "marked": "^15"
   },
   "devDependencies": {
@@ -45,7 +46,7 @@
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "@valibot/to-json-schema": "1.6.0",
-    "electron": "40.4.1",
+    "electron": "41.2.1",
     "electron-builder": "^26",
     "electron-vite": "^5",
     "solid-js": "catalog:",

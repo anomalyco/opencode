@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "엔터프라이즈",
   "nav.zen": "Zen",
   "nav.login": "로그인",
-  "nav.free": "무료",
+  "nav.free": "다운로드",
   "nav.home": "홈",
   "nav.openMenu": "메뉴 열기",
   "nav.getStartedFree": "무료로 시작하기",
