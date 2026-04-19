@@ -1,5 +1,6 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
+import * as Notify from "@tui/util/notify"
 import * as Selection from "@tui/util/selection"
 import * as Terminal from "@tui/util/terminal"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
@@ -58,7 +59,9 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { Permission } from "@/permission"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
+import { Question } from "@/question"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 
 import type { EventSource } from "./context/sdk"
@@ -779,6 +782,32 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       message,
       duration: 5000,
     })
+  })
+
+  const notificationMethod = tuiConfig.notification_method ?? "auto"
+  const notifySession = (sessionID: string, prefix: string) => {
+    const session = sync.session.get(sessionID)
+    if (session?.parentID) return
+    Notify.notifyTerminal({
+      method: notificationMethod,
+      title: "OpenCode",
+      body: `${prefix}: ${session?.title ?? sessionID}`,
+    })
+  }
+
+  event.on("session.idle", (evt) => {
+    if (notificationMethod === "off") return
+    notifySession(evt.properties.sessionID, "Response ready")
+  })
+
+  event.on("permission.asked", (evt) => {
+    if (notificationMethod === "off") return
+    notifySession(evt.properties.sessionID, "Permission required")
+  })
+
+  event.on("question.asked", (evt) => {
+    if (notificationMethod === "off") return
+    notifySession(evt.properties.sessionID, "Question asked")
   })
 
   event.on("installation.update-available", async (evt) => {

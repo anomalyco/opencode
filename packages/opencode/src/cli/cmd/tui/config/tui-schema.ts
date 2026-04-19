@@ -1,6 +1,7 @@
 import z from "zod"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
+import { NOTIFICATION_METHODS } from "../util/notify"
 
 const KeybindOverride = z
   .object(
@@ -24,6 +25,10 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  notification_method: z
+    .enum(NOTIFICATION_METHODS)
+    .optional()
+    .describe("Select how terminal notifications are emitted for response-ready and attention-needed events"),
 })
 
 export const TuiInfo = z
