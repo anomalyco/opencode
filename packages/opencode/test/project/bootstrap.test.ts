@@ -151,7 +151,7 @@ describe("InstanceBootstrap with slow FileWatcher mock", () => {
     const failingWatcherLayer = Layer.succeed(
       MockWatcherService,
       MockWatcherService.of({
-        init: () => Effect.fail(new Error("subscribe failed: fs-events backend unavailable")),
+        init: () => Effect.fail(new Error("subscribe failed")) as unknown as Effect.Effect<void>,
       }),
     )
 

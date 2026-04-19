@@ -12,7 +12,6 @@ import { Log } from "@/util"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
 import * as Effect from "effect/Effect"
-import { Cause } from "effect"
 import { Config } from "@/config"
 
 export const InstanceBootstrap = Effect.gen(function* () {
@@ -21,24 +20,25 @@ export const InstanceBootstrap = Effect.gen(function* () {
   yield* Config.Service.use((svc) => svc.get())
   // Plugin can mutate config so it has to be initialized before anything else.
   yield* Plugin.Service.use((svc) => svc.init())
-  const fastGroup = [LSP.Service, ShareNext.Service, Format.Service, File.Service, Snapshot.Service]
-  const deferredGroup = [FileWatcher.Service, Vcs.Service]
 
-  // Fast group: await completion so downstream handlers can read these services safely.
+  // Fast group: await so downstream handlers can safely read these services.
   yield* Effect.all(
-    fastGroup.map((s) => s.use((i) => i.init())),
+    [
+      LSP.Service.use((i) => i.init()),
+      ShareNext.Service.use((i) => i.init()),
+      Format.Service.use((i) => i.init()),
+      File.Service.use((i) => i.init()),
+      Snapshot.Service.use((i) => i.init()),
+    ],
     { concurrency: "unbounded" },
   ).pipe(Effect.withSpan("InstanceBootstrap.fast"))
 
-  // Deferred group: init() forks expensive work (subscribe, git branch) into instance scope.
-  // These calls return quickly; we use forkDetach so failures don't kill the instance scope.
-  for (const s of deferredGroup) {
-    yield* Effect.forkDetach(
-      s.use((i) => i.init()).pipe(
-        Effect.catchCause((cause) => Effect.sync(() => Log.Default.error("deferred service init failed", { cause: Cause.pretty(cause) })))
-      ),
-    )
-  }
+  // Deferred group: forkDetach so their blocking init (subscribe, git branch) does not delay
+  // the request. Failures are swallowed by the detached fiber — instance remains healthy.
+  yield* Effect.all([
+    Effect.forkDetach(FileWatcher.Service.use((i) => i.init())),
+    Effect.forkDetach(Vcs.Service.use((i) => i.init())),
+  ])
 
   yield* Bus.Service.use((svc) =>
     svc.subscribeCallback(Command.Event.Executed, async (payload) => {
