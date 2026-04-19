@@ -70,7 +70,6 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const git = yield* Git.Service
-
     const state = yield* InstanceState.make(
       Effect.fn("FileWatcher.state")(
         function* () {

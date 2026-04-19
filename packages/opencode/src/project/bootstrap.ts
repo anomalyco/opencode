@@ -12,6 +12,7 @@ import { Log } from "@/util"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
 import * as Effect from "effect/Effect"
+import { Cause } from "effect"
 import { Config } from "@/config"
 
 export const InstanceBootstrap = Effect.gen(function* () {
@@ -20,17 +21,24 @@ export const InstanceBootstrap = Effect.gen(function* () {
   yield* Config.Service.use((svc) => svc.get())
   // Plugin can mutate config so it has to be initialized before anything else.
   yield* Plugin.Service.use((svc) => svc.init())
+  const fastGroup = [LSP.Service, ShareNext.Service, Format.Service, File.Service, Snapshot.Service]
+  const deferredGroup = [FileWatcher.Service, Vcs.Service]
+
+  // Fast group: await completion so downstream handlers can read these services safely.
   yield* Effect.all(
-    [
-      LSP.Service,
-      ShareNext.Service,
-      Format.Service,
-      File.Service,
-      FileWatcher.Service,
-      Vcs.Service,
-      Snapshot.Service,
-    ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
-  ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+    fastGroup.map((s) => s.use((i) => i.init())),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.withSpan("InstanceBootstrap.fast"))
+
+  // Deferred group: init() forks expensive work (subscribe, git branch) into instance scope.
+  // These calls return quickly; we fork with forkDaemon so failures don't kill the instance.
+  for (const s of deferredGroup) {
+    yield* Effect.forkDaemon(
+      s.use((i) => i.init()).pipe(
+        Effect.catchAllCause((cause) => Effect.sync(() => Log.Default.error("deferred service init failed", { cause: Cause.pretty(cause) })))
+      ),
+    )
+  }
 
   yield* Bus.Service.use((svc) =>
     svc.subscribeCallback(Command.Event.Executed, async (payload) => {
