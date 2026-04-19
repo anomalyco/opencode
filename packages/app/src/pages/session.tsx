@@ -548,6 +548,8 @@ export default function Page() {
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
+  let recoveryFrame: number | undefined
+  let recoveryTimer: number | undefined
   let todoFrame: number | undefined
   let todoTimer: number | undefined
   let diffFrame: number | undefined
@@ -786,6 +788,36 @@ export default function Page() {
 
       return sync.session.sync(id)
     },
+  )
+
+  createEffect(
+    on(
+      () => [sessionKey(), globalSync.recovery.token] as const,
+      ([key, token]) => {
+        if (recoveryFrame !== undefined) cancelAnimationFrame(recoveryFrame)
+        if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer)
+        recoveryFrame = undefined
+        recoveryTimer = undefined
+        if (!token) return
+
+        const id = params.id
+        if (!id) return
+
+        recoveryFrame = requestAnimationFrame(() => {
+          recoveryFrame = undefined
+          recoveryTimer = window.setTimeout(() => {
+            recoveryTimer = undefined
+            if (sessionKey() !== key) return
+            void sync.session.sync(id, { force: true })
+            void sync.session.todo(id, { force: true })
+            if (wantsReview()) {
+              void sync.session.diff(id, { force: true })
+            }
+          }, 0)
+        })
+      },
+      { defer: true },
+    ),
   )
 
   createEffect(
@@ -1784,6 +1816,8 @@ export default function Page() {
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
     if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+    if (recoveryFrame !== undefined) cancelAnimationFrame(recoveryFrame)
+    if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer)
     if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
     if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)

@@ -108,17 +108,35 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let attempt: AbortController | undefined
     let run: Promise<void> | undefined
     let started = false
-    const HEARTBEAT_TIMEOUT_MS = 15_000
+    const HEARTBEAT_TIMEOUT_MS = 45_000
+    const RESUME_GRACE_MS = 5_000
     let lastEventAt = Date.now()
     let heartbeat: ReturnType<typeof setTimeout> | undefined
+    let resumeProbe: ReturnType<typeof setTimeout> | undefined
+    const clearResumeProbe = () => {
+      if (!resumeProbe) return
+      clearTimeout(resumeProbe)
+      resumeProbe = undefined
+    }
+    const stale = () => Date.now() - lastEventAt >= HEARTBEAT_TIMEOUT_MS
+    const scheduleResumeProbe = () => {
+      clearResumeProbe()
+      resumeProbe = setTimeout(() => {
+        resumeProbe = undefined
+        if (!stale()) return
+        attempt?.abort()
+      }, RESUME_GRACE_MS)
+    }
     const resetHeartbeat = () => {
       lastEventAt = Date.now()
+      clearResumeProbe()
       if (heartbeat) clearTimeout(heartbeat)
       heartbeat = setTimeout(() => {
         attempt?.abort()
       }, HEARTBEAT_TIMEOUT_MS)
     }
     const clearHeartbeat = () => {
+      clearResumeProbe()
       if (!heartbeat) return
       clearTimeout(heartbeat)
       heartbeat = undefined
@@ -215,10 +233,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     onMount(() => {
       makeEventListener(document, "visibilitychange", () => {
-        if (document.visibilityState !== "visible") return
+        if (document.visibilityState !== "visible") {
+          clearResumeProbe()
+          return
+        }
         if (!started) return
-        if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
-        attempt?.abort()
+        if (!stale()) return
+        scheduleResumeProbe()
       })
     })
 

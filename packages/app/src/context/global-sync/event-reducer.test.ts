@@ -104,31 +104,31 @@ describe("applyGlobalEvent", () => {
   })
 
   test("handles global.disposed by triggering refresh", () => {
-    let refreshCount = 0
+    const reasons: string[] = []
     applyGlobalEvent({
       event: { type: "global.disposed" },
       project: [],
-      refresh: () => {
-        refreshCount += 1
+      refresh: (reason) => {
+        reasons.push(reason)
       },
       setGlobalProject() {},
     })
 
-    expect(refreshCount).toBe(1)
+    expect(reasons).toEqual(["global-disposed"])
   })
 
   test("handles server.connected by triggering refresh", () => {
-    let refreshCount = 0
+    const reasons: string[] = []
     applyGlobalEvent({
       event: { type: "server.connected" },
       project: [],
-      refresh: () => {
-        refreshCount += 1
+      refresh: (reason) => {
+        reasons.push(reason)
       },
       setGlobalProject() {},
     })
 
-    expect(refreshCount).toBe(1)
+    expect(reasons).toEqual(["server-connected"])
   })
 })
 

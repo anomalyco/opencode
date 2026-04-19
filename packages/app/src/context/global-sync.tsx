@@ -19,6 +19,7 @@ import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
+import { createRecoveryCoordinator, type RecoveryReason } from "./global-sync/recovery"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
@@ -70,6 +71,14 @@ function createGlobalSync() {
     provider_auth: {},
     config: {},
     reload: undefined,
+  })
+  const [recoveryStore, setRecoveryStore] = createStore({
+    token: 0,
+    at: 0,
+    force: false,
+    running: false,
+    reason: undefined as RecoveryReason | undefined,
+    reasons: [] as RecoveryReason[],
   })
   const queryClient = useQueryClient()
 
@@ -302,18 +311,12 @@ function createGlobalSync() {
       applyGlobalEvent({
         event,
         project: globalStore.project,
-        refresh: () => {
+        refresh: (reason) => {
           if (recent) return
-          queue.refresh()
+          void recovery.trigger({ reason, force: true })
         },
         setGlobalProject: setProjects,
       })
-      if (event.type === "server.connected" || event.type === "global.disposed") {
-        if (recent) return
-        for (const directory of Object.keys(children.children)) {
-          queue.push(directory)
-        }
-      }
       return
     }
 
@@ -342,6 +345,9 @@ function createGlobalSync() {
 
   onCleanup(unsub)
   onCleanup(() => {
+    recovery.dispose()
+  })
+  onCleanup(() => {
     queue.dispose()
   })
   onCleanup(() => {
@@ -367,7 +373,67 @@ function createGlobalSync() {
     }
   }
 
+  const recovery = createRecoveryCoordinator({
+    delayMs: 250,
+    async run(input) {
+      setRecoveryStore({
+        running: true,
+        force: input.force,
+        reason: input.reason,
+        reasons: input.reasons,
+      })
+      try {
+        await bootstrap()
+        const directories = Object.keys(children.children)
+        if (directories.length === 0) return
+        await Promise.all(directories.map((directory) => bootstrapInstance(directory)))
+      } finally {
+        setRecoveryStore(
+          produce((draft) => {
+            draft.at = Date.now()
+            draft.force = input.force
+            draft.reason = input.reason
+            draft.reasons = input.reasons
+            draft.running = false
+            draft.token += 1
+          }),
+        )
+      }
+    },
+  })
+
   onMount(() => {
+    const triggerRecovery = (reason: RecoveryReason) => {
+      if (!globalStore.ready) return
+      if (bootingRoot) return
+      void recovery.trigger({ reason, force: true })
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return
+      triggerRecovery("visibility")
+    }
+    const onPageShow = () => {
+      triggerRecovery("pageshow")
+    }
+    const onFocus = () => {
+      if (document.visibilityState !== "visible") return
+      triggerRecovery("focus")
+    }
+    const onOnline = () => {
+      triggerRecovery("online")
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    window.addEventListener("pageshow", onPageShow)
+    window.addEventListener("focus", onFocus)
+    window.addEventListener("online", onOnline)
+    onCleanup(() => {
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      window.removeEventListener("pageshow", onPageShow)
+      window.removeEventListener("focus", onFocus)
+      window.removeEventListener("online", onOnline)
+    })
+
     if (typeof requestAnimationFrame === "function") {
       eventFrame = requestAnimationFrame(() => {
         eventFrame = undefined
@@ -423,6 +489,8 @@ function createGlobalSync() {
     child: children.child,
     peek: children.peek,
     bootstrap,
+    recover: recovery.trigger,
+    recovery: recoveryStore,
     updateConfig,
     project: projectApi,
     todo: {

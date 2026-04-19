@@ -18,14 +18,21 @@ import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
+export type GlobalRefreshReason = "global-disposed" | "server-connected"
+
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
   setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
-  refresh: () => void
+  refresh: (reason: GlobalRefreshReason) => void
 }) {
-  if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
-    input.refresh()
+  if (input.event.type === "global.disposed") {
+    input.refresh("global-disposed")
+    return
+  }
+
+  if (input.event.type === "server.connected") {
+    input.refresh("server-connected")
     return
   }
 
