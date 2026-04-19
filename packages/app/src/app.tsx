@@ -83,6 +83,16 @@ function CrashProbe() {
   return null
 }
 
+function RootError(props: { error: unknown }) {
+  console.error("[app] root error boundary", props.error)
+
+  queueMicrotask(() => {
+    window.dispatchEvent(new CustomEvent("opencode:startup-interactive"))
+  })
+
+  return <ErrorPage error={props.error} />
+}
+
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
@@ -174,7 +184,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
       >
         <LanguageProvider locale={props.locale}>
           <UiI18nBridge>
-            <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+            <ErrorBoundary fallback={(error) => <RootError error={error} />}>
               <CrashProbe />
               <QueryProvider>
                 <DialogProvider>
