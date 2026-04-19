@@ -558,6 +558,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "현재",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "사용량: $",
 
+  "workspace.redeem.title": "쿠폰 사용",
+  "workspace.redeem.subtitle": "쿠폰 코드를 사용해 크레딧이나 혜택을 받으세요.",
+  "workspace.redeem.placeholder": "쿠폰 코드를 입력하세요",
+  "workspace.redeem.redeem": "사용",
+  "workspace.redeem.redeeming": "사용 중...",
+  "workspace.redeem.success": "쿠폰을 성공적으로 사용했습니다.",
+
   "workspace.reload.title": "자동 충전",
   "workspace.reload.disabled.before": "자동 충전이",
   "workspace.reload.disabled.state": "비활성화",

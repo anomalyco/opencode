@@ -142,10 +142,6 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "ZEN_LITE_COUPON_FIRST_MONTH_100_INVITEES": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "ZEN_LITE_PRICE": {
       "firstMonth100Coupon": string
       "firstMonth50Coupon": string

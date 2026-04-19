@@ -564,6 +564,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Gjeldende forbruk for",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "er $",
 
+  "workspace.redeem.title": "Løs inn kupong",
+  "workspace.redeem.subtitle": "Løs inn en kupongkode for å få kreditt eller fordeler.",
+  "workspace.redeem.placeholder": "Skriv inn kupongkode",
+  "workspace.redeem.redeem": "Løs inn",
+  "workspace.redeem.redeeming": "Løser inn...",
+  "workspace.redeem.success": "Kupongen ble løst inn.",
+
   "workspace.reload.title": "Auto-påfyll",
   "workspace.reload.disabled.before": "Auto-påfyll er",
   "workspace.reload.disabled.state": "deaktivert",
