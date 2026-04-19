@@ -30,6 +30,7 @@
     "electron-store": "^10",
     "electron-updater": "^6",
     "electron-window-state": "^5.0.3",
+    "drizzle-orm": "catalog:",
     "marked": "^15"
   },
   "devDependencies": {

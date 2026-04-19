@@ -227,6 +227,7 @@
       "name": "@opencode-ai/desktop-electron",
       "version": "1.14.17",
       "dependencies": {
+        "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "electron-context-menu": "4.1.2",
         "electron-log": "^5",
