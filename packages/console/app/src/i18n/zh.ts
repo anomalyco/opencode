@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "企业版",
   "nav.zen": "Zen",
   "nav.login": "登录",
-  "nav.free": "免费",
+  "nav.free": "下载",
   "nav.home": "首页",
   "nav.openMenu": "打开菜单",
   "nav.getStartedFree": "免费开始",
@@ -541,6 +541,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "未设置使用限额。",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "当前",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "的使用量为 $",
+
+  "workspace.redeem.title": "兑换优惠券",
+  "workspace.redeem.subtitle": "兑换优惠码以领取充值额度或权益。",
+  "workspace.redeem.placeholder": "输入优惠码",
+  "workspace.redeem.redeem": "兑换",
+  "workspace.redeem.redeeming": "兑换中...",
+  "workspace.redeem.success": "优惠券兑换成功。",
 
   "workspace.reload.title": "自动充值",
   "workspace.reload.disabled.before": "自动充值已",

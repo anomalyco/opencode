@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Accedi",
-  "nav.free": "Gratis",
+  "nav.free": "Scarica",
   "nav.home": "Home",
   "nav.openMenu": "Apri menu",
   "nav.getStartedFree": "Inizia gratis",
@@ -564,6 +564,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "Nessun limite di utilizzo impostato.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Utilizzo attuale per",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "è $",
+
+  "workspace.redeem.title": "Riscatta Coupon",
+  "workspace.redeem.subtitle": "Riscatta un codice coupon per ottenere credito o vantaggi.",
+  "workspace.redeem.placeholder": "Inserisci il codice coupon",
+  "workspace.redeem.redeem": "Riscatta",
+  "workspace.redeem.redeeming": "Riscatto in corso...",
+  "workspace.redeem.success": "Coupon riscattato con successo.",
 
   "workspace.reload.title": "Ricarica Auto",
   "workspace.reload.disabled.before": "La ricarica auto è",
