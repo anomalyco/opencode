@@ -182,8 +182,11 @@ export function Session() {
 
   createEffect(async () => {
     const previousWorkspace = project.workspace.current()
-    const result = await sdk.client.session.get({ sessionID: route.sessionID }, { throwOnError: true })
-    if (!result.data) {
+    // No `throwOnError` + explicit `.catch`: a 404 here (e.g. user passes -s
+    // for a deleted session) would otherwise bubble up as an unhandled rejection
+    // inside this async effect and hang the TUI with stdin in raw mode.
+    const result = await sdk.client.session.get({ sessionID: route.sessionID }).catch(() => undefined)
+    if (!result?.data) {
       toast.show({
         message: `Session not found: ${route.sessionID}`,
         variant: "error",
@@ -203,7 +206,16 @@ export function Session() {
         await sync.bootstrap({ fatal: false })
       } catch (e) {}
     }
-    await sync.session.sync(route.sessionID)
+    try {
+      await sync.session.sync(route.sessionID)
+    } catch (e) {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
+      })
+      navigate({ type: "home" })
+      return
+    }
     if (scroll) scroll.scrollBy(100_000)
   })
 
