@@ -240,6 +240,18 @@
     "syntaxPunctuation": {
       "dark": "darkStep12",
       "light": "lightStep12"
+    },
+    "syntaxTag": {
+      "dark": "darkRed",
+      "light": "lightRed"
+    },
+    "syntaxAttribute": {
+      "dark": "darkAccent",
+      "light": "lightAccent"
+    },
+    "syntaxTagDelimiter": {
+      "dark": "darkCyan",
+      "light": "lightCyan"
     }
   }
 }
