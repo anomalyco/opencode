@@ -118,6 +118,7 @@ test("loads config with defaults when no files exist", async () => {
     fn: async () => {
       const config = await load()
       expect(config.username).toBeDefined()
+      expect(config.lsp).toBe(true)
     },
   })
 })
