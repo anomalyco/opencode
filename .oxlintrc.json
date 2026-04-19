@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
+  "options": {
+    "typeAware": true
+  },
+  "categories": {
+    "suspicious": "warn"
+  },
+  "rules": {
+    "typescript/no-base-to-string": "warn",
+    // Effect uses `function*` with Effect.gen/Effect.fnUntraced that don't always yield
+    "require-yield": "off",
+    // SolidJS uses `let ref: T | undefined` for JSX ref bindings assigned at runtime
+    "no-unassigned-vars": "off",
+    // SolidJS tracks reactive deps by reading properties inside createEffect
+    "no-unused-expressions": "off",
+    // Intentional control char matching (ANSI escapes, null byte sanitization)
+    "no-control-regex": "off",
+    // SST and plugin tools require triple-slash references
+    "triple-slash-reference": "off",
+
+    // Suspicious category: suppress noisy rules
+    // Effect's nested function* closures inherently shadow outer scope
+    "no-shadow": "off",
+    // Namespace-heavy codebase makes this too noisy
+    "unicorn/consistent-function-scoping": "off",
+    // Opinionated — .sort()/.reverse() mutation is fine in this codebase
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    // Not relevant — this isn't a DOM event handler codebase
+    "unicorn/prefer-add-event-listener": "off",
+    // Bundler handles module resolution
+    "unicorn/require-module-specifiers": "off",
+    // postMessage target origin not relevant for this codebase
+    "unicorn/require-post-message-target-origin": "off",
+    // Side-effectful constructors are intentional in some places
+    "no-new": "off",
+
+    // Type-aware: catch unhandled promises
+    "typescript/no-floating-promises": "warn",
+    // Warn when spreading non-plain objects (Headers, class instances, etc.)
+    "typescript/no-misused-spread": "warn"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "options": {
+    "typeAware": true
+  },
+  "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts", "**/sdk.gen.ts"]
+}

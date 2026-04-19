@@ -1,0 +1,143 @@
+import z from "zod"
+import { Hono } from "hono"
+import { describeRoute, validator, resolver } from "hono-openapi"
+import { SyncEvent } from "@/sync"
+import { Database, asc, and, not, or, lte, eq } from "@/storage"
+import { EventTable } from "@/sync/event.sql"
+import { lazy } from "@/util/lazy"
+import { Log } from "@/util"
+import { startWorkspaceSyncing } from "@/control-plane/workspace"
+import { Instance } from "@/project/instance"
+import { errors } from "../../error"
+
+const ReplayEvent = z.object({
+  id: z.string(),
+  aggregateID: z.string(),
+  seq: z.number().int().min(0),
+  type: z.string(),
+  data: z.record(z.string(), z.unknown()),
+})
+
+const log = Log.create({ service: "server.sync" })
+
+export const SyncRoutes = lazy(() =>
+  new Hono()
+    .post(
+      "/start",
+      describeRoute({
+        summary: "Start workspace sync",
+        description: "Start sync loops for workspaces in the current project that have active sessions.",
+        operationId: "sync.start",
+        responses: {
+          200: {
+            description: "Workspace sync started",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        startWorkspaceSyncing(Instance.project.id)
+        return c.json(true)
+      },
+    )
+    .post(
+      "/replay",
+      describeRoute({
+        summary: "Replay sync events",
+        description: "Validate and replay a complete sync event history.",
+        operationId: "sync.replay",
+        responses: {
+          200: {
+            description: "Replayed sync events",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    sessionID: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          directory: z.string(),
+          events: z.array(ReplayEvent).min(1),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        const events = body.events
+        const source = events[0].aggregateID
+
+        log.info("sync replay requested", {
+          sessionID: source,
+          events: events.length,
+          first: events[0]?.seq,
+          last: events.at(-1)?.seq,
+          directory: body.directory,
+        })
+        SyncEvent.replayAll(events)
+
+        log.info("sync replay complete", {
+          sessionID: source,
+          events: events.length,
+          first: events[0]?.seq,
+          last: events.at(-1)?.seq,
+        })
+
+        return c.json({
+          sessionID: source,
+        })
+      },
+    )
+    .post(
+      "/history",
+      describeRoute({
+        summary: "List sync events",
+        description:
+          "List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history.",
+        operationId: "sync.history.list",
+        responses: {
+          200: {
+            description: "Sync events",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      id: z.string(),
+                      aggregate_id: z.string(),
+                      seq: z.number(),
+                      type: z.string(),
+                      data: z.record(z.string(), z.unknown()),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.record(z.string(), z.number().int().min(0))),
+      async (c) => {
+        const body = c.req.valid("json")
+        const exclude = Object.entries(body)
+        const where =
+          exclude.length > 0
+            ? not(or(...exclude.map(([id, seq]) => and(eq(EventTable.aggregate_id, id), lte(EventTable.seq, seq))))!)
+            : undefined
+        const rows = Database.use((db) => db.select().from(EventTable).where(where).orderBy(asc(EventTable.seq)).all())
+        return c.json(rows)
+      },
+    ),
+)

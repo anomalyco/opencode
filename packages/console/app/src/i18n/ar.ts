@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "المؤسسات",
   "nav.zen": "Zen",
   "nav.login": "تسجيل الدخول",
-  "nav.free": "مجانا",
+  "nav.free": "تحميل",
   "nav.home": "الرئيسية",
   "nav.openMenu": "فتح القائمة",
   "nav.getStartedFree": "ابدأ مجانا",
@@ -557,6 +557,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "لم يتم تعيين حد للاستخدام.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "الاستخدام الحالي لـ",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "هو $",
+
+  "workspace.redeem.title": "استرداد قسيمة",
+  "workspace.redeem.subtitle": "استرد رمز القسيمة للحصول على رصيد أو مزايا.",
+  "workspace.redeem.placeholder": "أدخل رمز القسيمة",
+  "workspace.redeem.redeem": "استرداد",
+  "workspace.redeem.redeeming": "جارٍ الاسترداد...",
+  "workspace.redeem.success": "تم استرداد القسيمة بنجاح.",
 
   "workspace.reload.title": "إعادة الشحن التلقائي",
   "workspace.reload.disabled.before": "إعادة الشحن التلقائي",

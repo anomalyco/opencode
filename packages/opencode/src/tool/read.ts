@@ -1,23 +1,23 @@
 import z from "zod"
-import { Effect, Scope } from "effect"
+import { Effect, Option, Scope } from "effect"
 import { createReadStream } from "fs"
-import { open } from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
-import { Tool } from "./tool"
-import { AppFileSystem } from "../filesystem"
+import * as Tool from "./tool"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { LSP } from "../lsp"
-import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
+import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+const SAMPLE_BYTES = 4096
 
 const parameters = z.object({
   filePath: z.string().describe("The absolute path to the file or directory to read"),
@@ -31,7 +31,6 @@ export const ReadTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
-    const time = yield* FileTime.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -75,10 +74,71 @@ export const ReadTool = Tool.define(
       ).pipe(Effect.map((items: string[]) => items.sort((a, b) => a.localeCompare(b))))
     })
 
-    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string, sessionID: Tool.Context["sessionID"]) {
+    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
       yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
-      yield* time.read(sessionID, filepath)
     })
+
+    const readSample = Effect.fn("ReadTool.readSample")(function* (
+      filepath: string,
+      fileSize: number,
+      sampleSize: number,
+    ) {
+      if (fileSize === 0) return new Uint8Array()
+
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const file = yield* fs.open(filepath, { flag: "r" })
+          return Option.getOrElse(yield* file.readAlloc(Math.min(sampleSize, fileSize)), () => new Uint8Array())
+        }),
+      )
+    })
+
+    const isBinaryFile = (filepath: string, bytes: Uint8Array) => {
+      const ext = path.extname(filepath).toLowerCase()
+      switch (ext) {
+        case ".zip":
+        case ".tar":
+        case ".gz":
+        case ".exe":
+        case ".dll":
+        case ".so":
+        case ".class":
+        case ".jar":
+        case ".war":
+        case ".7z":
+        case ".doc":
+        case ".docx":
+        case ".xls":
+        case ".xlsx":
+        case ".ppt":
+        case ".pptx":
+        case ".odt":
+        case ".ods":
+        case ".odp":
+        case ".bin":
+        case ".dat":
+        case ".obj":
+        case ".o":
+        case ".a":
+        case ".lib":
+        case ".wasm":
+        case ".pyc":
+        case ".pyo":
+          return true
+      }
+
+      if (bytes.length === 0) return false
+
+      let nonPrintableCount = 0
+      for (let i = 0; i < bytes.length; i++) {
+        if (bytes[i] === 0) return true
+        if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
+          nonPrintableCount++
+        }
+      }
+
+      return nonPrintableCount / bytes.length > 0.3
+    }
 
     const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
       if (params.offset !== undefined && params.offset < 1) {
@@ -144,12 +204,12 @@ export const ReadTool = Tool.define(
       }
 
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
+      const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
-      const mime = AppFileSystem.mimeType(filepath)
-      const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-      const isPdf = mime === "application/pdf"
-      if (isImage || isPdf) {
-        const msg = `${isImage ? "Image" : "PDF"} read successfully`
+      const mime = sniffAttachmentMime(sample, AppFileSystem.mimeType(filepath))
+      if (isImageAttachment(mime) || isPdfAttachment(mime)) {
+        const bytes = yield* fs.readFile(filepath)
+        const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
         return {
           title,
           output: msg,
@@ -162,13 +222,13 @@ export const ReadTool = Tool.define(
             {
               type: "file" as const,
               mime,
-              url: `data:${mime};base64,${Buffer.from(yield* fs.readFile(filepath)).toString("base64")}`,
+              url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
             },
           ],
         }
       }
 
-      if (yield* Effect.promise(() => isBinaryFile(filepath, Number(stat.size)))) {
+      if (isBinaryFile(filepath, sample)) {
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
@@ -181,7 +241,7 @@ export const ReadTool = Tool.define(
         )
       }
 
-      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>" + "\n"].join("\n")
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
       output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
 
       const last = file.offset + file.raw.length - 1
@@ -196,7 +256,7 @@ export const ReadTool = Tool.define(
       }
       output += "\n</content>"
 
-      yield* warm(filepath, ctx.sessionID)
+      yield* warm(filepath)
 
       if (loaded.length > 0) {
         output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
@@ -263,64 +323,4 @@ async function lines(filepath: string, opts: { limit: number; offset: number }) 
   }
 
   return { raw, count, cut, more, offset: opts.offset }
-}
-
-async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {
-  const ext = path.extname(filepath).toLowerCase()
-  // binary check for common non-text extensions
-  switch (ext) {
-    case ".zip":
-    case ".tar":
-    case ".gz":
-    case ".exe":
-    case ".dll":
-    case ".so":
-    case ".class":
-    case ".jar":
-    case ".war":
-    case ".7z":
-    case ".doc":
-    case ".docx":
-    case ".xls":
-    case ".xlsx":
-    case ".ppt":
-    case ".pptx":
-    case ".odt":
-    case ".ods":
-    case ".odp":
-    case ".bin":
-    case ".dat":
-    case ".obj":
-    case ".o":
-    case ".a":
-    case ".lib":
-    case ".wasm":
-    case ".pyc":
-    case ".pyo":
-      return true
-    default:
-      break
-  }
-
-  if (fileSize === 0) return false
-
-  const fh = await open(filepath, "r")
-  try {
-    const sampleSize = Math.min(4096, fileSize)
-    const bytes = Buffer.alloc(sampleSize)
-    const result = await fh.read(bytes, 0, sampleSize, 0)
-    if (result.bytesRead === 0) return false
-
-    let nonPrintableCount = 0
-    for (let i = 0; i < result.bytesRead; i++) {
-      if (bytes[i] === 0) return true
-      if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
-        nonPrintableCount++
-      }
-    }
-    // If >30% non-printable characters, consider it binary
-    return nonPrintableCount / result.bytesRead > 0.3
-  } finally {
-    await fh.close()
-  }
 }

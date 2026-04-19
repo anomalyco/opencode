@@ -283,9 +283,9 @@
   line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
-    margin-top: 24px;
+    margin-top: 16px;
     font-style: normal;
-    font-size: var(--font-size-base);
+    font-size: 13px;
     color: var(--text-weak);
 
     strong,
@@ -556,9 +556,12 @@
 
 [data-component="exa-tool-output"] {
   width: 100%;
-  padding-top: 8px;
   display: flex;
   flex-direction: column;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-large);
+  color: var(--text-base);
 }
 
 [data-slot="basic-tool-tool-subtitle"].exa-tool-query {
@@ -578,6 +581,8 @@
 [data-slot="exa-tool-link"] {
   display: block;
   max-width: 100%;
+  font: inherit;
+  line-height: inherit;
   color: var(--text-interactive-base);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -636,13 +641,13 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding-top: 6px;
+  padding-top: 0;
   padding-right: 0;
-  padding-bottom: 4px;
-  padding-left: 13px;
+  padding-bottom: 0;
+  padding-left: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;

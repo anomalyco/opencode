@@ -6,7 +6,7 @@
 import z from "zod"
 import * as path from "path"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
@@ -14,12 +14,10 @@ import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { Format } from "../format"
-import { FileTime } from "../file/time"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "../filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -45,7 +43,6 @@ export const EditTool = Tool.define(
   "edit",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
-    const filetime = yield* FileTime.Service
     const afs = yield* AppFileSystem.Service
     const format = yield* Format.Service
     const bus = yield* Bus.Service
@@ -71,52 +68,11 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
-          yield* filetime.withLock(filePath, () =>
-            Effect.gen(function* () {
-              if (params.oldString === "") {
-                const existed = yield* afs.existsSafe(filePath)
-                contentNew = params.newString
-                diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-                yield* ctx.ask({
-                  permission: "edit",
-                  patterns: [path.relative(Instance.worktree, filePath)],
-                  always: ["*"],
-                  metadata: {
-                    filepath: filePath,
-                    diff,
-                  },
-                })
-                yield* afs.writeWithDirs(filePath, params.newString)
-                yield* format.file(filePath)
-                yield* bus.publish(File.Event.Edited, { file: filePath })
-                yield* bus.publish(FileWatcher.Event.Updated, {
-                  file: filePath,
-                  event: existed ? "change" : "add",
-                })
-                yield* filetime.read(ctx.sessionID, filePath)
-                return
-              }
-
-              const info = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-              if (!info) throw new Error(`File ${filePath} not found`)
-              if (info.type === "Directory") throw new Error(`Path is a directory, not a file: ${filePath}`)
-              yield* filetime.assert(ctx.sessionID, filePath)
-              contentOld = yield* afs.readFileString(filePath)
-
-              const ending = detectLineEnding(contentOld)
-              const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
-              const next = convertToLineEnding(normalizeLineEndings(params.newString), ending)
-
-              contentNew = replace(contentOld, old, next, params.replaceAll)
-
-              diff = trimDiff(
-                createTwoFilesPatch(
-                  filePath,
-                  filePath,
-                  normalizeLineEndings(contentOld),
-                  normalizeLineEndings(contentNew),
-                ),
-              )
+          yield* Effect.gen(function* () {
+            if (params.oldString === "") {
+              const existed = yield* afs.existsSafe(filePath)
+              contentNew = params.newString
+              diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
               yield* ctx.ask({
                 permission: "edit",
                 patterns: [path.relative(Instance.worktree, filePath)],
@@ -126,26 +82,62 @@ export const EditTool = Tool.define(
                   diff,
                 },
               })
-
-              yield* afs.writeWithDirs(filePath, contentNew)
+              yield* afs.writeWithDirs(filePath, params.newString)
               yield* format.file(filePath)
               yield* bus.publish(File.Event.Edited, { file: filePath })
               yield* bus.publish(FileWatcher.Event.Updated, {
                 file: filePath,
-                event: "change",
+                event: existed ? "change" : "add",
               })
-              contentNew = yield* afs.readFileString(filePath)
-              diff = trimDiff(
-                createTwoFilesPatch(
-                  filePath,
-                  filePath,
-                  normalizeLineEndings(contentOld),
-                  normalizeLineEndings(contentNew),
-                ),
-              )
-              yield* filetime.read(ctx.sessionID, filePath)
-            }).pipe(Effect.orDie),
-          )
+              return
+            }
+
+            const info = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            if (!info) throw new Error(`File ${filePath} not found`)
+            if (info.type === "Directory") throw new Error(`Path is a directory, not a file: ${filePath}`)
+            contentOld = yield* afs.readFileString(filePath)
+
+            const ending = detectLineEnding(contentOld)
+            const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
+            const next = convertToLineEnding(normalizeLineEndings(params.newString), ending)
+
+            contentNew = replace(contentOld, old, next, params.replaceAll)
+
+            diff = trimDiff(
+              createTwoFilesPatch(
+                filePath,
+                filePath,
+                normalizeLineEndings(contentOld),
+                normalizeLineEndings(contentNew),
+              ),
+            )
+            yield* ctx.ask({
+              permission: "edit",
+              patterns: [path.relative(Instance.worktree, filePath)],
+              always: ["*"],
+              metadata: {
+                filepath: filePath,
+                diff,
+              },
+            })
+
+            yield* afs.writeWithDirs(filePath, contentNew)
+            yield* format.file(filePath)
+            yield* bus.publish(File.Event.Edited, { file: filePath })
+            yield* bus.publish(FileWatcher.Event.Updated, {
+              file: filePath,
+              event: "change",
+            })
+            contentNew = yield* afs.readFileString(filePath)
+            diff = trimDiff(
+              createTwoFilesPatch(
+                filePath,
+                filePath,
+                normalizeLineEndings(contentOld),
+                normalizeLineEndings(contentNew),
+              ),
+            )
+          }).pipe(Effect.orDie)
 
           const filediff: Snapshot.FileDiff = {
             file: filePath,
@@ -169,7 +161,7 @@ export const EditTool = Tool.define(
           let output = "Edit applied successfully."
           yield* lsp.touchFile(filePath, true)
           const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = Filesystem.normalizePath(filePath)
+          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
 
@@ -417,7 +409,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
             if (match) {
               yield match[0]
             }
-          } catch (e) {
+          } catch {
             // Invalid regex pattern, skip
           }
         }
