@@ -53,8 +53,16 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalListPushSubscriptionsResponses,
+  GlobalPushPublicKeyResponses,
+  GlobalRemovePushSubscriptionErrors,
+  GlobalRemovePushSubscriptionResponses,
+  GlobalTestPushErrors,
+  GlobalTestPushResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
+  GlobalUpsertPushSubscriptionErrors,
+  GlobalUpsertPushSubscriptionResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -303,6 +311,129 @@ export class Global extends HeyApiClient {
     return (options?.client ?? this.client).sse.get<GlobalEventResponses, unknown, ThrowOnError>({
       url: "/global/event",
       ...options,
+    })
+  }
+
+  /**
+   * Get push public key
+   *
+   * Get the VAPID public key used for Web Push subscriptions.
+   */
+  public pushPublicKey<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalPushPublicKeyResponses, unknown, ThrowOnError>({
+      url: "/global/push/public-key",
+      ...options,
+    })
+  }
+
+  /**
+   * List push subscriptions
+   *
+   * List registered Web Push subscriptions for the current server.
+   */
+  public listPushSubscriptions<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalListPushSubscriptionsResponses, unknown, ThrowOnError>({
+      url: "/global/push/subscriptions",
+      ...options,
+    })
+  }
+
+  /**
+   * Upsert push subscription
+   *
+   * Create or update a Web Push subscription for the current device.
+   */
+  public upsertPushSubscription<ThrowOnError extends boolean = false>(
+    parameters?: {
+      endpoint?: string
+      expirationTime?: number | null
+      keys?: {
+        auth: string
+        p256dh: string
+      }
+      enabled?: boolean
+      notifyOnCompletion?: boolean
+      notifyOnError?: boolean
+      userAgent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "endpoint" },
+            { in: "body", key: "expirationTime" },
+            { in: "body", key: "keys" },
+            { in: "body", key: "enabled" },
+            { in: "body", key: "notifyOnCompletion" },
+            { in: "body", key: "notifyOnError" },
+            { in: "body", key: "userAgent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      GlobalUpsertPushSubscriptionResponses,
+      GlobalUpsertPushSubscriptionErrors,
+      ThrowOnError
+    >({
+      url: "/global/push/subscriptions",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove push subscription
+   *
+   * Delete a Web Push subscription by id.
+   */
+  public removePushSubscription<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).delete<
+      GlobalRemovePushSubscriptionResponses,
+      GlobalRemovePushSubscriptionErrors,
+      ThrowOnError
+    >({
+      url: "/global/push/subscriptions/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send test push
+   *
+   * Send a test Web Push notification to the current or selected device.
+   */
+  public testPush<ThrowOnError extends boolean = false>(
+    parameters?: {
+      id?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "id" }] }])
+    return (options?.client ?? this.client).post<GlobalTestPushResponses, GlobalTestPushErrors, ThrowOnError>({
+      url: "/global/push/test",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

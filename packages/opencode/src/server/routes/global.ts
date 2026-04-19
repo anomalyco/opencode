@@ -15,6 +15,7 @@ import { Log } from "../../util"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config"
 import { errors } from "../error"
+import { Push } from "@/push"
 
 const log = Log.create({ service: "server" })
 
@@ -134,6 +135,117 @@ export const GlobalRoutes = lazy(() =>
           GlobalBus.on("event", handler)
           return () => GlobalBus.off("event", handler)
         })
+      },
+    )
+    .get(
+      "/push/public-key",
+      describeRoute({
+        summary: "Get push public key",
+        description: "Get the VAPID public key used for Web Push subscriptions.",
+        operationId: "global.pushPublicKey",
+        responses: {
+          200: {
+            description: "Push configuration",
+            content: {
+              "application/json": {
+                schema: resolver(Push.PublicKey),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(Push.publicKey())
+      },
+    )
+    .get(
+      "/push/subscriptions",
+      describeRoute({
+        summary: "List push subscriptions",
+        description: "List registered Web Push subscriptions for the current server.",
+        operationId: "global.listPushSubscriptions",
+        responses: {
+          200: {
+            description: "Push subscriptions",
+            content: {
+              "application/json": {
+                schema: resolver(Push.Subscription.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(Push.list())
+      },
+    )
+    .post(
+      "/push/subscriptions",
+      describeRoute({
+        summary: "Upsert push subscription",
+        description: "Create or update a Web Push subscription for the current device.",
+        operationId: "global.upsertPushSubscription",
+        responses: {
+          200: {
+            description: "Push subscription",
+            content: {
+              "application/json": {
+                schema: resolver(Push.Subscription),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Push.SubscriptionUpsert),
+      async (c) => {
+        return c.json(Push.upsert(c.req.valid("json")))
+      },
+    )
+    .delete(
+      "/push/subscriptions/:id",
+      describeRoute({
+        summary: "Remove push subscription",
+        description: "Delete a Web Push subscription by id.",
+        operationId: "global.removePushSubscription",
+        responses: {
+          200: {
+            description: "Subscription removed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ id: z.string() })),
+      async (c) => {
+        return c.json(Push.removeSubscription(c.req.valid("param").id))
+      },
+    )
+    .post(
+      "/push/test",
+      describeRoute({
+        summary: "Send test push",
+        description: "Send a test Web Push notification to the current or selected device.",
+        operationId: "global.testPush",
+        responses: {
+          200: {
+            description: "Test push result",
+            content: {
+              "application/json": {
+                schema: resolver(Push.TestResult),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Push.TestInput),
+      async (c) => {
+        return c.json(await Push.test(c.req.valid("json")))
       },
     )
     .get(

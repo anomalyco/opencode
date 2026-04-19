@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { handleNotificationClick, setNavigate } from "./notification-click"
+import { handleNotificationClick, NOTIFICATION_OPEN_EVENT, setNavigate } from "./notification-click"
 
 describe("notification click", () => {
   afterEach(() => {
@@ -18,6 +18,18 @@ describe("notification click", () => {
     setNavigate((href) => calls.push(href))
     handleNotificationClick(undefined)
     expect(calls).toEqual([])
+  })
+
+  test("emits notification-open event", () => {
+    const calls: Array<string | undefined> = []
+    const handler = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail : undefined
+      calls.push(detail?.href)
+    }
+    window.addEventListener(NOTIFICATION_OPEN_EVENT, handler)
+    handleNotificationClick("/abc/session/123")
+    window.removeEventListener(NOTIFICATION_OPEN_EVENT, handler)
+    expect(calls).toEqual(["/abc/session/123"])
   })
 
   test("falls back to location.assign without registered navigate", () => {

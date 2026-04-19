@@ -831,6 +831,50 @@ export const dict = {
   "settings.general.notifications.permissions.description": "Show system notification when a permission is required",
   "settings.general.notifications.errors.title": "Errors",
   "settings.general.notifications.errors.description": "Show system notification when an error occurs",
+  "settings.general.notifications.push.title": "Mobile push",
+  "settings.general.notifications.push.description":
+    "Uses service worker + Web Push so Android can notify you even when the page is backgrounded.",
+  "settings.general.notifications.push.status.unsupported": "This browser does not support background push.",
+  "settings.general.notifications.push.status.unconfigured": "Server Web Push keys are not configured yet.",
+  "settings.general.notifications.push.status.permission":
+    "Grant browser notification permission to enable background push for this device.",
+  "settings.general.notifications.push.status.denied":
+    "Browser notification permission is denied. Re-enable it in site settings to use push.",
+  "settings.general.notifications.push.status.syncing": "Syncing this device with the server...",
+  "settings.general.notifications.push.status.active": "Background push is active for this device.",
+  "settings.general.notifications.push.status.muted":
+    "This device is registered, but completion/error push toggles are currently off.",
+  "settings.general.notifications.push.status.unsubscribed":
+    "Browser permission is granted, but this device is not subscribed yet.",
+  "settings.general.notifications.push.test.title": "Test notification",
+  "settings.general.notifications.push.test.description": "Send a test push to this device through the service worker.",
+  "settings.general.notifications.push.unsubscribe.title": "Remove this device",
+  "settings.general.notifications.push.unsubscribe.description":
+    "Unsubscribe this browser from server-side Web Push delivery.",
+  "settings.general.notifications.push.action.enable": "Enable push",
+  "settings.general.notifications.push.action.refresh": "Refresh",
+  "settings.general.notifications.push.action.sync": "Sync device",
+  "settings.general.notifications.push.action.syncing": "Syncing...",
+  "settings.general.notifications.push.action.test": "Send test",
+  "settings.general.notifications.push.action.testing": "Sending...",
+  "settings.general.notifications.push.action.unsubscribe": "Unsubscribe",
+  "settings.general.notifications.push.action.unsubscribing": "Removing...",
+  "settings.general.notifications.push.action.unsupported": "Unsupported",
+  "settings.general.notifications.push.action.unconfigured": "Server setup needed",
+  "settings.general.notifications.push.toast.permissionDenied":
+    "Notification permission was not granted, so background push is still disabled.",
+  "settings.general.notifications.push.toast.synced.title": "Push synced",
+  "settings.general.notifications.push.toast.synced.description":
+    "This device is synced with the server for background push delivery.",
+  "settings.general.notifications.push.toast.testSent.title": "Test notification sent",
+  "settings.general.notifications.push.toast.testSent.description":
+    "If background push is working, you should receive a notification shortly.",
+  "settings.general.notifications.push.toast.testFailed":
+    "The test push could not be delivered. Check server push configuration and device subscription state.",
+  "settings.general.notifications.push.toast.unsubscribed.title": "Device unsubscribed",
+  "settings.general.notifications.push.toast.unsubscribed.description":
+    "This browser will no longer receive server-side push notifications.",
+  "settings.general.notifications.push.toast.unsubscribeFailed": "Failed to unsubscribe this device from push delivery.",
 
   "settings.general.sounds.agent.title": "Agent",
   "settings.general.sounds.agent.description": "Play sound when the agent is complete or needs attention",

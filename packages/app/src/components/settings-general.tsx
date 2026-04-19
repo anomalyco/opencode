@@ -12,6 +12,7 @@ import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
+import { usePush } from "@/context/push"
 import {
   monoDefault,
   monoFontFamily,
@@ -69,6 +70,7 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const permission = usePermission()
   const platform = usePlatform()
+  const push = usePush()
   const params = useParams()
   const settings = useSettings()
 
@@ -78,6 +80,9 @@ export const SettingsGeneral: Component = () => {
 
   const [store, setStore] = createStore({
     checking: false,
+    pushManaging: false,
+    pushTesting: false,
+    pushUnsubscribing: false,
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
@@ -107,6 +112,108 @@ export const SettingsGeneral: Component = () => {
     permission.disableAutoAccept(params.id, value)
   }
   const desktop = createMemo(() => platform.platform === "desktop")
+  const pushStatus = createMemo(() => {
+    const current = push.current
+    if (!current.supported) return language.t("settings.general.notifications.push.status.unsupported")
+    if (!current.publicKey) return language.t("settings.general.notifications.push.status.unconfigured")
+    if (current.permission === "denied") return language.t("settings.general.notifications.push.status.denied")
+    if (current.permission !== "granted") return language.t("settings.general.notifications.push.status.permission")
+    if (current.syncing) return language.t("settings.general.notifications.push.status.syncing")
+    if (current.subscribed && current.enabled) return language.t("settings.general.notifications.push.status.active")
+    if (current.subscribed) return language.t("settings.general.notifications.push.status.muted")
+    return language.t("settings.general.notifications.push.status.unsubscribed")
+  })
+  const canManagePush = createMemo(() => push.current.supported && !!push.current.publicKey)
+  const canTestPush = createMemo(
+    () => push.current.supported && !!push.current.publicKey && push.current.permission === "granted" && !!push.current.subscriptionID,
+  )
+  const canUnsubscribePush = createMemo(() => push.current.subscribed && !!push.current.subscriptionID)
+  const pushAction = createMemo(() => {
+    if (!push.current.supported) return language.t("settings.general.notifications.push.action.unsupported")
+    if (!push.current.publicKey) return language.t("settings.general.notifications.push.action.unconfigured")
+    if (push.current.permission !== "granted") return language.t("settings.general.notifications.push.action.enable")
+    if (!push.current.subscribed) return language.t("settings.general.notifications.push.action.sync")
+    return language.t("settings.general.notifications.push.action.refresh")
+  })
+
+  const managePush = async () => {
+    if (!canManagePush()) return
+    setStore("pushManaging", true)
+    try {
+      if (push.current.permission !== "granted") {
+        const result = await push.requestPermission()
+        if (result !== "granted") {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: language.t("settings.general.notifications.push.toast.permissionDenied"),
+          })
+          return
+        }
+      }
+
+      await push.sync()
+      showToast({
+        variant: "success",
+        title: language.t("settings.general.notifications.push.toast.synced.title"),
+        description: language.t("settings.general.notifications.push.toast.synced.description"),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setStore("pushManaging", false)
+    }
+  }
+
+  const sendTestPush = async () => {
+    setStore("pushTesting", true)
+    try {
+      const sent = await push.test()
+      if (sent) {
+        showToast({
+          variant: "success",
+          title: language.t("settings.general.notifications.push.toast.testSent.title"),
+          description: language.t("settings.general.notifications.push.toast.testSent.description"),
+        })
+        return
+      }
+
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("settings.general.notifications.push.toast.testFailed"),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setStore("pushTesting", false)
+    }
+  }
+
+  const removePush = async () => {
+    setStore("pushUnsubscribing", true)
+    try {
+      const removed = await push.unsubscribe()
+      if (removed) {
+        showToast({
+          variant: "success",
+          title: language.t("settings.general.notifications.push.toast.unsubscribed.title"),
+          description: language.t("settings.general.notifications.push.toast.unsubscribed.description"),
+        })
+        return
+      }
+
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("settings.general.notifications.push.toast.unsubscribeFailed"),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setStore("pushUnsubscribing", false)
+    }
+  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -461,6 +568,20 @@ export const SettingsGeneral: Component = () => {
 
       <SettingsList>
         <SettingsRow
+          title={language.t("settings.general.notifications.push.title")}
+          description={
+            <span class="flex flex-col gap-0.5">
+              <span>{language.t("settings.general.notifications.push.description")}</span>
+              <span>{pushStatus()}</span>
+            </span>
+          }
+        >
+          <Button size="small" variant="secondary" disabled={!canManagePush() || store.pushManaging} onClick={managePush}>
+            {store.pushManaging ? language.t("settings.general.notifications.push.action.syncing") : pushAction()}
+          </Button>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.notifications.agent.title")}
           description={language.t("settings.general.notifications.agent.description")}
         >
@@ -494,6 +615,33 @@ export const SettingsGeneral: Component = () => {
               onChange={(checked) => settings.notifications.setErrors(checked)}
             />
           </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.notifications.push.test.title")}
+          description={language.t("settings.general.notifications.push.test.description")}
+        >
+          <Button size="small" variant="secondary" disabled={!canTestPush() || store.pushTesting} onClick={sendTestPush}>
+            {store.pushTesting
+              ? language.t("settings.general.notifications.push.action.testing")
+              : language.t("settings.general.notifications.push.action.test")}
+          </Button>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.notifications.push.unsubscribe.title")}
+          description={language.t("settings.general.notifications.push.unsubscribe.description")}
+        >
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={!canUnsubscribePush() || store.pushUnsubscribing}
+            onClick={removePush}
+          >
+            {store.pushUnsubscribing
+              ? language.t("settings.general.notifications.push.action.unsubscribing")
+              : language.t("settings.general.notifications.push.action.unsubscribe")}
+          </Button>
         </SettingsRow>
       </SettingsList>
     </div>
@@ -596,7 +744,6 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  console.log(import.meta.env)
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">

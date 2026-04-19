@@ -1164,6 +1164,37 @@ export type GlobalEvent = {
     | SyncEventSessionDeleted
 }
 
+export type PushPublicKey = {
+  supported: boolean
+  publicKey: string | null
+}
+
+export type PushSubscription = {
+  id: string
+  endpoint: string
+  expirationTime?: number | null
+  enabled: boolean
+  notifyOnCompletion: boolean
+  notifyOnError: boolean
+  userAgent?: string
+  time: {
+    created: number
+    updated: number
+  }
+}
+
+export type BadRequestError = {
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
+}
+
+export type PushTestResult = {
+  sent: boolean
+}
+
 /**
  * Log level
  */
@@ -1670,14 +1701,6 @@ export type Config = {
      */
     mcp_timeout?: number
   }
-}
-
-export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
 }
 
 export type OAuth = {
@@ -2205,6 +2228,133 @@ export type GlobalEventResponses = {
 }
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
+
+export type GlobalPushPublicKeyData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/push/public-key"
+}
+
+export type GlobalPushPublicKeyResponses = {
+  /**
+   * Push configuration
+   */
+  200: PushPublicKey
+}
+
+export type GlobalPushPublicKeyResponse = GlobalPushPublicKeyResponses[keyof GlobalPushPublicKeyResponses]
+
+export type GlobalListPushSubscriptionsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/push/subscriptions"
+}
+
+export type GlobalListPushSubscriptionsResponses = {
+  /**
+   * Push subscriptions
+   */
+  200: Array<PushSubscription>
+}
+
+export type GlobalListPushSubscriptionsResponse =
+  GlobalListPushSubscriptionsResponses[keyof GlobalListPushSubscriptionsResponses]
+
+export type GlobalUpsertPushSubscriptionData = {
+  body?: {
+    endpoint: string
+    expirationTime?: number | null
+    keys: {
+      auth: string
+      p256dh: string
+    }
+    enabled?: boolean
+    notifyOnCompletion?: boolean
+    notifyOnError?: boolean
+    userAgent?: string
+  }
+  path?: never
+  query?: never
+  url: "/global/push/subscriptions"
+}
+
+export type GlobalUpsertPushSubscriptionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalUpsertPushSubscriptionError =
+  GlobalUpsertPushSubscriptionErrors[keyof GlobalUpsertPushSubscriptionErrors]
+
+export type GlobalUpsertPushSubscriptionResponses = {
+  /**
+   * Push subscription
+   */
+  200: PushSubscription
+}
+
+export type GlobalUpsertPushSubscriptionResponse =
+  GlobalUpsertPushSubscriptionResponses[keyof GlobalUpsertPushSubscriptionResponses]
+
+export type GlobalRemovePushSubscriptionData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/global/push/subscriptions/{id}"
+}
+
+export type GlobalRemovePushSubscriptionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalRemovePushSubscriptionError =
+  GlobalRemovePushSubscriptionErrors[keyof GlobalRemovePushSubscriptionErrors]
+
+export type GlobalRemovePushSubscriptionResponses = {
+  /**
+   * Subscription removed
+   */
+  200: boolean
+}
+
+export type GlobalRemovePushSubscriptionResponse =
+  GlobalRemovePushSubscriptionResponses[keyof GlobalRemovePushSubscriptionResponses]
+
+export type GlobalTestPushData = {
+  body?: {
+    id?: string
+  }
+  path?: never
+  query?: never
+  url: "/global/push/test"
+}
+
+export type GlobalTestPushErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalTestPushError = GlobalTestPushErrors[keyof GlobalTestPushErrors]
+
+export type GlobalTestPushResponses = {
+  /**
+   * Test push result
+   */
+  200: PushTestResult
+}
+
+export type GlobalTestPushResponse = GlobalTestPushResponses[keyof GlobalTestPushResponses]
 
 export type GlobalConfigGetData = {
   body?: never

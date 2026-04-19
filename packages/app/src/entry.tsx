@@ -5,7 +5,11 @@ import { AppBaseProviders, AppInterface } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
-import { handleNotificationClick } from "@/utils/notification-click"
+import {
+  handleNotificationClick,
+  NOTIFICATION_PERMISSION_GRANTED_EVENT,
+  SERVICE_WORKER_NOTIFICATION_OPEN,
+} from "@/utils/notification-click"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
@@ -59,6 +63,10 @@ const notify: Platform["notify"] = async (title, description, href) => {
     Notification.permission === "default"
       ? await Notification.requestPermission().catch(() => "denied")
       : Notification.permission
+
+  if (permission === "granted") {
+    window.dispatchEvent(new Event(NOTIFICATION_PERMISSION_GRANTED_EVENT))
+  }
 
   if (permission !== "granted") return
 
@@ -123,6 +131,15 @@ const platform: Platform = {
     return stored ? ServerConnection.Key.make(stored) : null
   },
   setDefaultServer: writeDefaultServerUrl,
+}
+
+if (typeof navigator === "object" && "serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const data = event.data
+    if (!data || typeof data !== "object") return
+    if (!("type" in data) || data.type !== SERVICE_WORKER_NOTIFICATION_OPEN) return
+    handleNotificationClick(typeof data.href === "string" ? data.href : undefined)
+  })
 }
 
 if (root instanceof HTMLElement) {

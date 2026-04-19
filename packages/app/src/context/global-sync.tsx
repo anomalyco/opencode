@@ -25,6 +25,7 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
+import { NOTIFICATION_OPEN_EVENT } from "@/utils/notification-click"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, skipToken, useQueryClient } from "@tanstack/solid-query"
@@ -422,16 +423,21 @@ function createGlobalSync() {
     const onOnline = () => {
       triggerRecovery("online")
     }
+    const onNotificationOpen = () => {
+      triggerRecovery("notification-open")
+    }
 
     document.addEventListener("visibilitychange", onVisibilityChange)
     window.addEventListener("pageshow", onPageShow)
     window.addEventListener("focus", onFocus)
     window.addEventListener("online", onOnline)
+    window.addEventListener(NOTIFICATION_OPEN_EVENT, onNotificationOpen as EventListener)
     onCleanup(() => {
       document.removeEventListener("visibilitychange", onVisibilityChange)
       window.removeEventListener("pageshow", onPageShow)
       window.removeEventListener("focus", onFocus)
       window.removeEventListener("online", onOnline)
+      window.removeEventListener(NOTIFICATION_OPEN_EVENT, onNotificationOpen as EventListener)
     })
 
     if (typeof requestAnimationFrame === "function") {
