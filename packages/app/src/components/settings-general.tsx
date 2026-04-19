@@ -128,6 +128,10 @@ export const SettingsGeneral: Component = () => {
     () => push.current.supported && !!push.current.publicKey && push.current.permission === "granted" && !!push.current.subscriptionID,
   )
   const canUnsubscribePush = createMemo(() => push.current.subscribed && !!push.current.subscriptionID)
+  const formatPushTime = (time?: number) => {
+    if (!time) return
+    return new Date(time).toLocaleString()
+  }
   const pushAction = createMemo(() => {
     if (!push.current.supported) return language.t("settings.general.notifications.push.action.unsupported")
     if (!push.current.publicKey) return language.t("settings.general.notifications.push.action.unconfigured")
@@ -576,6 +580,17 @@ export const SettingsGeneral: Component = () => {
               <Show when={push.current.serverOrigin}>
                 {(origin) => <span>{language.t("settings.general.notifications.push.origin", { origin: origin() })}</span>}
               </Show>
+              <Show when={formatPushTime(push.current.lastSuccessAt)}>
+                {(time) => <span>{language.t("settings.general.notifications.push.diagnostics.lastSuccess", { time: time() })}</span>}
+              </Show>
+              <Show when={formatPushTime(push.current.lastFailureAt)}>
+                {(time) => <span>{language.t("settings.general.notifications.push.diagnostics.lastFailure", { time: time() })}</span>}
+              </Show>
+              <Show when={push.current.failureCount > 0}>
+                <span>{language.t("settings.general.notifications.push.diagnostics.failureCount", { count: push.current.failureCount })}</span>
+              </Show>
+              <Show when={push.current.lastError}>
+                {(error) => <span>{language.t("settings.general.notifications.push.diagnostics.lastError", { error: error() })}</span>}</Show>
             </span>
           }
         >

@@ -835,6 +835,10 @@ export const dict = {
   "settings.general.notifications.push.description":
     "Uses service worker + Web Push so Android can notify you even when the page is backgrounded.",
   "settings.general.notifications.push.origin": "Push origin: {{origin}}",
+  "settings.general.notifications.push.diagnostics.lastSuccess": "Last delivery: {{time}}",
+  "settings.general.notifications.push.diagnostics.lastFailure": "Last failed delivery: {{time}}",
+  "settings.general.notifications.push.diagnostics.failureCount": "Delivery failures: {{count}}",
+  "settings.general.notifications.push.diagnostics.lastError": "Last delivery error: {{error}}",
   "settings.general.notifications.push.status.unsupported": "This browser does not support background push.",
   "settings.general.notifications.push.status.unconfigured": "Server Web Push keys are not configured yet.",
   "settings.general.notifications.push.status.permission":

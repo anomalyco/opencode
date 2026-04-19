@@ -23,6 +23,8 @@ describe("push subscription store", () => {
     })
 
     expect(saved.deviceLabel).toBe("Android Chrome")
+    expect(saved.failureCount).toBe(0)
+    expect(saved.lastError).toBeUndefined()
     expect(saved.serverOrigin).toBe("https://opencode.tim-ur.ru")
     expect(saved.notifyOnCompletion).toBe(true)
 

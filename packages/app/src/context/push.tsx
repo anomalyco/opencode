@@ -48,6 +48,10 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       deviceLabel: suggestedLabel(),
       enabled: false,
       error: undefined as string | undefined,
+      failureCount: 0,
+      lastError: undefined as string | undefined,
+      lastFailureAt: undefined as number | undefined,
+      lastSuccessAt: undefined as number | undefined,
       permission: permission(),
       publicKey: undefined as string | undefined,
       registered: false,
@@ -87,9 +91,17 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
     const remember = (item?: {
       id: string
       deviceLabel?: string
+      failureCount: number
+      lastError?: string
+      lastFailureAt?: number | null
+      lastSuccessAt?: number | null
       serverOrigin: string
     }) => {
       if (!item) return
+      setStore("failureCount", item.failureCount)
+      setStore("lastError", item.lastError)
+      setStore("lastFailureAt", item.lastFailureAt ?? undefined)
+      setStore("lastSuccessAt", item.lastSuccessAt ?? undefined)
       setStore("subscriptionID", item.id)
       setStore("serverOrigin", item.serverOrigin)
       if (item.deviceLabel && (store.deviceLabel === suggestedLabel() || !store.deviceLabel.trim())) {
@@ -171,6 +183,10 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           setStore("enabled", enabled)
           setStore("subscribed", !!subscription)
           if (!subscription) {
+            setStore("failureCount", 0)
+            setStore("lastError", undefined)
+            setStore("lastFailureAt", undefined)
+            setStore("lastSuccessAt", undefined)
             setStore("subscriptionID", undefined)
             return
           }
@@ -229,6 +245,10 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         deviceLabel: store.deviceLabel,
         enabled: false,
         error: undefined,
+        failureCount: 0,
+        lastError: undefined,
+        lastFailureAt: undefined,
+        lastSuccessAt: undefined,
         serverOrigin: store.serverOrigin,
         subscriptionID: undefined,
         subscribed: false,

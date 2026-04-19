@@ -1175,6 +1175,10 @@ export type PushSubscription = {
   endpoint: string
   expirationTime?: number | null
   enabled: boolean
+  failureCount: number
+  lastError?: string
+  lastFailureAt?: number | null
+  lastSuccessAt?: number | null
   notifyOnCompletion: boolean
   notifyOnError: boolean
   serverOrigin: string

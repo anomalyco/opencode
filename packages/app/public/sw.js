@@ -20,7 +20,7 @@ self.addEventListener("push", (event) => {
       const title = typeof payload.title === "string" ? payload.title : "OpenCode"
       const data = payload.data && typeof payload.data === "object" ? payload.data : {}
       await self.registration.showNotification(title, {
-        badge: typeof payload.badge === "string" ? payload.badge : "/favicon-96x96-v3.png",
+        badge: typeof payload.badge === "string" ? payload.badge : "/notification-badge.svg",
         body: typeof payload.body === "string" ? payload.body : "",
         data,
         icon: typeof payload.icon === "string" ? payload.icon : "/favicon-96x96-v3.png",
