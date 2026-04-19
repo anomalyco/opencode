@@ -45,6 +45,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const active = input.tabs().active()
     if (active === "context") return active
     if (active === "review" && review()) return active
+    if (active === "agents") return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
     const first = openedTabs()[0]
@@ -136,7 +137,10 @@ export const createOpenSessionFileTab = (input: {
     input.openTab(next)
 
     const path = input.pathFromTab(next)
-    if (!path) return
+    if (!path) {
+      input.setActive(next)
+      return
+    }
 
     input.loadFile(path)
     input.openReviewPanel()

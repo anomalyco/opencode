@@ -1452,6 +1452,14 @@ export default function Layout(props: ParentProps) {
     })
   }
 
+  const showBossPresetDialog = (preset?: import("@/context/global-sync/types").BossPreset) => {
+    const run = ++dialogRun
+    void import("@/components/dialog-boss-preset").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogBossPreset preset={preset} />)
+    })
+  }
+
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
@@ -2009,6 +2017,7 @@ export default function Layout(props: ParentProps) {
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog,
+    showBossPresetDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
@@ -2399,7 +2408,7 @@ export default function Layout(props: ParentProps) {
                 <ResizeHandle
                   direction="horizontal"
                   size={layout.sidebar.width()}
-                  min={244}
+                  min={typeof window === "undefined" ? 180 : Math.max(180, Math.round(window.innerWidth * 0.12))}
                   max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
                   onResize={(w) => {
                     setState("sizing", true)

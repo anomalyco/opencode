@@ -45,6 +45,8 @@ export const Info = z
     prompt: z.string().optional(),
     options: z.record(z.string(), z.any()),
     steps: z.number().int().positive().optional(),
+    effort_tier: z.enum(["low", "medium", "high"]).optional(),
+    no_paid_apis: z.boolean().optional(),
   })
   .meta({
     ref: "Agent",
@@ -258,6 +260,8 @@ export const layer = Layer.effect(
           item.hidden = value.hidden ?? item.hidden
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
+          item.effort_tier = value.effort_tier ?? item.effort_tier
+          item.no_paid_apis = value.no_paid_apis ?? item.no_paid_apis
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }

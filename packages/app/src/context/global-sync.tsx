@@ -22,11 +22,17 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
-import type { ProjectMeta } from "./global-sync/types"
+import type { BossPreset, ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, skipToken, useQueryClient } from "@tanstack/solid-query"
+
+export type ProviderAccount = {
+  key: string
+  label?: string
+  email?: string
+}
 
 type GlobalStore = {
   ready: boolean
@@ -59,6 +65,11 @@ function createGlobalSync() {
   const [projectCache, setProjectCache, projectInit] = persisted(
     Persist.global("globalSync.project", ["globalSync.project.v1"]),
     createStore({ value: [] as Project[] }),
+  )
+
+  const [presetCache, setPresetCache, presetInit] = persisted(
+    Persist.global("boss-presets", ["boss-presets.v1"]),
+    createStore({ value: [] as BossPreset[] }),
   )
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
@@ -411,6 +422,76 @@ function createGlobalSync() {
       })
   }
 
+  const providerApi = {
+    async listAccounts(providerID: string): Promise<ProviderAccount[]> {
+      const baseUrl = globalSDK.url.replace(/\/+$/, "")
+      const res = await fetch(`${baseUrl}/provider/${encodeURIComponent(providerID)}/accounts`)
+      if (!res.ok) throw new Error(`Failed to list accounts: ${res.status}`)
+      const data = await res.json()
+      return (data ?? []) as ProviderAccount[]
+    },
+    async getActiveAccount(providerID: string): Promise<string | undefined> {
+      const baseUrl = globalSDK.url.replace(/\/+$/, "")
+      const res = await fetch(`${baseUrl}/provider/${encodeURIComponent(providerID)}/accounts/active`)
+      if (!res.ok) return undefined
+      const data = await res.json()
+      return (data?.key ?? data) as string | undefined
+    },
+    async activateAccount(providerID: string, accountKey: string): Promise<void> {
+      const baseUrl = globalSDK.url.replace(/\/+$/, "")
+      const res = await fetch(`${baseUrl}/provider/${encodeURIComponent(providerID)}/accounts/activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountKey }),
+      })
+      if (!res.ok) throw new Error(`Failed to activate account: ${res.status}`)
+    },
+  }
+
+  const presetApi = {
+    list(): BossPreset[] {
+      return presetCache.value
+    },
+    get(id: string): BossPreset | undefined {
+      return presetCache.value.find((p) => p.id === id)
+    },
+    create(preset: BossPreset) {
+      setPresetCache(
+        "value",
+        produce((draft) => {
+          const idx = draft.findIndex((p) => p.id === preset.id)
+          if (idx !== -1) {
+            draft[idx] = preset
+          } else {
+            draft.push(preset)
+          }
+        }),
+      )
+    },
+    update(id: string, patch: Partial<Omit<BossPreset, "id">>) {
+      setPresetCache(
+        "value",
+        produce((draft) => {
+          const idx = draft.findIndex((p) => p.id === id)
+          if (idx === -1) return
+          Object.assign(draft[idx], patch)
+        }),
+      )
+    },
+    delete(id: string) {
+      setPresetCache(
+        "value",
+        produce((draft) => {
+          const idx = draft.findIndex((p) => p.id === id)
+          if (idx !== -1) draft.splice(idx, 1)
+        }),
+      )
+    },
+    linkProject(directory: string, presetId: string | undefined) {
+      children.projectMeta(directory, { bossPresetId: presetId } as ProjectMeta)
+    },
+  }
+
   return {
     data: globalStore,
     set,
@@ -424,7 +505,9 @@ function createGlobalSync() {
     peek: children.peek,
     bootstrap,
     updateConfig,
+    provider: providerApi,
     project: projectApi,
+    preset: presetApi,
     todo: {
       set: setSessionTodo,
     },

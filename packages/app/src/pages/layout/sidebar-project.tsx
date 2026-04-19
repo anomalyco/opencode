@@ -12,6 +12,7 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { displayName, sortedRootSessions } from "./helpers"
+import type { BossPreset } from "@/context/global-sync/types"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -27,6 +28,7 @@ export type ProjectSidebarContext = {
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showBossPresetDialog: (preset?: BossPreset) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
@@ -64,6 +66,7 @@ const ProjectTile = (props: {
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showBossPresetDialog: (preset?: BossPreset) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   closeProject: (directory: string) => void
@@ -74,9 +77,21 @@ const ProjectTile = (props: {
 }): JSX.Element => {
   const notification = useNotification()
   const layout = useLayout()
+  const globalSync = useGlobalSync()
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
+
+  const [bossMenu, setBossMenu] = createStore({ open: false })
+
+  const activePreset = createMemo(() => {
+    const [store] = globalSync.child(props.project.worktree, { bootstrap: false })
+    const presetId = store.projectMeta?.bossPresetId
+    if (!presetId) return undefined
+    return globalSync.preset.get(presetId)
+  })
+
+  const allPresets = createMemo(() => globalSync.preset.list())
 
   const clear = () =>
     props
@@ -144,12 +159,87 @@ const ProjectTile = (props: {
         onBlur={() => props.setOpen(false)}
       >
         <ProjectIcon project={props.project} notify />
+        <div
+          class="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full bg-surface-raised-base border border-border-weak-base flex items-center justify-center z-10 cursor-pointer"
+          title={activePreset()?.name ?? "Configure Boss Agent"}
+          onClick={(e) => {
+            e.stopPropagation()
+            props.showBossPresetDialog(activePreset())
+          }}
+        >
+          <span class="text-[8px] leading-none">{activePreset()?.icon || "B"}</span>
+        </div>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
+          <ContextMenu.Sub
+            open={bossMenu.open}
+            onOpenChange={(open) => setBossMenu("open", open)}
+          >
+            <ContextMenu.SubTrigger>
+              <ContextMenu.ItemLabel>
+                <span class="flex items-center gap-1.5">
+                  <span class="text-text-weak">⭐</span>
+                  Boss Preset
+                </span>
+              </ContextMenu.ItemLabel>
+            </ContextMenu.SubTrigger>
+            <ContextMenu.SubContent>
+              <ContextMenu.Item
+                onSelect={() => {
+                  globalSync.preset.linkProject(props.project.worktree, undefined)
+                }}
+              >
+                <ContextMenu.ItemLabel>
+                  <span class="flex items-center gap-1.5">
+                    <span class="text-icon-weak">None</span>
+                  </span>
+                </ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+              <For each={allPresets()}>
+                {(preset) => (
+                  <ContextMenu.Item
+                    onSelect={() => {
+                      globalSync.preset.linkProject(props.project.worktree, preset.id)
+                    }}
+                  >
+                    <ContextMenu.ItemLabel>
+                      <span class="flex items-center gap-1.5">
+                        <Show when={activePreset()?.id === preset.id}>
+                          <span class="text-text-interactive-base">✓</span>
+                        </Show>
+                        <span>{preset.icon || ""} {preset.name}</span>
+                      </span>
+                    </ContextMenu.ItemLabel>
+                  </ContextMenu.Item>
+                )}
+              </For>
+              <ContextMenu.Separator />
+              <ContextMenu.Item
+                onSelect={() => props.showBossPresetDialog()}
+              >
+                <ContextMenu.ItemLabel>
+                  <span class="flex items-center gap-1.5">
+                    ＋ New Preset...
+                  </span>
+                </ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+              <Show when={activePreset()}>
+                <ContextMenu.Item
+                  onSelect={() => props.showBossPresetDialog(activePreset())}
+                >
+                  <ContextMenu.ItemLabel>
+                  <span class="flex items-center gap-1.5">
+                    ⚙ Configure...
+                  </span>
+                  </ContextMenu.ItemLabel>
+                </ContextMenu.Item>
+              </Show>
+            </ContextMenu.SubContent>
+          </ContextMenu.Sub>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
             data-project={base64Encode(props.project.worktree)}
@@ -321,6 +411,7 @@ export const SortableProject = (props: {
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
+      showBossPresetDialog={props.ctx.showBossPresetDialog}
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}

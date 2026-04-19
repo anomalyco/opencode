@@ -4,10 +4,10 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { showToast } from "@opencode-ai/ui/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Component, For, Show } from "solid-js"
+import { createMemo, createSignal, type Component, For, onMount, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSync, type ProviderAccount } from "@/context/global-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -26,6 +26,86 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
 ] as const
+
+function ProviderAccounts(props: {
+  providerID: string
+  onAddAccount: () => void
+}) {
+  const globalSync = useGlobalSync()
+  const language = useLanguage()
+  const [accounts, setAccounts] = createSignal<ProviderAccount[]>([])
+  const [activeKey, setActiveKey] = createSignal<string | undefined>()
+  const [switching, setSwitching] = createSignal<string | undefined>()
+
+  onMount(() => {
+    void loadAccounts()
+  })
+
+  async function loadAccounts() {
+    try {
+      const [accs, active] = await Promise.all([
+        globalSync.provider.listAccounts(props.providerID),
+        globalSync.provider.getActiveAccount(props.providerID),
+      ])
+      setAccounts(accs)
+      setActiveKey(active)
+    } catch {
+      // Accounts endpoint may not exist for all providers — silently ignore
+    }
+  }
+
+  async function activate(key: string) {
+    setSwitching(key)
+    try {
+      await globalSync.provider.activateAccount(props.providerID, key)
+      setActiveKey(key)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("provider.account.switched"),
+      })
+    } catch {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+      })
+    } finally {
+      setSwitching(undefined)
+    }
+  }
+
+  return (
+    <div class="w-full">
+      <For each={accounts()}>
+        {(account) => (
+          <div
+            class="flex items-center justify-between gap-3 py-1.5 px-3 -mx-3 rounded-sm hover:bg-surface-raised-base cursor-pointer"
+            onClick={() => void activate(account.key)}
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <div
+                class={`size-1.5 rounded-full shrink-0 ${activeKey() === account.key ? "bg-icon-accent-base" : "bg-icon-weak-base"}`}
+              />
+              <span class="text-13-regular text-text-base truncate">
+                {account.label || account.email || account.key}
+              </span>
+            </div>
+            <Show when={switching() === account.key}>
+              <span class="text-12-regular text-text-weak">{language.t("provider.account.switching")}</span>
+            </Show>
+          </div>
+        )}
+      </For>
+      <button
+        type="button"
+        class="text-13-regular text-text-interactive-base hover:underline mt-1 px-3 -mx-3 py-1 cursor-pointer"
+        onClick={props.onAddAccount}
+      >
+        {language.t("provider.account.addAnother")}
+      </button>
+    </div>
+  )
+}
 
 export const SettingsProviders: Component = () => {
   const dialog = useDialog()
@@ -148,24 +228,34 @@ export const SettingsProviders: Component = () => {
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
-                      <span class="text-14-medium text-text-strong truncate">{item.name}</span>
-                      <Tag>{type(item)}</Tag>
+                  <div class="group flex flex-col justify-between gap-2 min-h-16 py-3 border-b border-border-weak-base last:border-none">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                      <div class="flex items-center gap-3 min-w-0">
+                        <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
+                        <span class="text-14-medium text-text-strong truncate">{item.name}</span>
+                        <Tag>{type(item)}</Tag>
+                      </div>
+                      <Show
+                        when={canDisconnect(item)}
+                        fallback={
+                          <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
+                            {language.t("settings.providers.connected.environmentDescription")}
+                          </span>
+                        }
+                      >
+                        <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
+                          {language.t("common.disconnect")}
+                        </Button>
+                      </Show>
                     </div>
-                    <Show
-                      when={canDisconnect(item)}
-                      fallback={
-                        <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
-                          {language.t("settings.providers.connected.environmentDescription")}
-                        </span>
-                      }
-                    >
-                      <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </Button>
-                    </Show>
+                    <div class="pl-8">
+                      <ProviderAccounts
+                        providerID={item.id}
+                        onAddAccount={() => {
+                          dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </For>

@@ -54,6 +54,12 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
+    effort_tier: Schema.optional(Schema.Literal("low", "medium", "high")).annotate({
+      description: "When set, enables dynamic model selection via the model intelligence system for this agent",
+    }),
+    no_paid_apis: Schema.optional(Schema.Boolean).annotate({
+      description: "When true, only subscription-covered (free) models will be considered for this agent",
+    }),
     permission: Schema.optional(PermissionRef),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
@@ -76,6 +82,8 @@ const KNOWN_KEYS = new Set([
   "permission",
   "disable",
   "tools",
+  "effort_tier",
+  "no_paid_apis",
 ])
 
 // Post-parse normalisation:

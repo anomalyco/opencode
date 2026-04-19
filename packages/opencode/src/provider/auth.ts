@@ -67,6 +67,8 @@ export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 export const CallbackInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
+  accountKey: Schema.optional(Schema.String).annotate({ description: "Compound key for multi-account, e.g. 'openai:work'" }),
+  accountLabel: Schema.optional(Schema.String).annotate({ description: "User-friendly label for this account" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
@@ -203,22 +205,33 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
       )
       if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
 
+      const storeKey = input.accountKey ?? input.providerID
+      const accountMeta = {
+        ...(input.accountLabel ? { _accountLabel: input.accountLabel } : {}),
+      }
+
       if ("key" in result) {
-        yield* auth.set(input.providerID, {
+        yield* auth.set(storeKey, {
           type: "api",
           key: result.key,
+          ...accountMeta,
         })
       }
 
       if ("refresh" in result) {
         const { type: _, provider: __, refresh, access, expires, ...extra } = result
-        yield* auth.set(input.providerID, {
+        yield* auth.set(storeKey, {
           type: "oauth",
           access,
           refresh,
           expires,
           ...extra,
+          ...accountMeta,
         })
+      }
+
+      if (input.accountKey) {
+        yield* auth.activate(input.providerID, storeKey)
       }
     })
 

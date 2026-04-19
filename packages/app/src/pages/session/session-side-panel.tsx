@@ -15,6 +15,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
+import { AgentsTab } from "@/components/session-agents-tab"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -22,6 +23,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
+import { useGlobalSync } from "@/context/global-sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -63,6 +65,22 @@ export function SessionSidePanel(props: {
   const fileOpen = createMemo(() => isDesktop() && shown() && layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
   const reviewTab = createMemo(() => isDesktop())
+  const parentSessionID = createMemo(() => sessionKey()?.split("/")[1])
+  const childSessions = createMemo(() => {
+    const parentID = parentSessionID()
+    if (!parentID) return []
+    return (sync.data.session ?? []).filter(
+      (session) => session.parentID === parentID && !session.time?.archived,
+    )
+  })
+
+  createEffect(() => {
+    if (!isDesktop() || childSessions().length === 0) return
+    if (tabs().active() === "agents") return
+    void tabs().open("agents")
+    tabs().setActive("agents")
+  })
+
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
@@ -278,6 +296,17 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Tabs.Trigger
+                        value="agents"
+                        onClick={() => {
+                          void tabs().open("agents")
+                          tabs().setActive("agents")
+                        }}
+                      >
+                        <div class="flex items-center gap-1.5">
+                          <div>Agents</div>
+                        </div>
+                      </Tabs.Trigger>
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
@@ -332,6 +361,14 @@ export function SessionSidePanel(props: {
                       </Show>
                     </Tabs.Content>
                   </Show>
+
+                  <Tabs.Content value="agents" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <Show when={activeTab() === "agents"}>
+                      <div class="flex-1 min-h-0 overflow-hidden">
+                        <AgentsTab parentSessionID={sessionKey()?.split("/")[1]} />
+                      </div>
+                    </Show>
+                  </Tabs.Content>
 
                   <Show when={activeFileTab()} keyed>
                     {(tab) => <FileTabContent tab={tab} />}
@@ -435,7 +472,7 @@ export function SessionSidePanel(props: {
                     direction="horizontal"
                     edge="start"
                     size={layout.fileTree.width()}
-                    min={200}
+                    min={typeof window === "undefined" ? 100 : Math.max(100, Math.round(window.innerWidth * 0.06))}
                     max={480}
                     onResize={(width) => {
                       props.size.touch()

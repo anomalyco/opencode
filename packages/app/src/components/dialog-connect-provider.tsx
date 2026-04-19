@@ -64,11 +64,17 @@ export function DialogConnectProvider(props: { provider: string }) {
   )
   const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
   const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
+  const isConnected = createMemo(() =>
+    providers.connected().some((p) => p.id === props.provider),
+  )
+
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
     state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
     error: undefined as string | undefined,
+    accountLabel: "",
+    accountStep: false as boolean,
   })
 
   type Action =
@@ -78,6 +84,9 @@ export function DialogConnectProvider(props: { provider: string }) {
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
     | { type: "auth.error"; error: string }
+    | { type: "account.show" }
+    | { type: "account.confirm" }
+    | { type: "account.setLabel"; label: string }
 
   function dispatch(action: Action) {
     setStore(
@@ -94,6 +103,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           draft.authorization = undefined
           draft.state = undefined
           draft.error = undefined
+          draft.accountStep = false
           return
         }
         if (action.type === "auth.prompt") {
@@ -112,8 +122,23 @@ export function DialogConnectProvider(props: { provider: string }) {
           draft.error = undefined
           return
         }
-        draft.state = "error"
-        draft.error = action.error
+        if (action.type === "auth.error") {
+          draft.state = "error"
+          draft.error = action.error
+          return
+        }
+        if (action.type === "account.show") {
+          draft.accountStep = true
+          return
+        }
+        if (action.type === "account.confirm") {
+          draft.accountStep = false
+          return
+        }
+        if (action.type === "account.setLabel") {
+          draft.accountLabel = action.label
+          return
+        }
       }),
     )
   }
@@ -144,6 +169,11 @@ export function DialogConnectProvider(props: { provider: string }) {
     return fallback
   }
 
+  function accountKey() {
+    if (!isConnected() || !store.accountLabel.trim()) return undefined
+    return `${props.provider}:${store.accountLabel.trim().toLowerCase().replace(/\s+/g, "-")}`
+  }
+
   async function selectMethod(index: number, inputs?: Record<string, string>) {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
@@ -151,6 +181,13 @@ export function DialogConnectProvider(props: { provider: string }) {
     }
 
     const method = methods()[index]
+
+    if (isConnected() && !store.accountStep && store.accountLabel.trim() === "" && method.type !== undefined) {
+      dispatch({ type: "method.select", index })
+      dispatch({ type: "account.show" })
+      return
+    }
+
     dispatch({ type: "method.select", index })
 
     if (method.type === "oauth") {
@@ -343,6 +380,10 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   function goBack() {
+    if (store.accountStep) {
+      dispatch({ type: "method.reset" })
+      return
+    }
     if (methods().length === 1) {
       all()
       return
@@ -356,6 +397,39 @@ export function DialogConnectProvider(props: { provider: string }) {
       return
     }
     all()
+  }
+
+  function AccountLabelView() {
+    async function handleSubmit(e: SubmitEvent) {
+      e.preventDefault()
+      if (!store.accountLabel.trim()) return
+      dispatch({ type: "account.confirm" })
+    }
+
+    return (
+      <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+        <div class="text-14-regular text-text-base">
+          {language.t("provider.connect.account.description", { provider: provider().name })}
+        </div>
+        <TextField
+          autofocus
+          type="text"
+          label={language.t("provider.connect.account.label")}
+          placeholder={language.t("provider.connect.account.placeholder")}
+          value={store.accountLabel}
+          onChange={(v) => dispatch({ type: "account.setLabel", label: v })}
+        />
+        <Button
+          class="w-auto"
+          type="submit"
+          size="large"
+          variant="primary"
+          disabled={!store.accountLabel.trim()}
+        >
+          {language.t("common.continue")}
+        </Button>
+      </form>
+    )
   }
 
   function MethodSelection() {
@@ -414,6 +488,7 @@ export function DialogConnectProvider(props: { provider: string }) {
         auth: {
           type: "api",
           key: apiKey,
+          ...(accountKey() ? { accountKey: accountKey(), accountLabel: store.accountLabel.trim() } : {}),
         },
       })
       await complete()
@@ -480,12 +555,17 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
+      const callbackBody: Record<string, unknown> = {
+        providerID: props.provider,
+        method: store.methodIndex,
+        code,
+      }
+      if (accountKey()) {
+        callbackBody.accountKey = accountKey()
+        callbackBody.accountLabel = store.accountLabel.trim()
+      }
       const result = await globalSDK.client.provider.oauth
-        .callback({
-          providerID: props.provider,
-          method: store.methodIndex,
-          code,
-        })
+        .callback(callbackBody as Parameters<typeof globalSDK.client.provider.oauth.callback>[0])
         .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
         .catch((error) => ({ ok: false as const, error }))
       if (result.ok) {
@@ -533,11 +613,16 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
+        const callbackBody: Record<string, unknown> = {
+          providerID: props.provider,
+          method: store.methodIndex,
+        }
+        if (accountKey()) {
+          callbackBody.accountKey = accountKey()
+          callbackBody.accountLabel = store.accountLabel.trim()
+        }
         const result = await globalSDK.client.provider.oauth
-          .callback({
-            providerID: props.provider,
-            method: store.methodIndex,
-          })
+          .callback(callbackBody as Parameters<typeof globalSDK.client.provider.oauth.callback>[0])
           .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
           .catch((error) => ({ ok: false as const, error }))
 
@@ -609,6 +694,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                     <span>{language.t("provider.connect.status.inProgress")}</span>
                   </div>
                 </div>
+              </Match>
+              <Match when={store.accountStep}>
+                <AccountLabelView />
               </Match>
               <Match when={store.methodIndex === undefined}>
                 <MethodSelection />

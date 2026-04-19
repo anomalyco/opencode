@@ -172,6 +172,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return childSessionOnPath(sessionStore.session, props.session.id, params.id)
   })
 
+  const workerCount = createMemo(() => {
+    return sessionStore.session.filter(
+      (s) => s.parentID === props.session.id && !s.time?.archived,
+    ).length
+  })
+
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
     const list = nav?.some((item) => item.id === props.session.id && item.directory === props.session.directory)
@@ -237,6 +243,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </div>
 
           <Show when={!props.level}>
+            <Show when={workerCount() > 0}>
+              <div class="shrink-0">
+                <span class="text-10-medium text-text-weak bg-background-stronger px-1 rounded">{workerCount()}</span>
+              </div>
+            </Show>
             <div
               class="shrink-0 overflow-hidden transition-[width,opacity]"
               classList={{

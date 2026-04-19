@@ -6,6 +6,7 @@ import { Provider } from "@/provider"
 import { ModelsDev } from "@/provider"
 import { ProviderAuth } from "@/provider"
 import { ProviderID } from "@/provider/schema"
+import { Auth } from "@/auth"
 import { mapValues } from "remeda"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
@@ -145,14 +146,99 @@ export const ProviderRoutes = lazy(() =>
       async (c) =>
         jsonRequest("ProviderRoutes.oauth.callback", c, function* () {
           const providerID = c.req.valid("param").providerID
-          const { method, code } = c.req.valid("json")
+          const { method, code, accountKey, accountLabel } = c.req.valid("json")
           const svc = yield* ProviderAuth.Service
           yield* svc.callback({
             providerID,
             method,
             code,
+            accountKey,
+            accountLabel,
           })
           return true
         }),
-    ),
+    )
+    .get(
+      "/:providerID/accounts",
+      describeRoute({
+        summary: "List provider accounts",
+        description: "Get all connected accounts for a specific provider.",
+        operationId: "provider.accounts",
+        responses: {
+          200: {
+            description: "List of accounts",
+          },
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: ProviderID.zod.meta({ description: "Provider ID" }),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("ProviderRoutes.accounts", c, function* () {
+          const providerID = c.req.valid("param").providerID
+          const auth = yield* Auth.Service
+          return yield* auth.accounts(providerID)
+        }),
+    )
+    .get(
+      "/:providerID/accounts/active",
+      describeRoute({
+        summary: "Get active account",
+        description: "Get the currently active account key for a provider.",
+        operationId: "provider.accounts.active",
+        responses: {
+          200: {
+            description: "Active account key",
+          },
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: ProviderID.zod.meta({ description: "Provider ID" }),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("ProviderRoutes.accounts.active", c, function* () {
+          const providerID = c.req.valid("param").providerID
+          const auth = yield* Auth.Service
+          return yield* auth.active(providerID)
+        }),
+    )
+    .post(
+      "/:providerID/accounts/activate",
+      describeRoute({
+        summary: "Activate account",
+        description: "Set the active account for a provider.",
+        operationId: "provider.accounts.activate",
+        responses: {
+          200: {
+            description: "Account activated",
+          },
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: ProviderID.zod.meta({ description: "Provider ID" }),
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          accountKey: z.string().meta({ description: "Account key to activate" }),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("ProviderRoutes.accounts.activate", c, function* () {
+          const providerID = c.req.valid("param").providerID
+          const { accountKey } = c.req.valid("json")
+          const auth = yield* Auth.Service
+          yield* auth.activate(providerID, accountKey)
+          return true
+        }),
+    )
 )

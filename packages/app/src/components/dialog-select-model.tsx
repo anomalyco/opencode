@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from "solid-js"
+import { Component, ComponentProps, createEffect, createMemo, createSignal, JSX, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -12,6 +12,7 @@ import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { useGlobalSync, type ProviderAccount } from "@/context/global-sync"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -27,6 +28,7 @@ const ModelList: Component<{
 }> = (props) => {
   const model = props.model ?? useLocal().model
   const language = useLanguage()
+  const globalSync = useGlobalSync()
 
   const models = createMemo(() =>
     model
@@ -34,6 +36,71 @@ const ModelList: Component<{
       .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
+
+  const [accountsMap, setAccountsMap] = createSignal<Record<string, ProviderAccount[]>>({})
+  const [activeAccountMap, setActiveAccountMap] = createSignal<Record<string, string | undefined>>({})
+  const fetched = new Set<string>()
+
+  createEffect(() => {
+    const providerIDs = new Set(models().map((m) => m.provider.id))
+    for (const pid of providerIDs) {
+      if (fetched.has(pid)) continue
+      fetched.add(pid)
+      void globalSync.provider.listAccounts(pid).then((accs) => {
+        setAccountsMap((prev) => ({ ...prev, [pid]: accs }))
+      })
+      void globalSync.provider.getActiveAccount(pid).then((active) => {
+        setActiveAccountMap((prev) => ({ ...prev, [pid]: active }))
+      })
+    }
+  })
+
+  function getAccountLabel(providerID: string, accountKey: string | undefined): string {
+    if (!accountKey) return "Default"
+    const accounts = accountsMap()[providerID]
+    const account = accounts?.find((a) => a.key === accountKey)
+    return account?.label || account?.email || accountKey
+  }
+
+  function modelAccountKey(m: { provider: { id: string; name: string }; id: string; name: string }): string | undefined {
+    const raw = m as Record<string, unknown>
+    if (typeof raw.accountKey === "string") return raw.accountKey
+    return undefined
+  }
+
+  const providerHasMultipleAccounts = (providerID: string) => {
+    const accounts = accountsMap()[providerID]
+    return accounts && accounts.length > 1
+  }
+
+  const groupByFn = (x: { provider: { id: string; name: string }; id: string; name: string }) => {
+    if (providerHasMultipleAccounts(x.provider.id)) {
+      const accKey = modelAccountKey(x)
+      const active = activeAccountMap()[x.provider.id]
+      if (accKey) {
+        const label = getAccountLabel(x.provider.id, accKey)
+        return `${x.provider.name}\0${accKey}\0${label}\0${accKey === active ? "0" : "1"}`
+      }
+      const activeLabel = active ? getAccountLabel(x.provider.id, active) : "Default"
+      return `${x.provider.name}\0${active ?? "default"}\0${activeLabel}\0${active ? "0" : "1"}`
+    }
+    return x.provider.name
+  }
+
+  const groupHeaderFn = (group: { category: string; items: unknown[] }) => {
+    const parts = group.category.split("\0")
+    if (parts.length === 4) {
+      const providerName = parts[0]
+      const accountLabel = parts[2]
+      return (
+        <div class="flex flex-col gap-0.5">
+          <span class="text-12-medium text-text-strong">{providerName}</span>
+          <span class="text-11-regular text-text-weak pl-2">{accountLabel}</span>
+        </div>
+      )
+    }
+    return <span class="text-12-medium text-text-strong">{group.category}</span>
+  }
 
   return (
     <List
@@ -45,13 +112,27 @@ const ModelList: Component<{
       current={model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={groupByFn}
+      groupHeader={groupHeaderFn}
       sortGroupsBy={(a, b) => {
-        const aProvider = a.items[0].provider.id
-        const bProvider = b.items[0].provider.id
-        if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
-        if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
-        return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
+        const aParts = a.category.split("\0")
+        const bParts = b.category.split("\0")
+        const aProvider = aParts[0]
+        const bProvider = bParts[0]
+        const aFirstItem = a.items[0] as { provider?: { id?: string } } | undefined
+        const bFirstItem = b.items[0] as { provider?: { id?: string } } | undefined
+        const aProviderID = aFirstItem?.provider?.id ?? ""
+        const bProviderID = bFirstItem?.provider?.id ?? ""
+
+        if (aProvider !== bProvider) {
+          if (popularProviders.includes(aProviderID) && !popularProviders.includes(bProviderID)) return -1
+          if (!popularProviders.includes(aProviderID) && popularProviders.includes(bProviderID)) return 1
+          return popularProviders.indexOf(aProviderID) - popularProviders.indexOf(bProviderID)
+        }
+
+        const aOrder = aParts[3] ?? "1"
+        const bOrder = bParts[3] ?? "1"
+        return aOrder.localeCompare(bOrder)
       }}
       itemWrapper={(item, node) => (
         <Tooltip

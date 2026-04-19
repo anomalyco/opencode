@@ -2,9 +2,14 @@ import type { RootLoadArgs } from "./types"
 
 export async function loadRootSessionsWithFallback(input: RootLoadArgs) {
   try {
-    const result = await input.list({ directory: input.directory, roots: true, limit: input.limit })
+    // Load root sessions (no parent)
+    const rootResult = await input.list({ directory: input.directory, roots: true, limit: input.limit })
+    // Also load child sessions (workers with parentID) so they survive cold start
+    const allResult = await input.list({ directory: input.directory, limit: input.limit })
+    const rootIds = new Set((rootResult.data ?? []).map((s) => s.id))
+    const children = (allResult.data ?? []).filter((s) => !rootIds.has(s.id) && !!s.parentID)
     return {
-      data: result.data,
+      data: [...(rootResult.data ?? []), ...children],
       limit: input.limit,
       limited: true,
     } as const

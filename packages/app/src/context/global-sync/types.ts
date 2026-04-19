@@ -19,6 +19,25 @@ import type {
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
+export type BossPreset = {
+  id: string
+  name: string
+  icon?: string
+  color?: string
+  providers: {
+    providerId: string
+    accountKey?: string
+    modelId: string
+    routing?: "sequential" | "parallel" | "fallback"
+    priority?: number
+  }[]
+  settings: {
+    spawnWorkers?: boolean
+    maxWorkers?: number
+    notifyOnComplete?: boolean
+  }
+}
+
 export type ProjectMeta = {
   name?: string
   icon?: {
@@ -28,6 +47,7 @@ export type ProjectMeta = {
   commands?: {
     start?: string
   }
+  bossPresetId?: string
 }
 
 export type State = {
@@ -120,7 +140,7 @@ export type DisposeCheck = {
 export type RootLoadArgs = {
   directory: string
   limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
+  list: (query: { directory: string; roots?: boolean; limit?: number }) => Promise<{ data?: Session[] }>
 }
 
 export type RootLoadResult = {
