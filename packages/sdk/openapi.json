@@ -10949,8 +10949,7 @@
               "type": "string"
             }
           }
-        },
-        "additionalProperties": false
+        }
       },
       "PermissionActionConfig": {
         "type": "string",
@@ -11180,13 +11179,11 @@
                 "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
                 "anyOf": [
                   {
-                    "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
                   },
                   {
-                    "description": "Disable timeout for this provider entirely.",
                     "type": "boolean",
                     "const": false
                   }
@@ -11247,8 +11244,7 @@
                           "enum": ["reasoning_content", "reasoning_details"]
                         }
                       },
-                      "required": ["field"],
-                      "additionalProperties": false
+                      "required": ["field"]
                     }
                   ]
                 },
@@ -11377,8 +11373,7 @@
               }
             }
           }
-        },
-        "additionalProperties": false
+        }
       },
       "McpLocalConfig": {
         "type": "object",

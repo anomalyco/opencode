@@ -21,22 +21,25 @@ import { isRecord } from "@/util/record"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect"
-import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 import { InstanceRef } from "@/effect/instance-ref"
+import { zod, ZodOverride } from "@/util/effect-zod"
 import { ConfigAgent } from "./agent"
+import { ConfigCommand } from "./command"
+import { ConfigFormatter } from "./formatter"
+import { ConfigLayout } from "./layout"
+import { ConfigLSP } from "./lsp"
+import { ConfigManaged } from "./managed"
 import { ConfigMCP } from "./mcp"
 import { ConfigModelID } from "./model-id"
-import { ConfigPlugin } from "./plugin"
-import { ConfigManaged } from "./managed"
-import { ConfigCommand } from "./command"
 import { ConfigParse } from "./parse"
-import { ConfigPermission } from "./permission"
-import { ConfigProvider } from "./provider"
-import { ConfigSkills } from "./skills"
 import { ConfigPaths } from "./paths"
-import { ConfigFormatter } from "./formatter"
-import { ConfigLSP } from "./lsp"
+import { ConfigPermission } from "./permission"
+import { ConfigPlugin } from "./plugin"
+import { ConfigProvider } from "./provider"
+import { ConfigServer } from "./server"
+import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@/npm"
 
@@ -73,170 +76,186 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(
   return config
 }
 
-export const Server = z
-  .object({
-    port: z.number().int().positive().optional().describe("Port to listen on"),
-    hostname: z.string().optional().describe("Hostname to listen on"),
-    mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-    mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
-    cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
-  })
-  .strict()
-  .meta({
-    ref: "ServerConfig",
-  })
+export const Server = ConfigServer.Server.zod
+export const Layout = ConfigLayout.Layout.zod
+export type Layout = ConfigLayout.Layout
 
-export const Layout = z.enum(["auto", "stretch"]).meta({
-  ref: "LayoutConfig",
-})
-export type Layout = z.infer<typeof Layout>
+// Schemas that still live at the zod layer (have .transform / .preprocess /
+// .meta not expressible in current Effect Schema) get referenced via a
+// ZodOverride-annotated Schema.Any.  Walker sees the annotation and emits the
+// exact zod directly, preserving component $refs.
+const AgentRef = Schema.Any.annotate({ [ZodOverride]: ConfigAgent.Info })
+const PermissionRef = Schema.Any.annotate({ [ZodOverride]: ConfigPermission.Info })
+const LogLevelRef = Schema.Any.annotate({ [ZodOverride]: Log.Level })
 
-export const Info = z
-  .object({
-    $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
-    logLevel: Log.Level.optional().describe("Log level"),
-    server: Server.optional().describe("Server configuration for opencode serve and web commands"),
-    command: z
-      .record(z.string(), ConfigCommand.Info.zod)
-      .optional()
-      .describe("Command configuration, see https://opencode.ai/docs/commands"),
-    skills: ConfigSkills.Info.zod.optional().describe("Additional skill folder paths"),
-    watcher: z
-      .object({
-        ignore: z.array(z.string()).optional(),
-      })
-      .optional(),
-    snapshot: z
-      .boolean()
-      .optional()
-      .describe(
-        "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
-      ),
-    // User-facing plugin config is stored as Specs; provenance gets attached later while configs are merged.
-    plugin: ConfigPlugin.Spec.zod.array().optional(),
-    share: z
-      .enum(["manual", "auto", "disabled"])
-      .optional()
-      .describe(
-        "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
-      ),
-    autoshare: z
-      .boolean()
-      .optional()
-      .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-    autoupdate: z
-      .union([z.boolean(), z.literal("notify")])
-      .optional()
-      .describe(
-        "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
-      ),
-    disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
-    enabled_providers: z
-      .array(z.string())
-      .optional()
-      .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-    model: ConfigModelID.zod.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
-    small_model: ConfigModelID.zod
-      .describe("Small model to use for tasks like title generation in the format of provider/model")
-      .optional(),
-    default_agent: z
-      .string()
-      .optional()
-      .describe(
-        "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
-      ),
-    username: z.string().optional().describe("Custom username to display in conversations instead of system username"),
-    mode: z
-      .object({
-        build: ConfigAgent.Info.optional(),
-        plan: ConfigAgent.Info.optional(),
-      })
-      .catchall(ConfigAgent.Info)
-      .optional()
-      .describe("@deprecated Use `agent` field instead."),
-    agent: z
-      .object({
+const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
+const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))
+
+const InfoSchema = Schema.Struct({
+  $schema: Schema.optional(Schema.String).annotate({
+    description: "JSON schema reference for configuration validation",
+  }),
+  logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
+  server: Schema.optional(ConfigServer.Server).annotate({
+    description: "Server configuration for opencode serve and web commands",
+  }),
+  command: Schema.optional(Schema.Record(Schema.String, ConfigCommand.Info)).annotate({
+    description: "Command configuration, see https://opencode.ai/docs/commands",
+  }),
+  skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
+  watcher: Schema.optional(
+    Schema.Struct({
+      ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+    }),
+  ),
+  snapshot: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+  }),
+  // User-facing plugin config is stored as Specs; provenance gets attached later while configs are merged.
+  plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPlugin.Spec))),
+  share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({
+    description:
+      "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+  }),
+  autoshare: Schema.optional(Schema.Boolean).annotate({
+    description: "@deprecated Use 'share' field instead. Share newly created sessions automatically",
+  }),
+  autoupdate: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("notify")])).annotate({
+    description:
+      "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+  }),
+  disabled_providers: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Disable providers that are loaded automatically",
+  }),
+  enabled_providers: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "When set, ONLY these providers will be enabled. All other providers will be ignored",
+  }),
+  model: Schema.optional(ConfigModelID).annotate({
+    description: "Model to use in the format of provider/model, eg anthropic/claude-2",
+  }),
+  small_model: Schema.optional(ConfigModelID).annotate({
+    description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  default_agent: Schema.optional(Schema.String).annotate({
+    description:
+      "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+  }),
+  username: Schema.optional(Schema.String).annotate({
+    description: "Custom username to display in conversations instead of system username",
+  }),
+  mode: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
+        build: Schema.optional(AgentRef),
+        plan: Schema.optional(AgentRef),
+      }),
+      [Schema.Record(Schema.String, AgentRef)],
+    ),
+  ).annotate({ description: "@deprecated Use `agent` field instead." }),
+  agent: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
         // primary
-        plan: ConfigAgent.Info.optional(),
-        build: ConfigAgent.Info.optional(),
+        plan: Schema.optional(AgentRef),
+        build: Schema.optional(AgentRef),
         // subagent
-        general: ConfigAgent.Info.optional(),
-        explore: ConfigAgent.Info.optional(),
+        general: Schema.optional(AgentRef),
+        explore: Schema.optional(AgentRef),
         // specialized
-        title: ConfigAgent.Info.optional(),
-        summary: ConfigAgent.Info.optional(),
-        compaction: ConfigAgent.Info.optional(),
-      })
-      .catchall(ConfigAgent.Info)
-      .optional()
-      .describe("Agent configuration, see https://opencode.ai/docs/agents"),
-    provider: z
-      .record(z.string(), ConfigProvider.Info)
-      .optional()
-      .describe("Custom provider configurations and model overrides"),
-    mcp: z
-      .record(
-        z.string(),
-        z.union([
-          ConfigMCP.Info.zod,
-          z
-            .object({
-              enabled: z.boolean(),
-            })
-            .strict(),
-        ]),
-      )
-      .optional()
-      .describe("MCP (Model Context Protocol) server configurations"),
-    formatter: ConfigFormatter.Info.zod.optional(),
-    lsp: ConfigLSP.Info.zod.optional(),
-    instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
-    layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
-    permission: ConfigPermission.Info.optional(),
-    tools: z.record(z.string(), z.boolean()).optional(),
-    enterprise: z
-      .object({
-        url: z.string().optional().describe("Enterprise URL"),
-      })
-      .optional(),
-    compaction: z
-      .object({
-        auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
-        prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
-        reserved: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
-      })
-      .optional(),
-    experimental: z
-      .object({
-        disable_paste_summary: z.boolean().optional(),
-        batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-        openTelemetry: z
-          .boolean()
-          .optional()
-          .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
-        primary_tools: z
-          .array(z.string())
-          .optional()
-          .describe("Tools that should only be available to primary agents."),
-        continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
-        mcp_timeout: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
-      })
-      .optional(),
-  })
+        title: Schema.optional(AgentRef),
+        summary: Schema.optional(AgentRef),
+        compaction: Schema.optional(AgentRef),
+      }),
+      [Schema.Record(Schema.String, AgentRef)],
+    ),
+  ).annotate({ description: "Agent configuration, see https://opencode.ai/docs/agents" }),
+  provider: Schema.optional(Schema.Record(Schema.String, ConfigProvider.Info)).annotate({
+    description: "Custom provider configurations and model overrides",
+  }),
+  mcp: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Union([
+        ConfigMCP.Info,
+        // Matches the legacy `{ enabled: false }` form used to disable a server.
+        Schema.Any.annotate({ [ZodOverride]: z.object({ enabled: z.boolean() }).strict() }),
+      ]),
+    ),
+  ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
+  formatter: Schema.optional(ConfigFormatter.Info),
+  lsp: Schema.optional(ConfigLSP.Info),
+  instructions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Additional instruction files or patterns to include",
+  }),
+  layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
+  permission: Schema.optional(PermissionRef),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  enterprise: Schema.optional(
+    Schema.Struct({
+      url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
+    }),
+  ),
+  compaction: Schema.optional(
+    Schema.Struct({
+      auto: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable automatic compaction when context is full (default: true)",
+      }),
+      prune: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable pruning of old tool outputs (default: true)",
+      }),
+      reserved: Schema.optional(NonNegativeInt).annotate({
+        description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+      }),
+    }),
+  ),
+  experimental: Schema.optional(
+    Schema.Struct({
+      disable_paste_summary: Schema.optional(Schema.Boolean),
+      batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
+      openTelemetry: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
+      }),
+      primary_tools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description: "Tools that should only be available to primary agents.",
+      }),
+      continue_loop_on_deny: Schema.optional(Schema.Boolean).annotate({
+        description: "Continue the agent loop when a tool call is denied",
+      }),
+      mcp_timeout: Schema.optional(PositiveInt).annotate({
+        description: "Timeout in milliseconds for model context protocol (MCP) requests",
+      }),
+    }),
+  ),
+})
+
+// Schema.Struct produces readonly types by default, but the service code
+// below mutates Info objects directly (e.g. `config.mode = ...`). Strip the
+// readonly recursively so callers get the same mutable shape zod inferred.
+//
+// `Types.DeepMutable` from effect-smol would be a drop-in, but its fallback
+// branch `{ -readonly [K in keyof T]: ... }` collapses `unknown` to `{}`
+// (since `keyof unknown = never`), which widens `Record<string, unknown>`
+// fields like `ConfigPlugin.Options`. The local version gates on
+// `extends object` so `unknown` passes through.
+//
+// Tuple branch preserves `ConfigPlugin.Spec`'s `readonly [string, Options]`
+// shape (otherwise the general array branch widens it to an array).
+type DeepMutable<T> = T extends readonly [unknown, ...unknown[]]
+  ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
+  : T extends readonly (infer U)[]
+    ? DeepMutable<U>[]
+    : T extends object
+      ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
+      : T
+
+// The walker emits `z.object({...})` which is non-strict by default. Config
+// historically uses `.strict()` (additionalProperties: false in openapi.json),
+// so layer that on after derivation.  Re-apply the Config ref afterward
+// since `.strict()` strips the walker's meta annotation.
+export const Info = (zod(InfoSchema) as unknown as z.ZodObject<any>)
   .strict()
-  .meta({
-    ref: "Config",
-  })
+  .meta({ ref: "Config" }) as unknown as z.ZodType<DeepMutable<Schema.Schema.Type<typeof InfoSchema>>>
 
 export type Info = z.output<typeof Info> & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
