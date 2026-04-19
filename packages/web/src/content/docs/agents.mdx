@@ -340,6 +340,22 @@ Specify a custom system prompt file for this agent with the `prompt` config. The
 }
 ```
 
+### Using multiple files in prompt
+
+The `prompt` field can include both inline instructions and multiple file references. Each `{file:...}` will be expanded and combined into the final prompt.
+
+Example:
+
+```json
+{
+  "agent": {
+    "review": {
+      "prompt": "You are a code review agent.\n\n{file:./prompts/style-guide.txt}\n{file:./prompts/security.txt}"
+    }
+  }
+}
+```
+
 This path is relative to where the config file is located. So this works for both the global OpenCode config and the project specific config.
 
 ---
