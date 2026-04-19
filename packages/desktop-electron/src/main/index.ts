@@ -8,6 +8,16 @@ import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
 
+import contextMenu from "electron-context-menu"
+contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+
+// on macOS apps run in `/` which can cause issues with ripgrep
+try {
+  process.chdir(homedir())
+} catch {}
+
+process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
+
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
   beta: "OpenCode Beta",
@@ -18,14 +28,14 @@ const APP_IDS: Record<string, string> = {
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 }
+const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
 app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
-app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"))
+app.setAppUserModelId(appId)
+app.setPath("userData", join(app.getPath("appData"), appId))
 const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
-import type { CommandChild } from "./cli"
-import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
@@ -33,12 +43,14 @@ import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
+import { drizzle } from "drizzle-orm/node-sqlite/driver"
+import type { Server } from "virtual:opencode-server"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let sidecar: CommandChild | null = null
+let server: Server.Listener | null = null
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
@@ -93,11 +105,9 @@ function setupApp() {
   }
 
   void app.whenReady().then(async () => {
-    // migrate()
     app.setAsDefaultProtocolClient("opencode")
     setDockIcon()
     setupAutoUpdater()
-    syncCli()
     await initialize()
   })
 }
@@ -130,19 +140,10 @@ async function initialize() {
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
 
-  logger.log("spawning sidecar", { url })
-  const { child, health, events } = spawnLocalServer(hostname, port, password)
-  sidecar = child
-  serverReady.resolve({
-    url,
-    username: "opencode",
-    password,
-  })
-
   const loadingTask = (async () => {
     logger.log("sidecar connection started", { url })
 
-    events.on("sqlite", (progress: SqliteMigrationProgress) => {
+    initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
       setInitStep({ phase: "sqlite_waiting" })
       if (overlay) sendSqliteMigrationProgress(overlay, progress)
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
@@ -150,8 +151,30 @@ async function initialize() {
     })
 
     if (needsMigration) {
+      const { Database, JsonMigration } = await import("virtual:opencode-server")
+      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
+        progress: (event: { current: number; total: number }) => {
+          const percent = Math.round(event.current / event.total) * 100
+          initEmitter.emit("sqlite", { type: "InProgress", value: percent })
+        },
+      })
+      initEmitter.emit("sqlite", { type: "Done" })
+
+      sqliteDone?.resolve()
+    }
+
+    if (needsMigration) {
       await sqliteDone?.promise
     }
+
+    logger.log("spawning sidecar", { url })
+    const { listener, health } = await spawnLocalServer(hostname, port, password)
+    server = listener
+    serverReady.resolve({
+      url,
+      username: "opencode",
+      password,
+    })
 
     await Promise.race([
       health.wait,
@@ -195,9 +218,6 @@ function wireMenu() {
   if (!mainWindow) return
   createMenu({
     trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
-    installCli: () => {
-      void installCli()
-    },
     checkForUpdates: () => {
       void checkForUpdates(true)
     },
@@ -212,7 +232,6 @@ function wireMenu() {
 
 registerIpcHandlers({
   killSidecar: () => killSidecar(),
-  installCli: async () => installCli(),
   awaitInitialization: async (sendStep) => {
     sendStep(initStep)
     const listener = (step: InitStep) => sendStep(step)
@@ -244,16 +263,9 @@ registerIpcHandlers({
 })
 
 function killSidecar() {
-  if (!sidecar) return
-  const pid = sidecar.pid
-  sidecar.kill()
-  sidecar = null
-  // tree-kill is async; also send process group signal as immediate fallback
-  if (pid && process.platform !== "win32") {
-    try {
-      process.kill(-pid, "SIGTERM")
-    } catch {}
-  }
+  if (!server) return
+  server.stop()
+  server = null
 }
 
 function ensureLoopbackNoProxy() {

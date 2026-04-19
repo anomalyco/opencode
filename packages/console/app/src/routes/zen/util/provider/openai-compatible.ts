@@ -6,12 +6,14 @@ type Usage = {
   total_tokens?: number
   // used by moonshot
   cached_tokens?: number
-  // used by xai
+  // used by xai & alibaba
   prompt_tokens_details?: {
     text_tokens?: number
     audio_tokens?: number
     image_tokens?: number
     cached_tokens?: number
+    // used by alibaba
+    cache_creation_input_tokens?: number
   }
   completion_tokens_details?: {
     reasoning_tokens?: number
@@ -21,17 +23,18 @@ type Usage = {
   }
 }
 
-export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
+export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentifier }) => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
     headers.set("x-session-affinity", headers.get("x-opencode-session") ?? "")
   },
-  modifyBody: (body: Record<string, any>) => {
+  modifyBody: (body: Record<string, any>, _workspaceID?: string) => {
     return {
       ...body,
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),
+      ...(safetyIdentifier ? { safety_identifier: safetyIdentifier } : {}),
     }
   },
   createBinaryStreamDecoder: () => undefined,
@@ -46,7 +49,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
         let json
         try {
           json = JSON.parse(chunk.slice(6)) as { usage?: Usage }
-        } catch (e) {
+        } catch {
           return
         }
 
@@ -61,6 +64,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
     const outputTokens = usage.completion_tokens ?? 0
     const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? undefined
     let cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
+    const cacheWriteTokens = usage.prompt_tokens_details?.cache_creation_input_tokens ?? undefined
 
     if (adjustCacheUsage && !cacheReadTokens) {
       cacheReadTokens = Math.floor(inputTokens * 0.9)
@@ -71,7 +75,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
       outputTokens,
       reasoningTokens,
       cacheReadTokens,
-      cacheWrite5mTokens: undefined,
+      cacheWrite5mTokens: cacheWriteTokens,
       cacheWrite1hTokens: undefined,
     }
   },
@@ -285,7 +289,7 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
         index: 0,
         message: {
           role: "assistant" as const,
-          ...(content.length > 0 && content.some((c) => c.type === "text")
+          ...(content.some((c) => c.type === "text")
             ? {
                 content: content
                   .filter((c) => c.type === "text")
@@ -293,7 +297,7 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
                   .join(""),
               }
             : {}),
-          ...(content.length > 0 && content.some((c) => c.type === "tool_use")
+          ...(content.some((c) => c.type === "tool_use")
             ? {
                 tool_calls: content
                   .filter((c) => c.type === "tool_use")

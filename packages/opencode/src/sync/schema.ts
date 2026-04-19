@@ -2,13 +2,13 @@ import { Schema } from "effect"
 import z from "zod"
 
 import { Identifier } from "@/id/id"
+import { ZodOverride } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
-export const EventID = Schema.String.pipe(
+export const EventID = Schema.String.annotate({ [ZodOverride]: Identifier.schema("event") }).pipe(
   Schema.brand("EventID"),
   withStatics((s) => ({
-    make: (id: string) => s.makeUnsafe(id),
-    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("event", id)),
+    ascending: (id?: string) => s.make(Identifier.ascending("event", id)),
     zod: Identifier.schema("event").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
   })),
 )

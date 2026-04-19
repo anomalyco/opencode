@@ -239,7 +239,9 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() => sync.data.config.plugin ?? [])
+  const plugins = createMemo(() =>
+    (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
+  )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 

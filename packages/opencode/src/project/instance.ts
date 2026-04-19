@@ -1,11 +1,12 @@
 import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
-import { Filesystem } from "@/util/filesystem"
+import { makeRuntime } from "@/effect/run-service"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { iife } from "@/util/iife"
-import { Log } from "@/util/log"
-import { Context } from "../util/context"
-import { Project } from "./project"
-import { State } from "./state"
+import { Log } from "@/util"
+import { LocalContext } from "../util"
+import * as Project from "./project"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 export interface InstanceContext {
   directory: string
@@ -13,26 +14,15 @@ export interface InstanceContext {
   project: Project.Info
 }
 
-const context = Context.create<InstanceContext>("instance")
+const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
+const project = makeRuntime(Project.Service, Project.defaultLayer)
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-function emit(directory: string) {
-  GlobalBus.emit("event", {
-    directory,
-    payload: {
-      type: "server.instance.disposed",
-      properties: {
-        directory,
-      },
-    },
-  })
-}
-
-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+function boot(input: { directory: string; init?: () => Promise<any>; worktree?: string; project?: Project.Info }) {
   return iife(async () => {
     const ctx =
       input.project && input.worktree
@@ -41,11 +31,13 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
             worktree: input.worktree,
             project: input.project,
           }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-            directory: input.directory,
-            worktree: sandbox,
-            project,
-          }))
+        : await project
+            .runPromise((svc) => svc.fromDirectory(input.directory))
+            .then(({ project, sandbox }) => ({
+              directory: input.directory,
+              worktree: sandbox,
+              project,
+            }))
     await context.provide(ctx, async () => {
       await input.init?.()
     })
@@ -64,7 +56,7 @@ function track(directory: string, next: Promise<InstanceContext>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = AppFileSystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
@@ -93,17 +85,19 @@ export const Instance = {
   get project() {
     return context.use().project
   },
+
   /**
    * Check if a path is within the project boundary.
    * Returns true if path is inside Instance.directory OR Instance.worktree.
    * Paths within the worktree but outside the working directory should not trigger external_directory permission.
    */
-  containsPath(filepath: string) {
-    if (Filesystem.contains(Instance.directory, filepath)) return true
+  containsPath(filepath: string, ctx?: InstanceContext) {
+    const instance = ctx ?? Instance
+    if (AppFileSystem.contains(instance.directory, filepath)) return true
     // Non-git projects set worktree to "/" which would match ANY absolute path.
     // Skip worktree check in this case to preserve external_directory permissions.
-    if (Instance.worktree === "/") return false
-    return Filesystem.contains(Instance.worktree, filepath)
+    if (instance.worktree === "/") return false
+    return AppFileSystem.contains(instance.worktree, filepath)
   },
   /**
    * Captures the current instance ALS context and returns a wrapper that
@@ -114,24 +108,53 @@ export const Instance = {
     const ctx = context.use()
     return ((...args: any[]) => context.provide(ctx, () => fn(...args))) as F
   },
-  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
-    return State.create(() => Instance.directory, init, dispose)
+  /**
+   * Run a synchronous function within the given instance context ALS.
+   * Use this to bridge from Effect (where InstanceRef carries context)
+   * back to sync code that reads Instance.directory from ALS.
+   */
+  restore<R>(ctx: InstanceContext, fn: () => R): R {
+    return context.provide(ctx, fn)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = AppFileSystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await disposeInstance(directory)
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
-    emit(directory)
+
+    GlobalBus.emit("event", {
+      directory,
+      project: input.project?.id,
+      workspace: WorkspaceContext.workspaceID,
+      payload: {
+        type: "server.instance.disposed",
+        properties: {
+          directory,
+        },
+      },
+    })
+
     return await next
   },
   async dispose() {
     const directory = Instance.directory
+    const project = Instance.project
     Log.Default.info("disposing instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await disposeInstance(directory)
     cache.delete(directory)
-    emit(directory)
+
+    GlobalBus.emit("event", {
+      directory,
+      project: project.id,
+      workspace: WorkspaceContext.workspaceID,
+      payload: {
+        type: "server.instance.disposed",
+        properties: {
+          directory,
+        },
+      },
+    })
   },
   async disposeAll() {
     if (disposal.all) return disposal.all

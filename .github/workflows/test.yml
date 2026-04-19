@@ -15,6 +15,10 @@ concurrency:
 
 permissions:
   contents: read
+  checks: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   unit:
@@ -37,6 +41,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
@@ -45,8 +54,39 @@ jobs:
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
+            turbo-${{ runner.os }}-
+
       - name: Run unit tests
-        run: bun turbo test
+        run: bun turbo test:ci
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Publish unit reports
+        if: always()
+        uses: mikepenz/action-junit-report@v6
+        with:
+          report_paths: packages/*/.artifacts/unit/junit.xml
+          check_name: "unit results (${{ matrix.settings.name }})"
+          detailed_summary: true
+          include_time_in_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+          path: packages/*/.artifacts/unit/junit.xml
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
@@ -70,13 +110,18 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
       - name: Read Playwright version
         id: playwright-version
         run: |
-          version=$(node -e 'console.log(require("./packages/app/package.json").devDependencies["@playwright/test"])')
+          version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
@@ -100,15 +145,17 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
+          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 7
           path: |
+            packages/app/e2e/junit-*.xml
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report
