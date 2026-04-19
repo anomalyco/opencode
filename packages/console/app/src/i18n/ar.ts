@@ -558,6 +558,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "الاستخدام الحالي لـ",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "هو $",
 
+  "workspace.redeem.title": "استرداد قسيمة",
+  "workspace.redeem.subtitle": "استرد رمز القسيمة للحصول على رصيد أو مزايا.",
+  "workspace.redeem.placeholder": "أدخل رمز القسيمة",
+  "workspace.redeem.redeem": "استرداد",
+  "workspace.redeem.redeeming": "جارٍ الاسترداد...",
+  "workspace.redeem.success": "تم استرداد القسيمة بنجاح.",
+
   "workspace.reload.title": "إعادة الشحن التلقائي",
   "workspace.reload.disabled.before": "إعادة الشحن التلقائي",
   "workspace.reload.disabled.state": "معطّل",

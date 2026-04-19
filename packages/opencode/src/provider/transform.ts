@@ -587,6 +587,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/google-vertex/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
+      if (model.providerID === "github-copilot") {
+        if (model.api.id.includes("opus-4.7")) {
+          return Object.fromEntries(["medium"].map((effort) => [effort, { reasoningEffort: effort }]))
+        }
+      }
+
       if (adaptiveEfforts) {
         return Object.fromEntries(
           adaptiveEfforts.map((effort) => [
@@ -629,6 +635,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               reasoningConfig: {
                 type: "adaptive",
                 maxReasoningEffort: effort,
+                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
+                  ? { display: "summarized" }
+                  : {}),
               },
             },
           ]),
@@ -798,9 +807,10 @@ export function options(input: {
 
   if (input.model.api.npm === "@ai-sdk/azure") {
     result["store"] = true
+    result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
+  if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
     result["usage"] = {
       include: true,
     }
@@ -937,7 +947,7 @@ export function smallOptions(model: Provider.Model) {
     }
     return { thinkingConfig: { thinkingBudget: 0 } }
   }
-  if (model.providerID === "openrouter") {
+  if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
     if (model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
