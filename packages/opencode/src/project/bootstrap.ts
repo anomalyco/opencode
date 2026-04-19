@@ -31,11 +31,11 @@ export const InstanceBootstrap = Effect.gen(function* () {
   ).pipe(Effect.withSpan("InstanceBootstrap.fast"))
 
   // Deferred group: init() forks expensive work (subscribe, git branch) into instance scope.
-  // These calls return quickly; we fork with forkDaemon so failures don't kill the instance.
+  // These calls return quickly; we use forkDetach so failures don't kill the instance scope.
   for (const s of deferredGroup) {
-    yield* Effect.forkDaemon(
+    yield* Effect.forkDetach(
       s.use((i) => i.init()).pipe(
-        Effect.catchAllCause((cause) => Effect.sync(() => Log.Default.error("deferred service init failed", { cause: Cause.pretty(cause) })))
+        Effect.catchCause((cause) => Effect.sync(() => Log.Default.error("deferred service init failed", { cause: Cause.pretty(cause) })))
       ),
     )
   }
