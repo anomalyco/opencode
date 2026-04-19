@@ -4,6 +4,7 @@ import { createMemo, For, Show } from "solid-js"
 import { useSync, type TokensLiveData } from "@tui/context/sync"
 import { formatTokenNumber, formatCost } from "@/session/live-token-math"
 import { computeCacheHitRate } from "@/session/context-window"
+import { computeUsageCost, getModelPricing } from "@/session/pricing"
 
 const id = "internal:sidebar-context"
 
@@ -31,7 +32,56 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const sync = useSync()
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
-  const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
+
+  // Recursively collect sessionID + all descendant session IDs
+  const descendantSessionIDs = createMemo(() => {
+    const allSessions = sync.data.session ?? []
+    const byParent = new Map<string, string[]>()
+    for (const s of allSessions) {
+      const pid = (s as any).parentID
+      if (!pid) continue
+      const list = byParent.get(pid) ?? []
+      list.push(s.id)
+      byParent.set(pid, list)
+    }
+    const ids = new Set<string>([props.session_id])
+    const stack = [props.session_id]
+    while (stack.length > 0) {
+      const current = stack.pop()!
+      const kids = byParent.get(current) ?? []
+      for (const k of kids) {
+        if (!ids.has(k)) { ids.add(k); stack.push(k) }
+      }
+    }
+    return [...ids]
+  })
+
+  // All messages across the session tree, flattened
+  const allMessages = createMemo(() => {
+    const result: AssistantMessage[] = []
+    for (const id of descendantSessionIDs()) {
+      const msgs = sync.data.message?.[id] ?? []
+      for (const m of msgs) {
+        if (m.role === "assistant") result.push(m as AssistantMessage)
+      }
+    }
+    return result
+  })
+
+  // Cost: compute via our pricing (not am.cost which is often 0)
+  const cost = createMemo(() => {
+    let total = 0
+    for (const am of allMessages()) {
+      const pricing = getModelPricing(am.modelID)
+      total += computeUsageCost({
+        input: am.tokens.input,
+        output: am.tokens.output,
+        cacheRead: am.tokens.cache.read,
+        cacheWrite: am.tokens.cache.write,
+      }, pricing)
+    }
+    return total
+  })
 
   const live = createMemo(() => sync.data.tokensLive[props.session_id] as TokensLiveData | undefined)
 
@@ -96,19 +146,22 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   })
 
   const modelBreakdown = createMemo(() => {
-    const messages = msg()
     const byModel = new Map<string, ModelUsage>()
-
-    for (const m of messages) {
-      if (m.role !== "assistant") continue
-      const am = m as AssistantMessage
+    for (const am of allMessages()) {
+      const pricing = getModelPricing(am.modelID)
+      const itemCost = computeUsageCost({
+        input: am.tokens.input,
+        output: am.tokens.output,
+        cacheRead: am.tokens.cache.read,
+        cacheWrite: am.tokens.cache.write,
+      }, pricing)
       const existing = byModel.get(am.modelID)
       if (existing) {
         existing.input += am.tokens.input
         existing.output += am.tokens.output
         existing.cacheRead += am.tokens.cache.read
         existing.cacheWrite += am.tokens.cache.write
-        existing.cost += am.cost
+        existing.cost += itemCost
       } else {
         byModel.set(am.modelID, {
           model: am.modelID,
@@ -116,11 +169,10 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           output: am.tokens.output,
           cacheRead: am.tokens.cache.read,
           cacheWrite: am.tokens.cache.write,
-          cost: am.cost,
+          cost: itemCost,
         })
       }
     }
-
     if (byModel.size < 2) return []
     return [...byModel.values()].sort((a, b) => b.cost - a.cost)
   })
