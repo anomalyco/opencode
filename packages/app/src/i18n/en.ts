@@ -857,6 +857,20 @@ export const dict = {
   "settings.general.notifications.push.device.description":
     "Optional label for this browser, so you can recognize which phone or browser is subscribed.",
   "settings.general.notifications.push.device.placeholder": "Android Chrome",
+  "settings.general.notifications.push.devices.title": "Registered devices",
+  "settings.general.notifications.push.devices.description":
+    "Shows every browser currently subscribed to this server's Web Push notifications.",
+  "settings.general.notifications.push.devices.empty": "No push devices are currently registered.",
+  "settings.general.notifications.push.devices.item.current": "Current device",
+  "settings.general.notifications.push.devices.item.pending": "No delivery history yet.",
+  "settings.general.notifications.push.devices.item.lastSuccess": "Last delivery: {{time}}",
+  "settings.general.notifications.push.devices.item.error": "{{count}} failures. Last error: {{error}}",
+  "settings.general.notifications.push.devices.action.remove": "Remove",
+  "settings.general.notifications.push.devices.action.removing": "Removing...",
+  "settings.general.notifications.push.devices.toast.removed.title": "Device removed",
+  "settings.general.notifications.push.devices.toast.removed.description":
+    "That browser will no longer receive server-side push notifications.",
+  "settings.general.notifications.push.devices.toast.removeFailed": "Failed to remove that push subscription.",
   "settings.general.notifications.push.unsubscribe.title": "Remove this device",
   "settings.general.notifications.push.unsubscribe.description":
     "Unsubscribe this browser from server-side Web Push delivery.",

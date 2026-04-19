@@ -8,6 +8,20 @@ import { NOTIFICATION_PERMISSION_GRANTED_EVENT } from "@/utils/notification-clic
 
 type PermissionState = NotificationPermission | "unsupported"
 
+type Device = {
+  deviceLabel?: string
+  enabled: boolean
+  endpoint: string
+  failureCount: number
+  id: string
+  lastError?: string
+  lastFailureAt?: number
+  lastSuccessAt?: number
+  notifyOnCompletion: boolean
+  notifyOnError: boolean
+  serverOrigin: string
+}
+
 function suggestedLabel() {
   const agent = typeof navigator === "object" ? navigator.userAgent : ""
   if (/Android/i.test(agent) && /Chrome/i.test(agent)) return "Android Chrome"
@@ -46,6 +60,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
 
     const [store, setStore] = createStore({
       deviceLabel: suggestedLabel(),
+      devices: [] as Device[],
       enabled: false,
       error: undefined as string | undefined,
       failureCount: 0,
@@ -73,6 +88,12 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         requestPermission() {
           return Promise.resolve("unsupported" as const)
         },
+        refreshDevices() {
+          return Promise.resolve()
+        },
+        removeDevice() {
+          return Promise.resolve(false)
+        },
         setDeviceLabel() {},
         test() {
           return Promise.resolve(false)
@@ -87,6 +108,39 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
     let labelTimer: ReturnType<typeof setTimeout> | undefined
     let registrationPromise: Promise<ServiceWorkerRegistration | undefined> | undefined
     let syncing: Promise<void> | undefined
+
+    const normalizeDevice = (item: {
+      deviceLabel?: string
+      enabled: boolean
+      endpoint: string
+      failureCount: number
+      id: string
+      lastError?: string
+      lastFailureAt?: number | null
+      lastSuccessAt?: number | null
+      notifyOnCompletion: boolean
+      notifyOnError: boolean
+      serverOrigin: string
+    }) => ({
+      deviceLabel: item.deviceLabel,
+      enabled: item.enabled,
+      endpoint: item.endpoint,
+      failureCount: item.failureCount,
+      id: item.id,
+      lastError: item.lastError,
+      lastFailureAt: item.lastFailureAt ?? undefined,
+      lastSuccessAt: item.lastSuccessAt ?? undefined,
+      notifyOnCompletion: item.notifyOnCompletion,
+      notifyOnError: item.notifyOnError,
+      serverOrigin: item.serverOrigin,
+    })
+
+    const refreshDevices = async () => {
+      const result = await globalSDK.client.global.listPushSubscriptions().catch(() => undefined)
+      const devices = (result?.data ?? []).map(normalizeDevice)
+      setStore("devices", devices)
+      return devices
+    }
 
     const remember = (item?: {
       id: string
@@ -130,8 +184,8 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
     const subscriptionID = async (subscription?: PushSubscription | null) => {
       if (store.subscriptionID) return store.subscriptionID
       if (!subscription?.endpoint) return
-      const response = await globalSDK.client.global.listPushSubscriptions().catch(() => undefined)
-      const match = response?.data?.find((item) => item.endpoint === subscription.endpoint)
+      const devices = await refreshDevices()
+      const match = devices.find((item) => item.endpoint === subscription.endpoint)
       if (!match?.id) return
       remember(match)
       return match.id
@@ -183,6 +237,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           setStore("enabled", enabled)
           setStore("subscribed", !!subscription)
           if (!subscription) {
+            await refreshDevices()
             setStore("failureCount", 0)
             setStore("lastError", undefined)
             setStore("lastFailureAt", undefined)
@@ -208,6 +263,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
             userAgent: navigator.userAgent,
           })
           remember(result.data)
+          await refreshDevices()
           setStore("error", undefined)
         } finally {
           setStore("syncing", false)
@@ -241,6 +297,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         await globalSDK.client.global.removePushSubscription({ id }).catch(() => undefined)
       }
       const removed = subscription ? await subscription.unsubscribe().catch(() => false) : true
+      await refreshDevices()
       setStore({
         deviceLabel: store.deviceLabel,
         enabled: false,
@@ -254,6 +311,13 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         subscribed: false,
       })
       return removed
+    }
+
+    const removeDevice = async (id: string) => {
+      if (id === store.subscriptionID) return unsubscribe()
+      const removed = await globalSDK.client.global.removePushSubscription({ id }).catch(() => false)
+      await refreshDevices()
+      return removed === true
     }
 
     const setDeviceLabel = (value: string) => {
@@ -276,6 +340,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       )
         .testPush(id ? { id } : {})
         .catch(() => undefined)
+      await refreshDevices()
       return result?.data?.sent === true
     }
 
@@ -291,6 +356,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       window.addEventListener(NOTIFICATION_PERMISSION_GRANTED_EVENT, onPermissionGranted as EventListener)
       document.addEventListener("visibilitychange", onVisibility)
       schedule()
+      void refreshDevices()
       onCleanup(() => {
         if (timer) clearTimeout(timer)
         if (labelTimer) clearTimeout(labelTimer)
@@ -304,6 +370,8 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         return store
       },
       requestPermission,
+      refreshDevices,
+      removeDevice,
       setDeviceLabel,
       sync,
       test,
