@@ -1,4 +1,4 @@
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 
 export function render(parts: Part[] | undefined) {
   if (!parts?.length) return ""
@@ -23,4 +23,20 @@ export function mergeMessages(a: Message[] | undefined, b: Message[]) {
       new Map<string, Message>(),
     ).values(),
   ).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
+export function context(dir: string, id: string, session: Session | undefined, count: number) {
+  if (!dir || !id) return ""
+  return [
+    "<current-opencode-session>",
+    `directory: ${dir}`,
+    `session_id: ${id}`,
+    `title: ${session?.title || "Untitled"}`,
+    `message_count: ${count}`,
+    "</current-opencode-session>",
+  ].join("\n")
+}
+
+export function prompt(text: string, extra: string, on: boolean) {
+  return [on ? extra : "", text].filter(Boolean).join("\n\n")
 }

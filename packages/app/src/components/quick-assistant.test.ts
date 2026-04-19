@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message } from "@opencode-ai/sdk/v2/client"
-import { mergeMessages } from "./quick-assistant-helpers"
+import { context, mergeMessages, prompt } from "./quick-assistant-helpers"
 
 const msg = (id: string, role: "user" | "assistant") =>
   ({
@@ -21,5 +21,30 @@ describe("mergeMessages", () => {
   test("deduplicates by id and keeps fetched updates", () => {
     const result = mergeMessages([msg("msg_1", "user")], [msg("msg_1", "assistant"), msg("msg_2", "assistant")])
     expect(result.map((item) => `${item.id}:${item.role}`)).toEqual(["msg_1:assistant", "msg_2:assistant"])
+  })
+})
+
+describe("quick assistant prompt", () => {
+  test("omits current session context by default", () => {
+    expect(prompt("ship it", "<current-opencode-session>\nfoo\n</current-opencode-session>", false)).toBe("ship it")
+  })
+
+  test("prepends current session context when enabled", () => {
+    expect(prompt("ship it", "<current-opencode-session>\nfoo\n</current-opencode-session>", true)).toBe(
+      "<current-opencode-session>\nfoo\n</current-opencode-session>\n\nship it",
+    )
+  })
+
+  test("renders current session context block", () => {
+    expect(context("/repo", "ses_1", { title: "Demo" } as any, 7)).toBe(
+      [
+        "<current-opencode-session>",
+        "directory: /repo",
+        "session_id: ses_1",
+        "title: Demo",
+        "message_count: 7",
+        "</current-opencode-session>",
+      ].join("\n"),
+    )
   })
 })
