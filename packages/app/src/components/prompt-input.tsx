@@ -28,7 +28,8 @@ import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
-import { useCommand } from "@/context/command"
+import { matchKeybind, parseKeybind, useCommand } from "@/context/command"
+import { useSettings } from "@/context/settings"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -100,6 +101,11 @@ const EXAMPLES = [
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
+const PROMPT_SUBMIT_ID = "prompt.submit"
+const PROMPT_NEWLINE_ID = "prompt.newline"
+const DEFAULT_PROMPT_SUBMIT_KEYBIND = "enter"
+const DEFAULT_PROMPT_NEWLINE_KEYBIND = "shift+enter"
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
 
@@ -112,9 +118,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
+  const settings = useSettings()
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+
+  // Register Enter / Shift+Enter as rebindable commands so they surface in
+  // the Keyboard Shortcuts settings UI (grouped under "Prompt" via the
+  // "prompt." id prefix). The actual dispatch stays local in handleKeyDown
+  // below so the editor always wins over the global keymap.
+  command.register(() => [
+    {
+      id: PROMPT_SUBMIT_ID,
+      title: language.t("command.prompt.submit"),
+      keybind: DEFAULT_PROMPT_SUBMIT_KEYBIND,
+    },
+    {
+      id: PROMPT_NEWLINE_ID,
+      title: language.t("command.prompt.newline"),
+      keybind: DEFAULT_PROMPT_NEWLINE_KEYBIND,
+    },
+  ])
+
+  const submitKeybinds = createMemo(() =>
+    parseKeybind(settings.keybinds.get(PROMPT_SUBMIT_ID) ?? DEFAULT_PROMPT_SUBMIT_KEYBIND),
+  )
+  const newlineKeybinds = createMemo(() =>
+    parseKeybind(settings.keybinds.get(PROMPT_NEWLINE_ID) ?? DEFAULT_PROMPT_NEWLINE_KEYBIND),
+  )
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -1165,11 +1196,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
-    if (event.key === "Enter" && event.shiftKey) {
+    // Handle configured newline keybind BEFORE the IME check - the default
+    // (Shift+Enter) is never used for IME input and should always insert a
+    // newline regardless of composition state. Users who rebind the newline
+    // keybind to unmodified Enter accept that this takes precedence over IME.
+    if (matchKeybind(newlineKeybinds(), event)) {
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
+      event.stopPropagation()
       return
     }
 
@@ -1232,9 +1266,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
+    // Note: the newline keybind is handled earlier, before the IME check.
+    if (matchKeybind(submitKeybinds(), event)) {
       event.preventDefault()
+      event.stopPropagation()
       if (event.repeat) return
       if (
         working() &&
