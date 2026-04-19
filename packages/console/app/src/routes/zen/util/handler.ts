@@ -762,7 +762,8 @@ export async function handler(
     const billing = authInfo.billing
     const billingUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/billing`
     const membersUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/members`
-    if (!billing.paymentMethodID && billing.balance <= 0) throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
+    if (!billing.paymentMethodID && billing.balance <= 0)
+      throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
     if (billing.balance <= 0) throw new CreditsError(t("zen.api.error.insufficientBalance", { billingUrl }))
 
     const now = new Date()
