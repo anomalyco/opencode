@@ -11,6 +11,7 @@ import { ProviderTransform } from "../provider"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_ADVISOR from "./prompt/advisor.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -23,6 +24,7 @@ import { Effect, Context, Layer } from "effect"
 import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { Flag } from "@/flag/flag"
 
 export const Info = z
   .object({
@@ -231,6 +233,32 @@ export const layer = Layer.effect(
             ),
             prompt: PROMPT_SUMMARY,
           },
+        }
+
+        if (Flag.OPENCODE_EXPERIMENTAL_ADVISOR || cfg.experimental?.advisor) {
+          agents.advisor = {
+            name: "advisor",
+            description:
+              "Strategic advisor for architecture decisions, security review, and complex trade-offs.",
+            mode: "subagent",
+            native: true,
+            prompt: PROMPT_ADVISOR,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                read: "allow",
+                bash: "allow",
+                webfetch: "allow",
+                websearch: "allow",
+              }),
+              user,
+            ),
+            options: {},
+          }
         }
 
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
