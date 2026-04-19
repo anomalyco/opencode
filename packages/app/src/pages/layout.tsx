@@ -153,6 +153,11 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  createEffect(() => {
+    if (!import.meta.env.DEV) return
+    if (platform.platform !== "desktop") return
+    console.debug("[layout] debug bar disabled on desktop dev")
+  })
   type DictKey = keyof typeof enDict
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   // Keep the route slug, resolved directory, and comparison key separate.
@@ -3043,7 +3048,7 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && <DebugBar />}
+        {import.meta.env.DEV && platform.platform !== "desktop" && <DebugBar />}
       </div>
       <QuickAssistant />
       <Toast.Region />
