@@ -34,6 +34,8 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    /** When true, raw-chunk handler skips live-token event emission. Set by compaction.ts to prevent polluting the user's session token display. */
+    isCompactionLLM?: boolean
   }
 
   export type StreamRequest = StreamInput & {
@@ -254,9 +256,14 @@ export namespace LLM {
           return { result: "", error: e.message ?? String(e) }
         }
       }
-    }
+     }
+
+    const liveTokensDisabled = process.env.OPENCODE_DISABLE_LIVE_TOKENS === "1"
+    l.info("[live-tokens] includeRawChunks", { enabled: !liveTokensDisabled })
 
     return streamText({
+      // DEPENDS ON AI SDK includeRawChunks — verify after AI SDK upgrades. See .sisyphus/plans/live-token-tracking-v114.md T7.
+      includeRawChunks: !liveTokensDisabled,
       onError(error) {
         l.error("stream error", {
           error,

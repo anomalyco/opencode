@@ -11,6 +11,9 @@ import { Session } from "."
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { parseAnthropicRawChunk } from "./raw-chunk-anthropic"
+import { computeContextUtilization, getContextLimit, computeCacheHitRate } from "./context-window"
+import { computeUsageCost, getModelPricing } from "./pricing"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -52,6 +55,7 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    isCompactionLLM: boolean
   }
 
   type StreamEvent = Event
@@ -95,8 +99,10 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          isCompactionLLM: false,
         }
         let aborted = false
+        let liveInputTokens = { input: 0, cacheRead: 0, cacheWrite: 0 }
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
@@ -354,6 +360,89 @@ export namespace SessionProcessor {
             case "finish":
               return
 
+            case "raw": {
+              try {
+                if (ctx.isCompactionLLM) {
+                  log.info("[live-tokens] compaction call skip publish", { sessionID: ctx.sessionID })
+                  return
+                }
+                const parsed = parseAnthropicRawChunk(value.rawValue)
+                if (!parsed) break
+                const modelID = ctx.model.id
+                if (parsed.kind === "message_start") {
+                  liveInputTokens = { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite }
+                  const contextLimit = getContextLimit(modelID, false)
+                  const ctxUtil = computeContextUtilization(
+                    { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite },
+                    contextLimit,
+                  )
+                  const cacheHitPct = computeCacheHitRate({
+                    input: parsed.input,
+                    cacheRead: parsed.cacheRead,
+                    cacheWrite: parsed.cacheWrite,
+                  })
+                  const payload = MessageV2.buildLiveTokenEvent({
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.id,
+                    modelID,
+                    providerID: ctx.model.providerID,
+                    inputTokens: parsed.input,
+                    outputTokens: 0,
+                    cacheReadTokens: parsed.cacheRead,
+                    cacheWriteTokens: parsed.cacheWrite,
+                    cost: 0,
+                    contextUsed: ctxUtil.used,
+                    contextLimit,
+                    cacheHitPct,
+                    phase: "streaming",
+                    timestamp: Date.now(),
+                  })
+                  yield* bus.publish(MessageV2.Event.TokensLive, payload)
+                  log.info("[live-tokens] publish phase=streaming", {
+                    sessionID: ctx.sessionID,
+                    isCompaction: false,
+                    in: parsed.input,
+                    out: 0,
+                  })
+                } else if (parsed.kind === "message_delta") {
+                  const { input, cacheRead, cacheWrite } = liveInputTokens
+                  const cost = computeUsageCost(
+                    { input, output: parsed.output, cacheRead, cacheWrite },
+                    getModelPricing(modelID),
+                  )
+                  const contextLimit = getContextLimit(modelID, false)
+                  const ctxUtil = computeContextUtilization({ input, cacheRead, cacheWrite }, contextLimit)
+                  const cacheHitPct = computeCacheHitRate({ input, cacheRead, cacheWrite })
+                  const payload = MessageV2.buildLiveTokenEvent({
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.id,
+                    modelID,
+                    providerID: ctx.model.providerID,
+                    inputTokens: input,
+                    outputTokens: parsed.output,
+                    cacheReadTokens: cacheRead,
+                    cacheWriteTokens: cacheWrite,
+                    cost,
+                    contextUsed: ctxUtil.used,
+                    contextLimit,
+                    cacheHitPct,
+                    phase: "final",
+                    timestamp: Date.now(),
+                  })
+                  yield* bus.publish(MessageV2.Event.TokensLive, payload)
+                  log.info("[live-tokens] publish phase=final", {
+                    sessionID: ctx.sessionID,
+                    isCompaction: false,
+                    in: input,
+                    out: parsed.output,
+                  })
+                }
+              } catch (err) {
+                log.error("[live-tokens] error", { error: err })
+              }
+              return
+            }
+
             default:
               log.info("unhandled", { ...value })
               return
@@ -441,6 +530,7 @@ export namespace SessionProcessor {
         const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
           log.info("process")
           ctx.needsCompaction = false
+          ctx.isCompactionLLM = streamInput.isCompactionLLM === true
           ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
           return yield* Effect.gen(function* () {

@@ -493,6 +493,25 @@ export namespace MessageV2 {
         delta: z.string(),
       }),
     ),
+    TokensLive: BusEvent.define(
+      "message.tokens.live",
+      z.object({
+        sessionID: z.string(),
+        messageID: z.string(),
+        modelID: z.string(),
+        providerID: z.string(),
+        inputTokens: z.number().nonnegative(),
+        outputTokens: z.number().nonnegative(),
+        cacheReadTokens: z.number().nonnegative(),
+        cacheWriteTokens: z.number().nonnegative(),
+        cost: z.number().nonnegative(),
+        contextUsed: z.number().min(0).max(100),
+        contextLimit: z.number().nonnegative(),
+        cacheHitPct: z.number().min(0).max(100).nullable(),
+        phase: z.enum(["streaming", "final"]),
+        timestamp: z.number(),
+      }),
+    ),
     PartRemoved: SyncEvent.define({
       type: "message.part.removed",
       version: 1,
@@ -503,6 +522,12 @@ export namespace MessageV2 {
         partID: PartID.zod,
       }),
     }),
+  }
+
+  export type TokensLivePayload = z.infer<typeof Event.TokensLive.properties>
+
+  export function buildLiveTokenEvent(params: TokensLivePayload): TokensLivePayload {
+    return Event.TokensLive.properties.parse(params)
   }
 
   export const WithParts = z.object({

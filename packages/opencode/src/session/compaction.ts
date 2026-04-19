@@ -253,22 +253,23 @@ When constructing the summary, try to stick to this template:
           model,
         })
         const result = yield* processor
-          .process({
-            user: userMessage,
-            agent,
-            sessionID: input.sessionID,
-            tools: {},
-            system: [],
-            messages: [
-              ...modelMessages,
-              {
-                role: "user",
-                content: [{ type: "text", text: prompt }],
-              },
-            ],
-            model,
-          })
-          .pipe(Effect.onInterrupt(() => processor.abort()))
+           .process({
+             user: userMessage,
+             agent,
+             sessionID: input.sessionID,
+             tools: {},
+             system: [],
+             messages: [
+               ...modelMessages,
+               {
+                 role: "user",
+                 content: [{ type: "text", text: prompt }],
+               },
+             ],
+             model,
+             isCompactionLLM: true,
+           })
+           .pipe(Effect.onInterrupt(() => processor.abort()))
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
