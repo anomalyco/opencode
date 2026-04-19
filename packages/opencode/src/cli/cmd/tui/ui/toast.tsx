@@ -56,8 +56,8 @@ function init() {
 
   const toast = {
     show(options: ToastOptions) {
-      const { duration, ...currentToast } = options
-      setStore("currentToast", currentToast)
+      const duration = options.duration ?? 5000
+      setStore("currentToast", options)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {
         setStore("currentToast", null)
