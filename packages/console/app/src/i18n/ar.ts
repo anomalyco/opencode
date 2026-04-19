@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "المؤسسات",
   "nav.zen": "Zen",
   "nav.login": "تسجيل الدخول",
-  "nav.free": "مجانا",
+  "nav.free": "تحميل",
   "nav.home": "الرئيسية",
   "nav.openMenu": "فتح القائمة",
   "nav.getStartedFree": "ابدأ مجانا",
