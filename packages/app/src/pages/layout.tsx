@@ -816,12 +816,6 @@ export default function Layout(props: ParentProps) {
             const sorted = mergeByID([], next)
             const stale = markPrefetched(directory, sessionID)
             const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
-            const meta = {
-              limit: sorted.length,
-              cursor,
-              complete: !cursor,
-              at: Date.now(),
-            }
 
             if (stale.length > 0) {
               clearSessionPrefetch(directory, stale)
@@ -835,6 +829,12 @@ export default function Layout(props: ParentProps) {
               current.filter((item): item is Message => !!item?.id),
               sorted,
             )
+            const meta = {
+              count: merged.length,
+              cursor,
+              complete: !cursor,
+              at: Date.now(),
+            }
 
             if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
 

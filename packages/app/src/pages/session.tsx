@@ -42,6 +42,7 @@ import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
+  clipMessages,
   createOpenReviewFile,
   createSessionTabs,
   createSizing,
@@ -221,8 +222,7 @@ export default function Page() {
     if (!id) return []
     const all = sync.data.message[id] ?? []
     const limit = explicitMessageLimit()
-    if (limit === undefined || all.length <= limit) return all
-    return all.slice(-limit)
+    return clipMessages(all, limit)
   })
   const messagesReady = createMemo(() => {
     const id = params.id

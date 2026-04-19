@@ -217,7 +217,12 @@ export function GlobalSDKProvider(props: ParentProps) {
         for (const event of events) {
           if (skip && event.payload.type === "message.part.delta") {
             const props = event.payload.properties
-            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
+            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) {
+              console.debug(
+                `[global-sdk] skip stale delta dir=${event.directory} msg=${props.messageID} part=${props.partID} field=${props.field} len=${props.delta.length} tail=${JSON.stringify(props.delta.slice(-40))}`,
+              )
+              continue
+            }
           }
           domainEmitter.emit(event.directory, event.payload)
         }
@@ -259,6 +264,61 @@ export function GlobalSDKProvider(props: ParentProps) {
                 if (aborted(error) || streamErrorLogged) return
                 streamErrorLogged = true
                 console.error("[global-sdk] event stream error", {
+                  domain,
+                  url,
+                  fetch: eventFetch ? "platform" : "webview",
+                  error,
+                })
+              },
+            })
+            let yielded = Date.now()
+            resetHeartbeat()
+            for await (const event of events.stream) {
+              resetHeartbeat()
+              streamErrorLogged = false
+              const directory = event.directory ?? "global"
+              const payload = event.payload
+              const k = key(directory, payload)
+              if (k) {
+                const i = coalesced.get(k)
+                if (i !== undefined) {
+                  if (payload.type === "message.part.updated" && payload.properties.part.type === "text") {
+                    const part = payload.properties.part
+                    console.debug(
+                      `[global-sdk] coalesce part.updated dir=${directory} msg=${part.messageID} part=${part.id} len=${part.text.length} tail=${JSON.stringify(part.text.slice(-40))}`,
+                    )
+                  }
+                  queue[i] = { directory, payload }
+                  if (payload.type === "message.part.updated") {
+                    const part = payload.properties.part
+                    stale.add(deltaKey(directory, part.messageID, part.id))
+                  }
+                  continue
+                }
+                coalesced.set(k, queue.length)
+              }
+              if (payload.type === "message.part.updated" && payload.properties.part.type === "text") {
+                const part = payload.properties.part
+                console.debug(
+                  `[global-sdk] queue part.updated dir=${directory} msg=${part.messageID} part=${part.id} len=${part.text.length} tail=${JSON.stringify(part.text.slice(-40))}`,
+                )
+              }
+              if (payload.type === "message.part.delta" && payload.properties.field === "text") {
+                const props = payload.properties
+                console.debug(
+                  `[global-sdk] queue part.delta dir=${directory} msg=${props.messageID} part=${props.partID} len=${props.delta.length} tail=${JSON.stringify(props.delta.slice(-40))}`,
+                )
+              }
+              queue.push({ directory, payload })
+              schedule()
+              if (Date.now() - yielded < STREAM_YIELD_MS) continue
+              yielded = Date.now()
+              await wait(0)
+            }
+          } catch (error) {
+            if (!aborted(error) && !streamErrorLogged) {
+              streamErrorLogged = true
+              console.error("[global-sdk] event stream error", {
                   domain,
                   url,
                   fetch: eventFetch ? "platform" : "webview",

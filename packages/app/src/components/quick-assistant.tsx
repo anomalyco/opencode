@@ -21,7 +21,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
 import { formatServerError } from "@/utils/server-errors"
 import { domainFromDirectory } from "@/pages/layout/extra-agents"
-import { mergeMessages, render } from "./quick-assistant-helpers"
+import { context, mergeMessages, prompt, render } from "./quick-assistant-helpers"
 
 function errorName(err: unknown) {
   if (!err || typeof err !== "object") return undefined
@@ -43,11 +43,13 @@ const QUICK_AGENT = "assistant"
 type Saved = {
   open: boolean
   session: Record<string, string | undefined>
+  context: boolean
 }
 
 const initial = {
   open: false,
   session: {},
+  context: false,
 } satisfies Saved
 
 function validModel(store: State, model: { providerID: string; modelID: string } | undefined) {
@@ -252,21 +254,14 @@ export function QuickAssistant() {
     if (!id) return
     return currentData()?.session.find((item) => item.id === id)
   })
+
   const currentContext = createMemo(() => {
     const current = activeDir()
     const id = params.id
     if (!current || !id) return ""
     const session = currentSession()
     const messages = currentData()?.message[id] ?? []
-
-    return [
-      "<current-opencode-session>",
-      `directory: ${current}`,
-      `session_id: ${id}`,
-      `title: ${session?.title || "Untitled"}`,
-      `message_count: ${messages.length}`,
-      "</current-opencode-session>",
-    ].join("\n")
+    return context(current, id, session, messages.length)
   })
 
   createEffect(() => {
@@ -348,10 +343,19 @@ export function QuickAssistant() {
     setSaved("open", !saved.open)
   }
 
+  const toggleContext = () => {
+    const next = !saved.context
+    console.debug(`[quick-assistant] context ${next ? "enabled" : "disabled"}`)
+    setSaved("context", next)
+  }
+
   const reset = async () => {
     const current = root()
     const id = sessionID()
     const setStore = setData()
+    console.debug(
+      `[quick-assistant] reset busy=${busy() ? 1 : 0} session=${id ?? ""} messages=${list().length} context=${saved.context ? 1 : 0}`,
+    )
     if (current && id && busy()) {
       await globalSDK
         .createClient({ directory: current, throwOnError: true })
@@ -465,7 +469,7 @@ export function QuickAssistant() {
     }
     if (!text) return
     if (!store || !setStore) return
-    const body = [currentContext(), text].filter(Boolean).join("\n\n")
+    const body = prompt(text, currentContext(), saved.context)
     const pick = chosen()
     if (!pick) {
       showToast({
@@ -476,6 +480,9 @@ export function QuickAssistant() {
     }
 
     setState("loading", true)
+    console.debug(
+      `[quick-assistant] submit context=${saved.context ? 1 : 0} text=${text.length} body=${body.length}`,
+    )
     const client = globalSDK.createClient({ directory: current, throwOnError: true })
     const id = await ensureSession(client, setStore).catch((err: unknown) => {
       showToast({
@@ -635,6 +642,20 @@ export function QuickAssistant() {
                   title={sessionID() || list().length > 0 ? "Clear" : "New"}
                 >
                   <Icon name="new-session" class="size-4.5" />
+                </button>
+                <button
+                  type="button"
+                  class="flex size-10 items-center justify-center rounded-full border border-border-weak-base bg-background-base text-text-strong shadow-xs-border transition-colors"
+                  classList={{
+                    "border-border-strong-base bg-surface-panel text-text-strong": saved.context,
+                    "text-text-weaker": !saved.context,
+                  }}
+                  onClick={toggleContext}
+                  aria-pressed={saved.context}
+                  aria-label={saved.context ? "Disable current session context" : "Enable current session context"}
+                  title={saved.context ? "Current session context on" : "Current session context off"}
+                >
+                  <Icon name="link" class="size-4.5" />
                 </button>
                 <IconButton
                   type="button"

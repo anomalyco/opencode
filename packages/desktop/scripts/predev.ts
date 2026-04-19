@@ -12,6 +12,8 @@ async function build(baseline: boolean) {
   return cmd.cwd("../opencode").nothrow()
 }
 
+await $`bun ../../script/sync-version.ts`
+
 function fallbackBinary(name: string) {
   return name.replace("-baseline", "")
 }

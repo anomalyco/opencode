@@ -74,18 +74,16 @@ jobs:
 
       - name: Prepare Desktop
         run: |
-          cd packages/desktop
-          $version = $env:APP_VERSION -replace '^v', ''
-          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$') {
-            $base = (Get-Content ../opencode/package.json | ConvertFrom-Json).version
+          $rootVersion = $env:APP_VERSION -replace '^v', ''
+          if ($rootVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$') {
+            $base = (Get-Content VERSION).Trim()
             $tag = [regex]::Replace($env:APP_VERSION.ToLowerInvariant(), '[^0-9a-z-]+', '-').Trim('-')
             if ([string]::IsNullOrWhiteSpace($tag)) { $tag = 'dev' }
-            $version = "$base-$tag.$env:GITHUB_RUN_NUMBER"
+            $rootVersion = "$base-$tag.$env:GITHUB_RUN_NUMBER"
           }
-          # Update version
-          $pkg = Get-Content package.json | ConvertFrom-Json
-          $pkg.version = $version
-          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+          bun ./script/sync-version.ts $rootVersion
+
+          cd packages/desktop
 
           # List downloaded files for debugging
           Write-Host "Downloaded files:"

@@ -56,6 +56,7 @@ import { Spinner } from "./spinner"
 import { animate } from "motion"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
+import { hold } from "./message-part-stream"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -236,6 +237,10 @@ function createLiveText(getValue: () => string, active: () => boolean) {
   })
 
   return value
+}
+
+function clip(text: string, size = 40) {
+  return JSON.stringify(text.slice(-size))
 }
 
 function relativizeProjectPath(path: string, directory?: string) {
@@ -1586,6 +1591,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return last?.id === part.id
   })
   const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
+
+  const block = createMemo(() => {
+    const text = renderText()
+    if (!text) return { head: "", tail: "" }
+    if (!streaming() || !isLastTextPart()) return { head: text, tail: "" }
+    return hold(text)
+  })
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
@@ -1603,18 +1615,32 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   }
 
   return (
-    <Show when={renderText()}>
+    <Show when={block().head || block().tail}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown
-            text={renderText()}
-            cacheKey={part.id}
-            streaming={streaming()}
-            eager={props.markdownEager}
-            viewport={props.markdownViewport}
-            highlight={props.markdownHighlight}
-            math={props.markdownMath}
-          />
+          <Show when={block().head}>
+            <Markdown
+              text={block().head}
+              cacheKey={`${part.id}:head`}
+              instant={streaming()}
+              eager={props.markdownEager}
+              viewport={props.markdownViewport}
+              highlight={props.markdownHighlight}
+              math={props.markdownMath}
+            />
+          </Show>
+          <Show when={block().tail}>
+            <Markdown
+              text={block().tail}
+              cacheKey={`${part.id}:tail`}
+              streaming
+              instant
+              eager={props.markdownEager}
+              viewport={props.markdownViewport}
+              highlight={props.markdownHighlight}
+              math={props.markdownMath}
+            />
+          </Show>
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>

@@ -34,25 +34,7 @@ Add highlights before publishing. Delete this section if no highlights.
 
 console.log("=== publishing ===\n")
 
-const pkgjsons = await Array.fromAsync(
-  new Bun.Glob("**/package.json").scan({
-    absolute: true,
-  }),
-).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
-
-for (const file of pkgjsons) {
-  let pkg = await Bun.file(file).text()
-  pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
-  console.log("updated:", file)
-  await Bun.file(file).write(pkg)
-}
-
-const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
-let toml = await Bun.file(extensionToml).text()
-toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-console.log("updated:", extensionToml)
-await Bun.file(extensionToml).write(toml)
+await $`bun ./script/sync-version.ts ${Script.version}`
 
 await $`bun install`
 await import(`../packages/sdk/js/script/build.ts`)

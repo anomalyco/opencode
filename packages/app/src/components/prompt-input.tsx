@@ -65,6 +65,7 @@ import { GhostText } from "./prompt-input/ghost-text"
 import { shouldRender } from "./prompt-input/sync"
 import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
 import { Popover } from "@opencode-ai/ui/popover"
+import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
 import { working as sessionWorking } from "@/pages/session/session-working"
@@ -219,6 +220,39 @@ const GitContext = () => {
       .catch(() => undefined)
   })
 
+  const copy = (path: string) => {
+    console.debug("[GitContext] copy worktree path", { path })
+    const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    if (!clip?.writeText) {
+      console.debug("[GitContext] clipboard unavailable", { path })
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: path,
+      })
+      return
+    }
+    void clip.writeText(path).then(
+      () => {
+        console.debug("[GitContext] copied worktree path", { path })
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.share.copy.copied"),
+          description: path,
+        })
+      },
+      (err: unknown) => {
+        console.debug("[GitContext] failed to copy worktree path", { path, err })
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      },
+    )
+  }
+
   return (
     <Show when={sync.project?.vcs === "git" && branch()}>
       <Popover
@@ -263,7 +297,7 @@ const GitContext = () => {
                   {(item) => {
                     const active = () => item.path === root()
                     return (
-                      <div class="flex items-start gap-2 min-w-0 text-12-regular">
+                      <div class="flex items-start gap-2 min-w-0 px-2 py-1.5 text-12-regular">
                         <Icon
                           name="folder"
                           size="small"
@@ -284,13 +318,33 @@ const GitContext = () => {
                           >
                             {getFilename(item.path)}
                           </div>
-                          <div
-                            class="break-all font-mono text-[12px] leading-5"
-                            style={{ color: active() ? "var(--icon-success-active)" : undefined }}
-                            classList={{ "text-text-weak": !active() }}
+                          <button
+                            type="button"
+                            class="group/path inline-flex max-w-full items-start gap-1 rounded-sm text-left"
+                            aria-label={`${language.t("command.project.copyPath")}: ${item.path}`}
+                            title={item.path}
+                            onClick={() => copy(item.path)}
                           >
-                            {item.path}
-                          </div>
+                            <span
+                              class="break-all font-mono text-[12px] leading-5 transition-colors group-hover/path:underline"
+                              style={{ color: active() ? "var(--icon-success-active)" : undefined }}
+                              classList={{
+                                "text-text-weak": !active(),
+                                "hover:text-text-strong": !active(),
+                              }}
+                            >
+                              {item.path}
+                            </span>
+                            <Icon
+                              name="copy"
+                              size="small"
+                              class="mt-0.5 shrink-0 transition-colors"
+                              classList={{
+                                "text-icon-weak group-hover/path:text-icon-base": !active(),
+                                "text-icon-success-base group-hover/path:text-icon-success-active": active(),
+                              }}
+                            />
+                          </button>
                         </div>
                       </div>
                     )

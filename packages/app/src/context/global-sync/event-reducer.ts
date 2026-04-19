@@ -216,10 +216,23 @@ export function applyDirectoryEvent(input: {
       if (SKIP_PARTS.has(part.type)) break
       const parts = input.store.part[part.messageID]
       if (!parts) {
+        if (part.type === "text") {
+          console.debug(
+            `[sync] part.updated init msg=${part.messageID} part=${part.id} len=${part.text.length} tail=${JSON.stringify(part.text.slice(-40))}`,
+          )
+        }
         input.setStore("part", part.messageID, [part])
         break
       }
       const result = Binary.search(parts, part.id, (p) => p.id)
+      if (part.type === "text") {
+        const item = result.found ? parts[result.index] : undefined
+        const prev = item?.type === "text" ? item.text ?? "" : ""
+        const next = part.text ?? ""
+        console.debug(
+          `[sync] part.updated msg=${part.messageID} part=${part.id} prev=${prev.length} next=${next.length} back=${next.length < prev.length ? 1 : 0} tail=${JSON.stringify(next.slice(-40))}`,
+        )
+      }
       if (result.found) {
         input.setStore("part", part.messageID, result.index, reconcile(part))
         break
@@ -258,6 +271,14 @@ export function applyDirectoryEvent(input: {
       if (!parts) break
       const result = Binary.search(parts, props.partID, (p) => p.id)
       if (!result.found) break
+      const hit = parts[result.index]
+      if (props.field === "text" && hit?.type === "text") {
+        const prev = hit.text ?? ""
+        const next = prev + props.delta
+        console.debug(
+          `[sync] part.delta msg=${props.messageID} part=${props.partID} prev=${prev.length} delta=${props.delta.length} next=${next.length} tail=${JSON.stringify(next.slice(-40))}`,
+        )
+      }
       input.setStore(
         "part",
         props.messageID,
