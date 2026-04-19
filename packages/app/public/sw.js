@@ -2,8 +2,72 @@ self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting())
 })
 
+function decodeServerKey(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+  const raw = atob(padded)
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0))
+}
+
+async function fetchJSON(url) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    credentials: "include",
+  }).catch(() => undefined)
+  if (!response?.ok) return
+  return response.json().catch(() => undefined)
+}
+
+async function syncSubscription(previousEndpoint) {
+  const config = await fetchJSON("/global/push/public-key")
+  if (config?.supported !== true || typeof config.publicKey !== "string") return
+
+  const existing = await fetchJSON("/global/push/subscriptions")
+  const previous = Array.isArray(existing)
+    ? existing.find((item) => item && typeof item === "object" && item.endpoint === previousEndpoint)
+    : undefined
+
+  const subscription = await self.registration.pushManager
+    .subscribe({
+      applicationServerKey: decodeServerKey(config.publicKey),
+      userVisibleOnly: true,
+    })
+    .catch(() => undefined)
+  if (!subscription) return
+
+  const json = subscription.toJSON()
+  if (!json.endpoint || !json.keys?.auth || !json.keys?.p256dh) return
+
+  await fetch("/global/push/subscriptions", {
+    body: JSON.stringify({
+      deviceLabel: previous && typeof previous.deviceLabel === "string" ? previous.deviceLabel : undefined,
+      enabled: previous && typeof previous.enabled === "boolean" ? previous.enabled : true,
+      endpoint: json.endpoint,
+      expirationTime: json.expirationTime ?? null,
+      keys: {
+        auth: json.keys.auth,
+        p256dh: json.keys.p256dh,
+      },
+      notifyOnCompletion: previous && typeof previous.notifyOnCompletion === "boolean" ? previous.notifyOnCompletion : true,
+      notifyOnError: previous && typeof previous.notifyOnError === "boolean" ? previous.notifyOnError : false,
+      serverOrigin: self.location.origin,
+      userAgent: self.navigator?.userAgent,
+    }),
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  }).catch(() => undefined)
+}
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim())
+})
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(syncSubscription(event.oldSubscription?.endpoint))
 })
 
 self.addEventListener("push", (event) => {

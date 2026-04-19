@@ -3,9 +3,9 @@ import { Slug } from "@opencode-ai/shared/util/slug"
 import { Log } from "@/util"
 import { Flag } from "@/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
-import { Database, desc, eq } from "@/storage"
+import { Database, asc, desc, eq, lte } from "@/storage"
 import { SessionTable } from "@/session/session.sql"
-import { PushSubscriptionTable } from "./push.sql"
+import { PushDeliveryTable, PushSubscriptionTable } from "./push.sql"
 import webpush from "web-push"
 import z from "zod"
 
@@ -100,8 +100,23 @@ type NotificationPayload = {
   requireInteraction: boolean
 }
 
+type DeliveryUrgency = "high" | "normal"
+
+type DeliverySettings = {
+  ttlSeconds: number
+  urgency: DeliveryUrgency
+}
+
+type DeliveryRow = typeof PushDeliveryTable.$inferSelect
+
 let initialized = false
 let configured = false
+let drainScheduledAt: number | undefined
+let drainTimer: ReturnType<typeof setTimeout> | undefined
+let draining: Promise<void> | undefined
+
+const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000] as const
+const MAX_DELIVERY_ATTEMPTS = RETRY_DELAYS_MS.length + 1
 
 function vapid() {
   if (!Flag.OPENCODE_PUSH_VAPID_PUBLIC_KEY) return
@@ -121,6 +136,27 @@ function ensureConfigured() {
   webpush.setVapidDetails(next.subject, next.publicKey, next.privateKey)
   configured = true
   return next
+}
+
+function deliverySettings(kind: Kind): DeliverySettings {
+  if (kind === "error") {
+    return {
+      ttlSeconds: 60 * 60 * 24,
+      urgency: "high",
+    }
+  }
+
+  if (kind === "test") {
+    return {
+      ttlSeconds: 60 * 30,
+      urgency: "high",
+    }
+  }
+
+  return {
+    ttlSeconds: 60 * 60 * 12,
+    urgency: "normal",
+  }
 }
 
 function fromRow(row: typeof PushSubscriptionTable.$inferSelect) {
@@ -177,6 +213,27 @@ function target(id?: string) {
   })
 }
 
+function dueDeliveries() {
+  return Database.use((db) =>
+    db
+      .select()
+      .from(PushDeliveryTable)
+      .where(lte(PushDeliveryTable.next_attempt_at, Date.now()))
+      .orderBy(asc(PushDeliveryTable.next_attempt_at), asc(PushDeliveryTable.id))
+      .all(),
+  )
+}
+
+function nextDelivery() {
+  return Database.use((db) =>
+    db
+      .select({ nextAttemptAt: PushDeliveryTable.next_attempt_at })
+      .from(PushDeliveryTable)
+      .orderBy(asc(PushDeliveryTable.next_attempt_at), asc(PushDeliveryTable.id))
+      .get(),
+  )
+}
+
 function subscriptions(kind: Kind) {
   return Database.use((db) =>
     db
@@ -206,6 +263,35 @@ function body(input: { kind: Kind; session: SessionMeta; error?: unknown }) {
     }
   }
   return input.session.title || input.session.id
+}
+
+function stopDrainTimer() {
+  if (!drainTimer) return
+  clearTimeout(drainTimer)
+  drainTimer = undefined
+  drainScheduledAt = undefined
+}
+
+function scheduleDrain(at = Date.now()) {
+  if (!ensureConfigured()) return
+  if (drainScheduledAt !== undefined && drainScheduledAt <= at) return
+  stopDrainTimer()
+  drainScheduledAt = at
+  drainTimer = setTimeout(() => {
+    drainTimer = undefined
+    drainScheduledAt = undefined
+    void kickDrain()
+  }, Math.max(0, at - Date.now()))
+}
+
+function scheduleNextDrain() {
+  if (!ensureConfigured()) return
+  const next = nextDelivery()
+  if (!next) {
+    stopDrainTimer()
+    return
+  }
+  scheduleDrain(next.nextAttemptAt)
 }
 
 export function payload(input: { kind: Kind; session: SessionMeta; error?: unknown }): NotificationPayload {
@@ -241,7 +327,28 @@ function testPayload(): NotificationPayload {
   }
 }
 
+function parsePayload(value: string) {
+  try {
+    return JSON.parse(value) as NotificationPayload
+  } catch {
+    return
+  }
+}
+
+function clearDelivery(id: string) {
+  Database.use((db) => {
+    db.delete(PushDeliveryTable).where(eq(PushDeliveryTable.id, id)).run()
+  })
+}
+
+function clearDeliveriesForSubscription(subscriptionID: string) {
+  Database.use((db) => {
+    db.delete(PushDeliveryTable).where(eq(PushDeliveryTable.subscription_id, subscriptionID)).run()
+  })
+}
+
 function remove(id: string) {
+  clearDeliveriesForSubscription(id)
   Database.use((db) => {
     db.delete(PushSubscriptionTable).where(eq(PushSubscriptionTable.id, id)).run()
   })
@@ -264,7 +371,35 @@ function fail(id: string, error: unknown) {
   })
 }
 
-async function send(row: typeof PushSubscriptionTable.$inferSelect, notification: NotificationPayload) {
+function retryDelayMs(attemptCount: number) {
+  return RETRY_DELAYS_MS[Math.min(Math.max(attemptCount - 1, 0), RETRY_DELAYS_MS.length - 1)]
+}
+
+function statusCode(error: unknown) {
+  if (!error || typeof error !== "object") return
+  if (!("statusCode" in error)) return
+  return typeof error.statusCode === "number" ? error.statusCode : undefined
+}
+
+function enqueue(row: typeof PushSubscriptionTable.$inferSelect, notification: NotificationPayload) {
+  const settings = deliverySettings(notification.data.kind)
+  Database.use((db) => {
+    db.delete(PushDeliveryTable).where(eq(PushDeliveryTable.tag, `${row.id}:${notification.tag}`)).run()
+    db.insert(PushDeliveryTable).values({
+      id: Slug.create(),
+      subscription_id: row.id,
+      payload: JSON.stringify(notification),
+      kind: notification.data.kind,
+      tag: `${row.id}:${notification.tag}`,
+      ttl_seconds: settings.ttlSeconds,
+      urgency: settings.urgency,
+      next_attempt_at: Date.now(),
+    }).run()
+  })
+  scheduleDrain()
+}
+
+async function send(row: typeof PushSubscriptionTable.$inferSelect, notification: NotificationPayload, settings: DeliverySettings) {
   const config = ensureConfigured()
   if (!config) return false
   try {
@@ -278,6 +413,10 @@ async function send(row: typeof PushSubscriptionTable.$inferSelect, notification
         },
       },
       JSON.stringify(notification),
+      {
+        TTL: settings.ttlSeconds,
+        urgency: settings.urgency,
+      },
     )
     Database.use((db) => {
       db
@@ -293,7 +432,7 @@ async function send(row: typeof PushSubscriptionTable.$inferSelect, notification
     })
     return true
   } catch (error) {
-    const status = typeof error === "object" && error && "statusCode" in error ? error.statusCode : undefined
+    const status = statusCode(error)
     if (status === 404 || status === 410) {
       remove(row.id)
       return false
@@ -301,6 +440,73 @@ async function send(row: typeof PushSubscriptionTable.$inferSelect, notification
     fail(row.id, error)
     throw error
   }
+}
+
+async function processDelivery(delivery: DeliveryRow) {
+  const subscription = Database.use((db) =>
+    db.select().from(PushSubscriptionTable).where(eq(PushSubscriptionTable.id, delivery.subscription_id)).get(),
+  )
+  if (!subscription) {
+    clearDelivery(delivery.id)
+    return
+  }
+  if (!subscription.enabled) {
+    clearDelivery(delivery.id)
+    return
+  }
+
+  const notification = parsePayload(delivery.payload)
+  if (!notification) {
+    clearDelivery(delivery.id)
+    return
+  }
+
+  try {
+    await send(subscription, notification, {
+      ttlSeconds: delivery.ttl_seconds,
+      urgency: delivery.urgency === "high" ? "high" : "normal",
+    })
+    clearDelivery(delivery.id)
+  } catch (error) {
+    const attempts = delivery.attempt_count + 1
+    if (attempts >= MAX_DELIVERY_ATTEMPTS) {
+      clearDelivery(delivery.id)
+      return
+    }
+
+    Database.use((db) => {
+      db
+        .update(PushDeliveryTable)
+        .set({
+          attempt_count: attempts,
+          last_error: error instanceof Error ? error.message : String(error),
+          last_status: statusCode(error),
+          next_attempt_at: Date.now() + retryDelayMs(attempts),
+          time_updated: Date.now(),
+        })
+        .where(eq(PushDeliveryTable.id, delivery.id))
+        .run()
+    })
+  }
+}
+
+function kickDrain() {
+  if (draining) return draining
+  if (!ensureConfigured()) return Promise.resolve()
+  stopDrainTimer()
+  draining = (async () => {
+    while (true) {
+      const deliveries = dueDeliveries()
+      if (deliveries.length === 0) return
+      for (const delivery of deliveries) {
+        await processDelivery(delivery)
+      }
+    }
+  })().finally(() => {
+    draining = undefined
+    scheduleNextDrain()
+  })
+  return draining
 }
 
 async function dispatch(event: GlobalEvent) {
@@ -317,13 +523,15 @@ async function dispatch(event: GlobalEvent) {
   if (targets.length === 0) return
 
   const notification = payload({ kind, session, error: event.payload?.properties?.error })
-  await Promise.allSettled(targets.map((item) => send(item, notification)))
+  targets.forEach((item) => enqueue(item, notification))
+  await kickDrain()
 }
 
 export function init() {
   if (initialized) return
   initialized = true
   ensureConfigured()
+  scheduleNextDrain()
   GlobalBus.on("event", (event) => {
     void dispatch(event).catch((error) => {
       log.error("dispatch failed", {
@@ -368,6 +576,7 @@ export function upsert(input: z.output<typeof SubscriptionUpsert>) {
           notify_on_error: input.notifyOnError ?? false,
           server_origin: input.serverOrigin,
           user_agent: input.userAgent,
+          failure_count: 0,
           last_error: null,
           time_updated: Date.now(),
         })
@@ -428,15 +637,9 @@ export async function test(input: z.output<typeof TestInput>) {
   if (!ensureConfigured()) return { sent: false }
   const row = target(input.id)
   if (!row) return { sent: false }
-  try {
-    return { sent: await send(row, testPayload()) }
-  } catch (error) {
-    log.error("test push failed", {
-      error,
-      subscriptionID: row.id,
-    })
-    return { sent: false }
-  }
+  enqueue(row, testPayload())
+  await kickDrain()
+  return { sent: true }
 }
 
 export * as Push from "."

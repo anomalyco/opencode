@@ -16,6 +16,12 @@ const DEFAULT_CSP =
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
+function cacheHeaders(path: string) {
+  if (path === "/sw.js" || path === "/site.webmanifest") {
+    return "no-cache, no-store, must-revalidate"
+  }
+}
+
 export const UIRoutes = (): Hono =>
   new Hono().all("/*", async (c) => {
     const embeddedWebUI = await embeddedUIPromise
@@ -28,6 +34,11 @@ export const UIRoutes = (): Hono =>
       if (await fs.exists(match)) {
         const mime = getMimeType(match) ?? "text/plain"
         c.header("Content-Type", mime)
+        const cacheControl = cacheHeaders(path)
+        if (cacheControl) {
+          c.header("Cache-Control", cacheControl)
+          c.header("Pragma", "no-cache")
+        }
         if (mime.startsWith("text/html")) {
           c.header("Content-Security-Policy", DEFAULT_CSP)
         }
@@ -50,6 +61,11 @@ export const UIRoutes = (): Hono =>
         : undefined
       const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
       response.headers.set("Content-Security-Policy", csp(hash))
+      const cacheControl = cacheHeaders(path)
+      if (cacheControl) {
+        response.headers.set("Cache-Control", cacheControl)
+        response.headers.set("Pragma", "no-cache")
+      }
       return response
     }
   })

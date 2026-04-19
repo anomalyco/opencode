@@ -25,3 +25,18 @@ export const PushSubscriptionTable = sqliteTable("push_subscription", {
   last_failure_at: integer(),
   ...Timestamps,
 })
+
+export const PushDeliveryTable = sqliteTable("push_delivery", {
+  id: text().primaryKey(),
+  subscription_id: text().notNull(),
+  payload: text().notNull(),
+  kind: text().notNull(),
+  tag: text().notNull(),
+  ttl_seconds: integer().notNull(),
+  urgency: text().notNull(),
+  attempt_count: integer().notNull().$default(() => 0),
+  next_attempt_at: integer().notNull(),
+  last_error: text(),
+  last_status: integer(),
+  ...Timestamps,
+})

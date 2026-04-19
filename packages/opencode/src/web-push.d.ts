@@ -8,11 +8,17 @@ declare module "web-push" {
     }
   }
 
+  export type SendOptions = {
+    TTL?: number
+    urgency?: "very-low" | "low" | "normal" | "high"
+  }
+
   export function setVapidDetails(subject: string, publicKey: string, privateKey: string): void
 
   export function sendNotification(
     subscription: PushSubscription,
     payload?: string,
+    options?: SendOptions,
   ): Promise<unknown>
 
   const webpush: {
