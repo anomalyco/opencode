@@ -404,17 +404,6 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   const id = model.id.toLowerCase()
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
-  if (
-    id.includes("deepseek") ||
-    id.includes("minimax") ||
-    id.includes("glm") ||
-    id.includes("mistral") ||
-    id.includes("kimi") ||
-    id.includes("k2p5") ||
-    id.includes("qwen") ||
-    id.includes("big-pickle")
-  )
-    return {}
 
   // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
   if (id.includes("grok") && id.includes("grok-3-mini")) {
@@ -532,6 +521,13 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
+      // zai/zhipuai GLM honors `thinking: { type }` (binary on/off).
+      if (["zai", "zhipuai"].some((id) => model.providerID.includes(id)) && model.family === "glm") {
+        return {
+          "thinking-off": { thinking: { type: "disabled" } },
+          "thinking-on": { thinking: { type: "enabled" } },
+        }
+      }
       return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
     case "@ai-sdk/azure":

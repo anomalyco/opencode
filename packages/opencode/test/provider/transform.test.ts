@@ -2071,46 +2071,21 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("deepseek returns empty object", () => {
+  test("glm with reasoning enabled returns thinking-off/thinking-on via openai-compatible", () => {
     const model = createMockModel({
-      id: "deepseek/deepseek-chat",
-      providerID: "deepseek",
+      id: "zai-coding/glm-5.1",
+      providerID: "zai-coding",
+      family: "glm",
       api: {
-        id: "deepseek-chat",
-        url: "https://api.deepseek.com",
+        id: "glm-5.1",
+        url: "https://open.bigmodel.cn/api/paas/v4",
         npm: "@ai-sdk/openai-compatible",
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
-  })
-
-  test("minimax returns empty object", () => {
-    const model = createMockModel({
-      id: "minimax/minimax-model",
-      providerID: "minimax",
-      api: {
-        id: "minimax-model",
-        url: "https://api.minimax.com",
-        npm: "@ai-sdk/openai-compatible",
-      },
-    })
-    const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
-  })
-
-  test("glm returns empty object", () => {
-    const model = createMockModel({
-      id: "glm/glm-4",
-      providerID: "glm",
-      api: {
-        id: "glm-4",
-        url: "https://api.glm.com",
-        npm: "@ai-sdk/openai-compatible",
-      },
-    })
-    const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    expect(Object.keys(result)).toEqual(["thinking-off", "thinking-on"])
+    expect(result["thinking-off"]).toEqual({ thinking: { type: "disabled" } })
+    expect(result["thinking-on"]).toEqual({ thinking: { type: "enabled" } })
   })
 
   test("mistral returns empty object", () => {
