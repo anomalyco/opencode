@@ -182,9 +182,9 @@ export function TerminalPanel() {
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
+      class="relative w-full shrink-0 overflow-hidden bg-background-base"
       classList={{
-        "border-t border-border-weak-base": opened(),
+        "border-t border-border-weaker-base": opened(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
           !size.active(),
       }}
@@ -215,10 +215,10 @@ export function TerminalPanel() {
           when={terminal.ready()}
           fallback={
             <div class="flex flex-col h-full pointer-events-none">
-              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-background-stronger overflow-hidden">
+              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-background-base overflow-hidden">
                 <For each={handoff()}>
                   {(title) => (
-                    <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
+                    <div class="px-2 py-1 rounded-lg bg-surface-base text-14-regular text-text-weak truncate max-w-40">
                       {title}
                     </div>
                   )}
@@ -297,7 +297,7 @@ export function TerminalPanel() {
                 {(id) => (
                   <Show when={all().find((pty) => pty.id === id)}>
                     {(t) => (
-                      <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                      <div class="relative p-1 h-10 flex items-center bg-background-base text-14-regular">
                         {terminalTabLabel({
                           title: t().title,
                           titleNumber: t().titleNumber,

@@ -47,23 +47,17 @@
       width: 100%;
       padding-right: 4px;
 
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border-weak-base);
-      background: var(--input-base);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-weaker-base);
+      background: var(--surface-raised-strong);
 
       &:focus-within:not(:has([data-readonly])) {
-        border-color: transparent;
-        /* border/shadow-xs/select */
-        box-shadow:
-          0 0 0 3px var(--border-weak-selected),
-          0 0 0 1px var(--border-selected),
-          0 1px 2px -1px rgba(19, 16, 16, 0.25),
-          0 1px 2px 0 rgba(19, 16, 16, 0.08),
-          0 1px 3px 0 rgba(19, 16, 16, 0.12);
+        border-color: var(--border-interactive-base);
+        box-shadow: none;
       }
 
       &:has([data-invalid]) {
-        background: var(--surface-critical-weak);
+        background: var(--surface-raised-strong);
         border: 1px solid var(--border-critical-selected);
       }
 

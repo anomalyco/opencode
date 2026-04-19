@@ -69,12 +69,14 @@ export default function Home() {
   }
 
   return (
-    <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
+    <div class="mx-auto mt-44 w-full max-w-3xl px-5">
+      <div class="mx-auto flex w-full max-w-xl flex-col items-center text-center">
+        <Logo class="w-52 md:w-64 opacity-10" />
+      </div>
       <Button
         size="large"
         variant="ghost"
-        class="mt-4 mx-auto text-14-regular text-text-weak"
+        class="mt-5 mx-auto rounded-full px-4 text-14-regular text-text-weak"
         onClick={() => dialog.show(() => <DialogSelectServer />)}
       >
         <div
@@ -87,20 +89,20 @@ export default function Home() {
       </Button>
       <Switch>
         <Match when={sync.data.project.length > 0}>
-          <div class="mt-20 w-full flex flex-col gap-4">
-            <div class="flex gap-2 items-center justify-between pl-3">
+          <div class="mt-18 mx-auto flex w-full max-w-2xl flex-col gap-4">
+            <div class="flex gap-2 items-center justify-between px-1">
               <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
               <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
                 {language.t("command.project.open")}
               </Button>
             </div>
-            <ul class="flex flex-col gap-2">
+            <ul class="flex flex-col gap-1.5">
               <For each={recent()}>
                 {(project) => (
                   <Button
                     size="large"
                     variant="ghost"
-                    class="text-14-mono text-left justify-between px-3"
+                    class="rounded-xl bg-surface-base text-14-mono text-left justify-between px-4 hover:bg-surface-base-hover"
                     onClick={() => openProject(project.worktree)}
                   >
                     {project.worktree.replace(homedir(), "~")}
@@ -114,7 +116,7 @@ export default function Home() {
           </div>
         </Match>
         <Match when={!sync.ready}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
+          <div class="mt-28 mx-auto flex flex-col items-center gap-3">
             <div class="text-12-regular text-text-weak">{language.t("common.loading")}</div>
             <Button class="px-3" onClick={chooseProject}>
               {language.t("command.project.open")}
@@ -122,11 +124,13 @@ export default function Home() {
           </div>
         </Match>
         <Match when={true}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <Icon name="folder-add-left" size="large" />
+          <div class="mt-28 mx-auto flex flex-col items-center gap-4 text-center">
+            <div class="flex size-14 items-center justify-center rounded-2xl bg-surface-base text-text-base">
+              <Icon name="folder-add-left" size="large" />
+            </div>
             <div class="flex flex-col gap-1 items-center justify-center">
               <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
-              <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
+              <div class="max-w-80 text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
             </div>
             <Button class="px-3 mt-1" onClick={chooseProject}>
               {language.t("command.project.open")}

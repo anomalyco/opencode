@@ -1,12 +1,11 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
-import { Suspense, createMemo, createSignal, lazy, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-
-const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
+import { StatusPopoverBody } from "./status-popover-body"
 
 export function StatusPopover() {
   const language = useLanguage()
@@ -53,13 +52,7 @@ export function StatusPopover() {
       shift={-168}
     >
       <Show when={shown()}>
-        <Suspense
-          fallback={
-            <div class="w-[360px] h-14 rounded-xl bg-background-strong shadow-[var(--shadow-lg-border-base)]" />
-          }
-        >
-          <Body shown={shown} />
-        </Suspense>
+        <StatusPopoverBody shown={shown} />
       </Show>
     </Popover>
   )

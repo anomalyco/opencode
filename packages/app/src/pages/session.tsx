@@ -13,7 +13,6 @@ import {
   on,
   onMount,
   untrack,
-  createResource,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -434,6 +433,8 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
   const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
+  const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
+  const hasSessionReview = createMemo(() => sessionCount() > 0)
   const canReview = createMemo(() => !!sync.project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
@@ -443,6 +444,8 @@ export default function Page() {
     review: reviewTab,
     hasReview: canReview,
   })
+  const contextOpen = tabState.contextOpen
+  const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
@@ -485,7 +488,7 @@ export default function Page() {
     if (!tab) return
 
     const path = file.pathFromTab(tab)
-    if (path) void file.load(path)
+    if (path) file.load(path)
   })
 
   createEffect(
@@ -755,9 +758,8 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  const [sessionSync] = createResource(
-    () => [sdk.directory, params.id] as const,
-    ([directory, id]) => {
+  createEffect(
+    on([() => sdk.directory, () => params.id] as const, ([, id]) => {
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       refreshFrame = undefined
@@ -768,10 +770,13 @@ export default function Page() {
       const stale = !cached
         ? false
         : (() => {
-            const info = getSessionPrefetch(directory, id)
+            const info = getSessionPrefetch(sdk.directory, id)
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
+      untrack(() => {
+        void sync.session.sync(id)
+      })
 
       refreshFrame = requestAnimationFrame(() => {
         refreshFrame = undefined
@@ -783,9 +788,7 @@ export default function Page() {
           })
         }, 0)
       })
-
-      return sync.session.sync(id)
-    },
+    }),
   )
 
   createEffect(
@@ -1151,7 +1154,7 @@ export default function Page() {
   )
 
   const reviewPanel = () => (
-    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+    <div data-component="review-panel-surface" class="flex flex-col h-full overflow-hidden contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         {reviewContent({
           diffStyle: layout.review.diffStyle(),
@@ -1793,8 +1796,7 @@ export default function Page() {
   })
 
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      {sessionSync() ?? ""}
+    <div class="relative size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
@@ -1825,7 +1827,7 @@ export default function Page() {
         {/* Session panel */}
         <div
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
@@ -1941,7 +1943,7 @@ export default function Page() {
                 direction="horizontal"
                 size={layout.session.width()}
                 min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.63}
                 onResize={(width) => {
                   size.touch()
                   layout.session.resize(width)

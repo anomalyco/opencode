@@ -427,9 +427,7 @@ export function SessionHeader() {
               </Show>
               <div class="flex items-center gap-1">
                 <Show when={status()}>
-                  <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
-                    <StatusPopover />
-                  </Tooltip>
+                  <StatusPopover />
                 </Show>
                 <Show when={term()}>
                   <TooltipKeybind

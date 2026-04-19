@@ -290,12 +290,9 @@ const agentPalette = [
   "var(--icon-agent-plan-base)",
   "var(--syntax-info)",
   "var(--syntax-success)",
-  "var(--syntax-warning)",
   "var(--syntax-property)",
   "var(--syntax-constant)",
   "var(--text-diff-add-base)",
-  "var(--text-diff-delete-base)",
-  "var(--icon-warning-base)",
 ]
 
 function tone(name: string) {
@@ -1787,7 +1784,7 @@ ToolRegistry.register({
                 <Spinner />
               </span>
             </Show>
-            <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-strong)" }}>
+            <span data-component="task-tool-title" style={{ color: tone() ?? "var(--text-interactive-base)" }}>
               {title()}
             </span>
             <Show when={subtitle()}>

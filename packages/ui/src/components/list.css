@@ -191,7 +191,7 @@
         justify-content: space-between;
         align-items: center;
         align-self: stretch;
-        background: var(--surface-raised-stronger-non-alpha);
+        background: var(--list-header-bg, var(--surface-raised-stronger-non-alpha));
         position: sticky;
         top: 0;
 
@@ -212,7 +212,7 @@
           left: 0;
           right: 0;
           height: 16px;
-          background: linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha), transparent);
+          background: linear-gradient(to bottom, var(--list-header-fade, var(--surface-raised-stronger-non-alpha)), transparent);
           pointer-events: none;
           opacity: 0;
           transition: opacity 0.15s ease;

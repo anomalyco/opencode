@@ -55,6 +55,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => {
+    if (metrics().totalCost <= 0) return
     return usd().format(metrics().totalCost)
   })
 
@@ -74,7 +75,20 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const circle = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
+      <ProgressCircle
+        size={20}
+        strokeWidth={2}
+        percentage={context()?.usage ?? 0}
+        label={context()?.usage ?? 0}
+        rounded
+      />
+    </div>
+  )
+
+  const usage = () => (
+    <div class="flex items-center gap-1.5 whitespace-nowrap">
+      <Show when={cost()}>{(value) => <span class="text-11-regular text-text-weak tabular-nums">{value()}</span>}</Show>
+      {circle()}
     </div>
   )
 
@@ -94,10 +108,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           </>
         )}
       </Show>
-      <div class="flex items-center gap-2">
-        <span class="text-text-invert-strong">{cost()}</span>
-        <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
-      </div>
+      <Show when={cost()}>
+        {(value) => (
+          <div class="flex items-center gap-2">
+            <span class="text-text-invert-strong">{value()}</span>
+            <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
+          </div>
+        )}
+      </Show>
     </div>
   )
 
@@ -105,16 +123,16 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     <Show when={params.id}>
       <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
         <Switch>
-          <Match when={variant() === "indicator"}>{circle()}</Match>
+          <Match when={variant() === "indicator"}>{usage()}</Match>
           <Match when={true}>
             <Button
               type="button"
               variant="ghost"
-              class="size-6"
+              class="h-6 w-auto px-1.5"
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             >
-              {circle()}
+              {usage()}
             </Button>
           </Match>
         </Switch>
