@@ -42,6 +42,15 @@ describe("push subscription store", () => {
 
     expect(updated.deviceLabel).toBe("Pixel 8")
 
+    const muted = Push.update({
+      id: saved.id,
+      value: {
+        enabled: false,
+      },
+    })
+
+    expect(muted.enabled).toBe(false)
+
     expect(Push.removeSubscription(saved.id)).toBe(true)
     expect(Push.list()).toHaveLength(0)
   })

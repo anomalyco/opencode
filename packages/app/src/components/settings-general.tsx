@@ -190,6 +190,38 @@ export const SettingsGeneral: Component = () => {
       setStore("pushSavingID", undefined)
     }
   }
+  const togglePushDevice = async (device: (typeof push.current.devices)[number]) => {
+    setStore("pushSavingID", device.id)
+    try {
+      const updated = await push.setDeviceEnabled(device.id, !device.enabled)
+      if (updated) {
+        showToast({
+          variant: "success",
+          title: language.t(
+            device.enabled
+              ? "settings.general.notifications.push.devices.toast.muted.title"
+              : "settings.general.notifications.push.devices.toast.unmuted.title",
+          ),
+          description: language.t(
+            device.enabled
+              ? "settings.general.notifications.push.devices.toast.muted.description"
+              : "settings.general.notifications.push.devices.toast.unmuted.description",
+          ),
+        })
+        return
+      }
+
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("settings.general.notifications.push.devices.toast.toggleFailed"),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setStore("pushSavingID", undefined)
+    }
+  }
   const pushAction = createMemo(() => {
     if (!push.current.supported) return language.t("settings.general.notifications.push.action.unsupported")
     if (!push.current.publicKey) return language.t("settings.general.notifications.push.action.unconfigured")
@@ -783,6 +815,11 @@ export const SettingsGeneral: Component = () => {
                         </div>
                       </Show>
                       <div class="text-11-regular text-text-weak break-words">{describePushDevice(device)}</div>
+                      <Show when={!device.enabled}>
+                        <div class="text-11-regular text-text-weak">
+                          {language.t("settings.general.notifications.push.devices.item.muted")}
+                        </div>
+                      </Show>
                     </div>
                     <Show when={device.id !== push.current.subscriptionID}>
                       <div class="flex flex-col gap-2 items-end">
@@ -795,6 +832,20 @@ export const SettingsGeneral: Component = () => {
                           {store.pushSavingID === device.id
                             ? language.t("settings.general.notifications.push.devices.action.saving")
                             : language.t("settings.general.notifications.push.devices.action.save")}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          disabled={store.pushSavingID === device.id}
+                          onClick={() => togglePushDevice(device)}
+                        >
+                          {store.pushSavingID === device.id
+                            ? language.t("settings.general.notifications.push.devices.action.saving")
+                            : language.t(
+                                device.enabled
+                                  ? "settings.general.notifications.push.devices.action.mute"
+                                  : "settings.general.notifications.push.devices.action.unmute",
+                              )}
                         </Button>
                         <Button
                           size="small"

@@ -2340,6 +2340,7 @@ export type GlobalRemovePushSubscriptionResponse =
 export type GlobalUpdatePushSubscriptionData = {
   body?: {
     deviceLabel?: string
+    enabled?: boolean
   }
   path: {
     id: string

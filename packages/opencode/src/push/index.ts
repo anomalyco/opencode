@@ -64,6 +64,7 @@ export const SubscriptionUpsert = z.object({
 
 export const SubscriptionUpdate = z.object({
   deviceLabel: z.string().trim().max(120).optional(),
+  enabled: z.boolean().optional(),
 })
 
 export const TestInput = z.object({
@@ -406,13 +407,15 @@ export function removeSubscription(id: string) {
 }
 
 export function update(input: { id: string; value: z.output<typeof SubscriptionUpdate> }) {
+  const next = {
+    ...(input.value.deviceLabel !== undefined ? { device_label: input.value.deviceLabel } : {}),
+    ...(input.value.enabled !== undefined ? { enabled: input.value.enabled } : {}),
+    time_updated: Date.now(),
+  }
   Database.use((db) => {
     db
       .update(PushSubscriptionTable)
-      .set({
-        device_label: input.value.deviceLabel,
-        time_updated: Date.now(),
-      })
+      .set(next)
       .where(eq(PushSubscriptionTable.id, input.id))
       .run()
   })

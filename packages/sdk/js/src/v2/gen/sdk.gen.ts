@@ -428,6 +428,7 @@ export class Global extends HeyApiClient {
     parameters: {
       id: string
       deviceLabel?: string
+      enabled?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -438,6 +439,7 @@ export class Global extends HeyApiClient {
           args: [
             { in: "path", key: "id" },
             { in: "body", key: "deviceLabel" },
+            { in: "body", key: "enabled" },
           ],
         },
       ],

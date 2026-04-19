@@ -91,6 +91,9 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         refreshDevices() {
           return Promise.resolve()
         },
+        setDeviceEnabled() {
+          return Promise.resolve(undefined)
+        },
         updateDeviceLabel() {
           return Promise.resolve(undefined)
         },
@@ -323,11 +326,10 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       return removed === true
     }
 
-    const updateDeviceLabel = async (id: string, value: string) => {
-      const trimmed = value.trim()
+    const setDeviceEnabled = async (id: string, enabled: boolean) => {
       const result = await (
         globalSDK.client.global as typeof globalSDK.client.global & {
-          updatePushSubscription: (input: { id: string; requestBody: { deviceLabel?: string } }) => Promise<{
+          updatePushSubscription: (input: { id: string; enabled?: boolean }) => Promise<{
             data?: {
               deviceLabel?: string
               id: string
@@ -342,9 +344,34 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       )
         .updatePushSubscription({
           id,
-          requestBody: {
-            deviceLabel: trimmed || undefined,
-          },
+          enabled,
+        })
+        .catch(() => undefined)
+      remember(result?.data)
+      await refreshDevices()
+      return result?.data
+    }
+
+    const updateDeviceLabel = async (id: string, value: string) => {
+      const trimmed = value.trim()
+      const result = await (
+        globalSDK.client.global as typeof globalSDK.client.global & {
+          updatePushSubscription: (input: { id: string; deviceLabel?: string }) => Promise<{
+            data?: {
+              deviceLabel?: string
+              id: string
+              failureCount: number
+              lastError?: string
+              lastFailureAt?: number | null
+              lastSuccessAt?: number | null
+              serverOrigin: string
+            }
+          }>
+        }
+      )
+        .updatePushSubscription({
+          id,
+          deviceLabel: trimmed || undefined,
         })
         .catch(() => undefined)
       remember(result?.data)
@@ -407,6 +434,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       requestPermission,
       refreshDevices,
       removeDevice,
+      setDeviceEnabled,
       setDeviceLabel,
       sync,
       test,
