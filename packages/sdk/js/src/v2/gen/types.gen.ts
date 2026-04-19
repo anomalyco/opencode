@@ -2337,6 +2337,37 @@ export type GlobalRemovePushSubscriptionResponses = {
 export type GlobalRemovePushSubscriptionResponse =
   GlobalRemovePushSubscriptionResponses[keyof GlobalRemovePushSubscriptionResponses]
 
+export type GlobalUpdatePushSubscriptionData = {
+  body?: {
+    deviceLabel?: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/global/push/subscriptions/{id}"
+}
+
+export type GlobalUpdatePushSubscriptionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalUpdatePushSubscriptionError =
+  GlobalUpdatePushSubscriptionErrors[keyof GlobalUpdatePushSubscriptionErrors]
+
+export type GlobalUpdatePushSubscriptionResponses = {
+  /**
+   * Push subscription
+   */
+  200: PushSubscription
+}
+
+export type GlobalUpdatePushSubscriptionResponse =
+  GlobalUpdatePushSubscriptionResponses[keyof GlobalUpdatePushSubscriptionResponses]
+
 export type GlobalTestPushData = {
   body?: {
     id?: string

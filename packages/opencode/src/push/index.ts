@@ -62,6 +62,10 @@ export const SubscriptionUpsert = z.object({
   userAgent: z.string().optional(),
 })
 
+export const SubscriptionUpdate = z.object({
+  deviceLabel: z.string().trim().max(120).optional(),
+})
+
 export const TestInput = z.object({
   id: z.string().optional(),
 })
@@ -399,6 +403,22 @@ export function upsert(input: z.output<typeof SubscriptionUpsert>) {
 export function removeSubscription(id: string) {
   remove(id)
   return true
+}
+
+export function update(input: { id: string; value: z.output<typeof SubscriptionUpdate> }) {
+  Database.use((db) => {
+    db
+      .update(PushSubscriptionTable)
+      .set({
+        device_label: input.value.deviceLabel,
+        time_updated: Date.now(),
+      })
+      .where(eq(PushSubscriptionTable.id, input.id))
+      .run()
+  })
+  const row = Database.use((db) => db.select().from(PushSubscriptionTable).where(eq(PushSubscriptionTable.id, input.id)).get())
+  if (!row) throw new Error(`Push subscription not found: ${input.id}`)
+  return fromRow(row)
 }
 
 export async function test(input: z.output<typeof TestInput>) {

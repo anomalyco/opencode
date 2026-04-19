@@ -80,8 +80,10 @@ export const SettingsGeneral: Component = () => {
 
   const [store, setStore] = createStore({
     checking: false,
+    pushDeviceDrafts: {} as Record<string, string>,
     pushManaging: false,
     pushRemovingID: undefined as string | undefined,
+    pushSavingID: undefined as string | undefined,
     pushTesting: false,
     pushUnsubscribing: false,
   })
@@ -154,6 +156,39 @@ export const SettingsGeneral: Component = () => {
       })
     }
     return language.t("settings.general.notifications.push.devices.item.pending")
+  }
+  const deviceDraft = (device: (typeof push.current.devices)[number]) => {
+    const draft = store.pushDeviceDrafts[device.id]
+    if (draft !== undefined) return draft
+    return device.deviceLabel || ""
+  }
+  const savePushDevice = async (device: (typeof push.current.devices)[number]) => {
+    const next = deviceDraft(device)
+    const current = device.deviceLabel || ""
+    if (next.trim() === current.trim()) return
+    setStore("pushSavingID", device.id)
+    try {
+      const updated = await push.updateDeviceLabel(device.id, next)
+      if (updated) {
+        setStore("pushDeviceDrafts", device.id, undefined as unknown as string)
+        showToast({
+          variant: "success",
+          title: language.t("settings.general.notifications.push.devices.toast.saved.title"),
+          description: language.t("settings.general.notifications.push.devices.toast.saved.description"),
+        })
+        return
+      }
+
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: language.t("settings.general.notifications.push.devices.toast.saveFailed"),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setStore("pushSavingID", undefined)
+    }
   }
   const pushAction = createMemo(() => {
     if (!push.current.supported) return language.t("settings.general.notifications.push.action.unsupported")
@@ -718,9 +753,30 @@ export const SettingsGeneral: Component = () => {
                 {(device) => (
                   <div class="flex items-start justify-between gap-3 rounded-sm border border-border-weak-base bg-surface-raised-base px-3 py-2">
                     <div class="min-w-0 flex flex-col gap-0.5">
-                      <div class="text-12-medium text-text-base truncate">
-                        {device.deviceLabel || language.t("settings.general.notifications.push.device.placeholder")}
-                      </div>
+                      <Show
+                        when={device.id === push.current.subscriptionID}
+                        fallback={
+                          <div class="w-full sm:w-[180px]">
+                            <TextField
+                              label={language.t("settings.general.notifications.push.devices.item.label")}
+                              hideLabel
+                              type="text"
+                              value={deviceDraft(device)}
+                              onChange={(value) => setStore("pushDeviceDrafts", device.id, value)}
+                              placeholder={language.t("settings.general.notifications.push.device.placeholder")}
+                              spellcheck={false}
+                              autocorrect="off"
+                              autocomplete="off"
+                              autocapitalize="words"
+                              class="text-12-regular"
+                            />
+                          </div>
+                        }
+                      >
+                        <div class="text-12-medium text-text-base truncate">
+                          {device.deviceLabel || language.t("settings.general.notifications.push.device.placeholder")}
+                        </div>
+                      </Show>
                       <Show when={device.id === push.current.subscriptionID}>
                         <div class="text-11-regular text-text-weak">
                           {language.t("settings.general.notifications.push.devices.item.current")}
@@ -729,16 +785,28 @@ export const SettingsGeneral: Component = () => {
                       <div class="text-11-regular text-text-weak break-words">{describePushDevice(device)}</div>
                     </div>
                     <Show when={device.id !== push.current.subscriptionID}>
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        disabled={store.pushRemovingID === device.id}
-                        onClick={() => removePushDevice(device.id)}
-                      >
-                        {store.pushRemovingID === device.id
-                          ? language.t("settings.general.notifications.push.devices.action.removing")
-                          : language.t("settings.general.notifications.push.devices.action.remove")}
-                      </Button>
+                      <div class="flex flex-col gap-2 items-end">
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          disabled={store.pushSavingID === device.id || deviceDraft(device).trim() === (device.deviceLabel || "").trim()}
+                          onClick={() => savePushDevice(device)}
+                        >
+                          {store.pushSavingID === device.id
+                            ? language.t("settings.general.notifications.push.devices.action.saving")
+                            : language.t("settings.general.notifications.push.devices.action.save")}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          disabled={store.pushRemovingID === device.id}
+                          onClick={() => removePushDevice(device.id)}
+                        >
+                          {store.pushRemovingID === device.id
+                            ? language.t("settings.general.notifications.push.devices.action.removing")
+                            : language.t("settings.general.notifications.push.devices.action.remove")}
+                        </Button>
+                      </div>
                     </Show>
                   </div>
                 )}

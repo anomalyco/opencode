@@ -225,6 +225,30 @@ export const GlobalRoutes = lazy(() =>
         return c.json(Push.removeSubscription(c.req.valid("param").id))
       },
     )
+    .patch(
+      "/push/subscriptions/:id",
+      describeRoute({
+        summary: "Update push subscription",
+        description: "Update editable fields for a Web Push subscription by id.",
+        operationId: "global.updatePushSubscription",
+        responses: {
+          200: {
+            description: "Push subscription",
+            content: {
+              "application/json": {
+                schema: resolver(Push.Subscription),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ id: z.string() })),
+      validator("json", Push.SubscriptionUpdate),
+      async (c) => {
+        return c.json(Push.update({ id: c.req.valid("param").id, value: c.req.valid("json") }))
+      },
+    )
     .post(
       "/push/test",
       describeRoute({

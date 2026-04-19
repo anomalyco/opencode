@@ -33,6 +33,15 @@ describe("push subscription store", () => {
     expect(listed[0]?.id).toBe(saved.id)
     expect(listed[0]?.deviceLabel).toBe("Android Chrome")
 
+    const updated = Push.update({
+      id: saved.id,
+      value: {
+        deviceLabel: "Pixel 8",
+      },
+    })
+
+    expect(updated.deviceLabel).toBe("Pixel 8")
+
     expect(Push.removeSubscription(saved.id)).toBe(true)
     expect(Push.list()).toHaveLength(0)
   })

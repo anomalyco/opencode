@@ -59,6 +59,8 @@ import type {
   GlobalRemovePushSubscriptionResponses,
   GlobalTestPushErrors,
   GlobalTestPushResponses,
+  GlobalUpdatePushSubscriptionErrors,
+  GlobalUpdatePushSubscriptionResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   GlobalUpsertPushSubscriptionErrors,
@@ -414,6 +416,45 @@ export class Global extends HeyApiClient {
       url: "/global/push/subscriptions/{id}",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update push subscription
+   *
+   * Update editable fields for a Web Push subscription by id.
+   */
+  public updatePushSubscription<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      deviceLabel?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "deviceLabel" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      GlobalUpdatePushSubscriptionResponses,
+      GlobalUpdatePushSubscriptionErrors,
+      ThrowOnError
+    >({
+      url: "/global/push/subscriptions/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

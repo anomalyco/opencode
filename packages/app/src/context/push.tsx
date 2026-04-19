@@ -91,6 +91,9 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
         refreshDevices() {
           return Promise.resolve()
         },
+        updateDeviceLabel() {
+          return Promise.resolve(undefined)
+        },
         removeDevice() {
           return Promise.resolve(false)
         },
@@ -320,6 +323,38 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       return removed === true
     }
 
+    const updateDeviceLabel = async (id: string, value: string) => {
+      const trimmed = value.trim()
+      const result = await (
+        globalSDK.client.global as typeof globalSDK.client.global & {
+          updatePushSubscription: (input: { id: string; requestBody: { deviceLabel?: string } }) => Promise<{
+            data?: {
+              deviceLabel?: string
+              id: string
+              failureCount: number
+              lastError?: string
+              lastFailureAt?: number | null
+              lastSuccessAt?: number | null
+              serverOrigin: string
+            }
+          }>
+        }
+      )
+        .updatePushSubscription({
+          id,
+          requestBody: {
+            deviceLabel: trimmed || undefined,
+          },
+        })
+        .catch(() => undefined)
+      remember(result?.data)
+      await refreshDevices()
+      if (id === store.subscriptionID) {
+        setStore("deviceLabel", trimmed || suggestedLabel())
+      }
+      return result?.data
+    }
+
     const setDeviceLabel = (value: string) => {
       setStore("deviceLabel", value)
       if (labelTimer) clearTimeout(labelTimer)
@@ -376,6 +411,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       sync,
       test,
       unsubscribe,
+      updateDeviceLabel,
     }
   },
 })
