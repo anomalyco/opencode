@@ -1418,6 +1418,19 @@ const layer: Layer.Layer<
             ...model.headers,
           }
 
+        // Fireworks AI uses per-replica caching that requires session affinity via x-session-affinity header
+        // Without this, prompt caching is unreliable (cache misses when hitting different replicas)
+        // See: https://docs.fireworks.ai/guides/prompt-caching
+        // Only apply if we have a valid sessionId provided in options
+        const sessionId = options["sessionId"]
+        if ((model.providerID === "fireworks-ai" || model.providerID.startsWith("fireworks")) && 
+            typeof sessionId === "string" && sessionId.trim() !== "") {
+          options["headers"] = {
+            ...options["headers"],
+            "x-session-affinity": sessionId.trim(),
+          }
+        }
+
         const key = Hash.fast(
           JSON.stringify({
             providerID: model.providerID,
