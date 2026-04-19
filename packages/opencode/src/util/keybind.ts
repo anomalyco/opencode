@@ -1,6 +1,15 @@
 import { isDeepEqual } from "remeda"
 import type { ParsedKey } from "@opentui/core"
 
+const UNICODE_UPPER_TO_LOWER: Record<string, string> = {
+  "İ": "i",
+  "Ğ": "ğ",
+  "Ş": "ş",
+  "Ü": "ü",
+  "Ö": "ö",
+  "Ç": "ç",
+}
+
 /**
  * Keybind info derived from OpenTUI's ParsedKey with our custom `leader` field.
  * This ensures type compatibility and catches missing fields at compile time.
@@ -21,11 +30,19 @@ export function match(a: Info | undefined, b: Info): boolean {
  * This helper ensures all required fields are present and avoids manual object creation.
  */
 export function fromParsedKey(key: ParsedKey, leader = false): Info {
+  let name = key.name === " " ? "space" : key.name
+  let shift = key.shift
+
+  if (!shift && name.length === 1 && UNICODE_UPPER_TO_LOWER[name] !== undefined) {
+    name = UNICODE_UPPER_TO_LOWER[name]!
+    shift = true
+  }
+
   return {
-    name: key.name === " " ? "space" : key.name,
+    name,
     ctrl: key.ctrl,
     meta: key.meta,
-    shift: key.shift,
+    shift,
     super: key.super ?? false,
     leader,
   }
