@@ -8,7 +8,7 @@ export const dict = {
   "nav.zen": "Zen",
   "nav.go": "Go",
   "nav.login": "Login",
-  "nav.free": "Free",
+  "nav.free": "Download",
   "nav.home": "Home",
   "nav.openMenu": "Open menu",
   "nav.getStartedFree": "Get started for free",

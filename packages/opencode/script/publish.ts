@@ -12,11 +12,13 @@ async function published(name: string, version: string) {
 }
 
 async function publish(dir: string, name: string, version: string) {
+  // GitHub artifact downloads can drop the executable bit, and Docker uses the
+  // unpacked dist binaries directly rather than the published tarball.
+  if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
   if (await published(name, version)) {
     console.log(`already published ${name}@${version}`)
     return
   }
-  if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
   await $`bun pm pack`.cwd(dir)
   await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
 }
