@@ -22,10 +22,10 @@ export default function () {
             <BlackSection />
           </Show>
           <BillingSection />
+          <RedeemSection />
           <Show when={billingInfo()?.customerID}>
             <ReloadSection />
             <MonthlyLimitSection />
-            <RedeemSection />
             <PaymentSection />
           </Show>
         </Show>
