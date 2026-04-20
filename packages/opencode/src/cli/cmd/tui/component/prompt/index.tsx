@@ -42,6 +42,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import os from "os"
 
 export type PromptProps = {
   sessionID?: string
@@ -1012,13 +1013,22 @@ export function Prompt(props: PromptProps) {
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
-                    e.preventDefault()
-                    await pasteAttachment({
-                      filename: "clipboard",
-                      mime: content.mime,
-                      content: content.data,
-                    })
-                    return
+                    const tempFile = path.join(os.tmpdir(), `clipboard-${Date.now()}.png`)
+                    await Filesystem.write(tempFile, Buffer.from(content.data, "base64"))
+
+                    // Only MiniMax models need this workaround - insert instruction to use MCP tool
+                    const modelId = local.model.parsed().model?.toLowerCase() ?? ""
+                    const providerId = local.model.parsed().provider?.toLowerCase() ?? ""
+                    const isMiniMax = modelId.includes("minimax") || providerId.includes("minimax")
+
+                    if (isMiniMax) {
+                      e.preventDefault()
+                      // Insert image file path with instruction for MiniMax model to use MCP tool
+                      const promptInstruction = `Please use MiniMax_understand_image tool to analyze this image: ${tempFile}`
+                      pasteText(promptInstruction, "[Image Analysis]")
+                      return
+                    }
+                    // For non-MiniMax models, let the default paste behavior continue
                   }
                   // If no image, let the default paste behavior continue
                 }
@@ -1088,6 +1098,27 @@ export function Prompt(props: PromptProps) {
                 if (props.disabled) {
                   event.preventDefault()
                   return
+                }
+
+                // Check clipboard for images first - handle image paste before any text processing
+                const clipboardContent = await Clipboard.read()
+                if (clipboardContent?.mime.startsWith("image/")) {
+                  const tempFile = path.join(os.tmpdir(), `clipboard-${Date.now()}.png`)
+                  await Filesystem.write(tempFile, Buffer.from(clipboardContent.data, "base64"))
+
+                  // Only MiniMax models need this workaround - insert instruction to use MCP tool
+                  const modelId = local.model.parsed().model?.toLowerCase() ?? ""
+                  const providerId = local.model.parsed().provider?.toLowerCase() ?? ""
+                  const isMiniMax = modelId.includes("minimax") || providerId.includes("minimax")
+
+                  if (isMiniMax) {
+                    event.preventDefault()
+                    // Insert image file path with instruction for MiniMax model to use MCP tool
+                    const promptInstruction = `Please use MiniMax_understand_image tool to analyze this image: ${tempFile}`
+                    pasteText(promptInstruction, "[Image Analysis]")
+                    return
+                  }
+                  // For non-MiniMax models, let the default paste behavior continue
                 }
 
                 // Normalize line endings at the boundary
