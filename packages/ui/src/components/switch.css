@@ -17,39 +17,54 @@
     border-width: 0;
   }
 
+  /* Track — mirrors Kumo sm: 32x16, relative, no border, no padding, ring for outline */
   [data-slot="switch-control"] {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    width: 28px;
+    width: 32px;
     height: 16px;
     flex-shrink: 0;
-    border-radius: 3px;
-    border: 1px solid var(--border-weak-base);
-    background: var(--surface-base);
-    transition:
-      background-color 150ms,
-      border-color 150ms;
+    border: none;
+    padding: 0;
+    border-radius: 5px;
+    corner-shape: squircle;
+    background-color: var(--border-weak-base);
+    box-shadow: 0 0 0 1px var(--border-base);
+    transition: all 150ms ease-out;
+
+    @media (prefers-color-scheme: dark) {
+      background-color: #3d3d3d;
+      box-shadow: 0 0 0 1px #4a4a4a;
+    }
   }
 
+  @supports (corner-shape: squircle) {
+    [data-slot="switch-control"],
+    [data-slot="switch-thumb"] {
+      border-radius: 10px;
+    }
+  }
+
+  /* Thumb — mirrors Kumo sm: 16x16, absolute top-0 bottom-0, inset radius to nest inside track */
   [data-slot="switch-thumb"] {
-    width: 14px;
-    height: 14px;
-    box-sizing: content-box;
+    position: absolute;
+    top: 0.5px;
+    bottom: 0.5px;
+    left: 0.5px;
+    width: 15px;
+    border: none;
+    border-radius: 5px;
+    corner-shape: squircle;
+    background-color: var(--icon-invert-base);
 
-    border-radius: 2px;
-    border: 1px solid var(--border-base);
-    background: var(--icon-invert-base);
-
-    /* shadows/shadow-xs */
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--icon-invert-base);
+    }
     box-shadow:
-      0 1px 2px -1px rgba(19, 16, 16, 0.04),
-      0 1px 2px 0 rgba(19, 16, 16, 0.06),
-      0 1px 3px 0 rgba(19, 16, 16, 0.08);
-
-    transform: translateX(-1px);
-    transition:
-      transform 150ms,
-      background-color 150ms;
+      0 0 1px 0.5px rgba(0, 0, 0, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.06);
+    transition: all 150ms ease-out;
   }
 
   [data-slot="switch-label"] {
@@ -81,48 +96,37 @@
     letter-spacing: var(--letter-spacing-normal);
   }
 
+  /* Hover — no-op, let parent handle visual feedback */
   &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
-    background-color: var(--surface-hover);
   }
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
-    border-color: var(--border-focus);
-    box-shadow: var(--shadow-xs-border-focus);
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
   }
 
+  /* Checked — green track + ring, white thumb slides to right half */
   &[data-checked] [data-slot="switch-control"] {
-    box-sizing: border-box;
-    border-color: var(--icon-strong-base);
-    background-color: var(--icon-strong-base);
+    background-color: var(--icon-success-base, var(--icon-strong-base));
+    box-shadow: 0 0 0 1px var(--icon-success-base, var(--icon-strong-base));
   }
 
   &[data-checked] [data-slot="switch-thumb"] {
-    border: none;
-    transform: translateX(12px);
-    background-color: var(--icon-invert-base);
+    left: 16.5px;
+    background-color: #ffffff;
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
-    background-color: var(--surface-hover);
+    opacity: 0.85;
   }
 
   &[data-disabled] {
     cursor: not-allowed;
-  }
-
-  &[data-disabled] [data-slot="switch-control"] {
-    border-color: var(--border-disabled);
-    background-color: var(--surface-disabled);
-  }
-
-  &[data-disabled] [data-slot="switch-thumb"] {
-    background-color: var(--icon-disabled);
+    opacity: 0.5;
   }
 
   &[data-invalid] [data-slot="switch-control"] {
-    border-color: var(--border-error);
+    box-shadow: 0 0 0 1px var(--border-error);
   }
 
   &[data-readonly] {
