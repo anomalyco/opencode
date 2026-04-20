@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Logg inn",
-  "nav.free": "Gratis",
+  "nav.free": "Last ned",
   "nav.home": "Hjem",
   "nav.openMenu": "Åpne meny",
   "nav.getStartedFree": "Kom i gang gratis",
@@ -563,6 +563,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "Ingen bruksgrense satt.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Gjeldende forbruk for",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "er $",
+
+  "workspace.redeem.title": "Løs inn kupong",
+  "workspace.redeem.subtitle": "Løs inn en kupongkode for å få kreditt eller fordeler.",
+  "workspace.redeem.placeholder": "Skriv inn kupongkode",
+  "workspace.redeem.redeem": "Løs inn",
+  "workspace.redeem.redeeming": "Løser inn...",
+  "workspace.redeem.success": "Kupongen ble løst inn.",
 
   "workspace.reload.title": "Auto-påfyll",
   "workspace.reload.disabled.before": "Auto-påfyll er",

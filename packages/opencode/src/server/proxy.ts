@@ -130,13 +130,6 @@ export async function http(url: string | URL, extra: HeadersInit | undefined, re
     const done = sync ? Fence.wait(workspaceID, sync, req.signal) : Promise.resolve()
 
     return done.then(async () => {
-      console.log("proxy http response", {
-        method: req.method,
-        request: req.url,
-        url: String(url),
-        status: res.status,
-        statusText: res.statusText,
-      })
       return new Response(res.body, {
         status: res.status,
         statusText: res.statusText,

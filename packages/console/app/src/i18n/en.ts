@@ -8,7 +8,7 @@ export const dict = {
   "nav.zen": "Zen",
   "nav.go": "Go",
   "nav.login": "Login",
-  "nav.free": "Free",
+  "nav.free": "Download",
   "nav.home": "Home",
   "nav.openMenu": "Open menu",
   "nav.getStartedFree": "Get started for free",
@@ -558,6 +558,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "No usage limit set.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Current usage for",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "is $",
+
+  "workspace.redeem.title": "Redeem Coupon",
+  "workspace.redeem.subtitle": "Redeem a coupon code to claim credits or perks.",
+  "workspace.redeem.placeholder": "Enter coupon code",
+  "workspace.redeem.redeem": "Redeem",
+  "workspace.redeem.redeeming": "Redeeming...",
+  "workspace.redeem.success": "Coupon redeemed successfully.",
 
   "workspace.reload.title": "Auto Reload",
   "workspace.reload.disabled.before": "Auto reload is",
