@@ -277,16 +277,73 @@
   }
 }
 
+[data-component="assistant-preamble"] {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+
+  [data-slot="assistant-preamble-toggle"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 28px;
+    color: var(--text-weaker);
+    cursor: pointer;
+  }
+
+  [data-slot="assistant-preamble-toggle-copy"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+  }
+
+  [data-slot="assistant-preamble-content"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 4px;
+  }
+
+  > [data-slot="collapsible-content"] > [data-slot="assistant-preamble-toggle"][data-position="end"] {
+    margin-top: 8px;
+  }
+}
+
+[data-slot="assistant-preamble-content"] {
+  [data-component="markdown"] {
+    color: var(--text-weaker);
+
+    strong,
+    b {
+      color: var(--text-weak);
+    }
+  }
+
+  [data-slot="basic-tool-tool-title"],
+  [data-slot="context-tool-group-title"] {
+    color: var(--text-base);
+  }
+
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"],
+  [data-slot="context-tool-group-item"],
+  [data-slot="text-part-meta"] {
+    color: var(--text-weak);
+  }
+}
+
 [data-component="reasoning-part"] {
   width: 100%;
-  color: var(--text-base);
+  color: var(--text-weak);
   line-height: var(--line-height-normal);
 
   [data-component="markdown"] {
-    margin-top: 16px;
+    margin-top: 8px;
     font-style: normal;
     font-size: 13px;
-    color: var(--text-weak);
+    color: inherit;
 
     strong,
     b {

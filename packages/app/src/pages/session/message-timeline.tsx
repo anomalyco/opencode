@@ -30,7 +30,7 @@ import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { messageAgentColor } from "@/utils/agent"
-import { isSessionWorking } from "@/utils/session-working"
+import { isSessionActuallyWorking, isSessionWorking } from "@/utils/session-working"
 import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
@@ -275,7 +275,7 @@ export function MessageTimeline(props: {
 
   const activeMessageID = createMemo(() => {
     const status = sessionStatus()
-    if (status.type !== "idle") {
+    if (isSessionActuallyWorking(status, sessionMessages())) {
       const messages = sessionMessages()
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === "user") return messages[i].id

@@ -142,6 +142,8 @@ export const dict: Record<string, string> = {
 
   "ui.message.expand": "Expand message",
   "ui.message.collapse": "Collapse message",
+  "ui.messagePart.reasoning.expand": "Show reasoning",
+  "ui.messagePart.reasoning.collapse": "Hide reasoning",
   "ui.message.copy": "Copy",
   "ui.message.copyMessage": "Copy message",
   "ui.message.forkMessage": "Fork to new session",

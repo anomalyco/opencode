@@ -601,6 +601,7 @@ export function AssistantParts(props: {
   editToolDefaultOpen?: boolean
 }) {
   const data = useData()
+  const i18n = useI18n()
   const emptyParts: PartType[] = []
   const emptyTools: ToolPart[] = []
   const msgs = createMemo(() => index(props.messages))
@@ -628,68 +629,114 @@ export function AssistantParts(props: {
   )
 
   const last = createMemo(() => grouped().at(-1)?.key)
+  const finalIndex = createMemo(() => {
+    const entries = grouped()
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]
+      if (!entry || entry.type !== "part") continue
+      const item = part().get(entry.ref.messageID)?.get(entry.ref.partID)
+      if (item?.type === "text") return i
+    }
+    return -1
+  })
+  const preamble = createMemo(() => {
+    const entries = grouped()
+    const index = finalIndex()
+    if (index === -1) return entries
+    if (index === 0) return [] as PartGroup[]
+    return entries.slice(0, index)
+  })
+  const response = createMemo(() => {
+    const entries = grouped()
+    const index = finalIndex()
+    if (index === -1) return [] as PartGroup[]
+    return entries.slice(index)
+  })
+  const [preambleOpen, setPreambleOpen] = createSignal(false)
+
+  const Entry = (input: { entry: PartGroup }) => {
+    const entry = () => input.entry
+    const entryType = createMemo(() => entry().type)
+
+    return (
+      <Switch>
+        <Match when={entryType() === "context"}>
+          {(() => {
+            const parts = createMemo(
+              () => {
+                const current = entry()
+                if (current.type !== "context") return emptyTools
+                return current.refs
+                  .map((ref) => part().get(ref.messageID)?.get(ref.partID))
+                  .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+              },
+              emptyTools,
+              { equals: same },
+            )
+            const busy = createMemo(() => props.working && last() === entry().key)
+
+            return (
+              <Show when={parts().length > 0}>
+                <ContextToolGroup parts={parts()} busy={busy()} />
+              </Show>
+            )
+          })()}
+        </Match>
+        <Match when={entryType() === "part"}>
+          {(() => {
+            const message = createMemo(() => {
+              const current = entry()
+              if (current.type !== "part") return
+              return msgs().get(current.ref.messageID)
+            })
+            const item = createMemo(() => {
+              const current = entry()
+              if (current.type !== "part") return
+              return part().get(current.ref.messageID)?.get(current.ref.partID)
+            })
+
+            return (
+              <Show when={message()}>
+                <Show when={item()}>
+                  <Part
+                    part={item()!}
+                    message={message()!}
+                    showAssistantCopyPartID={props.showAssistantCopyPartID}
+                    turnDurationMs={props.turnDurationMs}
+                    defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                  />
+                </Show>
+              </Show>
+            )
+          })()}
+        </Match>
+      </Switch>
+    )
+  }
 
   return (
-    <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
-
-        return (
-          <Switch>
-            <Match when={entryType() === "context"}>
-              {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
-                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
-                const busy = createMemo(() => props.working && last() === entryAccessor().key)
-
-                return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} busy={busy()} />
-                  </Show>
-                )
-              })()}
-            </Match>
-            <Match when={entryType() === "part"}>
-              {(() => {
-                const message = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return msgs().get(entry.ref.messageID)
-                })
-                const item = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return part().get(entry.ref.messageID)?.get(entry.ref.partID)
-                })
-
-                return (
-                  <Show when={message()}>
-                    <Show when={item()}>
-                      <Part
-                        part={item()!}
-                        message={message()!}
-                        showAssistantCopyPartID={props.showAssistantCopyPartID}
-                        turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                      />
-                    </Show>
-                  </Show>
-                )
-              })()}
-            </Match>
-          </Switch>
-        )
-      }}
-    </Index>
+    <>
+      <Show when={preamble().length > 0}>
+        <Collapsible data-component="assistant-preamble" open={preambleOpen()} onOpenChange={setPreambleOpen}>
+          <Collapsible.Trigger data-slot="assistant-preamble-toggle">
+            <span data-slot="assistant-preamble-toggle-copy">
+              {preambleOpen() ? i18n.t("ui.messagePart.reasoning.collapse") : i18n.t("ui.messagePart.reasoning.expand")}
+            </span>
+            <Collapsible.Arrow />
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div data-slot="assistant-preamble-content">
+              <For each={preamble()}>{(entry) => <Entry entry={entry} />}</For>
+            </div>
+            <Collapsible.Trigger data-slot="assistant-preamble-toggle" data-position="end">
+              <span data-slot="assistant-preamble-toggle-copy">{i18n.t("ui.messagePart.reasoning.collapse")}</span>
+              <Collapsible.Arrow />
+            </Collapsible.Trigger>
+          </Collapsible.Content>
+        </Collapsible>
+      </Show>
+      <For each={response()}>{(entry) => <Entry entry={entry} />}</For>
+    </>
   )
 }
 

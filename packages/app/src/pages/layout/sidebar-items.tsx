@@ -13,7 +13,7 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
-import { isSessionWorking } from "@/utils/session-working"
+import { isSessionActuallyWorking } from "@/utils/session-working"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, hasProjectPermissions } from "./helpers"
@@ -153,7 +153,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
     const status = sessionStore.session_status[props.session.id]
-    return isSessionWorking(status)
+    return isSessionActuallyWorking(status, sessionStore.message[props.session.id] ?? [])
   })
 
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
