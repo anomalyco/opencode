@@ -29,11 +29,6 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-async function touch(file: string, time: number) {
-  const date = new Date(time)
-  await fs.utimes(file, date, date)
-}
-
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     LSP.defaultLayer,
