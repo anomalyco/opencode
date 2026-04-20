@@ -151,23 +151,6 @@ Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns ma
 
 ---
 
-### list
-
-List files and directories in a given path.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-This tool lists directory contents. It accepts glob patterns to filter results.
-
----
-
 ### lsp (experimental)
 
 Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
@@ -345,7 +328,7 @@ MCP (Model Context Protocol) servers allow you to integrate external tools and s
 
 ## Internals
 
-Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
+Internally, tools like `grep` and `glob` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
 
 ---
 
