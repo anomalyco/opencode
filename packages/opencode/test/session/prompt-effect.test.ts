@@ -150,7 +150,7 @@ const lsp = Layer.succeed(
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-function makeHttp(pluginLayer: Layer.Layer<Plugin.Service> = Plugin.defaultLayer) {
+function makeHttp() {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -159,7 +159,7 @@ function makeHttp(pluginLayer: Layer.Layer<Plugin.Service> = Plugin.defaultLayer
     AgentSvc.defaultLayer,
     Command.defaultLayer,
     Permission.defaultLayer,
-    pluginLayer,
+    Plugin.defaultLayer,
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
     lsp,
