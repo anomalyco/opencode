@@ -50,6 +50,10 @@ export class Remote extends Schema.Class<Remote>("McpRemoteConfig")({
   timeout: Schema.optional(Schema.Number).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
+  insecure: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Disable TLS certificate verification for this remote MCP server. Only use for self-signed certificates in trusted environments.",
+  }),
 }) {
   static readonly zod = zod(this)
 }

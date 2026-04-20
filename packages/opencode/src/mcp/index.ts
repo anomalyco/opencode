@@ -30,9 +30,21 @@ import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Agent } from "node:https"
 
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
+
+const insecureAgent = new Agent({ rejectUnauthorized: false })
+
+/**
+ * Creates a fetch function that skips TLS certificate verification.
+ * Supports both Bun (via `tls` init option) and Node (via `agent`).
+ */
+function createInsecureFetch(): typeof globalThis.fetch {
+  return ((input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(input, Object.assign({}, init, { tls: { rejectUnauthorized: false }, agent: insecureAgent }))) as typeof fetch
+}
 
 export const Resource = z
   .object({
@@ -303,12 +315,16 @@ export const layer = Layer.effect(
         )
       }
 
+      const insecureFetch = mcp.insecure ? createInsecureFetch() : undefined
+      if (mcp.insecure) log.warn("TLS certificate verification disabled", { key })
+
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: insecureFetch,
           }),
         },
         {
@@ -316,6 +332,7 @@ export const layer = Layer.effect(
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: insecureFetch,
           }),
         },
       ]
@@ -766,7 +783,10 @@ export const layer = Layer.effect(
         auth,
       )
 
-      const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), { authProvider })
+      const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
+        authProvider,
+        fetch: mcpConfig.insecure ? createInsecureFetch() : undefined,
+      })
 
       return yield* Effect.tryPromise({
         try: () => {
