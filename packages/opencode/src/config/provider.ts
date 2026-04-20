@@ -102,6 +102,19 @@ export class Info extends Schema.Class<Info>("ProviderConfig")({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        rateLimit: Schema.optional(
+          Schema.Struct({
+            perMinute: Schema.optional(PositiveInt).annotate({
+              description: "Learned or user-set request limit per 60 seconds.",
+            }),
+            perDay: Schema.optional(PositiveInt).annotate({
+              description: "Learned or user-set request limit per 24 hours.",
+            }),
+          }).annotate({
+            description:
+              "Request-rate limits for this provider. Populated automatically the first time a 429 response is received, or can be set manually.",
+          }),
+        ),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),

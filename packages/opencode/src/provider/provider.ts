@@ -28,6 +28,7 @@ import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { RateLimit } from "./rate-limit"
 
 const log = Log.create({ service: "provider" })
 
@@ -1471,11 +1472,14 @@ const layer: Layer.Layer<
             }
           }
 
+          RateLimit.tick(model.providerID)
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
           })
+
+          RateLimit.recordResponse(model.providerID, res.headers)
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
