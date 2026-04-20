@@ -111,8 +111,8 @@
       "light": "#F8F8F8"
     },
     "diffLineNumber": {
-      "dark": "#505050",
-      "light": "#808080"
+      "dark": "textMuted",
+      "light": "#6a6a6a"
     },
     "diffAddedLineNumberBg": {
       "dark": "#0d2818",

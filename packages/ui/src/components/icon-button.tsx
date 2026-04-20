@@ -19,7 +19,7 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
       data-size={split.size || "normal"}
       data-variant={split.variant || "secondary"}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >

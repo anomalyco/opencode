@@ -99,7 +99,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
           {
             ...createDefaultOptions(props.diffStyle),
             ...others,
-            ...(local.preloadedDiff.options ?? {}),
+            ...local.preloadedDiff.options,
           },
           virtualizer,
           virtualMetrics,
@@ -109,7 +109,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
           {
             ...createDefaultOptions(props.diffStyle),
             ...others,
-            ...(local.preloadedDiff.options ?? {}),
+            ...local.preloadedDiff.options,
           },
           workerPool,
         )

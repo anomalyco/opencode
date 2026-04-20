@@ -37,23 +37,23 @@ const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes"
 
 const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
 
-export namespace Protected {
-  /** Directory basenames to skip when scanning the home directory. */
-  export function names(): ReadonlySet<string> {
-    if (process.platform === "darwin") return new Set(DARWIN_HOME)
-    if (process.platform === "win32") return new Set(WIN32_HOME)
-    return new Set()
-  }
-
-  /** Absolute paths that should never be watched, stated, or scanned. */
-  export function paths(): string[] {
-    if (process.platform === "darwin")
-      return [
-        ...DARWIN_HOME.map((n) => path.join(home, n)),
-        ...DARWIN_LIBRARY.map((n) => path.join(home, "Library", n)),
-        ...DARWIN_ROOT,
-      ]
-    if (process.platform === "win32") return WIN32_HOME.map((n) => path.join(home, n))
-    return []
-  }
+/** Directory basenames to skip when scanning the home directory. */
+export function names(): ReadonlySet<string> {
+  if (process.platform === "darwin") return new Set(DARWIN_HOME)
+  if (process.platform === "win32") return new Set(WIN32_HOME)
+  return new Set()
 }
+
+/** Absolute paths that should never be watched, stated, or scanned. */
+export function paths(): string[] {
+  if (process.platform === "darwin")
+    return [
+      ...DARWIN_HOME.map((n) => path.join(home, n)),
+      ...DARWIN_LIBRARY.map((n) => path.join(home, "Library", n)),
+      ...DARWIN_ROOT,
+    ]
+  if (process.platform === "win32") return WIN32_HOME.map((n) => path.join(home, n))
+  return []
+}
+
+export * as Protected from "./protected"
