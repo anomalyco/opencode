@@ -100,8 +100,14 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("yolo", {
+        type: "boolean",
+        default: false,
+        describe: "start with all permission prompts auto-approved (YOLO mode)",
       }),
   handler: async (args) => {
+    if (args.yolo) process.env.OPENCODE_YOLO = "true"
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()

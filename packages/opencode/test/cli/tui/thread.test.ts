@@ -59,6 +59,7 @@ describe("tui thread", () => {
       session: undefined,
       continue: false,
       fork: false,
+      yolo: false,
       port: 0,
       hostname: "127.0.0.1",
       mdns: false,

@@ -40,6 +40,8 @@ describe("parseStreamError", () => {
 
     expect(parsed?.type).toBe("api_error")
     expect(parsed?.message).toBe("Rate limit exceeded. Please wait 1s and try again.")
-    expect(parsed?.isRetryable).toBe(true)
+    if (parsed?.type === "api_error") {
+      expect(parsed.isRetryable).toBe(true)
+    }
   })
 })

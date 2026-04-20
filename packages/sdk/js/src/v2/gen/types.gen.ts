@@ -3407,6 +3407,7 @@ export type SessionUpdateData = {
   body?: {
     title?: string
     permission?: PermissionRuleset
+    permissionMode?: "merge" | "replace"
     time?: {
       archived?: number
     }

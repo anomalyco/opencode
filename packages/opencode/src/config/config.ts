@@ -669,6 +669,10 @@ export const layer = Layer.effect(
           result.permission = mergeDeep(perms, result.permission ?? {})
         }
 
+        if (Flag.OPENCODE_YOLO) {
+          result.permission = { "*": "allow" }
+        }
+
         if (!result.username) result.username = os.userInfo().username
 
         if (result.autoshare === true && !result.share) {

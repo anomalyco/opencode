@@ -74,6 +74,8 @@ delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
 delete process.env["OPENCODE_SERVER_PASSWORD"]
 delete process.env["OPENCODE_SERVER_USERNAME"]
+// Ensure local shell env doesn't leak into tests.
+delete process.env["OPENCODE_YOLO"]
 
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"

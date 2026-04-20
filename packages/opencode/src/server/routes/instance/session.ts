@@ -285,6 +285,7 @@ export const SessionRoutes = lazy(() =>
         z.object({
           title: z.string().optional(),
           permission: Permission.Ruleset.zod.optional(),
+          permissionMode: z.enum(["merge", "replace"]).optional(),
           time: z
             .object({
               archived: z.number().optional(),
@@ -303,9 +304,13 @@ export const SessionRoutes = lazy(() =>
             yield* session.setTitle({ sessionID, title: updates.title })
           }
           if (updates.permission !== undefined) {
+            const next =
+              updates.permissionMode === "replace"
+                ? updates.permission
+                : Permission.merge(current.permission ?? [], updates.permission)
             yield* session.setPermission({
               sessionID,
-              permission: Permission.merge(current.permission ?? [], updates.permission),
+              permission: next,
             })
           }
           if (updates.time?.archived !== undefined) {

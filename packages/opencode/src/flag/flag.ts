@@ -104,4 +104,7 @@ export const Flag = {
   get OPENCODE_CLIENT() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
   },
+  get OPENCODE_YOLO() {
+    return truthy("OPENCODE_YOLO")
+  },
 }
