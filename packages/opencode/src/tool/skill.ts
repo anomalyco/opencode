@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import * as Stream from "effect/Stream"
 import { Ripgrep } from "../file/ripgrep"
 import { Skill } from "../skill"
+import { ConfigMarkdown } from "../config"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
 
@@ -39,6 +40,10 @@ export const SkillTool = Tool.define(
 
           const dir = path.dirname(info.location)
           const base = pathToFileURL(dir).href
+          const content = yield* Effect.tryPromise(() => ConfigMarkdown.parse(info.location)).pipe(
+            Effect.map((md) => md.content.trim()),
+            Effect.catch(() => Effect.succeed(info.content.trim())),
+          )
           const limit = 10
           const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
             Stream.filter((file) => !file.includes("SKILL.md")),
@@ -54,7 +59,7 @@ export const SkillTool = Tool.define(
               `<skill_content name="${info.name}">`,
               `# Skill: ${info.name}`,
               "",
-              info.content.trim(),
+              content,
               "",
               `Base directory for this skill: ${base}`,
               "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",

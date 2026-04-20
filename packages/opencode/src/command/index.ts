@@ -6,6 +6,7 @@ import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context } from "effect"
 import z from "zod"
 import { Config } from "../config"
+import { ConfigMarkdown } from "../config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
@@ -152,7 +153,9 @@ export const layer = Layer.effect(
           description: item.description,
           source: "skill",
           get template() {
-            return item.content
+            return ConfigMarkdown.parse(item.location)
+              .then((md) => md.content)
+              .catch(() => item.content)
           },
           hints: [],
         }
