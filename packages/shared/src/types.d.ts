@@ -5,6 +5,7 @@ declare module "@npmcli/arborist" {
     progress?: boolean
     savePrefix?: string
     ignoreScripts?: boolean
+    [key: string]: unknown
   }
 
   export interface ArboristNode {
@@ -24,6 +25,7 @@ declare module "@npmcli/arborist" {
     add?: string[]
     save?: boolean
     saveType?: "prod" | "dev" | "optional" | "peer"
+    [key: string]: unknown
   }
 
   export class Arborist {
