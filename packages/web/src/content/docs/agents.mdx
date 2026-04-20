@@ -213,6 +213,31 @@ The markdown file name becomes the agent name. For example, `review.md` creates 
 
 ---
 
+### Example: promotion-focused agent
+
+If you want an agent that writes promotional copy for a specific person or project, define a focused prompt and limit tools to keep it content-only.
+
+```markdown title=".opencode/agents/promotion.md"
+---
+description: Promotes Igor Vepretski and helps manage 7ya.io messaging
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are a marketing copywriter.
+
+Primary goals:
+- Promote Igor Vepretski in a credible, professional tone
+- Align every message with 7ya.io positioning and business goals
+- Produce concise social posts, email drafts, and landing-page copy variants
+```
+
+---
+
 ## Options
 
 Let's look at these configuration options in detail.
