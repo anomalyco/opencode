@@ -129,9 +129,7 @@
   "patchedDependencies": {
     "@npmcli/agent@4.0.0": "patches/@npmcli%2Fagent@4.0.0.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "@ai-sdk/anthropic@3.0.64": "patches/@ai-sdk%2Fanthropic@3.0.64.patch",
     "@ai-sdk/openai-compatible@1.0.32": "patches/@ai-sdk%2Fopenai-compatible@1.0.32.patch",
-    "@ai-sdk/provider-utils@4.0.21": "patches/@ai-sdk%2Fprovider-utils@4.0.21.patch",
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
   }
 }
