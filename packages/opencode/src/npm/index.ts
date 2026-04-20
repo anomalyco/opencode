@@ -1,6 +1,7 @@
 export * as Npm from "."
 
 import path from "path"
+import npa from "npm-package-arg"
 import semver from "semver"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
@@ -135,6 +136,17 @@ export const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
+      const name = (() => {
+        try {
+          return npa(pkg).name ?? pkg
+        } catch {
+          return pkg
+        }
+      })()
+
+      if (yield* afs.existsSafe(dir)) {
+        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
@@ -150,13 +162,17 @@ export const layer = Layer.effect(
       if (!canWrite) return
 
       const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
-      yield* Effect.gen(function* () {
-        const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
-        if (!nodeModulesExists) {
-          yield* reify({ add, dir })
-          return
-        }
-      }).pipe(Effect.withSpan("Npm.checkNodeModules"))
+      if (
+        yield* Effect.gen(function* () {
+          const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
+          if (!nodeModulesExists) {
+            yield* reify({ add, dir })
+            return true
+          }
+          return false
+        }).pipe(Effect.withSpan("Npm.checkNodeModules"))
+      )
+        return
 
       yield* Effect.gen(function* () {
         const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))

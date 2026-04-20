@@ -39,6 +39,7 @@ export interface Settings {
     fontSize: number
     mono: string
     sans: string
+    terminal: string
   }
   keybinds: Record<string, string>
   permissions: {
@@ -50,13 +51,17 @@ export interface Settings {
 
 export const monoDefault = "System Mono"
 export const sansDefault = "System Sans"
+export const terminalDefault = "JetBrainsMono Nerd Font Mono"
 
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+const terminalFallback =
+  '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const monoBase = monoFallback
 const sansBase = sansFallback
+const terminalBase = terminalFallback
 
 function input(font: string | undefined) {
   return font ?? ""
@@ -89,6 +94,14 @@ export function sansFontFamily(font: string | undefined) {
   return stack(font, sansBase)
 }
 
+export function terminalInput(font: string | undefined) {
+  return input(font)
+}
+
+export function terminalFontFamily(font: string | undefined) {
+  return stack(font, terminalBase)
+}
+
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
@@ -110,6 +123,7 @@ const defaultSettings: Settings = {
     fontSize: 14,
     mono: "",
     sans: "",
+    terminal: "",
   },
   keybinds: {},
   permissions: {
@@ -232,6 +246,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         uiFont: withFallback(() => store.appearance?.sans, defaultSettings.appearance.sans),
         setUIFont(value: string) {
           setStore("appearance", "sans", value.trim() ? value : "")
+        },
+        terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
+        setTerminalFont(value: string) {
+          setStore("appearance", "terminal", value.trim() ? value : "")
         },
       },
       keybinds: {

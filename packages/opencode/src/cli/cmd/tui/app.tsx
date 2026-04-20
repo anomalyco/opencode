@@ -1,7 +1,6 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
-import * as Terminal from "@tui/util/terminal"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
@@ -120,12 +119,6 @@ export function tui(input: {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
 
-    const mode = await Terminal.getTerminalBackgroundColor()
-
-    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
-    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
-    win32DisableProcessedInput()
-
     const onExit = async () => {
       unguard?.()
       resolve()
@@ -136,6 +129,7 @@ export function tui(input: {
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
+    const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     await render(() => {
       return (

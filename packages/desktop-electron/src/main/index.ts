@@ -28,8 +28,10 @@ const APP_IDS: Record<string, string> = {
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 }
+const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
 app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
-app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"))
+app.setAppUserModelId(appId)
+app.setPath("userData", join(app.getPath("appData"), appId))
 const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
@@ -41,6 +43,7 @@ import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
+import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import type { Server } from "virtual:opencode-server"
 
 const initEmitter = new EventEmitter()
@@ -137,15 +140,6 @@ async function initialize() {
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
 
-  logger.log("spawning sidecar", { url })
-  const { listener, health } = await spawnLocalServer(hostname, port, password)
-  server = listener
-  serverReady.resolve({
-    url,
-    username: "opencode",
-    password,
-  })
-
   const loadingTask = (async () => {
     logger.log("sidecar connection started", { url })
 
@@ -157,8 +151,30 @@ async function initialize() {
     })
 
     if (needsMigration) {
+      const { Database, JsonMigration } = await import("virtual:opencode-server")
+      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
+        progress: (event: { current: number; total: number }) => {
+          const percent = Math.round(event.current / event.total) * 100
+          initEmitter.emit("sqlite", { type: "InProgress", value: percent })
+        },
+      })
+      initEmitter.emit("sqlite", { type: "Done" })
+
+      sqliteDone?.resolve()
+    }
+
+    if (needsMigration) {
       await sqliteDone?.promise
     }
+
+    logger.log("spawning sidecar", { url })
+    const { listener, health } = await spawnLocalServer(hostname, port, password)
+    server = listener
+    serverReady.resolve({
+      url,
+      username: "opencode",
+      password,
+    })
 
     await Promise.race([
       health.wait,

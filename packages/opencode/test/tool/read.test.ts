@@ -394,6 +394,19 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.live("detects attachment media from file contents", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
+      yield* put(path.join(dir, "image.bin"), jpeg)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      expect(result.output).toBe("Image read successfully")
+      expect(result.attachments?.[0].mime).toBe("image/jpeg")
+      expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
+    }),
+  )
+
   it.live("large image files are properly attached without error", () =>
     Effect.gen(function* () {
       const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })
