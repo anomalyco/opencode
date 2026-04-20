@@ -11,7 +11,7 @@ import { indentWithTab } from "@codemirror/commands"
 
 interface SettingsCodeEditorProps {
   title: string
-  extensions: Extension[]
+  extensions: Extension[] | ((path: string) => Extension[])
   load: () => Promise<{ path: string; content: string } | undefined>
   save: (content: string) => Promise<{ content: string } | undefined>
   i18n: {
@@ -114,11 +114,13 @@ export const SettingsCodeEditor: Component<SettingsCodeEditorProps> = (props) =>
         },
       ])
 
+      const extensions = typeof props.extensions === "function" ? props.extensions(state.filePath) : props.extensions
+
       const editorState = EditorState.create({
         doc: state.currentContent,
         extensions: [
           basicSetup,
-          ...props.extensions,
+          ...extensions,
           keymap.of([indentWithTab]),
           saveKeymap,
           themeCompartment.of(editorTheme(isDark())),

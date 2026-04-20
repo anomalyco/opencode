@@ -7,18 +7,23 @@ import { linter, type Diagnostic } from "@codemirror/lint"
 import { parse as parseJsonc, type ParseError as JsoncParseError, printParseErrorCode } from "jsonc-parser"
 import { SettingsCodeEditor } from "./settings-code-editor"
 
-const jsoncLinter = linter((view) => {
-  const errors: JsoncParseError[] = []
-  parseJsonc(view.state.doc.toString(), errors, { allowTrailingComma: true })
-  return errors.map(
-    (e): Diagnostic => ({
-      from: e.offset,
-      to: e.offset + e.length,
-      severity: "error",
-      message: printParseErrorCode(e.error),
-    }),
-  )
-})
+function createJsonLinter(jsonc: boolean) {
+  return linter((view) => {
+    const errors: JsoncParseError[] = []
+    parseJsonc(view.state.doc.toString(), errors, {
+      allowTrailingComma: jsonc,
+      disallowComments: !jsonc,
+    })
+    return errors.map(
+      (e): Diagnostic => ({
+        from: e.offset,
+        to: e.offset + e.length,
+        severity: "error",
+        message: printParseErrorCode(e.error),
+      }),
+    )
+  })
+}
 
 export const SettingsConfig: Component = () => {
   const language = useLanguage()
@@ -27,7 +32,7 @@ export const SettingsConfig: Component = () => {
   return (
     <SettingsCodeEditor
       title={language.t("settings.tab.config")}
-      extensions={[json(), jsoncLinter]}
+      extensions={(path) => [json(), createJsonLinter(path.endsWith(".jsonc"))]}
       load={async () => {
         const result = await globalSDK.client.global.configFile.get()
         if (result.error) throw new Error(formatServerError(result.error))

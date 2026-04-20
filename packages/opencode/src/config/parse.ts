@@ -30,7 +30,6 @@ export function jsonc(text: string, filepath: string, options?: { jsonc?: boolea
     throw new JsonError({
       path: filepath,
       message: issues,
-      input: text,
     })
   }
 

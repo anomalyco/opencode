@@ -2356,9 +2356,6 @@ test("parseManagedPlist handles empty config", async () => {
 })
 
 describe("global raw config and rules", () => {
-  const runGlobal = <A>(fn: (svc: Config.Interface) => Effect.Effect<A>) =>
-    Effect.runPromise(Config.Service.use(fn).pipe(Effect.scoped, Effect.provide(layer)))
-
   async function withGlobalTmp<T>(
     fn: (svc: Config.Interface) => Promise<T> | Effect.Effect<T, any>,
     options?: { init?: (dir: string) => Promise<void> },

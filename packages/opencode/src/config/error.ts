@@ -8,7 +8,6 @@ export const JsonError = NamedError.create(
   z.object({
     path: z.string(),
     message: z.string().optional(),
-    input: z.string().optional(),
   }),
 )
 
