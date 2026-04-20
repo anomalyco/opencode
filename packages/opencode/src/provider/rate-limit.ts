@@ -32,10 +32,8 @@ function ensure(providerID: ProviderID): State {
 
 function prune(s: State) {
   const now = Date.now()
-  const minuteCutoff = now - 60_000
-  const dayCutoff = now - 86_400_000
-  s.minute = s.minute.filter((t) => t > minuteCutoff)
-  s.day = s.day.filter((t) => t > dayCutoff)
+  s.minute = s.minute.filter((t) => t > now - 60_000)
+  s.day = s.day.filter((t) => t > now - 86_400_000)
 }
 
 export function tick(providerID: ProviderID) {
@@ -90,14 +88,13 @@ export function recordResponse(providerID: ProviderID, headers: Headers) {
   const s = ensure(providerID)
   const requests = parseFamily(headers, REQUEST_HEADER_FAMILIES)
   const tokens = parseFamily(headers, TOKEN_HEADER_FAMILIES)
-  if (requests || tokens) {
-    s.headers = { requests, tokens }
-  }
+  const parsed = requests || tokens ? { requests, tokens } : undefined
+  if (parsed) s.headers = parsed
   if (!s.loggedHeaders) {
     s.loggedHeaders = true
     log.info("provider first response headers", {
       providerID,
-      rateLimitHeaders: requests || tokens ? { requests, tokens } : "none",
+      rateLimitHeaders: parsed ?? "none",
       keys: Array.from(headers.keys()).filter((k) => k.includes("ratelimit") || k === "retry-after"),
     })
   }
@@ -140,10 +137,13 @@ function persistLearnedLimits(providerID: ProviderID, perMinute: number, perDay:
 }
 
 function readJsonSafe(p: string): Record<string, any> {
-  if (!fs.existsSync(p)) return {}
-  const raw = fs.readFileSync(p, "utf8")
-  if (raw.trim() === "") return {}
-  return JSON.parse(raw)
+  let raw = ""
+  try {
+    raw = fs.readFileSync(p, "utf8")
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e
+  }
+  return raw.trim() === "" ? {} : JSON.parse(raw)
 }
 
 export type Snapshot = {
