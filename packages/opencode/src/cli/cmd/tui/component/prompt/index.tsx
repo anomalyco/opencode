@@ -1258,14 +1258,13 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box width="100%" flexDirection="row" gap={2} minWidth={0}>
-          <box flexGrow={1} minWidth={0}>
+        <box width="100%" flexDirection="row" minWidth={0}>
+          <box flexGrow={1} flexShrink={0}>
             <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
               <box
                 flexDirection="row"
                 gap={1}
                 flexGrow={1}
-                minWidth={0}
                 justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
               >
                 <box flexShrink={0} flexDirection="row" gap={1}>
@@ -1333,7 +1332,7 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text} wrapMode="none">
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text} wrapMode="none" flexShrink={0}>
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
@@ -1343,6 +1342,7 @@ export function Prompt(props: PromptProps) {
             </Show>
           </box>
           <Show when={status().type !== "retry"}>
+            <box width={2} flexShrink={0} />
             <box gap={2} flexDirection="row" flexShrink={1} minWidth={0}>
               <Switch>
                 <Match when={store.mode === "normal"}>
