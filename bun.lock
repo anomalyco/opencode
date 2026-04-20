@@ -661,6 +661,7 @@
   "patchedDependencies": {
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
+    "@npmcli/agent@4.0.0": "patches/@npmcli%2Fagent@4.0.0.patch",
   },
   "overrides": {
     "@types/bun": "catalog:",
