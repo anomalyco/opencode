@@ -179,14 +179,20 @@ function normalizeMessages(
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        const reasoningParts = msg.content.filter((part): part is (typeof msg.content)[number] & { type: "reasoning" } => {
+          return part.type === "reasoning"
+        })
+        const reasoningText = reasoningParts.map((part) => part.text).join("")
+        const encryptedContent = reasoningParts.reduce<string | undefined>((result, part) => {
+          const next = part.providerOptions?.openai?.reasoningEncryptedContent
+          return typeof next === "string" && next ? next : result
+        }, undefined)
 
         // Filter out reasoning parts from content
-        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        const filteredContent = msg.content.filter((part) => part.type !== "reasoning")
 
         // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-        if (reasoningText) {
+        if (reasoningText || encryptedContent) {
           return {
             ...msg,
             content: filteredContent,
@@ -194,7 +200,8 @@ function normalizeMessages(
               ...msg.providerOptions,
               openaiCompatible: {
                 ...msg.providerOptions?.openaiCompatible,
-                [field]: reasoningText,
+                ...(reasoningText ? { [field]: reasoningText } : {}),
+                ...(encryptedContent ? { encrypted_content: encryptedContent } : {}),
               },
             },
           }

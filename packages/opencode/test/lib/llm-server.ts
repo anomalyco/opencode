@@ -10,7 +10,7 @@ type Line = Record<string, unknown>
 
 type Flow =
   | { type: "text"; text: string }
-  | { type: "reason"; text: string }
+  | { type: "reason"; text: string; encryptedContent?: string }
   | { type: "tool-start"; id: string; name: string }
   | { type: "tool-args"; text: string }
   | { type: "usage"; usage: Usage }
@@ -88,8 +88,13 @@ function textLine(value: string) {
   return chunk({ delta: { content: value } })
 }
 
-function reasonLine(value: string) {
-  return chunk({ delta: { reasoning_content: value } })
+function reasonLine(value: string, encryptedContent?: string) {
+  return chunk({
+    delta: {
+      reasoning_content: value,
+      ...(encryptedContent ? { encrypted_content: encryptedContent } : {}),
+    },
+  })
 }
 
 function finishLine(reason: string, usage?: Usage) {
@@ -191,12 +196,12 @@ function responseMessageDone(id: string, seq: number) {
   }
 }
 
-function responseReason(id: string, seq: number) {
+function responseReason(id: string, seq: number, encryptedContent?: string) {
   return {
     type: "response.output_item.added",
     sequence_number: seq,
     output_index: 0,
-    item: { type: "reasoning", id, encrypted_content: null },
+    item: { type: "reasoning", id, encrypted_content: encryptedContent ?? null },
   }
 }
 
@@ -219,12 +224,12 @@ function responseReasonText(id: string, text: string, seq: number) {
   }
 }
 
-function responseReasonDone(id: string, seq: number) {
+function responseReasonDone(id: string, seq: number, encryptedContent?: string) {
   return {
     type: "response.output_item.done",
     sequence_number: seq,
     output_index: 0,
-    item: { type: "reasoning", id, encrypted_content: null },
+    item: { type: "reasoning", id, encrypted_content: encryptedContent ?? null },
   }
 }
 
@@ -300,7 +305,14 @@ function flow(item: Sse) {
     }
 
     if (delta && "reasoning_content" in delta && typeof delta.reasoning_content === "string") {
-      out.push({ type: "reason", text: delta.reasoning_content })
+      out.push({
+        type: "reason",
+        text: delta.reasoning_content,
+        encryptedContent:
+          "encrypted_content" in delta && typeof delta.encrypted_content === "string"
+            ? delta.encrypted_content
+            : undefined,
+      })
     }
 
     if (delta && "tool_calls" in delta && Array.isArray(delta.tool_calls)) {
@@ -333,6 +345,7 @@ function responses(item: Sse, model: string) {
   let seq = 1
   let msg: string | undefined
   let reason: string | undefined
+  let encryptedReason: string | undefined
   let hasMsg = false
   let hasReason = false
   let call:
@@ -361,10 +374,11 @@ function responses(item: Sse, model: string) {
 
     if (part.type === "reason") {
       reason ||= "rs_1"
+      encryptedReason = part.encryptedContent ?? encryptedReason
       if (!hasReason) {
         hasReason = true
         seq += 1
-        lines.push(responseReason(reason, seq))
+        lines.push(responseReason(reason, seq, encryptedReason))
         seq += 1
         lines.push(responseReasonPart(reason, seq))
       }
@@ -397,7 +411,7 @@ function responses(item: Sse, model: string) {
   }
   if (reason) {
     seq += 1
-    lines.push(responseReasonDone(reason, seq))
+    lines.push(responseReasonDone(reason, seq, encryptedReason))
   }
   if (call && !item.hang && !item.error) {
     seq += 1
@@ -470,8 +484,8 @@ export class Reply {
     return this
   }
 
-  reason(value: string) {
-    this.#tail = [...this.#tail, reasonLine(value)]
+  reason(value: string, encryptedContent?: string) {
+    this.#tail = [...this.#tail, reasonLine(value, encryptedContent)]
     return this
   }
 
@@ -611,7 +625,10 @@ namespace TestLLMServer {
     readonly text: (value: string, opts?: { usage?: Usage }) => Effect.Effect<void>
     readonly tool: (name: string, input: unknown) => Effect.Effect<void>
     readonly toolHang: (name: string, input: unknown) => Effect.Effect<void>
-    readonly reason: (value: string, opts?: { text?: string; usage?: Usage }) => Effect.Effect<void>
+    readonly reason: (
+      value: string,
+      opts?: { text?: string; usage?: Usage; encryptedContent?: string },
+    ) => Effect.Effect<void>
     readonly fail: (message?: unknown) => Effect.Effect<void>
     readonly error: (status: number, body: unknown) => Effect.Effect<void>
     readonly hang: Effect.Effect<void>
@@ -730,8 +747,11 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         toolHang: Effect.fn("TestLLMServer.toolHang")(function* (name: string, input: unknown) {
           queue(reply().pendingTool(name, input).hang().item())
         }),
-        reason: Effect.fn("TestLLMServer.reason")(function* (value: string, opts?: { text?: string; usage?: Usage }) {
-          const out = reply().reason(value)
+        reason: Effect.fn("TestLLMServer.reason")(function* (
+          value: string,
+          opts?: { text?: string; usage?: Usage; encryptedContent?: string },
+        ) {
+          const out = reply().reason(value, opts?.encryptedContent)
           if (opts?.text) out.text(opts.text)
           if (opts?.usage) out.usage(opts.usage)
           queue(out.stop().item())

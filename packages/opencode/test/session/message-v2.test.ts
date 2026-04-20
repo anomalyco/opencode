@@ -949,6 +949,108 @@ describe("session.message-v2.toModelMessage", () => {
   })
 })
 
+describe("session.message-v2.previousResponseId", () => {
+  function stepFinish(messageID: string, id: string, metadata?: Record<string, unknown>): MessageV2.StepFinishPart {
+    return {
+      ...basePart(messageID, id),
+      type: "step-finish",
+      reason: "stop",
+      cost: 0,
+      metadata,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    }
+  }
+
+  test("returns the latest matching response id", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("m-user"),
+        parts: [{ ...basePart("m-user", "u1"), type: "text", text: "hello" }] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo("m-assistant-1", "m-user", undefined, {
+          providerID: model.providerID,
+          modelID: model.id,
+        }),
+        parts: [stepFinish("m-assistant-1", "s1", { openai: { responseId: "resp-old" } })],
+      },
+      {
+        info: assistantInfo("m-assistant-2", "m-user", undefined, {
+          providerID: model.providerID,
+          modelID: model.id,
+        }),
+        parts: [
+          stepFinish("m-assistant-2", "s2", { openai: { responseId: "resp-mid" } }),
+          stepFinish("m-assistant-2", "s3", { openai: { responseId: "resp-latest" } }),
+        ],
+      },
+    ]
+
+    expect(MessageV2.previousResponseId({ messages: input, model })).toBe("resp-latest")
+  })
+
+  test("skips mismatched models and missing metadata", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("m-assistant-1", "m-user", undefined, {
+          providerID: model.providerID,
+          modelID: model.id,
+        }),
+        parts: [stepFinish("m-assistant-1", "s1", { openai: { responseId: "resp-match" } })],
+      },
+      {
+        info: assistantInfo("m-assistant-2", "m-user", undefined, {
+          providerID: model.providerID,
+          modelID: ModelID.make("other-model"),
+        }),
+        parts: [stepFinish("m-assistant-2", "s2", { openai: { responseId: "resp-other-model" } })],
+      },
+      {
+        info: assistantInfo("m-assistant-3", "m-user", undefined, {
+          providerID: ProviderID.make("other-provider"),
+          modelID: model.id,
+        }),
+        parts: [stepFinish("m-assistant-3", "s3", { openai: { responseId: "resp-other-provider" } })],
+      },
+      {
+        info: assistantInfo("m-assistant-4", "m-user", undefined, {
+          providerID: model.providerID,
+          modelID: model.id,
+        }),
+        parts: [stepFinish("m-assistant-4", "s4")],
+      },
+    ]
+
+    expect(MessageV2.previousResponseId({ messages: input, model })).toBe("resp-match")
+  })
+
+  test("returns undefined when no matching response id exists", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("m-assistant-1", "m-user", undefined, {
+          providerID: model.providerID,
+          modelID: model.id,
+        }),
+        parts: [
+          {
+            ...basePart("m-assistant-1", "r1"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0, end: 1 },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.previousResponseId({ messages: input, model })).toBeUndefined()
+  })
+})
+
 describe("session.message-v2.fromError", () => {
   test("serializes context_length_exceeded as ContextOverflowError", () => {
     const input = {

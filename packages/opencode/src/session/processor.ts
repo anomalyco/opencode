@@ -1,5 +1,6 @@
 import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
+import { mergeDeep } from "remeda"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Config } from "@/config"
@@ -71,6 +72,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  pendingReasoningEncryptedContent: string | undefined
 }
 
 type StreamEvent = Event
@@ -121,6 +123,7 @@ export const layer: Layer.Layer<
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        pendingReasoningEncryptedContent: undefined,
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -130,6 +133,56 @@ export const layer: Layer.Layer<
           providerID: input.model.providerID,
           aborted,
         })
+
+      const mergeMetadata = (existing?: Record<string, any>, next?: Record<string, any>) => {
+        if (!existing) return next
+        if (!next) return existing
+        return mergeDeep(existing, next)
+      }
+
+      const encryptedContentFromRaw = (rawValue: unknown) => {
+        const parsed = (() => {
+          if (typeof rawValue === "string") {
+            try {
+              return JSON.parse(rawValue)
+            } catch {
+              return
+            }
+          }
+          return rawValue
+        })()
+        if (!isRecord(parsed) || !Array.isArray(parsed.choices)) return {}
+        const choice = parsed.choices[0]
+        if (!isRecord(choice) || !isRecord(choice.delta)) return {}
+        const delta = choice.delta
+        return {
+          encryptedContent:
+            typeof delta.encrypted_content === "string" && delta.encrypted_content ? delta.encrypted_content : undefined,
+          reasoningContent:
+            typeof delta.reasoning_content === "string"
+              ? delta.reasoning_content
+              : typeof delta.reasoning === "string"
+                ? delta.reasoning
+                : undefined,
+        }
+      }
+
+      const attachEncryptedContent = Effect.fn("SessionProcessor.attachEncryptedContent")(function* (encrypted: string) {
+        const active = Object.values(ctx.reasoningMap)
+        if (active.length === 0) return false
+
+        for (const part of active) {
+          part.metadata = mergeMetadata(part.metadata, {
+            openai: {
+              ...part.metadata?.openai,
+              reasoningEncryptedContent: encrypted,
+            },
+          })
+          yield* session.updatePart(part)
+        }
+
+        return true
+      })
 
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
@@ -228,15 +281,26 @@ export const layer: Layer.Layer<
               type: "reasoning",
               text: "",
               time: { start: Date.now() },
-              metadata: value.providerMetadata,
+              metadata: mergeMetadata(
+                value.providerMetadata,
+                ctx.pendingReasoningEncryptedContent
+                  ? {
+                      openai: {
+                        reasoningEncryptedContent: ctx.pendingReasoningEncryptedContent,
+                      },
+                    }
+                  : undefined,
+              ),
             }
+            ctx.pendingReasoningEncryptedContent = undefined
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
           case "reasoning-delta":
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
-            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            if (value.providerMetadata)
+              ctx.reasoningMap[value.id].metadata = mergeMetadata(ctx.reasoningMap[value.id].metadata, value.providerMetadata)
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
@@ -251,10 +315,22 @@ export const layer: Layer.Layer<
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
             ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
-            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            if (value.providerMetadata)
+              ctx.reasoningMap[value.id].metadata = mergeMetadata(ctx.reasoningMap[value.id].metadata, value.providerMetadata)
             yield* session.updatePart(ctx.reasoningMap[value.id])
             delete ctx.reasoningMap[value.id]
+            ctx.pendingReasoningEncryptedContent = undefined
             return
+
+          case "raw": {
+            const encrypted = encryptedContentFromRaw(value.rawValue)
+            if (!encrypted.encryptedContent) return
+            const attached = yield* attachEncryptedContent(encrypted.encryptedContent)
+            if (!attached && encrypted.reasoningContent) {
+              ctx.pendingReasoningEncryptedContent = encrypted.encryptedContent
+            }
+            return
+          }
 
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
@@ -372,6 +448,7 @@ export const layer: Layer.Layer<
               type: "step-finish",
               tokens: usage.tokens,
               cost: usage.cost,
+              metadata: value.providerMetadata,
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
@@ -491,6 +568,7 @@ export const layer: Layer.Layer<
           })
         }
         ctx.reasoningMap = {}
+        ctx.pendingReasoningEncryptedContent = undefined
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),

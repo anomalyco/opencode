@@ -302,6 +302,7 @@ export const layer: Layer.Layer<
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
+      const previousResponseId = MessageV2.previousResponseId({ messages: msgs, model })
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {
         id: MessageID.ascending(),
@@ -349,6 +350,7 @@ export const layer: Layer.Layer<
           },
         ],
         model,
+        options: previousResponseId ? { previousResponseId } : undefined,
       })
 
       if (result === "compact") {

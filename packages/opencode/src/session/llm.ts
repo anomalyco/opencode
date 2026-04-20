@@ -42,6 +42,7 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  options?: Record<string, any>
 }
 
 export type StreamRequest = StreamInput & {
@@ -139,6 +140,7 @@ const live: Layer.Layer<
         mergeDeep(input.model.options),
         mergeDeep(input.agent.options),
         mergeDeep(variant),
+        mergeDeep(input.options ?? {}),
       )
       if (isOpenaiOauth) {
         options.instructions = system.join("\n")
@@ -365,6 +367,7 @@ const live: Layer.Layer<
         tools,
         toolChoice: input.toolChoice,
         maxOutputTokens: params.maxOutputTokens,
+        includeRawChunks: shouldIncludeRawChunks(input.model),
         abortSignal: input.abort,
         headers: {
           ...(input.model.providerID.startsWith("opencode")
@@ -448,6 +451,14 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+function shouldIncludeRawChunks(model: Provider.Model) {
+  return (
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    typeof model.capabilities.interleaved === "object" &&
+    model.capabilities.interleaved.field === "reasoning_content"
+  )
 }
 
 // Check if messages contain any tool-call content

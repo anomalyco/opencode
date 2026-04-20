@@ -412,6 +412,117 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
   ),
 )
 
+it.live("session.processor effect tests persist encrypted reasoning metadata from raw chunks", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.reason("think", { text: "done", encryptedContent: "encrypted-think" })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const base = yield* provider.getModel(ref.providerID, ref.modelID)
+        const mdl = {
+          ...base,
+          capabilities: {
+            ...base.capabilities,
+            reasoning: true,
+            interleaved: { field: "reasoning_content" as const },
+          },
+        }
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const reasoning = parts.find((part): part is MessageV2.ReasoningPart => part.type === "reasoning")
+        const text = parts.find((part): part is MessageV2.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(reasoning?.text).toBe("think")
+        expect(reasoning?.metadata?.openai?.reasoningEncryptedContent).toBe("encrypted-think")
+        expect(text?.text).toBe("done")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests keep encrypted reasoning metadata when a tool call follows", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(reply().reason("think", "encrypted-think").tool("bash", { cmd: "pwd" }))
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason then tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const base = yield* provider.getModel(ref.providerID, ref.modelID)
+        const mdl = {
+          ...base,
+          capabilities: {
+            ...base.capabilities,
+            reasoning: true,
+            interleaved: { field: "reasoning_content" as const },
+          },
+        }
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason then tool" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const reasoning = parts.find((part): part is MessageV2.ReasoningPart => part.type === "reasoning")
+        const tool = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(reasoning?.metadata?.openai?.reasoningEncryptedContent).toBe("encrypted-think")
+        expect(tool?.tool).toBe("bash")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests reset reasoning state across retries", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

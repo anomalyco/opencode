@@ -256,6 +256,7 @@ export const StepFinishPart = PartBase.extend({
   reason: z.string(),
   snapshot: z.string().optional(),
   cost: z.number(),
+  metadata: z.record(z.string(), z.any()).optional(),
   tokens: z.object({
     total: z.number().optional(),
     input: z.number(),
@@ -838,6 +839,22 @@ export function toModelMessages(
   options?: { stripMedia?: boolean },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
+}
+
+export function previousResponseId(input: { messages: WithParts[]; model: Provider.Model }) {
+  for (let i = input.messages.length - 1; i >= 0; i--) {
+    const msg = input.messages[i]
+    if (msg.info.role !== "assistant") continue
+    if (msg.info.providerID !== input.model.providerID) continue
+    if (msg.info.modelID !== input.model.id) continue
+
+    for (let j = msg.parts.length - 1; j >= 0; j--) {
+      const part = msg.parts[j]
+      if (part.type !== "step-finish") continue
+      const responseId = part.metadata?.openai?.responseId
+      if (typeof responseId === "string" && responseId) return responseId
+    }
+  }
 }
 
 export function page(input: { sessionID: SessionID; limit: number; before?: string }) {
