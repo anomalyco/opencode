@@ -346,6 +346,17 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     })
   }
 
+  if (options.thinking) {
+    while (msgs.length > 0) {
+      const last = msgs[msgs.length - 1]
+      if (last.role !== "assistant") break
+      if (typeof last.content === "string") { msgs = msgs.slice(0, -1); continue }
+      if (!Array.isArray(last.content)) break
+      if (last.content.some((p) => p.type === "tool-call")) break
+      msgs = msgs.slice(0, -1)
+    }
+  }
+
   return msgs
 }
 
