@@ -9,6 +9,7 @@ import { Config } from "../config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
+import PROMPT_LOOP from "./template/loop.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 
 type State = {
@@ -59,6 +60,8 @@ export function hints(template: string) {
 
 export const Default = {
   INIT: "init",
+  LOOP: "loop",
+  PROACTIVE: "proactive",
   REVIEW: "review",
 } as const
 
@@ -99,6 +102,24 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.LOOP] = {
+        name: Default.LOOP,
+        description: "run a prompt repeatedly until it finishes or you stop it",
+        source: "command",
+        get template() {
+          return PROMPT_LOOP
+        },
+        hints: ["$ARGUMENTS"],
+      }
+      commands[Default.PROACTIVE] = {
+        name: Default.PROACTIVE,
+        description: "alias for /loop",
+        source: "command",
+        get template() {
+          return PROMPT_LOOP
+        },
+        hints: ["$ARGUMENTS"],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
