@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Kurumsal",
   "nav.zen": "Zen",
   "nav.login": "Giriş",
-  "nav.free": "Ücretsiz",
+  "nav.free": "İndir",
   "nav.home": "Ana sayfa",
   "nav.openMenu": "Menüyü aç",
   "nav.getStartedFree": "Ücretsiz başla",
@@ -566,6 +566,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "Kullanım limiti belirlenmedi.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Şu anki kullanım",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "$",
+
+  "workspace.redeem.title": "Kupon Kullan",
+  "workspace.redeem.subtitle": "Kredi veya avantajlardan yararlanmak için bir kupon kodu kullanın.",
+  "workspace.redeem.placeholder": "Kupon kodunu girin",
+  "workspace.redeem.redeem": "Kullan",
+  "workspace.redeem.redeeming": "Kullanılıyor...",
+  "workspace.redeem.success": "Kupon başarıyla kullanıldı.",
 
   "workspace.reload.title": "Otomatik Yeniden Yükleme",
   "workspace.reload.disabled.before": "Otomatik yeniden yükleme:",

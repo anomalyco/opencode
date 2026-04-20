@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "エンタープライズ",
   "nav.zen": "Zen",
   "nav.login": "ログイン",
-  "nav.free": "無料",
+  "nav.free": "ダウンロード",
   "nav.home": "ホーム",
   "nav.openMenu": "メニューを開く",
   "nav.getStartedFree": "無料ではじめる",
@@ -563,6 +563,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "使用制限は設定されていません。",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "現在の使用状況（",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "）は $",
+
+  "workspace.redeem.title": "クーポンを利用",
+  "workspace.redeem.subtitle": "クーポンコードを利用して、クレジットや特典を受け取ります。",
+  "workspace.redeem.placeholder": "クーポンコードを入力",
+  "workspace.redeem.redeem": "利用する",
+  "workspace.redeem.redeeming": "利用中...",
+  "workspace.redeem.success": "クーポンを利用しました。",
 
   "workspace.reload.title": "自動チャージ",
   "workspace.reload.disabled.before": "自動チャージは",
