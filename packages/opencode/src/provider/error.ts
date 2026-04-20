@@ -111,9 +111,22 @@ export type ParsedStreamError =
   | {
       type: "api_error"
       message: string
-      isRetryable: false
+      isRetryable: boolean
       responseBody: string
     }
+
+function parseRetryAfterSeconds(message: string): number | undefined {
+  // Common pattern across OpenAI-compatible providers: "Please try again in 915ms" or "... in 2s".
+  const match = /try again in\s+(\d+)\s*(ms|s)/i.exec(message)
+  if (!match) return
+  const value = Number(match[1])
+  if (!Number.isFinite(value)) return
+  return match[2].toLowerCase() === "ms" ? Math.ceil(value / 1000) : value
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null
+}
 
 export function parseStreamError(input: unknown): ParsedStreamError | undefined {
   const body = json(input)
@@ -121,6 +134,34 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
+
+  // Some OpenAI-compatible providers (incl. RWTH) can send a nested OpenAI-style error object
+  // inside an SSE "type":"error" envelope.
+  // Example:
+  // {"type":"error","error":{"message":"...","type":"rate_limit_error","code":"user_quota_exceeded"}}
+  const nested = body?.error
+  if (isRecord(nested)) {
+    const nestedMessage = typeof nested.message === "string" ? nested.message : undefined
+    const nestedCode = typeof nested.code === "string" ? nested.code : undefined
+    const nestedType = typeof nested.type === "string" ? nested.type : undefined
+    const retryAfterSeconds = nestedMessage ? parseRetryAfterSeconds(nestedMessage) : undefined
+
+    if (
+      nestedCode === "insufficient_quota" ||
+      nestedCode === "user_quota_exceeded" ||
+      nestedType === "rate_limit_error"
+    ) {
+      return {
+        type: "api_error",
+        message: retryAfterSeconds
+          ? `Rate limit exceeded. Please wait ${retryAfterSeconds}s and try again.`
+          : "Rate limit exceeded. Please wait and try again.",
+        // Retry when the provider indicates this might be transient (wait time present).
+        isRetryable: retryAfterSeconds !== undefined,
+        responseBody,
+      }
+    }
+  }
 
   switch (body?.error?.code) {
     case "context_length_exceeded":
