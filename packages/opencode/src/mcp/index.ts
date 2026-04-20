@@ -130,7 +130,12 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
 
 // Convert MCP tool definition to AI SDK Tool type
-function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
+function convertMcpTool(
+  mcpTool: MCPToolDef,
+  getClient: () => MCPClient | undefined,
+  clientName: string,
+  timeout?: number,
+): Tool {
   const inputSchema = mcpTool.inputSchema
 
   // Spread first, then override type to ensure it's always "object"
@@ -145,6 +150,10 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
     execute: async (args: unknown) => {
+      const client = getClient()
+      if (!client) {
+        throw new Error(`MCP server \"${clientName}\" is not connected`)
+      }
       return client.callTool(
         {
           name: mcpTool.name,
@@ -473,6 +482,27 @@ export const layer = Layer.effect(
     )
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+      const prevOnClose = client.onclose
+      client.onclose = () => {
+        prevOnClose?.()
+        if (s.clients[name] !== client) return
+
+        log.warn("mcp client disconnected", { name })
+        delete s.clients[name]
+        delete s.defs[name]
+        s.status[name] = { status: "failed", error: "Connection closed" }
+        void bridge.promise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+      }
+
+      const prevOnError = client.onerror
+      client.onerror = (error) => {
+        prevOnError?.(error)
+        log.error("mcp client transport error", {
+          name,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         log.info("tools list changed notification received", { server: name })
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
@@ -657,7 +687,12 @@ export const layer = Layer.effect(
 
             const timeout = entry?.timeout ?? defaultTimeout
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(
+                mcpTool,
+                () => s.clients[clientName],
+                clientName,
+                timeout,
+              )
             }
           }),
         { concurrency: "unbounded" },
