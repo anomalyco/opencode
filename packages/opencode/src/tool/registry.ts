@@ -115,6 +115,8 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const contexttool = yield* ContextUsageTool
+    const newsessiontool = yield* NewSessionTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -204,8 +206,8 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
-          context: Tool.init(ContextUsageTool),
-          session: Tool.init(NewSessionTool),
+          context: Tool.init(contexttool),
+          session: Tool.init(newsessiontool),
         })
 
         return {
