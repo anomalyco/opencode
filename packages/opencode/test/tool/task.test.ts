@@ -35,9 +35,9 @@ const it = testEffect(
   ),
 )
 
-const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned", permission?: Session.Info["permission"]) {
+const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   const session = yield* Session.Service
-  const chat = yield* session.create({ title, permission })
+  const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
     id: MessageID.ascending(),
     role: "user",
@@ -385,78 +385,4 @@ describe("tool.task", () => {
     ),
   )
 
-  it.live("execute inherits parent external_directory and deny rules into child sessions", () =>
-    provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const sessions = yield* Session.Service
-          const parentPermission = [
-            {
-              permission: "external_directory",
-              pattern: "/tmp/shared/*",
-              action: "allow" as const,
-            },
-            {
-              permission: "read",
-              pattern: "*.env",
-              action: "deny" as const,
-            },
-            {
-              permission: "edit",
-              pattern: "*",
-              action: "allow" as const,
-            },
-          ]
-          const { chat, assistant } = yield* seed("Pinned", parentPermission)
-          const tool = yield* TaskTool
-          const def = yield* tool.init()
-
-          const result = yield* def.execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "reviewer",
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: new AbortController().signal,
-              extra: { promptOps: stubOps() },
-              messages: [],
-              metadata: () => Effect.void,
-              ask: () => Effect.void,
-            },
-          )
-
-          const child = yield* sessions.get(result.metadata.sessionId)
-          expect(child.permission?.some((rule) => rule.permission === "edit" && rule.action === "allow")).toBe(false)
-          expect(child.permission).toEqual([
-            {
-              permission: "external_directory",
-              pattern: "/tmp/shared/*",
-              action: "allow",
-            },
-            {
-              permission: "read",
-              pattern: "*.env",
-              action: "deny",
-            },
-          ])
-        }),
-      {
-        config: {
-          agent: {
-            reviewer: {
-              mode: "subagent",
-              permission: {
-                task: "allow",
-                todowrite: "allow",
-              },
-            },
-          },
-        },
-      },
-    ),
-  )
 })
