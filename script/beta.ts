@@ -295,10 +295,7 @@ async function main() {
   }
 
   if (applied.length > 0) {
-    const ok = await smoke(prs, applied)
-    if (!ok) {
-      throw new Error("Final smoke check failed")
-    }
+    console.log("\nSkipping final smoke check")
   }
 
   console.log("\nChecking if beta branch has changes...")

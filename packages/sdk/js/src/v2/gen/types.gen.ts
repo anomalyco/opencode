@@ -885,6 +885,7 @@ export type CompactionPart = {
   type: "compaction"
   auto: boolean
   overflow?: boolean
+  tail_start_id?: string
 }
 
 export type Part =
@@ -1642,6 +1643,14 @@ export type Config = {
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean
+    /**
+     * Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)
+     */
+    tail_turns?: number
+    /**
+     * Token budget for retained recent turn spans during compaction
+     */
+    tail_tokens?: number
     /**
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
