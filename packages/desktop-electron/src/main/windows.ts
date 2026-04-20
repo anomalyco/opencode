@@ -4,11 +4,6 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 
-type Globals = {
-  updaterEnabled: boolean
-  deepLinks?: string[]
-}
-
 const root = dirname(fileURLToPath(import.meta.url))
 
 let backgroundColor: string | undefined
@@ -54,7 +49,7 @@ export function setDockIcon() {
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
-export function createMainWindow(globals: Globals) {
+export function createMainWindow() {
   const state = windowState({
     defaultWidth: 1280,
     defaultHeight: 800,
@@ -84,15 +79,16 @@ export function createMainWindow(globals: Globals) {
         }
       : {}),
     webPreferences: {
-      preload: join(root, "../preload/index.mjs"),
-      sandbox: false,
+      preload: join(root, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     },
   })
 
   state.manage(win)
   loadWindow(win, "index.html")
   wireZoom(win)
-  injectGlobals(win, globals)
 
   win.once("ready-to-show", () => {
     win.show()
@@ -101,7 +97,7 @@ export function createMainWindow(globals: Globals) {
   return win
 }
 
-export function createLoadingWindow(globals: Globals) {
+export function createLoadingWindow() {
   const mode = tone()
   const win = new BrowserWindow({
     width: 640,
@@ -120,13 +116,14 @@ export function createLoadingWindow(globals: Globals) {
         }
       : {}),
     webPreferences: {
-      preload: join(root, "../preload/index.mjs"),
-      sandbox: false,
+      preload: join(root, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     },
   })
 
   loadWindow(win, "loading.html")
-  injectGlobals(win, globals)
 
   return win
 }
@@ -141,20 +138,6 @@ function loadWindow(win: BrowserWindow, html: string) {
 
   void win.loadFile(join(root, `../renderer/${html}`))
 }
-
-function injectGlobals(win: BrowserWindow, globals: Globals) {
-  win.webContents.on("dom-ready", () => {
-    const deepLinks = globals.deepLinks ?? []
-    const data = {
-      updaterEnabled: globals.updaterEnabled,
-      deepLinks: Array.isArray(deepLinks) ? deepLinks.splice(0) : deepLinks,
-    }
-    void win.webContents.executeJavaScript(
-      `window.__OPENCODE__ = Object.assign(window.__OPENCODE__ ?? {}, ${JSON.stringify(data)})`,
-    )
-  })
-}
-
 function wireZoom(win: BrowserWindow) {
   win.webContents.setZoomFactor(1)
   win.webContents.on("zoom-changed", () => {
