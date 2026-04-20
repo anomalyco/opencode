@@ -5,6 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import * as Filesystem from "../../../../util/filesystem"
 import * as Process from "../../../../util/process"
+import { sniffAttachmentMime } from "../../../../util/media"
 
 // Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
 const getWhich = lazy(async () => {
@@ -93,13 +94,19 @@ export async function read(): Promise<Content | undefined> {
   if (os === "linux") {
     const wayland = await Process.run(["wl-paste", "-t", "image/png"], { nothrow: true })
     if (wayland.stdout.byteLength > 0) {
-      return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
+      const mime = sniffAttachmentMime(new Uint8Array(wayland.stdout), "text/plain")
+      if (mime === "image/png") {
+        return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
+      }
     }
     const x11 = await Process.run(["xclip", "-selection", "clipboard", "-t", "image/png", "-o"], {
       nothrow: true,
     })
     if (x11.stdout.byteLength > 0) {
-      return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
+      const mime = sniffAttachmentMime(new Uint8Array(x11.stdout), "text/plain")
+      if (mime === "image/png") {
+        return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
+      }
     }
   }
 
