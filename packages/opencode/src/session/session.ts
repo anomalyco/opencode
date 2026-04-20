@@ -342,6 +342,12 @@ export const Event = {
       error: MessageV2.Assistant.fields.error,
     }),
   ),
+  TurnCompleted: BusEvent.define(
+    "session.turn.completed",
+    z.object({
+      sessionID: SessionID.zod,
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {

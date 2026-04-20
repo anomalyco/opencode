@@ -1621,6 +1621,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           continue
         }
 
+        // Notify plugins that the turn is complete
+        yield* bus.publish(Session.Event.TurnCompleted, { sessionID })
+
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
