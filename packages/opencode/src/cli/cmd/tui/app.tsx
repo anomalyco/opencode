@@ -1,7 +1,7 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import { createCliRenderer, CliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
@@ -86,6 +86,24 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   }
 }
 
+/**
+ * Some terminals (e.g. Ghostty) incorrectly report their appearance via CSI
+ * mode 997 — responding "light" despite having a dark background color. When
+ * CSI and the actual OSC 10/11 background luminance disagree, trust the color.
+ */
+function resolveThemeMode(renderer: CliRenderer, detected: "dark" | "light"): "dark" | "light" {
+  const oscBg: string | null = (renderer as any)._themeOscBackground
+  if (!oscBg || (renderer as any)._themeModeSource !== "csi") return detected
+  const hex = oscBg.replace("#", "")
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000
+  const inferred = brightness > 128 ? "light" : "dark"
+  if (inferred !== detected) return inferred
+  return detected
+}
+
 function errorMessage(error: unknown) {
   const formatted = FormatError(error)
   if (formatted !== undefined) return formatted
@@ -129,7 +147,7 @@ export function tui(input: {
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
-    const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
+    const mode = resolveThemeMode(renderer, (await renderer.waitForThemeMode(1000)) ?? "dark")
 
     await render(() => {
       return (
