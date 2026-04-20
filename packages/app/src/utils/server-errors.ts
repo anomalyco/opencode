@@ -1,3 +1,5 @@
+import { extraAgents, type ExtraAgentErrorMatcher } from "@/pages/layout/extra-agents"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -18,8 +20,9 @@ export type ProviderModelNotFoundError = {
 
 type Translator = (key: string, vars?: Record<string, string | number>) => string
 
-type OpenclawGuidance = {
-  kind: "file_unsupported" | "gateway_unavailable" | "gateway_auth"
+export type ExtraAgentErrorGuidance = {
+  agentId: string
+  kind: string
   message: string
 }
 
@@ -31,8 +34,8 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
 }
 
 export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
-  const openclaw = parseOpenclawError(error, translate)
-  if (openclaw) return openclaw.message
+  const extraAgent = parseExtraAgentError(error, translate)
+  if (extraAgent) return extraAgent.message
   if (isConfigInvalidErrorLike(error)) return parseReadableConfigInvalidError(error, translate)
   if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
   const message = nestedMessage(error)
@@ -69,73 +72,36 @@ export function permissionNotice(error: unknown, translate?: Translator, kind: "
   )
 }
 
-export function parseOpenclawError(error: unknown, translate?: Translator): OpenclawGuidance | undefined {
+export function parseExtraAgentError(error: unknown, translate?: Translator): ExtraAgentErrorGuidance | undefined {
   const message =
     nestedMessage(error) ?? (error instanceof Error ? error.message : typeof error === "string" ? error : "")
   if (!message) return
   const lower = message.toLowerCase()
 
-  if (lower.includes("does not expose a project filesystem yet")) {
+  for (const agent of extraAgents) {
+    const matchers = agent.capabilities?.errorMatchers
+    if (!matchers) continue
+    const hit = findMatcher(matchers, lower)
+    if (!hit) continue
+    const lines = hit.lines.map(({ key, fallback }) => tr(translate, key, fallback))
+    if (hit.appendOriginal) lines.push(message)
     return {
-      kind: "file_unsupported",
-      message: [
-        tr(
-          translate,
-          "error.openclaw.fileUnsupported",
-          "OpenClaw 目前还不提供项目文件树。你可以继续在 OpenClaw 中对话，但文件浏览/打开请切回普通项目。",
-        ),
-        tr(
-          translate,
-          "error.openclaw.fileUnsupported.hint",
-          "如果你想让 OpenClaw 管理某个项目，后续更适合做成项目内悬浮管家，而不是直接复用项目文件树。",
-        ),
-      ].join("\n"),
+      agentId: agent.id,
+      kind: hit.kind,
+      message: lines.join("\n"),
     }
   }
+}
 
-  if (
-    lower.includes("gateway not connected") ||
-    lower.includes("failed to connect to openclaw gateway") ||
-    lower.includes("gateway connect timeout") ||
-    lower.includes("gateway connection closed") ||
-    lower.includes("openclaw gateway session listing failed") ||
-    lower.includes("openclaw gateway history loading")
-  ) {
-    return {
-      kind: "gateway_unavailable",
-      message: [
-        tr(
-          translate,
-          "error.openclaw.gatewayUnavailable",
-          "OpenClaw gateway 当前不可用，导致会话列表或历史消息无法加载。",
-        ),
-        tr(
-          translate,
-          "error.openclaw.gatewayUnavailable.hint",
-          "请检查桌面设置里的 Gateway URL 是否正确，然后确认 gateway 进程仍在线；如果刚重启电脑，通常需要重新启动或重新连接 gateway。",
-        ),
-        message,
-      ].join("\n"),
-    }
-  }
-
-  if (
-    lower.includes("accepted") ||
-    lower.includes("unauthorized") ||
-    lower.includes("forbidden") ||
-    lower.includes("token")
-  ) {
-    return {
-      kind: "gateway_auth",
-      message: [
-        tr(translate, "error.openclaw.gatewayAuth", "OpenClaw gateway 鉴权可能失败了。"),
-        tr(
-          translate,
-          "error.openclaw.gatewayAuth.hint",
-          "请检查桌面设置中的 Gateway Token 是否仍然有效，并确认当前账号/设备有权限连接该 gateway。",
-        ),
-        message,
-      ].join("\n"),
+function findMatcher(
+  matchers: ReadonlyArray<ExtraAgentErrorMatcher>,
+  lower: string,
+): ExtraAgentErrorMatcher | undefined {
+  for (const matcher of matchers) {
+    try {
+      if (matcher.match(lower)) return matcher
+    } catch {
+      continue
     }
   }
 }

@@ -135,6 +135,7 @@ function buildNotificationIndex(listByDomain: Partial<Record<DomainId, Notificat
   const index = createNotificationIndex()
 
   for (const [domain, list] of Object.entries(listByDomain)) {
+    if (!list) continue
     const domainIndex = createNotificationIndexPerDomain()
 
     list.forEach((notification) => {
@@ -286,6 +287,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       meta.pruned = true
       const prunedByDomain: Partial<Record<DomainId, Notification[]>> = {}
       for (const [domain, list] of Object.entries(store.byDomain)) {
+        if (!list) continue
         prunedByDomain[domain as DomainId] = pruneNotifications(list)
       }
       batch(() => {

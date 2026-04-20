@@ -53,7 +53,10 @@ export const SidebarContent = (props: {
   let closeTimer: number | undefined
 
   const activeAgent = createMemo(() => props.extraAgents().find((agent) => agent.active?.()))
-  const entryIcon = createMemo(() => activeAgent()?.icon ?? ("grid" as IconName))
+  // GeneralAgent is the framework shell entry. The rail always shows a stable
+  // framework icon; which backend is active is a domain-internal detail revealed
+  // by the popover selector below.
+  const entryIcon = createMemo<IconName>(() => (props.extraAgents().length > 0 ? "brain" : "dot-grid"))
 
   const handleMenuMouseEnter = () => {
     if (closeTimer) {
@@ -134,13 +137,15 @@ export const SidebarContent = (props: {
               placement={placement()}
               trigger={
                 <div onMouseEnter={handleMenuMouseEnter} onMouseLeave={handleMenuMouseLeave}>
-                  <IconButton
-                    icon={entryIcon()}
-                    variant="ghost"
-                    size="large"
-                    classList={{ "bg-surface-base-active": !!activeAgent() }}
-                    aria-label="Extra Agents"
-                  />
+                  <Tooltip placement={placement()} value="GeneralAgent">
+                    <IconButton
+                      icon={entryIcon()}
+                      variant="ghost"
+                      size="large"
+                      classList={{ "bg-surface-base-active": !!activeAgent() }}
+                      aria-label="GeneralAgent"
+                    />
+                  </Tooltip>
                 </div>
               }
             >

@@ -20,7 +20,7 @@ import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
 import { formatServerError } from "@/utils/server-errors"
-import { domainFromDirectory } from "@/pages/layout/extra-agents"
+import { domainFromDirectory, extraAgentCapabilities, type ExtraAgentCapabilities } from "@/pages/layout/extra-agents"
 import { context, mergeMessages, prompt, render } from "./quick-assistant-helpers"
 
 function errorName(err: unknown) {
@@ -71,14 +71,15 @@ function pickAgent(store: State) {
   return list.find((item) => validModel(store, item.model)) ?? preferred ?? list[0]
 }
 
-function choose(store: State, preferredModel: { providerID: string; modelID: string } | undefined, openclaw: boolean) {
-  if (openclaw) {
+function choose(
+  store: State,
+  preferredModel: { providerID: string; modelID: string } | undefined,
+  override?: ExtraAgentCapabilities["agentChoose"],
+) {
+  if (override) {
     return {
-      agent: "claw",
-      model: {
-        providerID: "openclaw",
-        modelID: "claw",
-      },
+      agent: override.agent,
+      model: override.model,
     } satisfies Pick
   }
 
@@ -216,7 +217,7 @@ export function QuickAssistant() {
     if (same(current, root(), win())) return ""
     return current
   })
-  const openclaw = createMemo(() => server.current?.integration === "openclaw")
+  const agentChoose = createMemo(() => extraAgentCapabilities(server.current?.integration)?.agentChoose)
   const child = createMemo(() => {
     const next = root()
     if (!next) return
@@ -241,7 +242,7 @@ export function QuickAssistant() {
     const store = data()
     const model = settings.assistant.model()
     if (!store || model === "disabled") return
-    return choose(store, model, openclaw())
+    return choose(store, model, agentChoose())
   })
   const currentChild = createMemo(() => {
     const current = activeDir()

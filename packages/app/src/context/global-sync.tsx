@@ -134,8 +134,10 @@ function createGlobalSync() {
   let active = true
   let projectWritten = false
   let prevServer = server.current?.integration
-  const isolated = (directory: string) =>
-    isExtraAgentIntegration(server.current?.integration) && directory !== `/${server.current?.integration}`
+  // A directory is only "isolated" (skip bootstrap/load/event application) when its
+  // domain has no registered server to talk to. Visible-domain no longer gates hidden
+  // domains; each domain runs in parallel so long as it has an active server.
+  const isolated = (directory: string) => !server.currentFor(domainFromDirectory(directory))
   const trace = (_event: string, _extra?: Record<string, unknown>) => {}
 
   onCleanup(() => {
@@ -285,24 +287,64 @@ function createGlobalSync() {
     return queue
   }
 
-  const children = createChildStoreManager({
-    owner,
-    isBooting: (directory) => booting.has(directory),
-    isLoadingSessions: (directory) => sessionLoads.has(directory),
-    onBootstrap: (directory) => {
-      void bootstrapInstance(directory).catch((err) => {
-        console.error("[global-sync] bootstrap trigger failed", { directory, err })
-      })
+  type ChildManager = ReturnType<typeof createChildStoreManager>
+  const managers = new Map<DomainId, ChildManager>()
+  const managerFor = (domain: DomainId): ChildManager => {
+    const cached = managers.get(domain)
+    if (cached) return cached
+    const manager = createChildStoreManager({
+      owner,
+      isBooting: (directory) => booting.has(directory),
+      isLoadingSessions: (directory) => sessionLoads.has(directory),
+      onBootstrap: (directory) => {
+        void bootstrapInstance(directory).catch((err) => {
+          console.error("[global-sync] bootstrap trigger failed", { directory, err })
+        })
+      },
+      onDispose: (directory) => {
+        bump(directory, "dispose")
+        queueFor(domain).clear(directory)
+        sessionMeta.delete(directory)
+        sdkCache.delete(directory)
+        clearSessionPrefetchDirectory(directory)
+      },
+      translate: language.t,
+    })
+    managers.set(domain, manager)
+    return manager
+  }
+  const managerOf = (directory: string): ChildManager => managerFor(domainFromDirectory(directory))
+  const forEachDirectory = (visit: (directory: string, manager: ChildManager) => void) => {
+    for (const manager of managers.values()) {
+      for (const directory of Object.keys(manager.children)) {
+        visit(directory, manager)
+      }
+    }
+  }
+  const directoriesInDomain = (domain: DomainId) => {
+    const manager = managers.get(domain)
+    if (!manager) return [] as string[]
+    return Object.keys(manager.children)
+  }
+  const children = {
+    child: (directory: string, options?: Parameters<ChildManager["child"]>[1]) =>
+      managerOf(directory).child(directory, options),
+    peek: (directory: string, options?: Parameters<ChildManager["peek"]>[1]) =>
+      managerOf(directory).peek(directory, options),
+    ensureChild: (directory: string) => managerOf(directory).ensureChild(directory),
+    pin: (directory: string) => managerOf(directory).pin(directory),
+    unpin: (directory: string) => managerOf(directory).unpin(directory),
+    mark: (directory: string) => managerOf(directory).mark(directory),
+    disposeDirectory: (directory: string) => managerOf(directory).disposeDirectory(directory),
+    resetDirectory: (directory: string) => managerOf(directory).resetDirectory(directory),
+    projectMeta: (directory: string, patch: ProjectMeta) => managerOf(directory).projectMeta(directory, patch),
+    projectIcon: (directory: string, value: string | undefined) =>
+      managerOf(directory).projectIcon(directory, value),
+    lookup: (directory: string) => managerOf(directory).children[directory],
+    vcsCache: {
+      get: (directory: string) => managerOf(directory).vcsCache.get(directory),
     },
-    onDispose: (directory) => {
-      bump(directory, "dispose")
-      queueFor(domainFromDirectory(directory)).clear(directory)
-      sessionMeta.delete(directory)
-      sdkCache.delete(directory)
-      clearSessionPrefetchDirectory(directory)
-    },
-    translate: language.t,
-  })
+  }
 
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
@@ -319,7 +361,7 @@ function createGlobalSync() {
     if (isolated(directory)) {
       trace("loadSessions.skip", {
         directory,
-        why: "extra-agent-isolated",
+        why: "no-server-for-domain",
         silent: !!opts?.silent,
       })
       return
@@ -340,7 +382,7 @@ function createGlobalSync() {
     const raw = child[1] as (...args: unknown[]) => unknown
     const store = child[0]
     const setStore = ((...input: unknown[]) => {
-      if (rev(directory) !== mark || children.children[directory] !== child) return input[0]
+      if (rev(directory) !== mark || managerOf(directory).children[directory] !== child) return input[0]
       return raw(...input)
     }) as typeof child[1]
     trace("loadSessions.start", {
@@ -450,7 +492,7 @@ function createGlobalSync() {
     if (isolated(directory)) {
       trace("bootstrap.skip", {
         directory,
-        why: "extra-agent-isolated",
+        why: "no-server-for-domain",
       })
       return
     }
@@ -469,7 +511,7 @@ function createGlobalSync() {
       const mark = rev(directory)
       const raw = child[1] as (...args: unknown[]) => unknown
       const setStore = ((...input: unknown[]) => {
-        if (rev(directory) !== mark || children.children[directory] !== child) return input[0]
+        if (rev(directory) !== mark || managerOf(directory).children[directory] !== child) return input[0]
         return raw(...input)
       }) as typeof child[1]
       const cache = children.vcsCache.get(directory)
@@ -520,29 +562,32 @@ function createGlobalSync() {
     const recent = !!bootingRoot.get(dirDomain) || Date.now() - (bootedAt.get(dirDomain) ?? 0) < 1500
 
     if (directory === "global") {
-      if (emittingDomain !== currentDomain()) return
-      if (isExtraAgentIntegration(server.current?.integration)) return
+      // Route to the emitting domain's bucket regardless of which domain is visible.
+      // Hidden domains must continue to process their own global events.
       applyGlobalEvent({
         event,
-        project: globalStore.project,
+        project: projectBucket(emittingDomain),
         refresh: () => {
           if (recent) return
-          queueFor(currentDomain()).refresh()
+          queueFor(emittingDomain).refresh()
         },
-        setGlobalProject: setProjects,
+        setGlobalProject: (next) => setProjectsFor(emittingDomain, next),
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
-        for (const directory of Object.keys(children.children)) {
+        for (const directory of directoriesInDomain(emittingDomain)) {
           if (!loaded.dir[directory]) continue
-          queueFor(domainFromDirectory(directory)).push(directory)
+          queueFor(emittingDomain).push(directory)
         }
       }
       return
     }
 
+    // Cross-domain event bleed guard: a directory event coming from a different
+    // domain than the directory itself is a bug — drop it instead of applying.
+    if (emittingDomain !== dirDomain) return
     if (isolated(directory)) return
-    const existing = children.children[directory]
+    const existing = managerOf(directory).children[directory]
     if (!existing) return
     children.mark(directory)
     const [store, setStore] = existing
@@ -594,9 +639,9 @@ function createGlobalSync() {
     queues.clear()
   })
   onCleanup(() => {
-    for (const directory of Object.keys(children.children)) {
-      children.disposeDirectory(directory)
-    }
+    forEachDirectory((directory, manager) => {
+      manager.disposeDirectory(directory)
+    })
   })
 
   async function bootstrap(domain = currentDomain()) {
@@ -610,8 +655,8 @@ function createGlobalSync() {
         setGlobalStore: setBootStore,
       })
       await Promise.allSettled(
-        Object.keys(children.children)
-          .filter((directory) => loaded.dir[directory] && domainFromDirectory(directory) === domain)
+        directoriesInDomain(domain)
+          .filter((directory) => loaded.dir[directory])
           .map((directory) => bootstrapInstance(directory)),
       )
       bootedAt.set(domain, Date.now())
@@ -633,7 +678,7 @@ function createGlobalSync() {
         const nextDomain = server.domain
         const domainSwitch = prevDomain !== nextDomain
         prevServer = nextServer
-        const dirs = Object.keys(children.children).filter((directory) => domainFromDirectory(directory) === nextDomain)
+        const dirs = directoriesInDomain(nextDomain)
         trace("server.switch.reset", {
           domainSwitch,
           prevDomain,
@@ -649,9 +694,9 @@ function createGlobalSync() {
           }
         }
         for (const directory of dirs) {
-          if (!children.children[directory]) continue
+          if (!managerFor(nextDomain).children[directory]) continue
           if (!domainSwitch) {
-            queueFor(domainFromDirectory(directory)).clear(directory)
+            queueFor(nextDomain).clear(directory)
             sdkCache.delete(directory)
             clearSessionPrefetchDirectory(directory)
             children.resetDirectory(directory)
@@ -678,11 +723,11 @@ function createGlobalSync() {
     remove(id: string) {
       if (!id) return
       setGlobalStore("provider", (prev) => stripProvider(prev, id))
-      for (const directory of Object.keys(children.children)) {
-        const child = children.children[directory]
-        if (!child) continue
+      forEachDirectory((directory, manager) => {
+        const child = manager.children[directory]
+        if (!child) return
         child[1]("provider", (prev) => stripProvider(prev, id))
-      }
+      })
     },
   }
 

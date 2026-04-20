@@ -27,9 +27,17 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useServer } from "@/context/server"
+import { extraAgents } from "@/pages/layout/extra-agents"
 import type { Agent, Config, Project } from "@opencode-ai/sdk/v2/client"
 
-type Section = "agents-md" | "providers" | "agents" | "skills" | "plugins" | "claws"
+const CORE_SECTIONS = ["agents-md", "providers", "agents", "skills", "plugins", "claws"] as const
+type CoreSection = (typeof CORE_SECTIONS)[number]
+type Section = CoreSection | (string & {})
+
+function isKnownSection(value: string): boolean {
+  if ((CORE_SECTIONS as readonly string[]).includes(value)) return true
+  return extraAgents.some((agent) => agent.configSection === value)
+}
 
 type SkillGroup = "opencode" | "claude" | "project" | "external"
 
@@ -526,6 +534,8 @@ function sectionIcon(section: Section): IconProps["name"] {
   if (section === "agents") return "robot"
   if (section === "skills") return "brain"
   if (section === "plugins") return "code"
+  const agent = extraAgents.find((item) => item.configSection === section)
+  if (agent) return agent.icon
   return "openclaw"
 }
 
@@ -1567,15 +1577,8 @@ export default function ConfigPage() {
   )
   const querySection = createMemo<Section | undefined>(() => {
     const value = query.section
-    if (
-      value === "agents-md" ||
-      value === "providers" ||
-      value === "agents" ||
-      value === "skills" ||
-      value === "plugins" ||
-      value === "claws"
-    ) {
-      return value
+    if (typeof value === "string" && isKnownSection(value)) {
+      return value as Section
     }
   })
   const opened = createMemo(() =>
