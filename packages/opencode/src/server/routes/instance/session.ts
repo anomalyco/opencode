@@ -876,16 +876,29 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         c.status(200)
         c.header("Content-Type", "application/json")
-        return stream(c, async (stream) => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const msg = await runRequest(
-            "SessionRoutes.prompt",
-            c,
-            SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
-          )
-          void stream.write(JSON.stringify(msg))
-        })
+        return stream(
+          c,
+          async (stream) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const msg = await runRequest(
+              "SessionRoutes.prompt",
+              c,
+              SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+            )
+            void stream.write(JSON.stringify(msg))
+          },
+          // Without an onError handler hono's stream() falls back to
+          // console.error(e), which prints a Bun-formatted source-context
+          // stack trace to stderr. The caller already gets the error
+          // through ErrorMiddleware (which serializes NamedErrors into the
+          // JSON response). Route any escaped error to our Logger so it
+          // lands in the log file (not the user-facing terminal).
+          // See https://github.com/anomalyco/opencode/issues/17521.
+          async (err) => {
+            log.error("session.prompt stream callback failed", { err })
+          },
+        )
       },
     )
     .post(

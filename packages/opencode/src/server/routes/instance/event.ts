@@ -36,7 +36,9 @@ export const EventRoutes = () =>
       c.header("Cache-Control", "no-cache, no-transform")
       c.header("X-Accel-Buffering", "no")
       c.header("X-Content-Type-Options", "nosniff")
-      return streamSSE(c, async (stream) => {
+      return streamSSE(
+        c,
+        async (stream) => {
         const q = new AsyncQueue<string | null>()
         let done = false
 
@@ -83,6 +85,15 @@ export const EventRoutes = () =>
         } finally {
           stop()
         }
-      })
+        },
+        // Without an onError handler hono's streamSSE falls back to
+        // console.error(e) which prints a Bun-formatted stack to stderr —
+        // see https://github.com/anomalyco/opencode/issues/17521.
+        // Route to our Logger so it lands in the log file (or stderr only
+        // when --print-logs is on), keeping the user-facing terminal clean.
+        async (err) => {
+          log.error("event stream callback failed", { err })
+        },
+      )
     },
   )

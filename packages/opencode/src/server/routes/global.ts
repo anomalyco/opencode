@@ -21,7 +21,9 @@ const log = Log.create({ service: "server" })
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
 
 async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
-  return streamSSE(c, async (stream) => {
+  return streamSSE(
+    c,
+    async (stream) => {
     const q = new AsyncQueue<string | null>()
     let done = false
 
@@ -67,7 +69,13 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
     } finally {
       stop()
     }
-  })
+    },
+    // Without an onError handler hono's streamSSE falls back to
+    // console.error(e), which prints a Bun-formatted stack to stderr.
+    async (err) => {
+      log.error("global event stream callback failed", { err })
+    },
+  )
 }
 
 export const GlobalRoutes = lazy(() =>
