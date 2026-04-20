@@ -58,6 +58,7 @@ Die aktuelle Liste der Modelle umfasst:
 - **GLM-5**
 - **GLM-5.1**
 - **Kimi K2.5**
+- **Kimi K2.6**
 - **MiMo-V2-Pro**
 - **MiMo-V2-Omni**
 - **MiniMax M2.5**
@@ -86,6 +87,7 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 | GLM-5.1      | 880                    | 2,150              | 4,300              |
 | GLM-5        | 1,150                  | 2,880              | 5,750              |
 | Kimi K2.5    | 1,850                  | 4,630              | 9,250              |
+| Kimi K2.6    | 1,150           | 2,880      | 5,750      |
 | MiMo-V2-Pro  | 1,290                  | 3,225              | 6,450              |
 | MiMo-V2-Omni | 2,150                  | 5,450              | 10,900             |
 | Qwen3.6 Plus | 3,300                  | 8,200              | 16,300             |
@@ -96,7 +98,7 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
 
 - GLM-5/5.1 — 700 Input-, 52.000 Cached-, 150 Output-Tokens pro Anfrage
-- Kimi K2.5 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
+- Kimi K2.5/K2.6 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
 - MiniMax M2.7/M2.5 — 300 Input-, 55.000 Cached-, 125 Output-Tokens pro Anfrage
 - Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
@@ -128,6 +130,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6    | kimi-k2.6    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -135,7 +138,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | Qwen3.6 Plus | qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 | Qwen3.5 Plus | qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
-Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K2.5 würdest du beispielsweise `opencode-go/kimi-k2.5` in deiner Config verwenden.
+Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K2.6 würdest du beispielsweise `opencode-go/kimi-k2.6` in deiner Config verwenden.
 
 ---
 
