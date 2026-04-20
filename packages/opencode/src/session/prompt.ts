@@ -36,6 +36,7 @@ import { NamedError } from "@opencode-ai/shared/util/error"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool"
 import { Permission } from "@/permission"
+import { Instance } from "@/project/instance"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
@@ -43,7 +44,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Truncate } from "@/tool"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util"
-import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect"
 import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -986,10 +987,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
           let retried = false
           let reason: SandboxSpawn.RetryReason | undefined
-          let result
-          try {
-            result = yield* exec(proactive ? raw : call)
-          } catch (error) {
+          let result: { code: number; stderr: string }
+          const first = yield* exec(proactive ? raw : call).pipe(Effect.exit)
+          if (Exit.isFailure(first)) {
+            const error = Cause.squash(first.cause)
             if (rejected && !proactive && sandbox.active) {
               const message = error instanceof Error ? error.message : String(error)
               throw new Error(
@@ -997,8 +998,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 error instanceof Error ? { cause: error } : undefined,
               )
             }
-            throw error
+            return yield* Effect.failCause(first.cause)
           }
+          result = first.value
 
           if (!proactive) {
             reason = SandboxSpawn.retryReason({
