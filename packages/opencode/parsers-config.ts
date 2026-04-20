@@ -3,6 +3,9 @@ export default {
   // Warn: when taking queries from the nvim-treesitter repo, make sure to include the query dependencies as well
   //       marked with for example `; inherits: ecma` at the top of the file. Just put the dependencies before the actual query.
   //       ALSO: Some queries use breaking changes in the nvim-treesitter repo, that are not compatible with the (web-)tree-sitter parser.
+  //
+  // OFFLINE: When OPENCODE_PARSERS_DIR is set or a local parsers/ directory exists,
+  // the resolveOffline() method replaces remote URLs with local file paths.
   parsers: [
     {
       filetype: "python",
@@ -287,4 +290,76 @@ export default {
       },
     },
   ],
+  /**
+   * Resolve parser URLs to local file paths for offline use.
+   *
+   * When OPENCODE_PARSERS_DIR is set or a local parsers/ directory exists
+   * alongside the binary, this replaces remote GitHub URLs with local paths.
+   * Falls back to the original URLs when no local cache is available.
+   */
+  resolveOffline() {
+    const fs = require("fs") as typeof import("fs")
+    const path = require("path") as typeof import("path")
+
+    // Find parsers directory
+    const envDir = process.env.OPENCODE_PARSERS_DIR
+    let parsersDir: string | undefined
+    if (envDir && fs.existsSync(envDir)) {
+      parsersDir = envDir
+    } else {
+      const bunfsRoot = process.platform === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
+      const bunfsParsers = path.join(bunfsRoot, "parsers")
+      try { if (fs.existsSync(bunfsParsers)) parsersDir = bunfsParsers } catch {}
+      if (!parsersDir) {
+        const localParsers = path.join(path.dirname(process.execPath), "parsers")
+        if (fs.existsSync(localParsers)) parsersDir = localParsers
+      }
+      if (!parsersDir) {
+        const cwdParsers = path.join(process.cwd(), "parsers")
+        if (fs.existsSync(cwdParsers)) parsersDir = cwdParsers
+      }
+    }
+
+    if (!parsersDir) return this
+
+    // Resolve each parser's URLs to local paths
+    const resolvedParsers = this.parsers.map((parser) => {
+      const ft = parser.filetype
+      const ftDir = path.join(parsersDir!, ft)
+
+      // Resolve WASM
+      let localWasm = parser.wasm
+      if (fs.existsSync(ftDir)) {
+        const wasmName = path.basename(new URL(parser.wasm).pathname)
+        const wasmPath = path.join(ftDir, wasmName)
+        if (fs.existsSync(wasmPath)) {
+          localWasm = wasmPath
+        } else {
+          // Fallback: use any .wasm file in the directory
+          const files = fs.readdirSync(ftDir)
+          const firstWasm = files.find((f) => f.endsWith(".wasm"))
+          if (firstWasm) localWasm = path.join(ftDir, firstWasm)
+        }
+      }
+
+      // Resolve queries
+      let localQueries = parser.queries
+      if (parser.queries && fs.existsSync(ftDir)) {
+        localQueries = Object.fromEntries(
+          Object.entries(parser.queries).map(([queryType, urls]) => [
+            queryType,
+            urls.map((url) => {
+              const queryName = `${queryType}.scm`
+              const queryPath = path.join(ftDir, queryName)
+              return fs.existsSync(queryPath) ? queryPath : url
+            }),
+          ]),
+        )
+      }
+
+      return { ...parser, wasm: localWasm, queries: localQueries }
+    })
+
+    return { ...this, parsers: resolvedParsers }
+  },
 }
