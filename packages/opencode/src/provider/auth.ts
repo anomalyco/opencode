@@ -61,6 +61,7 @@ export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuth
 export const AuthorizeInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
   inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
+  callbackUrl: Schema.optional(Schema.String).annotate({ description: "Override the OAuth callback URL" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 
@@ -181,7 +182,10 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
         }
       }
 
-      const result = yield* Effect.promise(() => method.authorize(input.inputs))
+      const authorizeInputs = input.callbackUrl
+        ? { ...input.inputs, callbackUrl: input.callbackUrl }
+        : input.inputs
+      const result = yield* Effect.promise(() => method.authorize(authorizeInputs))
       pending.set(input.providerID, result)
       return {
         url: result.url,

@@ -108,12 +108,13 @@ export const ProviderRoutes = lazy(() =>
       async (c) =>
         jsonRequest("ProviderRoutes.oauth.authorize", c, function* () {
           const providerID = c.req.valid("param").providerID
-          const { method, inputs } = c.req.valid("json")
+          const { method, inputs, callbackUrl } = c.req.valid("json")
           const svc = yield* ProviderAuth.Service
           return yield* svc.authorize({
             providerID,
             method,
             inputs,
+            callbackUrl,
           })
         }),
     )
