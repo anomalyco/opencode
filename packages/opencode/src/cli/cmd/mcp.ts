@@ -10,7 +10,6 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config"
 import { ConfigMCP } from "../../config/mcp"
 import { Instance } from "../../project/instance"
-import { Installation } from "../../installation"
 import { InstallationVersion } from "../../installation/version"
 import path from "path"
 import { Global } from "../../global"
@@ -68,14 +67,49 @@ async function listState() {
   return AppRuntime.runPromise(
     Effect.gen(function* () {
       const cfg = yield* Config.Service
-      const mcp = yield* MCP.Service
+      const auth = yield* McpAuth.Service
       const config = yield* cfg.get()
-      const statuses = yield* mcp.status()
+      const global = yield* cfg.getGlobal()
+
+      const serverStatuses = yield* Effect.promise(() => {
+        const hostname = global.server?.hostname === "0.0.0.0" ? "127.0.0.1" : (global.server?.hostname ?? "127.0.0.1")
+        const password = process.env.OPENCODE_SERVER_PASSWORD
+        const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+        const headers = password
+          ? {
+              Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
+            }
+          : undefined
+
+        const ports = [...new Set([global.server?.port, 18790, 4096].filter((value): value is number => !!value))]
+        if (ports.length === 0) return Promise.resolve(undefined)
+
+        return (async () => {
+          for (const port of ports) {
+            const response = await fetch(`http://${hostname}:${port}/mcp`, {
+              headers,
+              signal: AbortSignal.timeout(1_000),
+            }).catch(() => undefined)
+
+            if (response?.ok) return (await response.json()) as Record<string, MCP.Status>
+          }
+
+          return undefined
+        })()
+      })
+
+      const statuses =
+        serverStatuses ??
+        (yield* Effect.gen(function* () {
+          const mcp = yield* MCP.Service
+          return yield* mcp.status()
+        }))
+
       const stored = yield* Effect.all(
-        Object.fromEntries(configuredServers(config).map(([name]) => [name, mcp.hasStoredTokens(name)])),
+        Object.fromEntries(configuredServers(config).map(([name]) => [name, Effect.map(auth.get(name), (entry) => !!entry?.tokens)])),
         { concurrency: "unbounded" },
       )
-      return { config, statuses, stored }
+      return { config, statuses, stored, source: serverStatuses ? ("server" as const) : ("local" as const) }
     }),
   )
 }
@@ -120,7 +154,7 @@ export const McpListCommand = cmd({
         UI.empty()
         prompts.intro("MCP Servers")
 
-        const { config, statuses, stored } = await listState()
+        const { config, statuses, stored, source } = await listState()
         const servers = configuredServers(config)
 
         if (servers.length === 0) {
@@ -169,7 +203,8 @@ export const McpListCommand = cmd({
           )
         }
 
-        prompts.outro(`${servers.length} server(s)`)
+        const sourceText = source === "server" ? "live server state" : "local process state"
+        prompts.outro(`${servers.length} server(s) · source: ${sourceText}`)
       },
     })
   },
