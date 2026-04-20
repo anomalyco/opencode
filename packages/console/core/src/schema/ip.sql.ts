@@ -39,13 +39,3 @@ export const ModelTpmLimitTable = mysqlTable(
   },
   (table) => [primaryKey({ columns: [table.id] })],
 )
-
-export const ModelRateLimitTable = mysqlTable(
-  "model_rate_limit",
-  {
-    key: varchar("key", { length: 255 }).notNull(),
-    interval: varchar("interval", { length: 40 }).notNull(),
-    count: int("count").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.key, table.interval] })],
-)
