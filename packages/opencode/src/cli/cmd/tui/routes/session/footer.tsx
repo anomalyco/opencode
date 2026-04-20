@@ -5,8 +5,10 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { useLayout } from "../../context/layout"
 
 export function Footer() {
+  const layout = useLayout()
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
@@ -66,21 +68,23 @@ export function Footer() {
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
-            <text fg={theme.text}>
-              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
-            </text>
-            <Show when={mcp()}>
+            <Show when={layout.current.inputAreaRightContent !== "status"}>
               <text fg={theme.text}>
-                <Switch>
-                  <Match when={mcpError()}>
-                    <span style={{ fg: theme.error }}>⊙ </span>
-                  </Match>
-                  <Match when={true}>
-                    <span style={{ fg: theme.success }}>⊙ </span>
-                  </Match>
-                </Switch>
-                {mcp()} MCP
+                <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
               </text>
+              <Show when={mcp()}>
+                <text fg={theme.text}>
+                  <Switch>
+                    <Match when={mcpError()}>
+                      <span style={{ fg: theme.error }}>⊙ </span>
+                    </Match>
+                    <Match when={true}>
+                      <span style={{ fg: theme.success }}>⊙ </span>
+                    </Match>
+                  </Switch>
+                  {mcp()} MCP
+                </text>
+              </Show>
             </Show>
             <text fg={theme.textMuted}>/status</text>
           </Match>

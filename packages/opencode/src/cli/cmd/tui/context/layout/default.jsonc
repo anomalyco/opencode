@@ -1,0 +1,52 @@
+{
+  "$schema": "https://opencode.ai/layout.json",
+  "name": "default",
+  "description": "Comfortable spacing with headers and sidebars",
+  "config": {
+    // Vertical spacing between consecutive messages
+    "messageSeparation": 1,
+
+    // Padding inside user message containers
+    "userMessagePaddingTop": 1,
+    "userMessagePaddingBottom": 0,
+
+    // Padding inside assistant message containers (tool outputs, text, etc.)
+    "assistantMessagePaddingTop": 2,
+    "assistantMessagePaddingBottom": 1,
+
+    // Left padding for message text (shared by user and assistant)
+    "messagePaddingLeft": 2,
+
+    // Padding around the entire session container
+    "containerPaddingTop": 1,
+    "containerPaddingBottom": 1,
+    "containerPaddingLeft": 2,
+    "containerPaddingRight": 2,
+
+    // Vertical gap between elements within the container
+    "containerGap": 1,
+
+    // Spacing above tool output blocks
+    "toolMarginTop": 1,
+
+    // Spacing above agent info footer (model/duration line)
+    "agentInfoMarginTop": 1,
+
+    // Horizontal indentation for message text and tool output
+    "textIndent": 3, // Main message text indent
+    "toolIndent": 2, // Tool call/output indent
+
+    // UI visibility toggles
+    "showHeader": true, // Show session header
+    "showFooter": true, // Show status footer
+    "forceSidebarHidden": false, // Force sidebar off (useful for narrow terminals)
+
+    // Input box styling
+    "showInputAgentInfo": true, // Show agent/model info below input box
+    "showInputBorder": true, // Show decorative border below input
+    "inputAgentInfoPaddingTop": 1, // Padding above agent info line
+    "inputBoxPaddingTop": 1, // Blank lines above cursor in input box
+    "inputBoxPaddingBottom": 0, // Blank lines below cursor in input box
+    "inputAreaRightContent": "keybinds", // What to show on right: "keybinds" or "status"
+  },
+}

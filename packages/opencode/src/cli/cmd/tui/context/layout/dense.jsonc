@@ -1,0 +1,52 @@
+{
+  "$schema": "https://opencode.ai/layout.json",
+  "name": "dense",
+  "description": "Minimal spacing for small terminals - no headers or sidebars",
+  "config": {
+    // Spacing between messages
+    "messageSeparation": 1,
+
+    // Minimal padding inside user message containers
+    "userMessagePaddingTop": 0,
+    "userMessagePaddingBottom": 0,
+
+    // Minimal padding inside assistant message containers
+    "assistantMessagePaddingTop": 1,
+    "assistantMessagePaddingBottom": 0,
+
+    // Left padding for message text
+    "messagePaddingLeft": 1,
+
+    // Minimal container padding
+    "containerPaddingTop": 0,
+    "containerPaddingBottom": 0,
+    "containerPaddingLeft": 1,
+    "containerPaddingRight": 1,
+
+    // No gap between container elements
+    "containerGap": 0,
+
+    // No spacing above tools
+    "toolMarginTop": 0,
+
+    // No spacing above agent info footer
+    "agentInfoMarginTop": 0,
+
+    // Reduced indentation to save horizontal space
+    "textIndent": 2, // Minimal text indent
+    "toolIndent": 1, // Minimal tool indent
+
+    // Hide UI chrome to maximize content area
+    "showHeader": false, // No header
+    "showFooter": false, // No footer
+    "forceSidebarHidden": true, // Always hide sidebar
+
+    // Compact input box
+    "showInputAgentInfo": false, // Move agent/model to status line
+    "showInputBorder": false, // No decorative border
+    "inputAgentInfoPaddingTop": 0, // No padding (not shown anyway)
+    "inputBoxPaddingTop": 1, // One blank line above cursor
+    "inputBoxPaddingBottom": 1, // One blank line below cursor
+    "inputAreaRightContent": "status", // Show LSP/MCP status instead of keybind hints
+  },
+}

@@ -6,6 +6,7 @@ import { fileURLToPath } from "url"
 import { Filesystem } from "@/util"
 import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
+import { useLayout } from "@tui/context/layout"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -105,8 +106,14 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const layout = useLayout()
   const kv = useKV()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+
+  // LSP/MCP status data (for status display option)
+  const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
+  const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
+  const lsp = createMemo(() => Object.keys(sync.data.lsp))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
@@ -982,7 +989,8 @@ export function Prompt(props: PromptProps) {
           <box
             paddingLeft={2}
             paddingRight={2}
-            paddingTop={1}
+            paddingTop={layout.current.inputBoxPaddingTop}
+            paddingBottom={layout.current.inputBoxPaddingBottom}
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
@@ -1183,74 +1191,101 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
-                      </text>
-                      <Show when={store.mode === "normal"}>
-                        <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={0}
-                            fg={fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha())}
-                          >
-                            {local.model.parsed().model}
-                          </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.current()}
-                              </span>
+            <Show when={layout.current.showInputAgentInfo}>
+              <box
+                flexDirection="row"
+                flexShrink={0}
+                paddingTop={layout.current.inputAgentInfoPaddingTop}
+                gap={1}
+                justifyContent="space-between"
+              >
+                <box flexDirection="row" gap={1}>
+                  <Show when={local.agent.current()} fallback={<box height={1} />}>
+                    {(agent) => (
+                      <>
+                        <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                          {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                        </text>
+                        <Show when={store.mode === "normal"}>
+                          <box flexDirection="row" gap={1}>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                            <text
+                              flexShrink={0}
+                              fg={fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha())}
+                            >
+                              {local.model.parsed().model}
                             </text>
-                          </Show>
-                        </box>
-                      </Show>
-                    </>
-                  )}
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                            <Show when={showVariant()}>
+                              <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                              <text>
+                                <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                                  {local.model.variant.current()}
+                                </span>
+                              </text>
+                            </Show>
+                          </box>
+                        </Show>
+                      </>
+                    )}
+                  </Show>
+                </box>
+                <Show when={hasRightContent()}>
+                  <box flexDirection="row" gap={1} alignItems="center">
+                    {props.right}
+                  </box>
                 </Show>
               </box>
-              <Show when={hasRightContent()}>
-                <box flexDirection="row" gap={1} alignItems="center">
-                  {props.right}
-                </box>
-              </Show>
-            </box>
+            </Show>
           </box>
         </box>
-        <box
-          height={1}
-          border={["left"]}
-          borderColor={borderHighlight()}
-          customBorderChars={{
-            ...EmptyBorder,
-            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
-          }}
-        >
+        <Show when={layout.current.showInputBorder}>
           <box
             height={1}
-            border={["bottom"]}
-            borderColor={theme.backgroundElement}
-            customBorderChars={
-              theme.backgroundElement.a !== 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
-          />
-        </box>
+            border={["left"]}
+            borderColor={borderHighlight()}
+            customBorderChars={{
+              ...EmptyBorder,
+              vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
+            }}
+          >
+            <box
+              height={1}
+              border={["bottom"]}
+              borderColor={theme.backgroundElement}
+              customBorderChars={
+                theme.backgroundElement.a !== 0
+                  ? {
+                      ...EmptyBorder,
+                      horizontal: "▀",
+                    }
+                  : {
+                      ...EmptyBorder,
+                      horizontal: " ",
+                    }
+              }
+            />
+          </box>
+        </Show>
         <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
+          <Show
+            when={status().type !== "idle"}
+            fallback={
+              layout.current.showInputAgentInfo ? (
+                (props.hint ?? <text />)
+              ) : (
+                <Show when={local.agent.current()}>
+                  {(agent) => (
+                    <box flexDirection="row" gap={1}>
+                      <text fg={local.agent.color(agent().name)}>{Locale.titlecase(agent().name)}</text>
+                      <text fg={theme.text}>{local.model.parsed().model}</text>
+                      <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                    </box>
+                  )}
+                </Show>
+              )
+            }
+          >
             <box
               flexDirection="row"
               gap={1}
@@ -1331,34 +1366,58 @@ export function Prompt(props: PromptProps) {
             </box>
           </Show>
           <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
-              <Switch>
-                <Match when={store.mode === "normal"}>
+            <Switch>
+              <Match when={layout.current.inputAreaRightContent === "keybinds"}>
+                <box gap={2} flexDirection="row">
                   <Switch>
-                    <Match when={usage()}>
-                      {(item) => (
-                        <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
-                        </text>
-                      )}
-                    </Match>
-                    <Match when={true}>
+                    <Match when={store.mode === "normal"}>
+                      <Switch>
+                        <Match when={usage()}>
+                          {(item) => (
+                            <text fg={theme.textMuted} wrapMode="none">
+                              {[item().context, item().cost].filter(Boolean).join(" · ")}
+                            </text>
+                          )}
+                        </Match>
+                        <Match when={true}>
+                          <text fg={theme.text}>
+                            {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                          </text>
+                        </Match>
+                      </Switch>
                       <text fg={theme.text}>
-                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                        {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                      </text>
+                    </Match>
+                    <Match when={store.mode === "shell"}>
+                      <text fg={theme.text}>
+                        esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
                       </text>
                     </Match>
                   </Switch>
+                </box>
+              </Match>
+              <Match when={layout.current.inputAreaRightContent === "status"}>
+                <box gap={2} flexDirection="row">
                   <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
                   </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
-                  </text>
-                </Match>
-              </Switch>
-            </box>
+                  <Show when={mcp()}>
+                    <text fg={theme.text}>
+                      <Switch>
+                        <Match when={mcpError()}>
+                          <span style={{ fg: theme.error }}>⊙ </span>
+                        </Match>
+                        <Match when={true}>
+                          <span style={{ fg: theme.success }}>⊙ </span>
+                        </Match>
+                      </Switch>
+                      {mcp()} MCP
+                    </text>
+                  </Show>
+                </box>
+              </Match>
+            </Switch>
           </Show>
         </box>
       </box>

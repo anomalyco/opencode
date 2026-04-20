@@ -39,6 +39,8 @@ import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
+import { LayoutProvider } from "@tui/context/layout"
+import { DialogLayoutList } from "@tui/component/dialog-layout-list"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
@@ -163,23 +165,25 @@ export function tui(input: {
                         <ProjectProvider>
                           <SyncProvider>
                             <ThemeProvider mode={mode}>
-                              <LocalProvider>
-                                <KeybindProvider>
-                                  <PromptStashProvider>
-                                    <DialogProvider>
-                                      <CommandProvider>
-                                        <FrecencyProvider>
-                                          <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <App onSnapshot={input.onSnapshot} />
-                                            </PromptRefProvider>
-                                          </PromptHistoryProvider>
-                                        </FrecencyProvider>
-                                      </CommandProvider>
-                                    </DialogProvider>
-                                  </PromptStashProvider>
-                                </KeybindProvider>
-                              </LocalProvider>
+                              <LayoutProvider>
+                                <LocalProvider>
+                                  <KeybindProvider>
+                                    <PromptStashProvider>
+                                      <DialogProvider>
+                                        <CommandProvider>
+                                          <FrecencyProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <App onSnapshot={input.onSnapshot} />
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </FrecencyProvider>
+                                        </CommandProvider>
+                                      </DialogProvider>
+                                    </PromptStashProvider>
+                                  </KeybindProvider>
+                                </LocalProvider>
+                              </LayoutProvider>
                             </ThemeProvider>
                           </SyncProvider>
                         </ProjectProvider>
@@ -584,6 +588,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
+      },
+      category: "System",
+    },
+    {
+      title: "Switch layout",
+      value: "layout.switch",
+      slash: {
+        name: "layout",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogLayoutList />)
       },
       category: "System",
     },

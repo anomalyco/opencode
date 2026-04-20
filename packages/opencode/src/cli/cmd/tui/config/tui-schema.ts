@@ -33,6 +33,10 @@ export const TuiInfo = z
     keybinds: KeybindOverride.optional(),
     plugin: ConfigPlugin.Spec.zod.array().optional(),
     plugin_enabled: z.record(z.string(), z.boolean()).optional(),
+    layout: z
+      .string()
+      .optional()
+      .describe("Layout mode (built-in: default, dense; or custom layouts from ~/.config/opencode/layout/)"),
   })
   .extend(TuiOptions.shape)
   .strict()
