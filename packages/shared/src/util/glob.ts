@@ -8,6 +8,7 @@ export namespace Glob {
     include?: "file" | "all"
     dot?: boolean
     symlink?: boolean
+    realpath?: boolean
   }
 
   function toGlobOptions(options: Options): GlobOptions {
@@ -17,6 +18,7 @@ export namespace Glob {
       dot: options.dot,
       follow: options.symlink ?? false,
       nodir: options.include !== "all",
+      realpath: options.realpath,
     }
   }
 

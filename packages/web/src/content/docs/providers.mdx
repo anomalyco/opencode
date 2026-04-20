@@ -27,6 +27,8 @@ in `~/.local/share/opencode/auth.json`.
 You can customize the providers through the `provider` section in your OpenCode
 config.
 
+OpenCode reads config from `config.json`, `opencode.json`, or `opencode.jsonc`. These files are optional and are usually created by you when you want project-specific or persistent settings. The global config directory may not exist until you create it.
+
 ---
 
 #### Base URL
@@ -195,7 +197,7 @@ To use Amazon Bedrock with OpenCode:
 
    #### Configuration File (Recommended)
 
-   For project-specific or persistent configuration, use `opencode.json`:
+   For project-specific or persistent configuration, create one of the supported config files, such as `opencode.json`:
 
    ```json title="opencode.json"
    {

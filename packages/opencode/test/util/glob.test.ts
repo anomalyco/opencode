@@ -96,6 +96,25 @@ describe("Glob", () => {
       expect(results.sort()).toEqual([path.join("linkdir", "file.txt"), path.join("realdir", "file.txt")])
     })
 
+    test("preserves symlinked absolute paths when realpath is false", async () => {
+      await using tmp = await tmpdir()
+      await fs.mkdir(path.join(tmp.path, "realdir"))
+      await fs.writeFile(path.join(tmp.path, "realdir", "file.txt"), "", "utf-8")
+      await fs.symlink(path.join(tmp.path, "realdir"), path.join(tmp.path, "linkdir"))
+
+      const results = await Glob.scan("**/*.txt", {
+        cwd: tmp.path,
+        absolute: true,
+        symlink: true,
+        realpath: false,
+      })
+
+      expect(results.sort()).toEqual([
+        path.join(tmp.path, "linkdir", "file.txt"),
+        path.join(tmp.path, "realdir", "file.txt"),
+      ])
+    })
+
     test("includes dotfiles when dot option is true", async () => {
       await using tmp = await tmpdir()
       await fs.writeFile(path.join(tmp.path, ".hidden"), "", "utf-8")

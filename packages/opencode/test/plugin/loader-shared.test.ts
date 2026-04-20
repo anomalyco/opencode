@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
+import { ConfigPlugin } from "../../src/config/plugin"
 import { Filesystem } from "../../src/util"
 
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
@@ -588,7 +589,9 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
+    const install = spyOn(Npm, "add").mockImplementation(async () => {
+      throw new Error("boom")
+    })
 
     try {
       await load(tmp.path)
@@ -820,6 +823,41 @@ export default {
     await load(tmp.path)
     const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
     expect(lines).toEqual(["a-start", "a-end", "b"])
+  })
+
+  test("loads auto-discovered plugins through symlinked plugin directories", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const cfg = path.join(dir, ".opencode")
+        const src = path.join(dir, "plugin-src")
+        await fs.mkdir(cfg, { recursive: true })
+        await fs.mkdir(src, { recursive: true })
+        await fs.mkdir(path.join(cfg, "node_modules", "@opencode-ai", "plugin"), { recursive: true })
+        await fs.symlink(src, path.join(cfg, "plugins"), process.platform === "win32" ? "junction" : "dir")
+        await Bun.write(
+          path.join(cfg, "node_modules", "@opencode-ai", "plugin", "package.json"),
+          JSON.stringify({ name: "@opencode-ai/plugin", type: "module", exports: "./index.js" }, null, 2),
+        )
+        await Bun.write(path.join(cfg, "node_modules", "@opencode-ai", "plugin", "index.js"), "export default 1\n")
+        await Bun.write(
+          path.join(src, "demo.js"),
+          [
+            'import * as plugin from "@opencode-ai/plugin"',
+            "",
+            "export default plugin.default",
+            "",
+          ].join("\n"),
+        )
+
+        return { cfg }
+      },
+    })
+
+    const [item] = await ConfigPlugin.load(tmp.extra.cfg)
+    expect(item).toBeDefined()
+    const spec = ConfigPlugin.pluginSpecifier(item!)
+    expect(spec).toContain("/.opencode/plugins/demo.js")
+    expect((await import(spec)).default).toBe(1)
   })
 
   test("skips external plugins in pure mode", async () => {

@@ -47,7 +47,7 @@ OpenCode comes with several built-in LSP servers for popular languages:
 | yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
 | zls                | .zig, .zon                                                          | `zig` command available                                      |
 
-LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
+Built-in LSP servers can start automatically when OpenCode opens a matching file and the server's requirements are met. If there is no matching file, the dependency is missing, or you disable a server in config, that LSP stays inactive.
 
 :::note
 You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
@@ -66,7 +66,7 @@ When opencode opens a file, it:
 
 ## Configure
 
-You can customize LSP servers through the `lsp` section in your opencode config.
+You can customize LSP servers through the `lsp` section in any OpenCode config file, such as `config.json`, `opencode.json`, or `opencode.jsonc`.
 
 ```json title="opencode.json"
 {

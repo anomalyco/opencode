@@ -2242,7 +2242,7 @@ export default function Layout(props: ParentProps) {
                       <Button
                         size="large"
                         icon="plus-small"
-                        class="w-full"
+                        class="w-full h-auto min-h-8 justify-start whitespace-normal break-words text-left"
                         onClick={() => {
                           const item = project()
                           if (!item) return

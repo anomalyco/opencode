@@ -1,7 +1,9 @@
 import { Glob } from "@opencode-ai/shared/util/glob"
 import { Schema } from "effect"
+import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { Filesystem } from "@/util"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import path from "path"
@@ -27,6 +29,18 @@ export type Origin = {
   scope: Scope
 }
 
+async function link(dir: string, file: string) {
+  const from = path.dirname(file)
+  const next = await fs.realpath(from).catch(() => from)
+  if (next === from) return
+
+  const target = path.join(dir, "node_modules")
+  const dest = path.join(next, "node_modules")
+  if (!(await Filesystem.exists(target)) || (await Filesystem.exists(dest))) return
+
+  await fs.symlink(target, dest, process.platform === "win32" ? "junction" : "dir").catch(() => undefined)
+}
+
 export async function load(dir: string) {
   const plugins: Spec[] = []
 
@@ -35,7 +49,9 @@ export async function load(dir: string) {
     absolute: true,
     dot: true,
     symlink: true,
+    realpath: false,
   })) {
+    await link(dir, item)
     plugins.push(pathToFileURL(item).href)
   }
   return plugins
