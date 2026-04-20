@@ -20,7 +20,7 @@ if (!Script.preview) {
   output.push(`release=${release.databaseId}`)
   output.push(`tag=${release.tagName}`)
 } else if (Script.channel === "beta") {
-  await $`gh release create v${Script.version} -d --target ${sha} --title "v${Script.version}" --repo ${process.env.GH_REPO}`
+  await $`gh release create v${Script.version} -d --title "v${Script.version}" --repo ${process.env.GH_REPO}`
   const release =
     await $`gh release view v${Script.version} --json tagName,databaseId --repo ${process.env.GH_REPO}`.json()
   output.push(`release=${release.databaseId}`)
