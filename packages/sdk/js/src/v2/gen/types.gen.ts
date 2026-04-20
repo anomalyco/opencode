@@ -1648,9 +1648,9 @@ export type Config = {
      */
     tail_turns?: number
     /**
-     * Token budget for retained recent turn spans during compaction
+     * Maximum number of tokens from recent turns to preserve verbatim after compaction
      */
-    tail_tokens?: number
+    preserve_recent_tokens?: number
     /**
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */

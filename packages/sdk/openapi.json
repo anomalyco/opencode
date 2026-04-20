@@ -11878,8 +11878,8 @@
                 "minimum": 0,
                 "maximum": 9007199254740991
               },
-              "tail_tokens": {
-                "description": "Token budget for retained recent turn spans during compaction",
+              "preserve_recent_tokens": {
+                "description": "Maximum number of tokens from recent turns to preserve verbatim after compaction",
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
