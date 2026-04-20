@@ -249,6 +249,25 @@ function providerCfg(url: string) {
   }
 }
 
+function openaiProviderCfg(url: string) {
+  return {
+    enabled_providers: ["openai"],
+    provider: {
+      openai: {
+        options: {
+          apiKey: "test-openai-key",
+          baseURL: url,
+        },
+      },
+    },
+    agent: {
+      build: {
+        model: "openai/gpt-5.2",
+      },
+    },
+  }
+}
+
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
@@ -436,6 +455,52 @@ it.live("static loop consumes queued replies across turns", () =>
       expect(yield* llm.pending).toBe(0)
     }),
     { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop automatically reuses previous_response_id for matching OpenAI responses turns", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello one" }],
+      })
+      yield* llm.text("world one")
+
+      const first = yield* prompt.loop({ sessionID: session.id })
+      expect(first.info.role).toBe("assistant")
+      const firstFinish = first.parts.find((part): part is MessageV2.StepFinishPart => part.type === "step-finish")
+      expect(firstFinish?.metadata?.openai?.responseId).toBe("resp_test")
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello two" }],
+      })
+      yield* llm.text("world two")
+
+      const second = yield* prompt.loop({ sessionID: session.id })
+      expect(second.info.role).toBe("assistant")
+      expect(second.parts.some((part) => part.type === "text" && part.text === "world two")).toBe(true)
+
+      const hits = yield* llm.hits
+      expect(hits).toHaveLength(2)
+      expect(hits[0]?.url.pathname.endsWith("/responses")).toBe(true)
+      expect(hits[0]?.body.previous_response_id).toBeUndefined()
+      expect(hits[1]?.url.pathname.endsWith("/responses")).toBe(true)
+      expect(hits[1]?.body.previous_response_id).toBe("resp_test")
+    }),
+    { git: true, config: openaiProviderCfg },
   ),
 )
 

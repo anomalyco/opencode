@@ -523,6 +523,85 @@ it.live("session.processor effect tests keep encrypted reasoning metadata when a
   ),
 )
 
+it.live("session.processor effect tests keep the latest encrypted reasoning metadata across raw chunks", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { reasoning_content: "think", encrypted_content: "encrypted-1" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { reasoning_content: " more", encrypted_content: "encrypted-2" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "stop" }],
+              },
+            ],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason twice")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const base = yield* provider.getModel(ref.providerID, ref.modelID)
+        const mdl = {
+          ...base,
+          capabilities: {
+            ...base.capabilities,
+            reasoning: true,
+            interleaved: { field: "reasoning_content" as const },
+          },
+        }
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason twice" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const reasoning = parts.find((part): part is MessageV2.ReasoningPart => part.type === "reasoning")
+
+        expect(value).toBe("continue")
+        expect(reasoning?.text).toBe("think more")
+        expect(reasoning?.metadata?.openai?.reasoningEncryptedContent).toBe("encrypted-2")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests reset reasoning state across retries", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
