@@ -182,14 +182,20 @@ export function parseAPICallError(input: { providerID: ProviderID; error: APICal
   }
 
   const metadata = input.error.url ? { url: input.error.url } : undefined
-  if (input.error.statusCode === 429) {
+  const is429 = input.error.statusCode === 429
+  if (is429) {
     RateLimit.onRateLimitError(input.providerID)
   }
+  const friendlyMessage = is429 ? `Rate limit hit on ${input.providerID} — retrying` : m
   return {
     type: "api_error",
-    message: m,
+    message: friendlyMessage,
     statusCode: input.error.statusCode,
-    isRetryable: input.providerID.startsWith("openai") ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable,
+    isRetryable: is429
+      ? true
+      : input.providerID.startsWith("openai")
+        ? isOpenAiErrorRetryable(input.error)
+        : input.error.isRetryable,
     responseHeaders: input.error.responseHeaders,
     responseBody: input.error.responseBody,
     metadata,

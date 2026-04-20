@@ -1,3 +1,5 @@
+import fs from "fs"
+import path from "path"
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
@@ -7,6 +9,7 @@ import { SessionTable } from "../../session/session.sql"
 import { Project } from "../../project"
 import { Instance } from "../../project/instance"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Global } from "../../global"
 
 interface SessionStats {
   totalSessions: number
@@ -80,6 +83,7 @@ export const StatsCommand = cmd({
       }
 
       displayStats(stats, args.tools, modelLimit)
+      displayRateLimits()
     })
   },
 })
@@ -410,4 +414,53 @@ function formatNumber(num: number): string {
     return (num / 1000).toFixed(1) + "K"
   }
   return num.toString()
+}
+
+function displayRateLimits() {
+  const width = 56
+  function renderRow(label: string, value: string): string {
+    const availableWidth = width - 1
+    const paddingNeeded = availableWidth - label.length - value.length
+    const padding = Math.max(0, paddingNeeded)
+    return `│${label}${" ".repeat(padding)}${value} │`
+  }
+
+  const jsonPath = path.join(Global.Path.config, "opencode.json")
+  let data: any
+  try {
+    data = JSON.parse(fs.readFileSync(jsonPath, "utf8"))
+  } catch {
+    return
+  }
+  const providers = data?.provider
+  if (!providers || typeof providers !== "object") return
+
+  const rows: Array<{ id: string; perMinute?: number; perDay?: number; tokensPerMinute?: number; tokensPerDay?: number }> = []
+  for (const [id, cfg] of Object.entries<any>(providers)) {
+    const rl = cfg?.options?.rateLimit
+    if (!rl) continue
+    rows.push({
+      id,
+      perMinute: rl.perMinute,
+      perDay: rl.perDay,
+      tokensPerMinute: rl.tokensPerMinute,
+      tokensPerDay: rl.tokensPerDay,
+    })
+  }
+  if (rows.length === 0) return
+
+  console.log("┌────────────────────────────────────────────────────────┐")
+  console.log("│               RATE LIMITS (learned/set)                │")
+  console.log("├────────────────────────────────────────────────────────┤")
+  for (const r of rows) {
+    console.log(`│ ${r.id.padEnd(54)} │`)
+    if (r.perMinute !== undefined) console.log(renderRow("  Requests/min", formatNumber(r.perMinute)))
+    if (r.perDay !== undefined) console.log(renderRow("  Requests/day", formatNumber(r.perDay)))
+    if (r.tokensPerMinute !== undefined) console.log(renderRow("  Tokens/min", formatNumber(r.tokensPerMinute)))
+    if (r.tokensPerDay !== undefined) console.log(renderRow("  Tokens/day", formatNumber(r.tokensPerDay)))
+    console.log("├────────────────────────────────────────────────────────┤")
+  }
+  process.stdout.write("\x1B[1A")
+  console.log("└────────────────────────────────────────────────────────┘")
+  console.log()
 }

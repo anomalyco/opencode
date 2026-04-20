@@ -28,7 +28,7 @@ import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
-import { RateLimit } from "./rate-limit"
+import { RateLimit, RateLimitError, formatGateMessage } from "./rate-limit"
 
 const log = Log.create({ service: "provider" })
 
@@ -1443,6 +1443,11 @@ const layer: Layer.Layer<
         const chunkTimeout = options["chunkTimeout"]
         delete options["chunkTimeout"]
 
+        if (options["rateLimit"] && typeof options["rateLimit"] === "object") {
+          RateLimit.configure(model.providerID, options["rateLimit"] as any)
+        }
+        delete options["rateLimit"]
+
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
@@ -1472,7 +1477,19 @@ const layer: Layer.Layer<
             }
           }
 
-          RateLimit.tick(model.providerID)
+          const estimate = RateLimit.estimateRequestTokens(opts.body)
+          const gate = RateLimit.check(model.providerID, estimate)
+          if (!gate.ok) {
+            throw new RateLimitError({
+              providerID: model.providerID,
+              reason: gate.reason,
+              limit: gate.limit,
+              current: gate.current,
+              resetAt: gate.resetAt,
+              message: formatGateMessage(model.providerID, gate),
+            })
+          }
+          RateLimit.tick(model.providerID, estimate)
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682

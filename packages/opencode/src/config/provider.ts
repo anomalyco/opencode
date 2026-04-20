@@ -110,9 +110,15 @@ export class Info extends Schema.Class<Info>("ProviderConfig")({
             perDay: Schema.optional(PositiveInt).annotate({
               description: "Learned or user-set request limit per 24 hours.",
             }),
+            tokensPerMinute: Schema.optional(PositiveInt).annotate({
+              description: "Learned or user-set token limit per 60 seconds.",
+            }),
+            tokensPerDay: Schema.optional(PositiveInt).annotate({
+              description: "Learned or user-set token limit per 24 hours.",
+            }),
           }).annotate({
             description:
-              "Request-rate limits for this provider. Populated automatically the first time a 429 response is received, or can be set manually.",
+              "Request- and token-rate limits for this provider. Populated automatically the first time a 429 response is received, or can be set manually.",
           }),
         ),
       }),
