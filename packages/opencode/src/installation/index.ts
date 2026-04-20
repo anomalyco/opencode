@@ -248,11 +248,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           return data.version
         }
 
-        const response = yield* httpOk.execute(
-          HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
-            HttpClientRequest.acceptJson,
-          ),
-        )
+        const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+        let githubRequest = HttpClientRequest.get(
+          "https://api.github.com/repos/anomalyco/opencode/releases/latest",
+        ).pipe(HttpClientRequest.acceptJson)
+        if (githubToken) githubRequest = githubRequest.pipe(HttpClientRequest.bearerToken(githubToken))
+        const response = yield* httpOk.execute(githubRequest)
         const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
         return data.tag_name.replace(/^v/, "")
       }, Effect.orDie)
