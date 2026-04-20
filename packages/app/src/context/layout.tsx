@@ -14,9 +14,14 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_SIDEBAR_WIDTH = 344
-const DEFAULT_FILE_TREE_WIDTH = 200
-const DEFAULT_SESSION_WIDTH = 300
+function vwDefault(max: number, pct: number) {
+  if (typeof window === "undefined") return max
+  return Math.min(max, Math.round(window.innerWidth * pct))
+}
+
+const DEFAULT_SIDEBAR_WIDTH = vwDefault(344, 0.24)
+const DEFAULT_FILE_TREE_WIDTH = vwDefault(200, 0.14)
+const DEFAULT_SESSION_WIDTH = vwDefault(300, 0.21)
 const DEFAULT_TERMINAL_HEIGHT = 280
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
@@ -609,7 +614,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         toggle() {
           setStore("sidebar", "opened", (x) => !x)
         },
-        width: createMemo(() => store.sidebar.width),
+        width: createMemo(() => {
+          const raw = store.sidebar.width
+          const vw = typeof window === "undefined" ? 9999 : window.innerWidth
+          return Math.min(raw, Math.round(vw * 0.30))
+        }),
         resize(width: number) {
           setStore("sidebar", "width", width)
         },
@@ -642,7 +651,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
+        width: createMemo(() => {
+          const raw = store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH
+          const vw = typeof window === "undefined" ? 9999 : window.innerWidth
+          return Math.min(raw, Math.round(vw * 0.20))
+        }),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
         setTab(tab: "changes" | "all") {
           if (!store.fileTree) {
@@ -681,7 +694,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       session: {
-        width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
+        width: createMemo(() => {
+          const raw = store.session?.width ?? DEFAULT_SESSION_WIDTH
+          const vw = typeof window === "undefined" ? 9999 : window.innerWidth
+          return Math.min(raw, Math.round(vw * 0.25))
+        }),
         resize(width: number) {
           if (!store.session) {
             setStore("session", { width })

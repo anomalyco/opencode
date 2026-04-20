@@ -1819,7 +1819,10 @@ export default function Layout(props: ParentProps) {
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const SIDE_FLOOR = typeof window === "undefined"
+    ? 244
+    : Math.min(244, Math.max(180, Math.round(window.innerWidth * 0.18)))
+  const side = createMemo(() => Math.max(layout.sidebar.width(), SIDE_FLOOR))
   const panel = createMemo(() => Math.max(side() - 64, 0))
 
   const loadedSessionDirs = new Set<string>()
@@ -2408,8 +2411,8 @@ export default function Layout(props: ParentProps) {
                 <ResizeHandle
                   direction="horizontal"
                   size={layout.sidebar.width()}
-                  min={typeof window === "undefined" ? 180 : Math.max(180, Math.round(window.innerWidth * 0.12))}
-                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                  min={typeof window === "undefined" ? 150 : Math.max(150, Math.round(window.innerWidth * 0.1))}
+                  max={typeof window === "undefined" ? 1000 : Math.round(window.innerWidth * 0.30)}
                   onResize={(w) => {
                     setState("sizing", true)
                     if (sizet !== undefined) clearTimeout(sizet)

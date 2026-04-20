@@ -8,8 +8,20 @@ export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 const file = path.join(Global.Path.data, "auth.json")
 const activeFile = path.join(Global.Path.data, "auth-active.json")
+const migratedFlag = path.join(Global.Path.data, "auth.v2-migrated")
 
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
+
+function parseJwtEmail(token: string): string | undefined {
+  const parts = token.split(".")
+  if (parts.length !== 3) return undefined
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString())
+    return payload.email
+  } catch {
+    return undefined
+  }
+}
 
 export class Oauth extends Schema.Class<Oauth>("OAuth")({
   type: Schema.Literal("oauth"),
@@ -69,6 +81,28 @@ export const layer = Layer.effect(
     const fsys = yield* AppFileSystem.Service
     const decode = Schema.decodeUnknownOption(Info)
     const writeMutex = yield* Ref.make(false)
+
+    yield* Effect.gen(function* () {
+      const flagged = yield* fsys.existsSafe(migratedFlag).pipe(Effect.orElseSucceed(() => false))
+      if (flagged) return
+      const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
+      let changed = false
+      for (const [key, value] of Object.entries(data)) {
+        if (!value || typeof value !== "object") continue
+        const entry = value as Record<string, unknown>
+        if (entry.type !== "oauth") continue
+        if (entry._accountEmail) continue
+        const email = typeof entry.access === "string" ? parseJwtEmail(entry.access) : undefined
+        if (!email) continue
+        entry._accountEmail = email
+        if (!entry._accountLabel) entry._accountLabel = "Default"
+        changed = true
+      }
+      if (changed) {
+        yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to migrate auth data")))
+      }
+      yield* fsys.writeJson(migratedFlag, "").pipe(Effect.mapError(fail("Failed to write migration flag")))
+    }).pipe(Effect.orElse(() => Effect.void))
 
     const all = Effect.fn("Auth.all")(function* () {
       if (process.env.OPENCODE_AUTH_CONTENT) {
