@@ -1297,10 +1297,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              gitUsername,
-              sessionID,
+              gitUsername: gitUsername,
+              sessionID: input.sessionID,
               modelID: input.model?.modelID ?? "",
-              agent,
+              agent: input.agent,
               opencodeVersion: opencodePackage.version,
             }),
           }).catch(() => {})
