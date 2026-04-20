@@ -38,6 +38,7 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
+import { ConfigParse } from "./config/parse"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -89,11 +90,29 @@ const cli = yargs(args)
       process.env.OPENCODE_PURE = "1"
     }
 
+    const configLogLevel = await (async (): Promise<Log.Level | undefined> => {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        const filepath = path.join(Global.Path.config, file)
+        try {
+          const text = await Filesystem.readText(filepath)
+          const parsed = ConfigParse.jsonc(text, filepath) as Record<string, unknown>
+          const level = parsed.logLevel
+          if (typeof level === "string" && ["DEBUG", "INFO", "WARN", "ERROR"].includes(level)) {
+            return level as Log.Level
+          }
+        } catch {
+          // config file missing or unreadable — ignore
+        }
+      }
+      return undefined
+    })()
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
+        if (configLogLevel) return configLogLevel
         if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
