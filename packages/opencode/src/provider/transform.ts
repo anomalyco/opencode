@@ -61,8 +61,14 @@ function normalizeMessages(
         }
         if (!Array.isArray(msg.content)) return msg
         const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
+          if (part.type === "text") {
             return part.text !== ""
+          }
+          if (part.type === "reasoning") {
+            // Keep reasoning parts that carry providerOptions (e.g. redacted_thinking
+            // blocks which have empty text but contain signature/redactedData metadata
+            // that must be preserved for the Anthropic API)
+            return part.text !== "" || part.providerOptions != null
           }
           return true
         })
@@ -116,6 +122,9 @@ function normalizeMessages(
       if (msg.role !== "assistant" || !Array.isArray(msg.content)) return [msg]
 
       const parts = msg.content
+      // Don't reorder messages containing reasoning/thinking blocks — Anthropic
+      // requires thinking and redacted_thinking blocks to remain exactly as returned.
+      if (parts.some((part) => part.type === "reasoning")) return [msg]
       const first = parts.findIndex((part) => part.type === "tool-call")
       if (first === -1) return [msg]
       if (!parts.slice(first).some((part) => part.type !== "tool-call")) return [msg]
@@ -246,13 +255,20 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
     if (shouldUseContentOptions) {
-      const lastContent = msg.content[msg.content.length - 1]
-      if (
-        lastContent &&
-        typeof lastContent === "object" &&
-        lastContent.type !== "tool-approval-request" &&
-        lastContent.type !== "tool-approval-response"
-      ) {
+      // Find the last content block that is safe to annotate with cache hints.
+      // Reasoning blocks must not be modified — Anthropic requires thinking and
+      // redacted_thinking blocks to remain exactly as returned in prior responses.
+      const lastContent = [...msg.content]
+          .reverse()
+          .find(
+            (part) =>
+              part &&
+             typeof part === "object" &&
+              part.type !== "tool-approval-request" &&
+              part.type !== "tool-approval-response" &&
+              part.type !== "reasoning",
+          )
+       if (lastContent) {
         lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
         continue
       }
