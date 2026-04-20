@@ -286,6 +286,7 @@ export function LiteSection() {
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
             <li>Kimi K2.5</li>
+            <li>Kimi K2.6</li>
             <li>GLM-5</li>
             <li>GLM-5.1</li>
             <li>Mimo-V2-Pro</li>
