@@ -22,7 +22,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "github-copilot": 3,
   anthropic: 4,
   google: 5,
-  nvidia: 6,
 }
 
 export function createDialogProviderOptions() {
