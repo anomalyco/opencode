@@ -839,10 +839,13 @@ export const layer = Layer.effect(
       const storedState = yield* auth.getOAuthState(mcpName)
       if (storedState !== result.oauthState) {
         yield* auth.clearOAuthState(mcpName)
+        yield* Effect.tryPromise(() => McpOAuthCallback.stopIfIdle()).pipe(Effect.ignore)
         throw new Error("OAuth state mismatch - potential CSRF attack")
       }
       yield* auth.clearOAuthState(mcpName)
-      return yield* finishAuth(mcpName, code)
+      const status = yield* finishAuth(mcpName, code)
+      yield* Effect.tryPromise(() => McpOAuthCallback.stopIfIdle()).pipe(Effect.ignore)
+      return status
     })
 
     const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
