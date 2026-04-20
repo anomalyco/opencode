@@ -1,0 +1,8 @@
+Run a prompt repeatedly while the session stays open.
+
+Usage:
+- `/loop <prompt>` starts a self-paced loop.
+- `/loop 5m <prompt>` starts a scheduled loop.
+- `/loop stop` stops the active loop for the session.
+
+If no prompt is provided, use `.claude/loop.md` from the project when present.
