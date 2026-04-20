@@ -993,7 +993,13 @@ export const ConfigProvidersResult = Schema.Struct({
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
-  return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
+  return Object.fromEntries(
+    Object.entries(providers).flatMap(([k, item]) => {
+      const first = sort(Object.values(item.models))[0]
+      if (!first) return []
+      return [[k, first.id]] as [string, string][]
+    }),
+  )
 }
 
 export interface Interface {
@@ -1171,6 +1177,7 @@ const layer: Layer.Layer<
               headers: {
                 Authorization: `Bearer ${secret}`,
                 Accept: "application/json",
+                "Accept-Encoding": "identity",
               },
               signal: AbortSignal.timeout(5_000),
             }).catch((error) => {
@@ -1627,7 +1634,7 @@ const layer: Layer.Layer<
             ...model.headers,
           }
 
-        if (model.providerID === "openwebui") {
+        if (model.api.npm === "@ai-sdk/openai-compatible") {
           options["headers"] = {
             ...options["headers"],
             "Accept-Encoding": "identity",
@@ -1680,19 +1687,18 @@ const layer: Layer.Layer<
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
 
-          if (model.providerID === "openwebui") {
-            const fetchWebui = (body?: BodyInit | null) =>
-              fetch(input, {
+          if (model.api.npm === "@ai-sdk/openai-compatible") {
+            const fetchCompat = (body?: BodyInit | null) =>
+              fetchFn(input, {
                 ...opts,
                 ...(body !== undefined ? { body } : {}),
                 timeout: false,
                 decompress: false,
               } as RequestInit & { decompress?: boolean; timeout?: boolean })
 
-            const initial = await fetchWebui()
+            const initial = await fetchCompat()
 
             const ctype = initial.headers.get("content-type") ?? "text/event-stream; charset=utf-8"
-            const contentEncoding = initial.headers.get("content-encoding")
             const outHeaders = new Headers()
             outHeaders.set("content-type", ctype)
 
@@ -1700,6 +1706,7 @@ const layer: Layer.Layer<
               if (initial.ok) return initial
               const text = await initial.text().catch(() => "")
               if (
+                model.providerID === "openwebui" &&
                 initial.status === 400 &&
                 text.includes("Function tools with reasoning_effort are not supported") &&
                 typeof opts.body === "string"
@@ -1710,7 +1717,7 @@ const layer: Layer.Layer<
                     "Open WebUI chat endpoint rejects tools (claims reasoning_effort incompatibility); retrying as normal chat without tools",
                     { modelID: model.api.id, providerID: model.providerID },
                   )
-                  return fetchWebui(next.body)
+                  return fetchCompat(next.body)
                 }
               }
               return new Response(text, {
@@ -1720,6 +1727,8 @@ const layer: Layer.Layer<
               })
             })()
 
+            const contentEncoding = res.headers.get("content-encoding")
+
             if (!res.ok) {
               const text = await res.text().catch(() => "")
               const errRes = new Response(text, {
@@ -1727,7 +1736,7 @@ const layer: Layer.Layer<
                 statusText: res.statusText,
                 headers: outHeaders,
               })
-              if (text) {
+              if (model.providerID === "openwebui" && text) {
                 const t = text.trim()
                 const parsed =
                   t.startsWith("[") || t.startsWith("{")
