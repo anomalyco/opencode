@@ -1,6 +1,5 @@
 import { describe, expect, test, spyOn, beforeEach, afterEach } from "bun:test"
-import { z } from "zod"
-import { QuestionTool } from "../../src/tool/question"
+import { normalizeQuestionsInput, QuestionTool } from "../../src/tool/question"
 import * as QuestionModule from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -63,6 +62,101 @@ describe("tool.question", () => {
 
     const result = await tool.execute({ questions }, ctx)
     expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
+  })
+
+  test("should parse a stringified questions array", async () => {
+    const tool = await QuestionTool.init()
+
+    askSpy.mockResolvedValueOnce([["TypeScript"]])
+
+    const input = {
+      questions: `[
+        {
+          "question": "Which language should we use?",
+          "header": "Stack",
+          "options": [
+            { "label": "TypeScript", "description": "Use TypeScript" }
+          ]
+        }
+      ]`,
+    } as unknown as Parameters<typeof tool.execute>[0]
+
+    const result = await tool.execute(input, ctx)
+
+    expect(askSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({
+            question: "Which language should we use?",
+            header: "Stack",
+          }),
+        ],
+      }),
+    )
+    expect(result.output).toContain(`"Which language should we use?"="TypeScript"`)
+  })
+
+  test("should wrap a single question object into an array", async () => {
+    const tool = await QuestionTool.init()
+
+    askSpy.mockResolvedValueOnce([["Python"]])
+
+    const input = {
+      questions: {
+        question: "Which language should we use?",
+        header: "Stack",
+        options: [{ label: "Python", description: "Use Python" }],
+      },
+    } as unknown as Parameters<typeof tool.execute>[0]
+
+    await tool.execute(input, ctx)
+
+    expect(askSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({
+            question: "Which language should we use?",
+          }),
+        ],
+      }),
+    )
+  })
+
+  test("should convert a plain string into a free-form question", async () => {
+    const tool = await QuestionTool.init()
+
+    askSpy.mockResolvedValueOnce([["Rust"]])
+
+    const input = {
+      questions: "Which language should we use?",
+    } as unknown as Parameters<typeof tool.execute>[0]
+
+    await tool.execute(input, ctx)
+
+    expect(askSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({
+            question: "Which language should we use?",
+            options: [],
+          }),
+        ],
+      }),
+    )
+  })
+
+  test("should normalize a multiline free-form question into a single question", () => {
+    const normalized = normalizeQuestionsInput(`次の作業を進める前に確認したいです。
+どの言語で実装したいですか？`)
+
+    expect(normalized).toEqual([
+      {
+        question:
+          "次の作業を進める前に確認したいです。\nどの言語で実装したいですか？",
+        header: "次の作業を進める前に確認したいです。",
+        options: [],
+      },
+    ])
   })
 
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
