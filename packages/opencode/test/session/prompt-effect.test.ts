@@ -157,7 +157,7 @@ function makeHttp() {
     LLM.defaultLayer,
     Env.defaultLayer,
     AgentSvc.defaultLayer,
-    Command.defaultLayer,
+    Command.defaultLayer.pipe(Layer.provide(mcp)),
     Permission.defaultLayer,
     Plugin.defaultLayer,
     Config.defaultLayer,

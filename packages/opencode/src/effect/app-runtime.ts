@@ -49,6 +49,10 @@ import { SessionShare } from "@/share"
 import { Npm } from "@/npm"
 import { memoMap } from "./memo-map"
 
+const mcpLayer = MCP.defaultLayer
+const commandLayer = Command.defaultLayer.pipe(Layer.provide(mcpLayer))
+const sessionPromptLayer = SessionPrompt.defaultLayer.pipe(Layer.provide(mcpLayer))
+
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
   AppFileSystem.defaultLayer,
@@ -78,13 +82,13 @@ export const AppLayer = Layer.mergeAll(
   SessionCompaction.defaultLayer,
   SessionRevert.defaultLayer,
   SessionSummary.defaultLayer,
-  SessionPrompt.defaultLayer,
+  sessionPromptLayer,
   Instruction.defaultLayer,
   LLM.defaultLayer,
   LSP.defaultLayer,
-  MCP.defaultLayer,
+  mcpLayer,
   McpAuth.defaultLayer,
-  Command.defaultLayer,
+  commandLayer,
   Truncate.defaultLayer,
   ToolRegistry.defaultLayer,
   Format.defaultLayer,

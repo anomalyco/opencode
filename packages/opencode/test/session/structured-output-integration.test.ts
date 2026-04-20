@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { Session } from "../../src/session"
+import { MCP } from "../../src/mcp"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util"
 import { Instance } from "../../src/project/instance"
@@ -23,7 +24,10 @@ async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionPrompt.Service | Session.Service>) {
   return Effect.runPromise(
-    fx.pipe(Effect.scoped, Effect.provide(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer))),
+    fx.pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(SessionPrompt.defaultLayer.pipe(Layer.provide(MCP.defaultLayer)), Session.defaultLayer)),
+    ),
   )
 }
 
