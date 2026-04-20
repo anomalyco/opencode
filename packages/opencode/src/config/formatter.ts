@@ -1,13 +1,17 @@
 export * as ConfigFormatter from "./formatter"
 
-import z from "zod"
+import { Schema } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
-export const Entry = z.object({
-  disabled: z.boolean().optional(),
-  command: z.array(z.string()).optional(),
-  environment: z.record(z.string(), z.string()).optional(),
-  extensions: z.array(z.string()).optional(),
-})
+export const Entry = Schema.Struct({
+  disabled: Schema.optional(Schema.Boolean),
+  command: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  environment: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  extensions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export const Info = z.union([z.boolean(), z.record(z.string(), Entry)])
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Entry)]).pipe(
+  withStatics((s) => ({ zod: zod(s) })),
+)
+export type Info = Schema.Schema.Type<typeof Info>

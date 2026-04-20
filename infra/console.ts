@@ -236,7 +236,6 @@ new sst.cloudflare.x.SolidStart("Console", {
     SALESFORCE_INSTANCE_URL,
     ZEN_BLACK_PRICE,
     ZEN_LITE_PRICE,
-    new sst.Secret("ZEN_LITE_COUPON_FIRST_MONTH_100_INVITEES"),
     new sst.Secret("ZEN_LIMITS"),
     new sst.Secret("ZEN_SESSION_SECRET"),
     ...ZEN_MODELS,

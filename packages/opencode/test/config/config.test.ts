@@ -27,7 +27,7 @@ import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util"
 import { ConfigPlugin } from "@/config/plugin"
-import { Npm } from "@opencode-ai/shared/npm"
+import { Npm } from "@/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),

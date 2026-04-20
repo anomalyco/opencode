@@ -5,11 +5,11 @@ import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
-import { useDialog } from "../../ui/dialog"
+import { useDialog, type DialogContext } from "../../ui/dialog"
 import type { PromptInfo } from "@tui/component/prompt/history"
 import { strip } from "@tui/component/prompt/part"
 
-export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
+export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID?: string) => void }) {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
@@ -19,9 +19,21 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
     dialog.setSize("large")
   })
 
-  const options = createMemo((): DialogSelectOption<string>[] => {
+  const options = createMemo((): DialogSelectOption<string | undefined>[] => {
     const messages = sync.data.message[props.sessionID] ?? []
-    const result = [] as DialogSelectOption<string>[]
+    const fullSession = {
+      title: "Full session",
+      value: undefined,
+      onSelect: async (dialog: DialogContext) => {
+        const forked = await sdk.client.session.fork({ sessionID: props.sessionID })
+        route.navigate({
+          sessionID: forked.data!.id,
+          type: "session",
+        })
+        dialog.clear()
+      },
+    } satisfies DialogSelectOption<string | undefined>
+    const result = [] as DialogSelectOption<string | undefined>[]
     for (const message of messages) {
       if (message.role !== "user") continue
       const part = (sync.data.part[message.id] ?? []).find(
@@ -57,9 +69,8 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
         },
       })
     }
-    result.reverse()
-    return result
+    return [fullSession, ...result.reverse()]
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork from message" options={options()} />
+  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork session" options={options()} />
 }

@@ -246,7 +246,8 @@ export const Event = {
     "session.error",
     z.object({
       sessionID: SessionID.zod.optional(),
-      error: MessageV2.Assistant.shape.error,
+      // z.lazy defers access to break circular dep: session → message-v2 → provider → plugin → session
+      error: z.lazy(() => MessageV2.Assistant.shape.error),
     }),
   ),
 }
@@ -649,7 +650,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       return input.partID
     })
 
-    const updatePartDelta = Effect.fn("Session.updatePartDelta")(function* (input: {
+    const updatePartDelta = Effect.fnUntraced(function* (input: {
       sessionID: SessionID
       messageID: MessageID
       partID: PartID

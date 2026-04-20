@@ -5,7 +5,6 @@ import { Config } from "@/config"
 import { Provider } from "@/provider"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
-import { AppRuntime } from "@/effect/app-runtime"
 import { jsonRequest } from "./trace"
 
 export const ConfigRoutes = lazy(() =>
@@ -52,11 +51,13 @@ export const ConfigRoutes = lazy(() =>
         },
       }),
       validator("json", Config.Info),
-      async (c) => {
-        const config = c.req.valid("json")
-        await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.update(config)))
-        return c.json(config)
-      },
+      async (c) =>
+        jsonRequest("ConfigRoutes.update", c, function* () {
+          const config = c.req.valid("json")
+          const cfg = yield* Config.Service
+          yield* cfg.update(config)
+          return config
+        }),
     )
     .get(
       "/providers",
