@@ -5,6 +5,12 @@ import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from 
 
 const root = "/permission"
 
+class PermissionNotFoundError extends Schema.TaggedErrorClass<PermissionNotFoundError>()(
+  "PermissionNotFoundError",
+  { message: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
 export const PermissionApi = HttpApi.make("permission")
   .add(
     HttpApiGroup.make("permission")
@@ -22,13 +28,15 @@ export const PermissionApi = HttpApi.make("permission")
           params: { requestID: PermissionID },
           payload: Permission.ReplyBody,
           success: Schema.Boolean,
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "permission.reply",
-            summary: "Respond to permission request",
-            description: "Approve or deny a permission request from the AI assistant.",
-          }),
-        ),
+        })
+          .addError(PermissionNotFoundError)
+          .annotateMerge(
+            OpenApi.annotations({
+              identifier: "permission.reply",
+              summary: "Respond to permission request",
+              description: "Approve or deny a permission request from the AI assistant.",
+            }),
+          ),
       )
       .annotateMerge(
         OpenApi.annotations({
@@ -57,6 +65,11 @@ export const permissionHandlers = Layer.unwrap(
       params: { requestID: PermissionID }
       payload: Permission.ReplyBody
     }) {
+      const pending = yield* svc.list()
+      const request = pending.find((r) => r.id === ctx.params.requestID)
+      if (!request) {
+        return yield* Effect.fail(new PermissionNotFoundError({ message: "Permission request not found" }))
+      }
       yield* svc.reply({
         requestID: ctx.params.requestID,
         reply: ctx.payload.reply,
