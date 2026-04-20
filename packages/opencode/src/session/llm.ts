@@ -447,7 +447,8 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  // StructuredOutput is an internal framework tool injected by prompt.ts; never permission-filter it.
+  return Record.filter(input.tools, (_, k) => k === "StructuredOutput" || (input.user.tools?.[k] !== false && !disabled.has(k)))
 }
 
 // Check if messages contain any tool-call content
