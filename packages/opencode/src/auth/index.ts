@@ -102,7 +102,7 @@ export const layer = Layer.effect(
         yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to migrate auth data")))
       }
       yield* fsys.writeJson(migratedFlag, "").pipe(Effect.mapError(fail("Failed to write migration flag")))
-    }).pipe(Effect.orElse(() => Effect.void))
+    }).pipe(Effect.orElseSucceed(() => {} as undefined))
 
     const all = Effect.fn("Auth.all")(function* () {
       if (process.env.OPENCODE_AUTH_CONTENT) {
