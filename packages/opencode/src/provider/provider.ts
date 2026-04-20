@@ -28,6 +28,7 @@ import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
+import { discoverOpenWebUIModels } from "./open-webui-discovery"
 import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
@@ -86,7 +87,8 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-async function* openwebuiDecodedWebChunks(
+/** Decode gzip/deflate/br SSE bodies when fetch uses `decompress: false` (OpenAI-compatible proxies). */
+async function* decodeOpenAICompatibleCompressedStream(
   webBody: ReadableStream<Uint8Array>,
   contentEncoding: string | null | undefined,
 ) {
@@ -1156,7 +1158,15 @@ const layer: Layer.Layer<
 
         yield* Effect.promise(async () => {
           const ow = cfg.provider?.["openwebui"]
-          const raw = (ow?.options?.baseURL ?? process.env["OPEN_WEBUI_BASE_URL"])?.replace(/\/+$/, "")
+          const metaRaw = await bridge.promise(
+            auth.get(ProviderID.make("openwebui")).pipe(
+              Effect.map((a) =>
+                a?.type === "api" && a.metadata?.baseURL ? a.metadata.baseURL : undefined,
+              ),
+              Effect.catch(() => Effect.succeed(undefined)),
+            ),
+          )
+          const raw = (ow?.options?.baseURL ?? process.env["OPEN_WEBUI_BASE_URL"] ?? metaRaw)?.replace(/\/+$/, "")
           if (!raw) return
           const secret =
             (typeof ow?.options?.apiKey === "string" && ow.options.apiKey) ||
@@ -1168,99 +1178,21 @@ const layer: Layer.Layer<
               ),
             ))
           if (!secret) return
-          const base = ProviderTransform.openwebuiOpenAICompatibleBase(raw)
-          const urls = ProviderTransform.openwebuiModelListUrls(base)
-          const models: Record<string, Model> = {}
-          for (const url of urls) {
-            if (Object.keys(models).length > 0) break
-            const response = await fetch(url, {
-              headers: {
-                Authorization: `Bearer ${secret}`,
-                Accept: "application/json",
-                "Accept-Encoding": "identity",
-              },
-              signal: AbortSignal.timeout(5_000),
-            }).catch((error) => {
-              log.error("Failed to fetch Open WebUI models", { endpoint: url, error })
-              return undefined
-            })
-            if (!response) continue
-            if (!response.ok) continue
-            const text = await response.text().catch(() => "")
-            const data = await Promise.resolve(text)
-              .then((x) => (x ? JSON.parse(x) : undefined))
-              .catch(() => undefined)
-            if (!data) {
-              log.error("Open WebUI models endpoint returned non-JSON body", {
-                endpoint: url,
-                preview: text.slice(0, 200),
-              })
-              continue
-            }
-            type OwuiEntry = { id?: string; name?: string; model?: string; info?: { id?: string } }
-            const entries = Array.isArray(data)
-              ? data
-              : data && typeof data === "object" && "data" in data && Array.isArray(data.data)
-                ? data.data
-                : data && typeof data === "object" && "models" in data && Array.isArray(data.models)
-                  ? data.models
-                  : []
-            for (const item of entries) {
-              const rawID = (() => {
-                if (typeof item === "string") return item
-                if (!item || typeof item !== "object") return undefined
-                const e = item as OwuiEntry
-                if (typeof e.id === "string" && e.id) return e.id
-                if (typeof e.name === "string" && e.name) return e.name
-                if (typeof e.model === "string" && e.model) return e.model
-                if (e.info && typeof e.info.id === "string" && e.info.id) return e.info.id
-                return undefined
-              })()
-              if (!rawID) continue
-              const e = item && typeof item === "object" ? (item as OwuiEntry) : undefined
-              const label = typeof e?.name === "string" ? e.name : rawID
-              models[rawID] = {
-                id: ModelID.make(rawID),
-                providerID: ProviderID.make("openwebui"),
-                name: label,
-                api: {
-                  id: rawID,
-                  url: base,
-                  npm: "@ai-sdk/openai-compatible",
-                },
-                status: "active",
-                headers: {},
-                options: {},
-                cost: {
-                  input: 0,
-                  output: 0,
-                  cache: { read: 0, write: 0 },
-                },
-                limit: {
-                  context: 128_000,
-                  output: 4_096,
-                },
-                capabilities: {
-                  temperature: true,
-                  reasoning: false,
-                  attachment: false,
-                  toolcall: true,
-                  input: { text: true, audio: false, image: false, video: false, pdf: false },
-                  output: { text: true, audio: false, image: false, video: false, pdf: false },
-                  interleaved: false,
-                },
-                release_date: "",
-                variants: {},
-              }
-            }
-          }
-          if (Object.keys(models).length === 0) {
-            log.error("Open WebUI instance returned no models after trying all endpoints", {
+
+          const discovered = await discoverOpenWebUIModels({
+            rawBaseURL: raw,
+            apiKey: secret,
+            timeoutMs: 5_000,
+          })
+          if (!discovered.ok) {
+            log.error("Open WebUI model discovery failed", {
               baseURL: raw,
-              normalized: base,
+              reason: discovered.reason,
+              detail: discovered.detail,
             })
             return
           }
+          const { models } = discovered
           database["openwebui"] = {
             id: ProviderID.make("openwebui"),
             name: "Open WebUI",
@@ -1768,7 +1700,7 @@ const layer: Layer.Layer<
             if (!res.body)
               return new Response(null, { status: res.status, statusText: res.statusText, headers: outHeaders })
 
-            const chunkIter = openwebuiDecodedWebChunks(res.body, contentEncoding)
+            const chunkIter = decodeOpenAICompatibleCompressedStream(res.body, contentEncoding)
             if (opts.signal) {
               opts.signal.addEventListener(
                 "abort",

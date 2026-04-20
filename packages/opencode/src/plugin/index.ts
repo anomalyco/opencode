@@ -17,6 +17,7 @@ import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
+import { OpenWebUIAuthPlugin } from "./open-webui"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
@@ -61,6 +62,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   PoeAuthPlugin,
   CloudflareWorkersAuthPlugin,
   CloudflareAIGatewayAuthPlugin,
+  OpenWebUIAuthPlugin,
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {

@@ -153,6 +153,8 @@ export type AuthHook = {
               type: "success"
               key: string
               provider?: string
+              /** Extra fields stored on API auth (e.g. Open WebUI instance URL). */
+              metadata?: Record<string, string>
             }
           | {
               type: "failed"

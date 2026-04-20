@@ -3,7 +3,7 @@ import { AppRuntime } from "../../effect/app-runtime"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { ModelsDev, ProviderTransform } from "../../provider"
+import { ModelsDev } from "../../provider"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
@@ -163,7 +163,8 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       })
       if (prompts.isCancel(key)) throw new UI.CancelledError()
 
-      const result = await method.authorize(inputs)
+      const mergedInputs = { ...inputs, apiKey: key }
+      const result = await method.authorize(mergedInputs)
       if (result.type === "failed") {
         prompts.log.error("Failed to authorize")
       }
@@ -172,6 +173,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
         await put(saveProvider, {
           type: "api",
           key: result.key ?? key,
+          ...(result.metadata ? { metadata: result.metadata } : {}),
         })
         prompts.log.success("Login successful")
       }
@@ -462,100 +464,6 @@ export const ProvidersLoginCommand = cmd({
           prompts.log.info(
             "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
           )
-        }
-
-        if (provider === "openwebui") {
-          const baseURL = await prompts.text({
-            message: "Enter your Open WebUI instance URL",
-            placeholder: "https://your-instance.com",
-            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-          })
-          if (prompts.isCancel(baseURL)) throw new UI.CancelledError()
-
-          const key = await prompts.password({
-            message: "Enter your API key",
-            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-          })
-          if (prompts.isCancel(key)) throw new UI.CancelledError()
-
-          const base = ProviderTransform.openwebuiOpenAICompatibleBase(baseURL.replace(/\/+$/, ""))
-          const urls = ProviderTransform.openwebuiModelListUrls(base)
-
-          const spinner = prompts.spinner()
-          spinner.start("Fetching models from Open WebUI...")
-
-          const headers = { Authorization: `Bearer ${key}` }
-          const load = (url: string) =>
-            fetch(url, { headers, signal: AbortSignal.timeout(10_000) }).catch(() => undefined)
-
-          let response: Awaited<ReturnType<typeof load>> | undefined
-          for (const url of urls) {
-            const res = await load(url)
-            response = res
-            if (res?.ok) break
-          }
-
-          if (!response || !response.ok) {
-            spinner.stop("Failed to connect to Open WebUI", 1)
-            const err = response
-              ? `Models endpoint returned status ${response.status}. Check your base URL and API key.`
-              : "Could not reach the Open WebUI instance. Check your base URL."
-            prompts.log.error(err)
-            prompts.outro("Failed")
-            return
-          }
-
-          const data = (await response.json().catch(() => undefined)) as unknown
-          if (data === undefined) {
-            spinner.stop("Failed to connect to Open WebUI", 1)
-            prompts.log.error("Could not read models from Open WebUI. Check your base URL.")
-            prompts.outro("Failed")
-            return
-          }
-
-          const modelCount = Array.isArray(data)
-            ? data.length
-            : data &&
-                typeof data === "object" &&
-                "data" in data &&
-                Array.isArray((data as { data: unknown[] }).data)
-              ? (data as { data: unknown[] }).data.length
-              : data &&
-                  typeof data === "object" &&
-                  "models" in data &&
-                  Array.isArray((data as { models: unknown[] }).models)
-                ? (data as { models: unknown[] }).models.length
-                : 0
-
-          if (modelCount === 0) {
-            spinner.stop("No models found", 1)
-            prompts.log.error(
-              "The Open WebUI instance returned no models. Check that your instance has models available.",
-            )
-            prompts.outro("Failed")
-            return
-          }
-
-          spinner.stop(`Found ${modelCount} model${modelCount === 1 ? "" : "s"}`)
-
-          await AppRuntime.runPromise(
-            Config.Service.use((cfg) =>
-              cfg.updateGlobal({
-                provider: {
-                  openwebui: {
-                    options: { baseURL: base },
-                  },
-                },
-              }),
-            ),
-          )
-          await put(provider, {
-            type: "api",
-            key,
-          })
-
-          prompts.outro("Done")
-          return
         }
 
         const key = await prompts.password({
