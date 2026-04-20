@@ -252,12 +252,12 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
 
         if (config.extension === "zip") {
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
+          const escapedArchive = archive.replace(/'/g, "''")
+          const escapedDir = dir.replace(/'/g, "''")
           const result = yield* run(shell, [
             "-NoProfile",
             "-Command",
-            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
-            archive,
-            dir,
+            `Expand-Archive -LiteralPath '${escapedArchive}' -DestinationPath '${escapedDir}' -Force`,
           ])
           if (result.code !== 0) {
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
