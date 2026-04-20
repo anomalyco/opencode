@@ -9,8 +9,22 @@ import fs from "fs/promises"
 import { Filesystem } from "../../util/filesystem"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
+import { Project } from "../../project/project"
+import { ProjectID } from "../../project/schema"
 import { EOL } from "os"
 import type { Argv } from "yargs"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 type AgentMode = "all" | "primary" | "subagent"
 
@@ -56,8 +70,10 @@ const AgentCreateCommand = cmd({
         describe: "model to use in the format of provider/model",
       }),
   async handler(args) {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         const cliPath = args.path
         const cliDescription = args.description
@@ -86,7 +102,7 @@ const AgentCreateCommand = cmd({
                 {
                   label: "Current project",
                   value: "project" as const,
-                  hint: Instance.worktree,
+                  hint: Instance.directory,
                 },
                 {
                   label: "Global",
@@ -99,7 +115,7 @@ const AgentCreateCommand = cmd({
             scope = scopeResult
           }
           targetPath = path.join(
-            scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
+            scope === "global" ? Global.Path.config : path.join(Instance.directory, ".opencode"),
             "agent",
           )
         }
@@ -229,8 +245,10 @@ const AgentListCommand = cmd({
   command: "list",
   describe: "list all available agents",
   async handler() {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         const agents = await Agent.list()
         const sortedAgents = agents.sort((a, b) => {

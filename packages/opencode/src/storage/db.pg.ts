@@ -38,6 +38,14 @@ export const Database = {
 		return getDb();
 	},
 
+	effect<T>(fn: () => T): T {
+		return fn();
+	},
+
+	async use<T>(fn: (db: ReturnType<typeof getDb>) => T | Promise<T>): Promise<T> {
+		return await fn(getDb());
+	},
+
 	async initialize() {
 		log.info("connecting to postgres...");
 		await getPool().query("SELECT 1");

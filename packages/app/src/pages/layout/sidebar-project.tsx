@@ -31,7 +31,7 @@ export type ProjectSidebarContext = {
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
-  sessionProps: Omit<SessionItemProps, "session" | "slug" | "children" | "mobile" | "dense" | "popover">
+  sessionProps: Omit<SessionItemProps, "session" | "slug" | "children" | "mobile" | "dense" | "popover" | "directory">
   setHoverSession: (id: string | undefined) => void
 }
 
@@ -211,6 +211,7 @@ const ProjectPreviewPanel = (props: {
                 {...props.ctx.sessionProps}
                 session={session}
                 slug={base64Encode(props.project.worktree)}
+                directory={props.project.worktree}
                 dense
                 mobile={props.mobile}
                 popover={false}
@@ -238,6 +239,7 @@ const ProjectPreviewPanel = (props: {
                       {...props.ctx.sessionProps}
                       session={session}
                       slug={base64Encode(directory)}
+                      directory={directory}
                       dense
                       mobile={props.mobile}
                       popover={false}

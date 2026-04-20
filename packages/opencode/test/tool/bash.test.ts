@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
@@ -21,6 +21,51 @@ const ctx = {
 }
 
 const projectRoot = path.join(__dirname, "../..")
+const originalFetch = globalThis.fetch
+const originalUrl = process.env.VERITLY_EXECUTOR_URL
+
+function output(command: string) {
+  if (command.includes("echo 'test'")) return "test\n"
+  if (command.includes("echo hello")) return "hello\n"
+  if (command.includes("echo foo && echo bar")) return "foo\nbar\n"
+
+  const seq = command.match(/seq 1 (\d+)/)
+  if (seq) {
+    const count = Number(seq[1])
+    return Array.from({ length: count }, (_, i) => String(i + 1)).join("\n") + "\n"
+  }
+
+  const bytes = command.match(/head -c (\d+) \/dev\/zero/)
+  if (bytes) {
+    return "a".repeat(Number(bytes[1]))
+  }
+
+  return ""
+}
+
+beforeEach(() => {
+  process.env.VERITLY_EXECUTOR_URL = "http://executor.test"
+  globalThis.fetch = (async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+    if (url.endsWith("/health")) {
+      return new Response("ok", { status: 200 })
+    }
+    if (!url.includes("/exec")) {
+      return new Response("not found", { status: 404 })
+    }
+    const body = JSON.parse(String(init?.body ?? "{}"))
+    return Response.json({
+      output: output(body.command),
+      exitCode: 0,
+    })
+  }) as typeof fetch
+})
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  if (originalUrl) process.env.VERITLY_EXECUTOR_URL = originalUrl
+  else delete process.env.VERITLY_EXECUTOR_URL
+})
 
 describe("tool.bash", () => {
   test("basic", async () => {

@@ -25,8 +25,8 @@ export namespace Account {
   export const Account = AccountSchema
   export type Account = AccountSchema
 
-  export function active(): Account | undefined {
-    return Option.getOrUndefined(runSync((service) => service.active()))
+  export async function active(): Promise<Account | undefined> {
+    return Option.getOrUndefined(await runPromise((service) => service.active()))
   }
 
   export async function config(accountID: AccountID, orgID: OrgID): Promise<Record<string, unknown> | undefined> {

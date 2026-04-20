@@ -1,12 +1,13 @@
 import z from "zod"
 import { fn } from "@/util/fn"
-import { Database, eq } from "@/storage/db"
+import { Database } from "@/storage/db.pg"
+import { eq } from "drizzle-orm"
 import { Project } from "@/project/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
 import { ProjectID } from "@/project/schema"
-import { WorkspaceTable } from "./workspace.sql"
+import { WorkspaceTable } from "@/storage/schema"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
 import { WorkspaceID } from "./schema"
@@ -80,33 +81,38 @@ export namespace Workspace {
           extra: info.extra,
           project_id: info.projectID,
         })
-        .run()
     })
 
     await adaptor.create(config)
     return info
   })
 
-  export function list(project: Project.Info) {
-    const rows = Database.use((db) =>
-      db.select().from(WorkspaceTable).where(eq(WorkspaceTable.project_id, project.id)).all(),
+  export async function list(project: Project.Info) {
+    const rows = await Database.use(async (db) =>
+      db.select().from(WorkspaceTable).where(eq(WorkspaceTable.project_id, project.id)),
     )
     return rows.map(fromRow).sort((a, b) => a.id.localeCompare(b.id))
   }
 
   export const get = fn(WorkspaceID.zod, async (id) => {
-    const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
+    const row = await Database.use(async (db) => {
+      const rows = await db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id));
+      return rows[0];
+    });
     if (!row) return
     return fromRow(row)
   })
 
   export const remove = fn(WorkspaceID.zod, async (id) => {
-    const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
+    const row = await Database.use(async (db) => {
+      const rows = await db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id));
+      return rows[0];
+    });
     if (row) {
       const info = fromRow(row)
       const adaptor = await getAdaptor(row.type)
       adaptor.remove(info)
-      Database.use((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
+      await Database.use(async (db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)))
       return info
     }
   })
@@ -131,9 +137,9 @@ export namespace Workspace {
     }
   }
 
-  export function startSyncing(project: Project.Info) {
+  export async function startSyncing(project: Project.Info) {
     const stop = new AbortController()
-    const spaces = list(project).filter((space) => space.type !== "worktree")
+    const spaces = await list(project)
 
     spaces.forEach((space) => {
       void workspaceEventLoop(space, stop.signal).catch((error) => {

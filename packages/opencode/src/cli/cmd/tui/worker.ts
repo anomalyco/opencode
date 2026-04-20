@@ -3,6 +3,8 @@ import { Server } from "@/server/server"
 import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { Project } from "@/project/project"
+import { ProjectID } from "@/project/schema"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
@@ -11,6 +13,18 @@ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -126,6 +140,7 @@ export const rpc = {
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
       directory: input.directory,
+      project: localProject(input.directory),
       init: InstanceBootstrap,
       fn: async () => {
         await upgrade().catch(() => {})

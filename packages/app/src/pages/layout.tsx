@@ -785,8 +785,7 @@ export default function Layout(props: ParentProps) {
     })
   }
 
-  const prefetchSession = (session: Session, priority: "high" | "low" = "low") => {
-    const directory = session.directory
+  const prefetchSession = (session: Session, directory: string, priority: "high" | "low" = "low") => {
     if (!directory) return
 
     const [store] = globalSync.child(directory, { bootstrap: false })
@@ -829,13 +828,14 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     const sessions = currentSessions()
     const id = params.id
+    const dir = currentDir()
 
     if (!id) {
       const first = sessions[0]
-      if (first) prefetchSession(first)
+      if (first) prefetchSession(first, dir)
 
       const second = sessions[1]
-      if (second) prefetchSession(second)
+      if (second) prefetchSession(second, dir)
       return
     }
 
@@ -843,10 +843,10 @@ export default function Layout(props: ParentProps) {
     if (index === -1) return
 
     const next = sessions[index + 1]
-    if (next) prefetchSession(next)
+    if (next) prefetchSession(next, dir)
 
     const prev = sessions[index - 1]
-    if (prev) prefetchSession(prev)
+    if (prev) prefetchSession(prev, dir)
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -868,14 +868,15 @@ export default function Layout(props: ParentProps) {
     const next = sessions[(targetIndex + 1) % sessions.length]
     const prev = sessions[(targetIndex - 1 + sessions.length) % sessions.length]
 
+    const dir = currentDir()
     if (offset > 0) {
-      if (next) prefetchSession(next, "high")
-      if (prev) prefetchSession(prev)
+      if (next) prefetchSession(next, dir, "high")
+      if (prev) prefetchSession(prev, dir)
     }
 
     if (offset < 0) {
-      if (prev) prefetchSession(prev, "high")
-      if (next) prefetchSession(next)
+      if (prev) prefetchSession(prev, dir, "high")
+      if (next) prefetchSession(next, dir)
     }
 
     navigateToSession(session)
@@ -897,19 +898,20 @@ export default function Layout(props: ParentProps) {
       if (!session) continue
       if (notification.session.unseenCount(session.id) === 0) continue
 
-      prefetchSession(session, "high")
+      const dir = currentDir()
+      prefetchSession(session, dir, "high")
 
       const next = sessions[(index + 1) % sessions.length]
       const prev = sessions[(index - 1 + sessions.length) % sessions.length]
 
       if (offset > 0) {
-        if (next) prefetchSession(next, "high")
-        if (prev) prefetchSession(prev)
+        if (next) prefetchSession(next, dir, "high")
+        if (prev) prefetchSession(prev, dir)
       }
 
       if (offset < 0) {
-        if (prev) prefetchSession(prev, "high")
-        if (next) prefetchSession(next)
+        if (prev) prefetchSession(prev, dir, "high")
+        if (next) prefetchSession(next, dir)
       }
 
       navigateToSession(session)
@@ -918,13 +920,13 @@ export default function Layout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
-    const [store, setStore] = globalSync.child(session.directory)
+    const dir = currentDir()
+    const [store, setStore] = globalSync.child(dir)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
     await globalSDK.client.session.update({
-      directory: session.directory,
       sessionID: session.id,
       time: { archived: Date.now() },
     })
@@ -1259,7 +1261,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+    navigateWithSidebarReset(`/${params.dir}/session/${session.id}`)
   }
 
   function openProject(directory: string, navigate = true) {
@@ -1474,7 +1476,6 @@ export default function Layout(props: ParentProps) {
           globalSDK.client.session
             .update({
               sessionID: session.id,
-              directory: session.directory,
               time: { archived: archivedAt },
             })
             .catch(() => undefined),

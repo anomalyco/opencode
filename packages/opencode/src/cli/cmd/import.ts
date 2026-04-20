@@ -5,8 +5,8 @@ import { SessionID, MessageID, PartID } from "../../session/schema"
 import { WorkspaceID } from "../../control-plane/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
-import { Database } from "../../storage/db"
-import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
+import { Database } from "../../storage/db.pg"
+import { SessionTable, MessageTable, PartTable } from "@/storage/schema"
 import { Instance } from "../../project/instance"
 import { ShareNext } from "../../share/share-next"
 import { EOL } from "os"
@@ -168,17 +168,16 @@ export const ImportCommand = cmd({
             }
           : undefined,
       })
-      Database.use((db) =>
+      await Database.use(async (db) =>
         db
           .insert(SessionTable)
           .values(row)
-          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } })
-          .run(),
+          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } }),
       )
 
       for (const msg of exportData.messages) {
         const { id: _mid, sessionID: _msid, ...msgData } = msg.info
-        Database.use((db) =>
+        await Database.use(async (db) =>
           db
             .insert(MessageTable)
             .values({
@@ -187,13 +186,12 @@ export const ImportCommand = cmd({
               time_created: msg.info.time?.created ?? Date.now(),
               data: msgData,
             })
-            .onConflictDoNothing()
-            .run(),
+            .onConflictDoNothing(),
         )
 
         for (const part of msg.parts) {
           const { id: _pid, sessionID: _psid, messageID: _pmid, ...partData } = part
-          Database.use((db) =>
+          await Database.use(async (db) =>
             db
               .insert(PartTable)
               .values({
@@ -202,8 +200,7 @@ export const ImportCommand = cmd({
                 session_id: row.id,
                 data: partData,
               })
-              .onConflictDoNothing()
-              .run(),
+              .onConflictDoNothing(),
           )
         }
       }

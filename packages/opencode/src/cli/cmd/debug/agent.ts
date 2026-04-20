@@ -130,7 +130,7 @@ async function createToolContext(agent: Agent.Info) {
     agent: agent.name,
     path: {
       cwd: Instance.directory,
-      root: Instance.worktree,
+      root: Instance.directory,
     },
     cost: 0,
     tokens: {

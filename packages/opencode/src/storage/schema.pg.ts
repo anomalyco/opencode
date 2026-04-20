@@ -1,21 +1,26 @@
 import { pgTable, text, bigint, jsonb, index, primaryKey, integer } from "drizzle-orm/pg-core";
+import { getDb } from "./db.pg";
+import { eq, SQL } from "drizzle-orm";
 
 export const Timestamps = {
 	time_created: bigint({ mode: "number" }).notNull(),
 	time_updated: bigint({ mode: "number" }).notNull(),
 };
 
+// Helper to get first row or undefined (replaces .get() from SQLite)
+export async function first<T>(promise: Promise<T[]>): Promise<T | undefined> {
+	const rows = await promise;
+	return rows[0];
+}
+
 export const ProjectTablePg = pgTable("project", {
 	id: text().primaryKey(),
 	tenant_user_id: text().notNull(),
-	worktree: text().notNull(),
-	vcs: text(),
 	name: text(),
 	icon_url: text(),
 	icon_color: text(),
 	...Timestamps,
 	time_initialized: bigint({ mode: "number" }),
-	sandboxes: jsonb().notNull().default([]),
 	commands: jsonb(),
 });
 
@@ -29,7 +34,6 @@ export const SessionTablePg = pgTable(
 		workspace_id: text(),
 		parent_id: text(),
 		slug: text().notNull(),
-		directory: text().notNull(),
 		title: text().notNull(),
 		version: text().notNull(),
 		share_url: text(),
@@ -102,3 +106,59 @@ export const PermissionTablePg = pgTable("permission", {
 	...Timestamps,
 	data: jsonb().notNull(),
 });
+
+export const SessionShareTablePg = pgTable("session_share", {
+	session_id: text()
+		.primaryKey()
+		.references(() => SessionTablePg.id, { onDelete: "cascade" }),
+	id: text().notNull(),
+	secret: text().notNull(),
+	url: text().notNull(),
+	...Timestamps,
+});
+
+export const WorkspaceTablePg = pgTable(
+	"workspace",
+	{
+		id: text().primaryKey(),
+		branch: text(),
+		project_id: text()
+			.notNull()
+			.references(() => ProjectTablePg.id, { onDelete: "cascade" }),
+		type: text().notNull(),
+		name: text(),
+		directory: text(),
+		extra: jsonb(),
+	},
+	(table) => [index("workspace_project_idx").on(table.project_id)],
+);
+
+export const AccountTablePg = pgTable("account", {
+	id: text().primaryKey(),
+	email: text().notNull(),
+	url: text().notNull(),
+	access_token: text().notNull(),
+	refresh_token: text().notNull(),
+	token_expiry: bigint({ mode: "number" }),
+	...Timestamps,
+});
+
+export const AccountStateTablePg = pgTable("account_state", {
+	id: integer().primaryKey(),
+	active_account_id: text().references(() => AccountTablePg.id, { onDelete: "set null" }),
+	active_org_id: text(),
+});
+
+export const ControlAccountTablePg = pgTable(
+	"control_account",
+	{
+		email: text().notNull(),
+		url: text().notNull(),
+		access_token: text().notNull(),
+		refresh_token: text().notNull(),
+		token_expiry: bigint({ mode: "number" }),
+		active: integer().notNull(),
+		...Timestamps,
+	},
+	(table) => [primaryKey({ columns: [table.email, table.url] })],
+);

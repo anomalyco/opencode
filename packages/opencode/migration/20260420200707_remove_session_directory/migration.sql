@@ -1,0 +1,1 @@
+ALTER TABLE "session" DROP COLUMN "directory";

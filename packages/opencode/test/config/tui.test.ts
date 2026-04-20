@@ -268,7 +268,7 @@ test("migrates legacy tui keys across multiple opencode.json levels", async () =
     fn: async () => {
       const config = await TuiConfig.get()
       expect(config.theme).toBe("nested-theme")
-      expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(true)
+      expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(false)
       expect(await Filesystem.exists(path.join(tmp.path, "apps", "client", "tui.json"))).toBe(true)
     },
   })

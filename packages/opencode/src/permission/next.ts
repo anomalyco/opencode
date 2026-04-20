@@ -4,8 +4,9 @@ import { Config } from "@/config/config"
 import { SessionID, MessageID } from "@/session/schema"
 import { PermissionID } from "./schema"
 import { Instance } from "@/project/instance"
-import { Database, eq } from "@/storage/db"
-import { PermissionTable } from "@/session/session.sql"
+import { Database } from "@/storage/db.pg"
+import { eq } from "drizzle-orm"
+import { PermissionTable } from "@/storage/schema"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { ProjectID } from "@/project/schema"
@@ -108,11 +109,12 @@ export namespace PermissionNext {
     ),
   }
 
-  const state = Instance.state(() => {
+  const state = Instance.state(async () => {
     const projectID = Instance.project.id
-    const row = Database.use((db) =>
-      db.select().from(PermissionTable).where(eq(PermissionTable.project_id, projectID)).get(),
-    )
+    const row = await Database.use(async (db) => {
+      const rows = await db.select().from(PermissionTable).where(eq(PermissionTable.project_id, projectID));
+      return rows[0];
+    });
     const stored = row?.data ?? ([] as Ruleset)
 
     const pending: Record<

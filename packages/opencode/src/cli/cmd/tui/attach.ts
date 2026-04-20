@@ -4,7 +4,21 @@ import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { Project } from "@/project/project"
+import { ProjectID } from "@/project/schema"
 import { existsSync } from "fs"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -66,8 +80,10 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
+      const effectiveDir = directory && existsSync(directory) ? directory : process.cwd()
       const config = await Instance.provide({
-        directory: directory && existsSync(directory) ? directory : process.cwd(),
+        directory: effectiveDir,
+        project: localProject(effectiveDir),
         fn: () => TuiConfig.get(),
       })
       await tui({

@@ -20,7 +20,21 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
 import { Instance } from "@/project/instance"
+import { Project } from "@/project/project"
+import { ProjectID } from "@/project/schema"
 import { bootstrap } from "../bootstrap"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
@@ -200,8 +214,10 @@ export const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
   async handler() {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         {
           UI.empty()
@@ -257,13 +273,13 @@ export const GithubInstallCommand = cmd({
             }
 
             // Get repo info
-            const info = (await git(["remote", "get-url", "origin"], { cwd: Instance.worktree })).text().trim()
+            const info = (await git(["remote", "get-url", "origin"], { cwd: Instance.directory })).text().trim()
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            return { owner: parsed.owner, repo: parsed.repo, root: Instance.worktree }
+            return { owner: parsed.owner, repo: parsed.repo, root: Instance.directory }
           }
 
           async function promptProvider() {
@@ -496,20 +512,20 @@ export const GithubRunCommand = cmd({
           : "issue"
         : undefined
       const gitText = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.worktree })
+        const result = await git(args, { cwd: Instance.directory })
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.worktree })
+        const result = await git(args, { cwd: Instance.directory })
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
-      const gitStatus = (args: string[]) => git(args, { cwd: Instance.worktree })
+      const gitStatus = (args: string[]) => git(args, { cwd: Instance.directory })
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)

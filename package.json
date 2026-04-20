@@ -18,7 +18,8 @@
 	"workspaces": {
 		"packages": [
 			"packages/*",
-			"packages/auth-shared"
+			"packages/auth-shared",
+			"packages/sdk/js"
 		],
 		"catalog": {
 			"@types/bun": "1.3.9",
@@ -88,7 +89,7 @@
 		"@veritly/telemetry-veritly": "workspace:*",
 		"@opencode-ai/plugin": "workspace:*",
 		"@opencode-ai/script": "workspace:*",
-		"@opencode-ai/sdk": "^1.14.19",
+		"@opencode-ai/sdk": "workspace:*",
 		"http-proxy": "^1.18.1",
 		"typescript": "catalog:",
 		"xlsx": "0.18.5"

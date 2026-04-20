@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, validator } from "hono-openapi";
 import { resolver } from "hono-openapi";
 import { Instance } from "../../project/instance";
@@ -15,6 +15,7 @@ import { git } from "../../util/git";
 import { which } from "../../util/which";
 import { assertHostedFilesystemEnabled } from "../hosted";
 import { createProjectSimple, listProjectsSimple } from "../../storage/project-pg";
+import { getRequestUser } from "./auth";
 
 const CreateProjectInput = z.object({
 	name: z.string().trim().min(1).max(120),
@@ -39,6 +40,12 @@ function projectRoot() {
 	return process.env.OPENCODE_PROJECTS_ROOT || process.cwd();
 }
 
+async function tenant(c: Pick<Context, "req">) {
+	const user = await getRequestUser(c);
+	if (user?.id) return user.id;
+	return;
+}
+
 export const ProjectRoutes = lazy(() =>
 	new Hono()
 		.get(
@@ -60,7 +67,8 @@ export const ProjectRoutes = lazy(() =>
 			}),
 			async (c) => {
 				if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
-					const tenantUserId = process.env.VERITLY_TENANT_USER_ID ?? "default";
+					const tenantUserId = await tenant(c);
+					if (!tenantUserId) return c.json({ error: "Unauthorized" }, 401);
 					const projects = await listProjectsSimple(tenantUserId);
 					return c.json(projects);
 				}
@@ -112,7 +120,8 @@ export const ProjectRoutes = lazy(() =>
 				const body = c.req.valid("json");
 
 				if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
-					const tenantUserId = process.env.VERITLY_TENANT_USER_ID ?? "default";
+					const tenantUserId = await tenant(c);
+					if (!tenantUserId) return c.json({ error: "Unauthorized" }, 401);
 					const result = await createProjectSimple({ name: body.name, tenantUserId });
 					return c.json(result);
 				}
@@ -138,13 +147,13 @@ export const ProjectRoutes = lazy(() =>
 					throw new Error(message);
 				}
 
-				let project = (await Project.fromDirectory(directory)).project;
-				if (project.name !== body.name) {
-					project = await Project.update({
-						projectID: project.id,
-						name: body.name,
-					});
-				}
+				const tenantUserId = await tenant(c);
+				if (!tenantUserId) return c.json({ error: "Unauthorized" }, 401);
+				const { project } = await Project.createForDirectory({
+					directory,
+					name: body.name,
+					tenantUserId,
+				});
 
 				return c.json({ directory, project });
 			},

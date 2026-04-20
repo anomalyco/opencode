@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
 
-import { Database } from "@/storage/db"
-import { AccountStateTable, AccountTable } from "./account.sql"
+import { Database } from "@/storage/db.pg"
+import { AccountStateTable, AccountTable } from "@/storage/schema"
 import { AccessToken, Account, AccountID, AccountRepoError, OrgID, RefreshToken } from "./schema"
 
 export type AccountRow = (typeof AccountTable)["$inferSelect"]
@@ -42,36 +42,37 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
     Effect.gen(function* () {
       const decode = Schema.decodeUnknownSync(Account)
 
-      const query = <A>(f: (db: DbClient) => A) =>
-        Effect.try({
+      const query = <A>(f: (db: DbClient) => Promise<A>) =>
+        Effect.tryPromise({
           try: () => Database.use(f),
           catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
         })
 
-      const tx = <A>(f: (db: DbClient) => A) =>
-        Effect.try({
-          try: () => Database.transaction(f),
+      const tx = <A>(f: (db: DbClient) => Promise<A>) =>
+        Effect.tryPromise({
+          try: () => Database.use(f),
           catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
         })
 
-      const current = (db: DbClient) => {
-        const state = db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
+      const current = async (db: DbClient) => {
+        const states = await db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID))
+        const state = states[0]
         if (!state?.active_account_id) return
-        const account = db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
+        const accounts = await db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id))
+        const account = accounts[0]
         if (!account) return
         return { ...account, active_org_id: state.active_org_id ?? null }
       }
 
-      const state = (db: DbClient, accountID: AccountID, orgID: Option.Option<OrgID>) => {
+      const state = async (db: DbClient, accountID: AccountID, orgID: Option.Option<OrgID>) => {
         const id = Option.getOrNull(orgID)
-        return db
+        await db
           .insert(AccountStateTable)
           .values({ id: ACCOUNT_STATE_ID, active_account_id: accountID, active_org_id: id })
           .onConflictDoUpdate({
             target: AccountStateTable.id,
             set: { active_account_id: accountID, active_org_id: id },
           })
-          .run()
       }
 
       const active = Effect.fn("AccountRepo.active")(() =>
@@ -79,31 +80,30 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
       )
 
       const list = Effect.fn("AccountRepo.list")(() =>
-        query((db) =>
-          db
-            .select()
-            .from(AccountTable)
-            .all()
-            .map((row: AccountRow) => decode({ ...row, active_org_id: null })),
-        ),
+        query(async (db) => {
+          const rows = await db.select().from(AccountTable)
+          return rows.map((row: AccountRow) => decode({ ...row, active_org_id: null }))
+        }),
       )
 
       const remove = Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
-        tx((db) => {
-          db.update(AccountStateTable)
+        tx(async (db) => {
+          await db.update(AccountStateTable)
             .set({ active_account_id: null, active_org_id: null })
             .where(eq(AccountStateTable.active_account_id, accountID))
-            .run()
-          db.delete(AccountTable).where(eq(AccountTable.id, accountID)).run()
+          await db.delete(AccountTable).where(eq(AccountTable.id, accountID))
         }).pipe(Effect.asVoid),
       )
 
       const use = Effect.fn("AccountRepo.use")((accountID: AccountID, orgID: Option.Option<OrgID>) =>
-        query((db) => state(db, accountID, orgID)).pipe(Effect.asVoid),
+        query(async (db) => state(db, accountID, orgID)).pipe(Effect.asVoid),
       )
 
       const getRow = Effect.fn("AccountRepo.getRow")((accountID: AccountID) =>
-        query((db) => db.select().from(AccountTable).where(eq(AccountTable.id, accountID)).get()).pipe(
+        query(async (db) => {
+          const rows = await db.select().from(AccountTable).where(eq(AccountTable.id, accountID))
+          return rows[0]
+        }).pipe(
           Effect.map(Option.fromNullishOr),
         ),
       )
@@ -117,14 +117,14 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
               refresh_token: input.refreshToken,
               token_expiry: Option.getOrNull(input.expiry),
             })
-            .where(eq(AccountTable.id, input.accountID))
-            .run(),
+            .where(eq(AccountTable.id, input.accountID)),
         ).pipe(Effect.asVoid),
       )
 
       const persistAccount = Effect.fn("AccountRepo.persistAccount")((input) =>
-        tx((db) => {
-          db.insert(AccountTable)
+        tx(async (db) => {
+          const now = Date.now()
+          await db.insert(AccountTable)
             .values({
               id: input.id,
               email: input.email,
@@ -132,17 +132,21 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
               access_token: input.accessToken,
               refresh_token: input.refreshToken,
               token_expiry: input.expiry,
+              time_created: now,
+              time_updated: now,
             })
             .onConflictDoUpdate({
               target: AccountTable.id,
               set: {
+                email: input.email,
+                url: input.url,
                 access_token: input.accessToken,
                 refresh_token: input.refreshToken,
                 token_expiry: input.expiry,
+                time_updated: now,
               },
             })
-            .run()
-          void state(db, input.id, input.orgID)
+          await state(db, input.id, input.orgID)
         }).pipe(Effect.asVoid),
       )
 

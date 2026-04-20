@@ -1,9 +1,5 @@
-import { EOL } from "os"
-import path from "path"
-import { Global } from "./global"
 import { Installation } from "./installation"
 import { Server } from "./server/server"
-import { Filesystem } from "./util/filesystem"
 import { Log } from "./util/log"
 
 const log = Log.create({ service: "hosted" })
@@ -33,29 +29,15 @@ process.env.AGENT = "1"
 process.env.OPENCODE = "1"
 process.env.OPENCODE_PID = String(process.pid)
 
-const usePg = process.env.DATABASE_URL?.startsWith("postgresql://")
-
-if (usePg) {
-  log.info("using postgresql", { url: process.env.DATABASE_URL })
-  const { Database } = await import("./storage/db.pg")
-  await Database.initialize()
-  const { setupPostgresTables } = await import("./storage/setup-pg")
-  await setupPostgresTables()
-} else {
-  log.info("using sqlite")
-  const { Database } = await import("./storage/db")
-  const { JsonMigration } = await import("./storage/json-migration")
-  const marker = path.join(Global.Path.data, "opencode.db")
-  if (!(await Filesystem.exists(marker))) {
-    process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
-    await JsonMigration.run(Database.Client().$client, {
-      progress: (event) => {
-        process.stderr.write(`sqlite-migration:${Math.floor((event.current / event.total) * 100)}` + EOL)
-      },
-    })
-    process.stderr.write("Database migration complete." + EOL)
-  }
+if (!process.env.DATABASE_URL?.startsWith("postgresql://")) {
+  console.error("DATABASE_URL must be a postgresql:// connection string")
+  process.exit(1)
 }
+
+log.info("using postgresql", { url: process.env.DATABASE_URL })
+const { Database } = await import("./storage/db.pg")
+await Database.initialize()
+// Migrations are run manually via: bun run db:migrate
 
 const hostname = process.env.OPENCODE_SERVER_HOSTNAME ?? "0.0.0.0"
 const port = Number(process.env.PORT ?? "3000")

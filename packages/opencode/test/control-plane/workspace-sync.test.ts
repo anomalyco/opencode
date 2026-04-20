@@ -3,8 +3,8 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Project } from "../../src/project/project"
-import { Database } from "../../src/storage/db"
-import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { Database } from "../../src/storage/db.pg"
+import { WorkspaceTable } from "../../src/storage/schema"
 import { GlobalBus } from "../../src/bus/global"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
@@ -50,12 +50,16 @@ describe("control-plane/workspace.startSyncing", () => {
   test("syncs only remote workspaces and emits remote SSE events", async () => {
     const { Workspace } = await import("../../src/control-plane/workspace")
     await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await Project.createForDirectory({
+      directory: tmp.path,
+      name: "sync-test",
+      tenantUserId: "user_test",
+    })
 
     const id1 = WorkspaceID.ascending()
     const id2 = WorkspaceID.ascending()
 
-    Database.use((db) =>
+    await Database.use((db) =>
       db
         .insert(WorkspaceTable)
         .values([
@@ -75,7 +79,6 @@ describe("control-plane/workspace.startSyncing", () => {
             name: "local",
           },
         ])
-        .run(),
     )
 
     const done = new Promise<void>((resolve) => {
@@ -88,7 +91,7 @@ describe("control-plane/workspace.startSyncing", () => {
       GlobalBus.on("event", listener)
     })
 
-    const sync = Workspace.startSyncing(project)
+    const sync = await Workspace.startSyncing(project)
     await Promise.race([
       done,
       new Promise((_, reject) => setTimeout(() => reject(new Error("timed out waiting for sync event")), 2000)),

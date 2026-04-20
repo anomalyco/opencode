@@ -16,7 +16,7 @@ export namespace Snapshot {
   const prune = "7.days"
 
   function args(git: string, cmd: string[]) {
-    return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
+    return ["--git-dir", git, "--work-tree", Instance.directory, ...cmd]
   }
 
   export function init() {
@@ -63,7 +63,7 @@ export namespace Snapshot {
         env: {
           ...process.env,
           GIT_DIR: git,
-          GIT_WORK_TREE: Instance.worktree,
+          GIT_WORK_TREE: Instance.directory,
         },
         nothrow: true,
       })
@@ -126,7 +126,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Instance.worktree, x).replaceAll("\\", "/")),
+        .map((x) => path.join(Instance.directory, x).replaceAll("\\", "/")),
     }
   }
 
@@ -136,7 +136,7 @@ export namespace Snapshot {
     const result = await Process.run(
       ["git", "-c", "core.longpaths=true", "-c", "core.symlinks=true", ...args(git, ["read-tree", snapshot])],
       {
-        cwd: Instance.worktree,
+        cwd: Instance.directory,
         nothrow: true,
       },
     )
@@ -144,7 +144,7 @@ export namespace Snapshot {
       const checkout = await Process.run(
         ["git", "-c", "core.longpaths=true", "-c", "core.symlinks=true", ...args(git, ["checkout-index", "-a", "-f"])],
         {
-          cwd: Instance.worktree,
+          cwd: Instance.directory,
           nothrow: true,
         },
       )
@@ -183,12 +183,12 @@ export namespace Snapshot {
             ...args(git, ["checkout", item.hash, "--", file]),
           ],
           {
-            cwd: Instance.worktree,
+            cwd: Instance.directory,
             nothrow: true,
           },
         )
         if (result.code !== 0) {
-          const relativePath = path.relative(Instance.worktree, file)
+          const relativePath = path.relative(Instance.directory, file)
           const checkTree = await Process.text(
             [
               "git",
@@ -199,7 +199,7 @@ export namespace Snapshot {
               ...args(git, ["ls-tree", item.hash, "--", relativePath]),
             ],
             {
-              cwd: Instance.worktree,
+              cwd: Instance.directory,
               nothrow: true,
             },
           )
@@ -234,7 +234,7 @@ export namespace Snapshot {
         ...args(git, ["diff", "--no-ext-diff", hash, "--", "."]),
       ],
       {
-        cwd: Instance.worktree,
+        cwd: Instance.directory,
         nothrow: true,
       },
     )
@@ -402,7 +402,7 @@ export namespace Snapshot {
 
   async function excludes() {
     const file = await Process.text(["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
-      cwd: Instance.worktree,
+      cwd: Instance.directory,
       nothrow: true,
     }).then((x) => x.text)
     if (!file.trim()) return

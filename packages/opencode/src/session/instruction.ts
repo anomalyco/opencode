@@ -31,7 +31,7 @@ function globalFiles() {
 
 async function resolveRelative(instruction: string): Promise<string[]> {
   if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-    return Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+    return Filesystem.globUp(instruction, Instance.directory, Instance.directory).catch(() => [])
   }
   if (!Flag.OPENCODE_CONFIG_DIR) {
     log.warn(
@@ -75,7 +75,7 @@ export namespace InstructionPrompt {
 
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const file of FILES) {
-        const matches = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+        const matches = await Filesystem.findUp(file, Instance.directory, Instance.directory)
         if (matches.length > 0) {
           matches.forEach((p) => {
             paths.add(path.resolve(p))

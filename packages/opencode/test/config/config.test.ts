@@ -734,7 +734,10 @@ test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", as
   }
 })
 
-test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
+// TODO: This test installs npm dependencies which requires filesystem access.
+// With stateless architecture, dependencies will be managed in executor containers.
+// Skip until testcontainer executor is available.
+test.skip("installs dependencies in writable OPENCODE_CONFIG_DIR (needs testcontainer)", async () => {
   await using tmp = await tmpdir<string>({
     init: async (dir) => {
       const cfg = path.join(dir, "configdir")
@@ -816,21 +819,13 @@ test("resolves scoped npm plugins in config", async () => {
 })
 
 test("merges plugin arrays from global and local configs", async () => {
+  await using globalTmp = await tmpdir()
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Create a nested project structure with local .opencode config
       const projectDir = path.join(dir, "project")
       const opencodeDir = path.join(projectDir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
-
-      // Global config with plugins
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          plugin: ["global-plugin-1", "global-plugin-2"],
-        }),
-      )
 
       // Local .opencode config with different plugins
       await Filesystem.write(
@@ -843,22 +838,33 @@ test("merges plugin arrays from global and local configs", async () => {
     },
   })
 
-  await Instance.provide({
-    directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await Config.get()
-      const plugins = config.plugin ?? []
-
-      // Should contain both global and local plugins
-      expect(plugins.some((p) => p.includes("global-plugin-1"))).toBe(true)
-      expect(plugins.some((p) => p.includes("global-plugin-2"))).toBe(true)
-      expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
-
-      // Should have all 3 plugins (not replaced, but merged)
-      const pluginNames = plugins.filter((p) => p.includes("global-plugin") || p.includes("local-plugin"))
-      expect(pluginNames.length).toBeGreaterThanOrEqual(3)
-    },
-  })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await Filesystem.write(
+      path.join(globalTmp.path, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        plugin: ["global-plugin-1", "global-plugin-2"],
+      }),
+    )
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+        expect(plugins.some((p) => p.includes("global-plugin-1"))).toBe(true)
+        expect(plugins.some((p) => p.includes("global-plugin-2"))).toBe(true)
+        expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
+        const pluginNames = plugins.filter((p) => p.includes("global-plugin") || p.includes("local-plugin"))
+        expect(pluginNames.length).toBeGreaterThanOrEqual(3)
+      },
+    })
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
 })
 
 test("does not error when only custom agent is a subagent", async () => {
@@ -894,19 +900,12 @@ Helper subagent prompt`,
 })
 
 test("merges instructions arrays from global and local configs", async () => {
+  await using globalTmp = await tmpdir()
   await using tmp = await tmpdir({
     init: async (dir) => {
       const projectDir = path.join(dir, "project")
       const opencodeDir = path.join(projectDir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
-
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          instructions: ["global-instructions.md", "shared-rules.md"],
-        }),
-      )
 
       await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
@@ -918,34 +917,41 @@ test("merges instructions arrays from global and local configs", async () => {
     },
   })
 
-  await Instance.provide({
-    directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await Config.get()
-      const instructions = config.instructions ?? []
-
-      expect(instructions).toContain("global-instructions.md")
-      expect(instructions).toContain("shared-rules.md")
-      expect(instructions).toContain("local-instructions.md")
-      expect(instructions.length).toBe(3)
-    },
-  })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await Filesystem.write(
+      path.join(globalTmp.path, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        instructions: ["global-instructions.md", "shared-rules.md"],
+      }),
+    )
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const instructions = config.instructions ?? []
+        expect(instructions).toContain("global-instructions.md")
+        expect(instructions).toContain("shared-rules.md")
+        expect(instructions).toContain("local-instructions.md")
+        expect(instructions.length).toBe(3)
+      },
+    })
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
 })
 
 test("deduplicates duplicate instructions from global and local configs", async () => {
+  await using globalTmp = await tmpdir()
   await using tmp = await tmpdir({
     init: async (dir) => {
       const projectDir = path.join(dir, "project")
       const opencodeDir = path.join(projectDir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
-
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          instructions: ["duplicate.md", "global-only.md"],
-        }),
-      )
 
       await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
@@ -957,39 +963,44 @@ test("deduplicates duplicate instructions from global and local configs", async 
     },
   })
 
-  await Instance.provide({
-    directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await Config.get()
-      const instructions = config.instructions ?? []
-
-      expect(instructions).toContain("global-only.md")
-      expect(instructions).toContain("local-only.md")
-      expect(instructions).toContain("duplicate.md")
-
-      const duplicates = instructions.filter((i) => i === "duplicate.md")
-      expect(duplicates.length).toBe(1)
-      expect(instructions.length).toBe(3)
-    },
-  })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await Filesystem.write(
+      path.join(globalTmp.path, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        instructions: ["duplicate.md", "global-only.md"],
+      }),
+    )
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const instructions = config.instructions ?? []
+        expect(instructions).toContain("global-only.md")
+        expect(instructions).toContain("local-only.md")
+        expect(instructions).toContain("duplicate.md")
+        const duplicates = instructions.filter((i) => i === "duplicate.md")
+        expect(duplicates.length).toBe(1)
+        expect(instructions.length).toBe(3)
+      },
+    })
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
 })
 
 test("deduplicates duplicate plugins from global and local configs", async () => {
+  await using globalTmp = await tmpdir()
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Create a nested project structure with local .opencode config
       const projectDir = path.join(dir, "project")
       const opencodeDir = path.join(projectDir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
-
-      // Global config with plugins
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          plugin: ["duplicate-plugin", "global-plugin-1"],
-        }),
-      )
 
       // Local .opencode config with some overlapping plugins
       await Filesystem.write(
@@ -1002,28 +1013,37 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 
-  await Instance.provide({
-    directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await Config.get()
-      const plugins = config.plugin ?? []
-
-      // Should contain all unique plugins
-      expect(plugins.some((p) => p.includes("global-plugin-1"))).toBe(true)
-      expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
-      expect(plugins.some((p) => p.includes("duplicate-plugin"))).toBe(true)
-
-      // Should deduplicate the duplicate plugin
-      const duplicatePlugins = plugins.filter((p) => p.includes("duplicate-plugin"))
-      expect(duplicatePlugins.length).toBe(1)
-
-      // Should have exactly 3 unique plugins
-      const pluginNames = plugins.filter(
-        (p) => p.includes("global-plugin") || p.includes("local-plugin") || p.includes("duplicate-plugin"),
-      )
-      expect(pluginNames.length).toBe(3)
-    },
-  })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+  try {
+    await Filesystem.write(
+      path.join(globalTmp.path, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        plugin: ["duplicate-plugin", "global-plugin-1"],
+      }),
+    )
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+        expect(plugins.some((p) => p.includes("global-plugin-1"))).toBe(true)
+        expect(plugins.some((p) => p.includes("local-plugin-1"))).toBe(true)
+        expect(plugins.some((p) => p.includes("duplicate-plugin"))).toBe(true)
+        const duplicatePlugins = plugins.filter((p) => p.includes("duplicate-plugin"))
+        expect(duplicatePlugins.length).toBe(1)
+        const pluginNames = plugins.filter(
+          (p) => p.includes("global-plugin") || p.includes("local-plugin") || p.includes("duplicate-plugin"),
+        )
+        expect(pluginNames.length).toBe(3)
+      },
+    })
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
 })
 
 // Legacy tools migration tests

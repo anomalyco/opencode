@@ -78,13 +78,15 @@ export type SessionItemProps = {
   hoverSession: Accessor<string | undefined>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
+  prefetchSession: (session: Session, directory: string, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  directory: string
 }
 
 const SessionRow = (props: {
   session: Session
   slug: string
+  directory: string
   mobile?: boolean
   dense?: boolean
   tint: Accessor<string | undefined>
@@ -95,7 +97,7 @@ const SessionRow = (props: {
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
+  prefetchSession: (session: Session, directory: string, priority?: "high" | "low") => void
   scheduleHoverPrefetch: () => void
   cancelHoverPrefetch: () => void
 }): JSX.Element => (
@@ -106,7 +108,7 @@ const SessionRow = (props: {
     onPointerLeave={props.cancelHoverPrefetch}
     onMouseEnter={props.scheduleHoverPrefetch}
     onMouseLeave={props.cancelHoverPrefetch}
-    onFocus={() => props.prefetchSession(props.session, "high")}
+    onFocus={() => props.prefetchSession(props.session, props.directory, "high")}
     onClick={() => {
       props.setHoverSession(undefined)
       if (props.sidebarOpened()) return
@@ -194,10 +196,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const globalSync = useGlobalSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = globalSync.child(props.session.directory)
+  const [sessionStore] = globalSync.child(props.directory)
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
-      return !permission.autoResponds(item, props.session.directory)
+      return !permission.autoResponds(item, props.directory)
     })
   })
   const isWorking = createMemo(() => {
@@ -242,7 +244,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     if (hoverPrefetch.current !== undefined) return
     hoverPrefetch.current = setTimeout(() => {
       hoverPrefetch.current = undefined
-      props.prefetchSession(props.session)
+      props.prefetchSession(props.session, props.directory)
     }, 200)
   }
 
@@ -257,6 +259,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     <SessionRow
       session={props.session}
       slug={props.slug}
+      directory={props.directory}
       mobile={props.mobile}
       dense={props.dense}
       tint={tint}
@@ -302,7 +305,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           messageLabel={messageLabel}
           onMessageSelect={(message) => {
             if (!isActive())
-              layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
+              layout.pendingMessage.set(`${props.slug}/${props.session.id}`, message.id)
 
             navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
           }}

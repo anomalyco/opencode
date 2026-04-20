@@ -32,7 +32,6 @@ export namespace Plugin {
     const input: PluginInput = {
       client,
       project: Instance.project,
-      worktree: Instance.worktree,
       directory: Instance.directory,
       get serverUrl(): URL {
         return Server.url ?? new URL("http://localhost:4096")

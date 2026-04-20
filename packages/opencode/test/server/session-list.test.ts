@@ -1,26 +1,44 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
+import { Project } from "../../src/project/project"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
 
-const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-describe("Session.list", () => {
-  test("filters by directory", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        const first = await Session.create({})
+async function list(input?: Parameters<typeof Session.list>[0]) {
+  return Array.fromAsync(Session.list(input))
+}
 
-        const otherDir = path.join(projectRoot, "..", "__session_list_other")
+async function create(dir: string, name: string) {
+  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+}
+
+describe("Session.list", () => {
+  test("lists sessions for current project only", async () => {
+    // Note: Sessions no longer have a local directory (directory is null)
+    // Session.list() automatically filters by the current project context
+    await using first = await tmpdir({ git: true })
+    const firstProject = await create(first.path, "session-list-main")
+    await Instance.provide({
+      directory: first.path,
+      project: firstProject,
+      fn: async () => {
+        const first = await Session.create({ title: "first-project-session" })
+
+        // Create a session in a different project context
+        await using secondDir = await tmpdir({ git: true })
+        const secondProject = await create(secondDir.path, "session-list-other")
         const second = await Instance.provide({
-          directory: otherDir,
-          fn: async () => Session.create({}),
+          directory: secondDir.path,
+          project: secondProject,
+          fn: async () => Session.create({ title: "second-project-session" }),
         })
 
-        const sessions = [...Session.list({ directory: projectRoot })]
+        // When listing in first project context, only see first project's sessions
+        const sessions = await list()
         const ids = sessions.map((s) => s.id)
 
         expect(ids).toContain(first.id)
@@ -30,13 +48,16 @@ describe("Session.list", () => {
   })
 
   test("filters root sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await create(tmp.path, "session-roots")
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
+      project,
       fn: async () => {
         const root = await Session.create({ title: "root-session" })
         const child = await Session.create({ title: "child-session", parentID: root.id })
 
-        const sessions = [...Session.list({ roots: true })]
+        const sessions = await list({ roots: true })
         const ids = sessions.map((s) => s.id)
 
         expect(ids).toContain(root.id)
@@ -46,26 +67,32 @@ describe("Session.list", () => {
   })
 
   test("filters by start time", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await create(tmp.path, "session-start")
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
+      project,
       fn: async () => {
-        const session = await Session.create({ title: "new-session" })
+        await Session.create({ title: "new-session" })
         const futureStart = Date.now() + 86400000
 
-        const sessions = [...Session.list({ start: futureStart })]
+        const sessions = await list({ start: futureStart })
         expect(sessions.length).toBe(0)
       },
     })
   })
 
   test("filters by search term", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await create(tmp.path, "session-search")
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
+      project,
       fn: async () => {
         await Session.create({ title: "unique-search-term-abc" })
         await Session.create({ title: "other-session-xyz" })
 
-        const sessions = [...Session.list({ search: "unique-search" })]
+        const sessions = await list({ search: "unique-search" })
         const titles = sessions.map((s) => s.title)
 
         expect(titles).toContain("unique-search-term-abc")
@@ -75,14 +102,17 @@ describe("Session.list", () => {
   })
 
   test("respects limit parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const project = await create(tmp.path, "session-limit")
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
+      project,
       fn: async () => {
         await Session.create({ title: "session-1" })
         await Session.create({ title: "session-2" })
         await Session.create({ title: "session-3" })
 
-        const sessions = [...Session.list({ limit: 2 })]
+        const sessions = await list({ limit: 2 })
         expect(sessions.length).toBe(2)
       },
     })

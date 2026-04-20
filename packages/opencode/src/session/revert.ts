@@ -4,8 +4,9 @@ import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
 import { Log } from "../util/log"
-import { Database, eq } from "../storage/db"
-import { MessageTable, PartTable } from "./session.sql"
+import { Database } from "../storage/db.pg"
+import { eq } from "drizzle-orm"
+import { MessageTable, PartTable } from "@/storage/schema"
 import { Storage } from "@/storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
@@ -113,7 +114,7 @@ export namespace SessionRevert {
       remove.push(msg)
     }
     for (const msg of remove) {
-      Database.use((db) => db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)).run())
+      await Database.use(async (db) => db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)))
       await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
     }
     if (session.revert.partID && target) {
@@ -124,7 +125,7 @@ export namespace SessionRevert {
         const removeParts = target.parts.slice(removeStart)
         target.parts = preserveParts
         for (const part of removeParts) {
-          Database.use((db) => db.delete(PartTable).where(eq(PartTable.id, part.id)).run())
+          await Database.use(async (db) => db.delete(PartTable).where(eq(PartTable.id, part.id)))
           await Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: sessionID,
             messageID: target.info.id,

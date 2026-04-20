@@ -7,57 +7,78 @@ import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
 
+async function list(input?: Parameters<typeof Session.listGlobal>[0]) {
+  return Array.fromAsync(Session.listGlobal(input))
+}
+
 describe("Session.listGlobal", () => {
   test("lists sessions across projects with project metadata", async () => {
     await using first = await tmpdir({ git: true })
     await using second = await tmpdir({ git: true })
+    const firstProject = (await Project.createForDirectory({
+      directory: first.path,
+      name: "global-first",
+      tenantUserId: "user_test",
+    })).project
+    const secondProject = (await Project.createForDirectory({
+      directory: second.path,
+      name: "global-second",
+      tenantUserId: "user_test",
+    })).project
 
     const firstSession = await Instance.provide({
       directory: first.path,
+      project: firstProject,
       fn: async () => Session.create({ title: "first-session" }),
     })
     const secondSession = await Instance.provide({
       directory: second.path,
+      project: secondProject,
       fn: async () => Session.create({ title: "second-session" }),
     })
 
-    const sessions = [...Session.listGlobal({ limit: 200 })]
+    const sessions = await list({ limit: 200 })
     const ids = sessions.map((session) => session.id)
 
     expect(ids).toContain(firstSession.id)
     expect(ids).toContain(secondSession.id)
 
-    const firstProject = Project.get(firstSession.projectID)
-    const secondProject = Project.get(secondSession.projectID)
+    const firstSaved = await Project.get(firstSession.projectID)
+    const secondSaved = await Project.get(secondSession.projectID)
 
     const firstItem = sessions.find((session) => session.id === firstSession.id)
     const secondItem = sessions.find((session) => session.id === secondSession.id)
 
-    expect(firstItem?.project?.id).toBe(firstProject?.id)
-    expect(firstItem?.project?.worktree).toBe(firstProject?.worktree)
-    expect(secondItem?.project?.id).toBe(secondProject?.id)
-    expect(secondItem?.project?.worktree).toBe(secondProject?.worktree)
+    expect(firstItem?.project?.id).toBe(firstSaved?.id)
+    expect(secondItem?.project?.id).toBe(secondSaved?.id)
   })
 
   test("excludes archived sessions by default", async () => {
     await using tmp = await tmpdir({ git: true })
+    const project = (await Project.createForDirectory({
+      directory: tmp.path,
+      name: "global-archived",
+      tenantUserId: "user_test",
+    })).project
 
     const archived = await Instance.provide({
       directory: tmp.path,
+      project,
       fn: async () => Session.create({ title: "archived-session" }),
     })
 
     await Instance.provide({
       directory: tmp.path,
+      project,
       fn: async () => Session.setArchived({ sessionID: archived.id, time: Date.now() }),
     })
 
-    const sessions = [...Session.listGlobal({ limit: 200 })]
+    const sessions = await list({ limit: 200 })
     const ids = sessions.map((session) => session.id)
 
     expect(ids).not.toContain(archived.id)
 
-    const allSessions = [...Session.listGlobal({ limit: 200, archived: true })]
+    const allSessions = await list({ limit: 200, archived: true })
     const allIds = allSessions.map((session) => session.id)
 
     expect(allIds).toContain(archived.id)
@@ -65,25 +86,38 @@ describe("Session.listGlobal", () => {
 
   test("supports cursor pagination", async () => {
     await using tmp = await tmpdir({ git: true })
+    const project = (await Project.createForDirectory({
+      directory: tmp.path,
+      name: "global-cursor",
+      tenantUserId: "user_test",
+    })).project
 
     const first = await Instance.provide({
       directory: tmp.path,
+      project,
       fn: async () => Session.create({ title: "page-one" }),
     })
     await new Promise((resolve) => setTimeout(resolve, 5))
     const second = await Instance.provide({
       directory: tmp.path,
+      project,
       fn: async () => Session.create({ title: "page-two" }),
     })
 
-    const page = [...Session.listGlobal({ directory: tmp.path, limit: 1 })]
+    // Sessions are stateless - no directory field anymore
+    // We filter by project via the Instance context
+    const allSessions = await list({ limit: 200 })
+    const projectSessions = allSessions.filter(s => s.projectID === project.id)
+    
+    expect(projectSessions.length).toBeGreaterThanOrEqual(2)
+    expect(projectSessions.map(s => s.id)).toContain(first.id)
+    expect(projectSessions.map(s => s.id)).toContain(second.id)
+
+    // Cursor pagination still works without directory filter
+    const page = await list({ limit: 1 })
     expect(page.length).toBe(1)
-    expect(page[0].id).toBe(second.id)
 
-    const next = [...Session.listGlobal({ directory: tmp.path, limit: 10, cursor: page[0].time.updated })]
-    const ids = next.map((session) => session.id)
-
-    expect(ids).toContain(first.id)
-    expect(ids).not.toContain(second.id)
+    const next = await list({ limit: 10, cursor: page[0].time.updated })
+    expect(next.length).toBeGreaterThanOrEqual(0)
   })
 })

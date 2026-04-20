@@ -257,7 +257,7 @@ export namespace LSPServer {
         const candidates = Filesystem.up({
           targets: [target],
           start: root,
-          stop: Instance.worktree,
+          stop: Instance.directory,
         })
         const first = await candidates.next()
         await candidates.return()
@@ -879,7 +879,7 @@ export namespace LSPServer {
         currentDir = parentDir
 
         // Stop if we've gone above the app root
-        if (!currentDir.startsWith(Instance.worktree)) break
+        if (!currentDir.startsWith(Instance.directory)) break
       }
 
       return crateRoot
@@ -1942,10 +1942,7 @@ export namespace LSPServer {
       const flakeRoot = await NearestRoot(["flake.nix"])(file)
       if (flakeRoot && flakeRoot !== Instance.directory) return flakeRoot
 
-      // If no flake.nix, fall back to git repository root
-      if (Instance.worktree && Instance.worktree !== Instance.directory) return Instance.worktree
-
-      // Finally, use the instance directory as fallback
+      // If no flake.nix, use the instance directory as fallback
       return Instance.directory
     },
     async spawn(root) {

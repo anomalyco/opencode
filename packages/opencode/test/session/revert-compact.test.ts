@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import path from "path"
+import { Project } from "../../src/project/project"
 import { Session } from "../../src/session"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionCompaction } from "../../src/session/compaction"
@@ -12,11 +13,16 @@ import { tmpdir } from "../fixture/fixture"
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
+async function create(dir: string, name: string) {
+  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+}
+
 describe("revert + compact workflow", () => {
   test("should properly handle compact command after revert", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
+      project: await create(tmp.path, "revert-compact-a"),
       fn: async () => {
         // Create a session
         const session = await Session.create({})
@@ -193,6 +199,7 @@ describe("revert + compact workflow", () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
+      project: await create(tmp.path, "revert-compact-b"),
       fn: async () => {
         // Create a session
         const session = await Session.create({})

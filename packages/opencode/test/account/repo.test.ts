@@ -3,15 +3,17 @@ import { Effect, Layer, Option } from "effect"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage/db.pg"
+import { AccountStateTable, AccountTable } from "../../src/storage/schema"
 import { testEffect } from "../fixture/effect"
 
 const truncate = Layer.effectDiscard(
-  Effect.sync(() => {
-    const db = Database.Client()
-    db.run(/*sql*/ `DELETE FROM account_state`)
-    db.run(/*sql*/ `DELETE FROM account`)
-  }),
+  Effect.tryPromise(() =>
+    Database.use(async (db) => {
+      await db.delete(AccountStateTable)
+      await db.delete(AccountTable)
+    }),
+  ),
 )
 
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))

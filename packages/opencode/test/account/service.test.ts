@@ -5,15 +5,17 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AccountRepo } from "../../src/account/repo"
 import { AccountService } from "../../src/account/service"
 import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage/db.pg"
+import { AccountStateTable, AccountTable } from "../../src/storage/schema"
 import { testEffect } from "../fixture/effect"
 
 const truncate = Layer.effectDiscard(
-  Effect.sync(() => {
-    const db = Database.Client()
-    db.run(/*sql*/ `DELETE FROM account_state`)
-    db.run(/*sql*/ `DELETE FROM account`)
-  }),
+  Effect.tryPromise(() =>
+    Database.use(async (db) => {
+      await db.delete(AccountStateTable)
+      await db.delete(AccountTable)
+    }),
+  ),
 )
 
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
@@ -84,7 +86,7 @@ it.effect(
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
       [AccountID.make("user-2"), [OrgID.make("org-2"), OrgID.make("org-3")]],
     ])
-    expect(yield* Ref.get(seen)).toEqual([
+    expect((yield* Ref.get(seen)).sort()).toEqual([
       "GET https://one.example.com/api/orgs",
       "GET https://two.example.com/api/orgs",
     ])

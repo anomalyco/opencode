@@ -38,7 +38,7 @@ export type WorkspaceSidebarContext = {
   hoverSession: Accessor<string | undefined>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
+  prefetchSession: (session: Session, directory: string, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
   workspaceName: (directory: string, projectId?: string, branch?: string) => string | undefined
   renameWorkspace: (directory: string, next: string, projectId?: string, branch?: string) => void
@@ -239,6 +239,7 @@ const WorkspaceActions = (props: {
 
 const WorkspaceSessionList = (props: {
   slug: Accessor<string>
+  directory: string
   mobile?: boolean
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
@@ -267,6 +268,7 @@ const WorkspaceSessionList = (props: {
         <SessionItem
           session={session}
           slug={props.slug()}
+          directory={props.directory}
           mobile={props.mobile}
           children={props.children()}
           sidebarExpanded={props.ctx.sidebarExpanded}
@@ -446,6 +448,7 @@ export const SortableWorkspace = (props: {
         <Collapsible.Content>
           <WorkspaceSessionList
             slug={slug}
+            directory={props.directory}
             mobile={props.mobile}
             ctx={props.ctx}
             showNew={showNew}
@@ -499,6 +502,7 @@ export const LocalWorkspace = (props: {
             <SessionItem
               session={session}
               slug={slug()}
+              directory={props.project.worktree}
               mobile={props.mobile}
               children={children()}
               sidebarExpanded={props.ctx.sidebarExpanded}

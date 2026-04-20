@@ -90,9 +90,9 @@ export namespace FileWatcher {
 
       if (Instance.project.vcs === "git") {
         const result = await git(["rev-parse", "--git-dir"], {
-          cwd: Instance.worktree,
+          cwd: Instance.directory,
         })
-        const vcsDir = result.exitCode === 0 ? path.resolve(Instance.worktree, result.text().trim()) : undefined
+        const vcsDir = result.exitCode === 0 ? path.resolve(Instance.directory, result.text().trim()) : undefined
         if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
           const gitDirContents = await readdir(vcsDir).catch(() => [])
           const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")

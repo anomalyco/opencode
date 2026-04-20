@@ -17,7 +17,8 @@
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
-    "db": "bun drizzle-kit"
+    "db:generate": "bun drizzle-kit generate",
+    "db:migrate": "bun run src/storage/migrate-pg.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -46,11 +47,12 @@
     "@types/mime-types": "3.0.1",
     "@types/semver": "^7.5.8",
     "@types/turndown": "5.0.5",
-    "@types/yargs": "17.0.33",
     "@types/which": "3.0.4",
+    "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
     "drizzle-kit": "1.0.0-beta.16-ea816b6",
     "drizzle-orm": "1.0.0-beta.16-ea816b6",
+    "testcontainers": "11.14.0",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
@@ -91,7 +93,7 @@
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "^1.14.19",
+    "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@openrouter/ai-sdk-provider": "1.5.4",
     "@opentelemetry/api": "^1.9.0",

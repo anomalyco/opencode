@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import "@univerjs/sheets/facade"
 import type { Nullable, CellValue } from "@univerjs/core"
 import { createUniverSdk, type UniverHostApi } from "@opencode-ai/univer-sdk"
 

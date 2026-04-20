@@ -1,9 +1,6 @@
-import { lazy } from "@/util/lazy"
 import type { Adaptor } from "../types"
 
-const ADAPTORS: Record<string, () => Promise<Adaptor>> = {
-  worktree: lazy(async () => (await import("./worktree")).WorktreeAdaptor),
-}
+const ADAPTORS: Record<string, () => Promise<Adaptor>> = {}
 
 export function getAdaptor(type: string): Promise<Adaptor> {
   return ADAPTORS[type]()

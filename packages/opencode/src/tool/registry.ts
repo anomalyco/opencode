@@ -71,7 +71,6 @@ export namespace ToolRegistry {
           const pluginCtx = {
             ...ctx,
             directory: Instance.directory,
-            worktree: Instance.worktree,
           } as unknown as PluginToolContext
           const result = await def.execute(args as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)

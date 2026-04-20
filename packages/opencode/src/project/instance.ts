@@ -1,15 +1,17 @@
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
+import { ProjectID } from "./schema"
 import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
 
+type Info = Project.Info & { vcs?: "git" | undefined }
+
 interface Context {
   directory: string
-  worktree: string
-  project: Project.Info
+  project: Info
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
@@ -30,20 +32,24 @@ function emit(directory: string) {
   })
 }
 
-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+function localProject(directory: string): Info {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git",
+  }
+}
+
+function boot(input: { directory: string; init?: () => Promise<any>; project?: Info }) {
   return iife(async () => {
-    const ctx =
-      input.project && input.worktree
-        ? {
-            directory: input.directory,
-            worktree: input.worktree,
-            project: input.project,
-          }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-            directory: input.directory,
-            worktree: sandbox,
-            project,
-          }))
+    const ctx = {
+      directory: input.directory,
+      project: input.project ?? localProject(input.directory),
+    }
     await context.provide(ctx, async () => {
       await input.init?.()
     })
@@ -61,7 +67,7 @@ function track(directory: string, next: Promise<Context>) {
 }
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: { directory: string; project?: Info; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
@@ -70,6 +76,7 @@ export const Instance = {
         directory,
         boot({
           directory,
+          project: input.project,
           init: input.init,
         }),
       )
@@ -82,28 +89,20 @@ export const Instance = {
   get directory() {
     return context.use().directory
   },
-  get worktree() {
-    return context.use().worktree
-  },
   get project() {
     return context.use().project
   },
   /**
    * Check if a path is within the project boundary.
-   * Returns true if path is inside Instance.directory OR Instance.worktree.
-   * Paths within the worktree but outside the working directory should not trigger external_directory permission.
+   * Returns true if path is inside Instance.directory.
    */
   containsPath(filepath: string) {
-    if (Filesystem.contains(Instance.directory, filepath)) return true
-    // Non-git projects set worktree to "/" which would match ANY absolute path.
-    // Skip worktree check in this case to preserve external_directory permissions.
-    if (Instance.worktree === "/") return false
-    return Filesystem.contains(Instance.worktree, filepath)
+    return Filesystem.contains(Instance.directory, filepath)
   },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
-  async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+  async reload(input: { directory: string; project?: Info; init?: () => Promise<any> }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
     await State.dispose(directory)

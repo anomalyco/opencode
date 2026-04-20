@@ -58,7 +58,6 @@ export namespace Skill {
 
     log.info("skill discovery starting", {
       instanceDirectory: Instance.directory,
-      worktree: Instance.worktree,
       opencodeSkillGlob: OPENCODE_SKILL_PATTERN,
     })
 
@@ -133,7 +132,7 @@ export namespace Skill {
       for await (const root of Filesystem.up({
         targets: EXTERNAL_DIRS,
         start: Instance.directory,
-        stop: Instance.worktree,
+        stop: Instance.directory,
       })) {
         await scanExternal(root, "project")
       }

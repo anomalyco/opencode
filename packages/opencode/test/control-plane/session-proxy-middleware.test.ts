@@ -3,10 +3,10 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 import { Hono } from "hono"
 import { tmpdir } from "../fixture/fixture"
 import { Project } from "../../src/project/project"
-import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { WorkspaceTable } from "../../src/storage/schema"
 import { Instance } from "../../src/project/instance"
 import { WorkspaceContext } from "../../src/control-plane/workspace-context"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage/db.pg"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
@@ -62,12 +62,16 @@ async function setup(state: State) {
   adaptors.installAdaptor("testing", TestAdaptor)
 
   await using tmp = await tmpdir({ git: true })
-  const { project } = await Project.fromDirectory(tmp.path)
+  const { project } = await Project.createForDirectory({
+    directory: tmp.path,
+    name: "proxy-test",
+    tenantUserId: "user_test",
+  })
 
   const id1 = WorkspaceID.ascending()
   const id2 = WorkspaceID.ascending()
 
-  Database.use((db) =>
+  await Database.use((db) =>
     db
       .insert(WorkspaceTable)
       .values([
@@ -87,7 +91,6 @@ async function setup(state: State) {
           name: "local",
         },
       ])
-      .run(),
   )
 
   const { WorkspaceRouterMiddleware } = await import("../../src/control-plane/workspace-router-middleware")

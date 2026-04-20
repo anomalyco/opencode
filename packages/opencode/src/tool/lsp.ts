@@ -45,7 +45,7 @@ export const LspTool = Tool.define("lsp", {
       character: args.character - 1,
     }
 
-    const relPath = path.relative(Instance.worktree, file)
+    const relPath = path.relative(Instance.directory, file)
     const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
 
     const exists = await Filesystem.exists(file)

@@ -143,7 +143,7 @@ export namespace SessionCompaction {
       summary: true,
       path: {
         cwd: Instance.directory,
-        root: Instance.worktree,
+        root: Instance.directory,
       },
       cost: 0,
       tokens: {

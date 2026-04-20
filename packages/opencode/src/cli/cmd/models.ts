@@ -1,10 +1,24 @@
 import type { Argv } from "yargs"
 import { Instance } from "../../project/instance"
+import { Project } from "../../project/project"
+import { ProjectID } from "../../project/schema"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 export const ModelsCommand = cmd({
   command: "models [provider]",
@@ -31,8 +45,10 @@ export const ModelsCommand = cmd({
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
 
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         const providers = await Provider.list()
 

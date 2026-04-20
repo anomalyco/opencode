@@ -18,19 +18,21 @@ import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
 import { Session } from "@/session"
+import { Executor } from "@/executor/sdk"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
-function executorUrl() {
-  const url = process.env.VERITLY_EXECUTOR_URL?.trim()
-  if (url) return url
-  throw new Error("Missing required env var: VERITLY_EXECUTOR_URL")
+// Lazy initialization of typed executor SDK
+let executor: ReturnType<typeof Executor.create> | null = null
+function getExecutor() {
+  if (!executor) {
+    const url = process.env.VERITLY_EXECUTOR_URL?.trim()
+    if (!url) throw new Error("Missing required env var: VERITLY_EXECUTOR_URL")
+    executor = Executor.create({ baseUrl: url })
+  }
+  return executor
 }
-
-// Executor configuration
-const MAX_RETRIES = 3
-const RETRY_DELAY_MS = 1000
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -65,69 +67,46 @@ const parser = lazy(async () => {
 // Track which session is connected to which executor VM
 const sessionToExecutor = new Map<string, boolean>()
 
-// Execute command on executor with retry logic
+// Execute command on executor using typed SDK
 async function executeOnExecutor(
   sessionId: string,
   command: string,
   timeout: number,
-  retryCount = 0,
-): Promise<{ output: string; exitCode: number; vmId?: string }> {
-  const url = executorUrl()
+): Promise<{ output: string; exitCode: number }> {
   try {
-    const response = await fetch(`${url}/v1/sessions/${sessionId}/exec`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command, timeout }),
-    })
-
-    if (response.status === 404) {
-      // VM not found - session mapping exists but VM was cleaned up
-      // This can happen if VM was inactive for too long
-      sessionToExecutor.delete(sessionId)
-
-      if (retryCount < MAX_RETRIES) {
-        log.info("VM not found, will retry with new VM", { sessionId, retryCount })
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
-        return executeOnExecutor(sessionId, command, timeout, retryCount + 1)
-      }
-
-      return {
-        output: "Error: VM session expired and could not be recreated. Please try again.",
-        exitCode: 1,
-      }
-    }
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Executor error: ${response.status} - ${error}`)
-    }
-
-    const result = await response.json()
+    const result = await getExecutor().exec(sessionId, command, timeout)
     sessionToExecutor.set(sessionId, true)
-
     return {
       output: result.output,
       exitCode: result.exitCode,
-      vmId: result.vmId,
     }
   } catch (error: any) {
-    if (error.message?.includes("fetch") || error.code === "ECONNREFUSED") {
-      // Executor is not available
-      log.error("Executor unavailable", { error: error.message, sessionId })
+    if (error.code === "SESSION_NOT_FOUND") {
+      // VM was cleaned up - session will be auto-created on next exec
+      sessionToExecutor.delete(sessionId)
       return {
-        output: `Error: Executor service unavailable at ${url}. Please ensure the executor is running.`,
+        output: "Error: VM session expired. Please try again.",
         exitCode: 1,
       }
     }
+    
+    if (error.code === "EXECUTION_FAILED" || error.code === "HEALTH_CHECK_FAILED") {
+      // Executor is not available
+      log.error("Executor unavailable", { error: error.message, sessionId })
+      return {
+        output: `Error: Executor service unavailable. Please ensure the executor is running.`,
+        exitCode: 1,
+      }
+    }
+    
     throw error
   }
 }
 
-// Check executor health
+// Check executor health using typed SDK
 async function checkExecutorHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${executorUrl()}/health`, { timeout: 5000 } as any)
-    return response.ok
+    return await getExecutor().isAvailable()
   } catch {
     return false
   }
@@ -269,10 +248,6 @@ export const BashTool = Tool.define("bash", async () => {
           const resultMetadata: string[] = []
           if (result.exitCode === 124) {
             resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
-          }
-
-          if (result.vmId) {
-            resultMetadata.push(`vm: ${result.vmId.slice(0, 8)}`)
           }
 
           if (resultMetadata.length > 0) {

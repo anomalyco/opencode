@@ -153,7 +153,6 @@ function formatSessionJSON(sessions: Session.Info[]): string {
     updated: session.time.updated,
     created: session.time.created,
     projectId: session.projectID,
-    directory: session.directory,
   }))
   return JSON.stringify(jsonData, null, 2)
 }

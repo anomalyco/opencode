@@ -2,8 +2,9 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { SessionID } from "./schema"
 import z from "zod"
-import { Database, eq, asc } from "../storage/db"
-import { TodoTable } from "./session.sql"
+import { Database } from "../storage/db.pg"
+import { eq, asc } from "drizzle-orm"
+import { TodoTable } from "@/storage/schema"
 
 export namespace Todo {
   export const Info = z
@@ -25,11 +26,11 @@ export namespace Todo {
     ),
   }
 
-  export function update(input: { sessionID: SessionID; todos: Info[] }) {
-    Database.transaction((db) => {
-      db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+  export async function update(input: { sessionID: SessionID; todos: Info[] }) {
+    await Database.use(async (db) => {
+      await db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID))
       if (input.todos.length === 0) return
-      db.insert(TodoTable)
+      await db.insert(TodoTable)
         .values(
           input.todos.map((todo, position) => ({
             session_id: input.sessionID,
@@ -39,14 +40,13 @@ export namespace Todo {
             position,
           })),
         )
-        .run()
     })
     Bus.publish(Event.Updated, input)
   }
 
-  export function get(sessionID: SessionID) {
-    const rows = Database.use((db) =>
-      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
+  export async function get(sessionID: SessionID) {
+    const rows = await Database.use(async (db) =>
+      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)),
     )
     return rows.map((row) => ({
       content: row.content,

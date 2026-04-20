@@ -9,12 +9,26 @@ import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
+import { Project } from "../../project/project"
+import { ProjectID } from "../../project/schema"
 import { Installation } from "../../installation"
 import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "../../util/filesystem"
 import { Bus } from "../../bus"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -69,8 +83,10 @@ export const McpListCommand = cmd({
   aliases: ["ls"],
   describe: "list MCP servers and their status",
   async handler() {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("MCP Servers")
@@ -146,8 +162,10 @@ export const McpAuthCommand = cmd({
       })
       .command(McpAuthListCommand),
   async handler(args) {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Authentication")
@@ -283,8 +301,10 @@ export const McpAuthListCommand = cmd({
   aliases: ["ls"],
   describe: "list OAuth-capable MCP servers and their auth status",
   async handler() {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Status")
@@ -327,8 +347,10 @@ export const McpLogoutCommand = cmd({
       type: "string",
     }),
   async handler(args) {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Logout")
@@ -419,8 +441,10 @@ export const McpAddCommand = cmd({
   command: "add",
   describe: "add an MCP server",
   async handler() {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("Add MCP server")
@@ -429,7 +453,7 @@ export const McpAddCommand = cmd({
 
         // Resolve config paths eagerly for hints
         const [projectConfigPath, globalConfigPath] = await Promise.all([
-          resolveConfigPath(Instance.worktree),
+          resolveConfigPath(Instance.directory),
           resolveConfigPath(Global.Path.config, true),
         ])
 
@@ -589,8 +613,10 @@ export const McpDebugCommand = cmd({
       demandOption: true,
     }),
   async handler(args) {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Debug")

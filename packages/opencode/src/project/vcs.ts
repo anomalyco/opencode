@@ -30,7 +30,7 @@ export namespace Vcs {
 
   async function currentBranch() {
     const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd: Instance.worktree,
+      cwd: Instance.directory,
     })
     if (result.exitCode !== 0) return
     const text = result.text().trim()

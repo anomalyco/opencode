@@ -1,19 +1,26 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Project } from "../../src/project/project"
 import { Session } from "../../src/session"
 import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID } from "../../src/session/schema"
+import { tmpdir } from "../fixture/fixture"
 
-const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+async function create(dir: string, name: string) {
+  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+}
 
 describe("session.started event", () => {
   test("should emit session.started event when session is created", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
+      project: await create(tmp.path, "session-events-a"),
       fn: async () => {
         let eventReceived = false
         let receivedInfo: Session.Info | undefined
@@ -33,7 +40,6 @@ describe("session.started event", () => {
         expect(receivedInfo).toBeDefined()
         expect(receivedInfo?.id).toBe(session.id)
         expect(receivedInfo?.projectID).toBe(session.projectID)
-        expect(receivedInfo?.directory).toBe(session.directory)
         expect(receivedInfo?.title).toBe(session.title)
 
         await Session.remove(session.id)
@@ -42,8 +48,10 @@ describe("session.started event", () => {
   })
 
   test("session.started event should be emitted before session.updated", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
+      project: await create(tmp.path, "session-events-b"),
       fn: async () => {
         const events: string[] = []
 
@@ -76,8 +84,10 @@ describe("step-finish token propagation via Bus event", () => {
   test(
     "non-zero tokens propagate through PartUpdated event",
     async () => {
+      await using tmp = await tmpdir({ git: true })
       await Instance.provide({
-        directory: projectRoot,
+        directory: tmp.path,
+        project: await create(tmp.path, "session-events-c"),
         fn: async () => {
           const session = await Session.create({})
 

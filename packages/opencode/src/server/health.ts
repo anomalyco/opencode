@@ -1,8 +1,8 @@
 import { Installation } from "@/installation"
 import { Log } from "@/util/log"
 import { SystemPrompt } from "../session/system"
-import { Database as SqliteDatabase } from "../storage/db"
 import { getPool } from "../storage/db.pg"
+import { Executor } from "@/executor/sdk"
 
 const log = Log.create({ service: "server.health" })
 
@@ -113,16 +113,9 @@ function univerHealthTargets() {
 }
 
 async function checkDatabase() {
-  if (process.env.DATABASE_URL?.startsWith("postgresql://")) {
-    return timedCheck("database", process.env.DATABASE_URL, async () => {
-      await getPool().query("SELECT 1")
-      return { ok: true, detail: "postgres reachable" }
-    })
-  }
-
-  return timedCheck("database", SqliteDatabase.Path, async () => {
-    SqliteDatabase.Client().$client.query("select 1").get()
-    return { ok: true, detail: "sqlite reachable" }
+  return timedCheck("database", process.env.DATABASE_URL, async () => {
+    await getPool().query("SELECT 1")
+    return { ok: true, detail: "postgres reachable" }
   })
 }
 
@@ -175,6 +168,17 @@ export function instructionCheck(): HealthCheckResult {
   }
 }
 
+// Initialize executor SDK for health checks
+let executorHealthClient: ReturnType<typeof Executor.create> | null = null
+function getExecutorHealthClient() {
+  if (!executorHealthClient) {
+    const url = executorUrl()
+    if (!url) return null
+    executorHealthClient = Executor.create({ baseUrl: url })
+  }
+  return executorHealthClient
+}
+
 async function checkExecutor() {
   const target = executorUrl()
   if (!target) {
@@ -186,19 +190,21 @@ async function checkExecutor() {
     } satisfies HealthCheckResult
   }
 
-  return timedCheck("executor", target, async (signal) => {
-    // First check basic executor health
-    const healthResponse = await fetch(`${target}/healthz`, {
-      method: "GET",
-      headers: { accept: "application/json" },
-      signal,
-    })
-
-    if (!healthResponse.ok) {
+  return timedCheck("executor", target, async () => {
+    const client = getExecutorHealthClient()
+    if (!client) {
       return {
         ok: false,
-        status: healthResponse.status,
-        detail: `executor health check failed: ${healthResponse.status}`,
+        detail: "failed to initialize executor SDK",
+      }
+    }
+
+    // Check health via SDK
+    const healthy = await client.isAvailable()
+    if (!healthy) {
+      return {
+        ok: false,
+        detail: "executor health check failed",
       }
     }
 
@@ -211,60 +217,45 @@ async function checkExecutor() {
 
     // Now test Python3 and Univer SDK via executor
     const id = `health-${Date.now()}`
-    const execResponse = await fetch(`${target}/v1/sessions/${id}/exec`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify({
-        command: "python3 --version && python3 -c 'from veritly_univer_sdk import UniverSDK; print(\"Univer SDK OK\")'",
-        timeout: 30000,
-      }),
-      signal,
-    })
+    try {
+      const result = await client.exec(
+        id,
+        "python3 --version && python3 -c 'from veritly_univer_sdk import UniverSDK; print(\"Univer SDK OK\")'",
+        30000
+      )
 
-    if (!execResponse.ok) {
-      const errorText = await execResponse.text().catch(() => "unknown error")
+      if (result.exitCode !== 0) {
+        return {
+          ok: false,
+          detail: `python/univer sdk check failed: ${result.output}`,
+        }
+      }
+
+      // Verify output contains expected strings
+      const output = result.output || ""
+      if (!output.includes("Python 3")) {
+        return {
+          ok: false,
+          detail: "python not available in executor",
+        }
+      }
+
+      if (!output.includes("Univer SDK OK")) {
+        return {
+          ok: false,
+          detail: "univer sdk not available in executor",
+        }
+      }
+
+      return {
+        ok: true,
+        detail: `executor healthy, mode: ${result.mode || "unknown"}`,
+      }
+    } catch (error: any) {
       return {
         ok: false,
-        status: execResponse.status,
-        detail: `executor exec check failed: ${execResponse.status} - ${errorText}`,
+        detail: `executor check failed: ${error.message}`,
       }
-    }
-
-    const result = (await execResponse.json()) as {
-      output?: string
-      exitCode?: number
-      mode?: string
-    }
-
-    if (result.exitCode !== 0) {
-      return {
-        ok: false,
-        detail: `python/univer sdk check failed: ${result.output}`,
-      }
-    }
-
-    // Verify output contains expected strings
-    const output = result.output || ""
-    if (!output.includes("Python 3")) {
-      return {
-        ok: false,
-        detail: "python3 not available in executor",
-      }
-    }
-
-    if (!output.includes("Univer SDK OK")) {
-      return {
-        ok: false,
-        detail: "univer sdk not available in executor",
-      }
-    }
-
-    return {
-      ok: true,
-      detail: `executor healthy, mode: ${result.mode || "unknown"}`,
     }
   })
 }

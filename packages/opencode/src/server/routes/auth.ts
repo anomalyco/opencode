@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { getCookie, setCookie, deleteCookie } from "hono/cookie"
 import type { User } from "@workos-inc/node"
 import {
@@ -150,6 +150,25 @@ export const AuthRoutes = new Hono()
 
 export async function getSessionUser(): Promise<User | null> {
   const sessionData = process.env["WORKOS_SESSION_DATA"]
+  if (!sessionData) return null
+
+  try {
+    const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"])
+    const result = await validateWorkosSession({
+      workos: getWorkOS(),
+      sessionData,
+      cookiePassword,
+    })
+
+    if (!result.ok) return null
+    return result.user
+  } catch {
+    return null
+  }
+}
+
+export async function getRequestUser(c: Pick<Context, "req">): Promise<User | null> {
+  const sessionData = getCookie(c, COOKIE_NAME)
   if (!sessionData) return null
 
   try {

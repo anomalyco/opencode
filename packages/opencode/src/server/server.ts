@@ -14,7 +14,22 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
+import { Project } from "../project/project"
+import { ProjectID } from "../project/schema"
 import { Vcs } from "../project/vcs"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  const match = /^\/projects\/(.+)$/.exec(directory)
+  return {
+    id: ProjectID.make(match ? match[1] : directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: match ? undefined : ("git" as const),
+  }
+}
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
@@ -32,7 +47,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { NotFoundError } from "../storage/db"
+import { NotFoundError } from "../storage/db.pg"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
@@ -117,39 +132,20 @@ export namespace Server {
             status: 500,
           })
         })
-        // CORS must run before auth: otherwise 401/403 responses omit ACAO and the browser blames CORS
-        // (e.g. UI on https://local-4444… fetching https://local-4096…/global/health with Basic).
-        .use(
-          cors({
-            credentials: true,
-            origin(input) {
-              if (!input) return
-
-              if (input.startsWith("http://localhost:")) return input
-              if (input.startsWith("http://127.0.0.1:")) return input
-              if (
-                input === "tauri://localhost" ||
-                input === "http://tauri.localhost" ||
-                input === "https://tauri.localhost"
-              )
-                return input
-
-              // *.opencode.ai (https only, adjust if needed)
-              if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-                return input
-              }
-              // Veritly hosted + tunnel dev (local-4444…, local-4096…, test1…, etc.)
-              if (/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/.test(input)) {
-                return input
-              }
-              if (opts?.cors?.includes(input)) {
-                return input
-              }
-
-              return
-            },
-          }),
-        )
+        .use(cors({
+          credentials: true,
+          origin(input) {
+            if (!input) return
+            if (input.startsWith("http://localhost:")) return input
+            if (input.startsWith("http://127.0.0.1:")) return input
+            if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
+              return input
+            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
+            if (/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/.test(input)) return input
+            if (opts?.cors?.includes(input)) return input
+            return
+          },
+        }))
         .get("/livez", (c) => c.text("ok"))
         .get("/health", async (c) => {
           const report = await apiHealthReport()
@@ -159,6 +155,7 @@ export namespace Server {
           const report = await apiHealthReportSimple()
           return c.json(report, report.ok ? 200 : 503)
         })
+        .get("/debug", (c) => c.text("debug ok"))
         .use(async (c, next) => {
           if (c.req.method === "OPTIONS") return next()
           if (isPublicHealthPath(c.req.path)) return next()
@@ -308,6 +305,7 @@ export namespace Server {
             async fn() {
               return Instance.provide({
                 directory,
+                project: localProject(directory),
                 init: InstanceBootstrap,
                 async fn() {
                   return next()
@@ -390,7 +388,6 @@ export namespace Server {
                           home: z.string(),
                           state: z.string(),
                           config: z.string(),
-                          worktree: z.string(),
                           directory: z.string(),
                         })
                         .meta({
@@ -407,7 +404,6 @@ export namespace Server {
               home: Global.Path.home,
               state: Global.Path.state,
               config: Global.Path.config,
-              worktree: Instance.worktree,
               directory: Instance.directory,
             })
           },

@@ -44,7 +44,6 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
           roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
@@ -58,7 +57,6 @@ export const SessionRoutes = lazy(() =>
         const query = c.req.valid("query")
         const sessions: Session.Info[] = []
         for await (const session of Session.list({
-          directory: query.directory,
           roots: query.roots,
           start: query.start,
           search: query.search,

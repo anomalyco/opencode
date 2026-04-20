@@ -5,8 +5,9 @@ import { Provider } from "@/provider/provider"
 import { Session } from "@/session"
 import type { SessionID } from "@/session/schema"
 import { MessageV2 } from "@/session/message-v2"
-import { Database, eq } from "@/storage/db"
-import { SessionShareTable } from "./share.sql"
+import { Database } from "@/storage/db.pg"
+import { eq } from "drizzle-orm"
+import { SessionShareTable } from "@/storage/schema"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
@@ -44,7 +45,7 @@ export namespace ShareNext {
   }> {
     const headers: Record<string, string> = {}
 
-    const active = Account.active()
+    const active = await Account.active()
     if (!active?.active_org_id) {
       const baseUrl = await Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
       return { headers, api: legacyApi, baseUrl }
@@ -127,24 +128,24 @@ export namespace ShareNext {
 
     const result = (await response.json()) as { id: string; url: string; secret: string }
 
-    Database.use((db) =>
+    await Database.use(async (db) =>
       db
         .insert(SessionShareTable)
         .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
         .onConflictDoUpdate({
           target: SessionShareTable.session_id,
           set: { id: result.id, secret: result.secret, url: result.url },
-        })
-        .run(),
+        }),
     )
     fullSync(sessionID)
     return result
   }
 
-  function get(sessionID: SessionID) {
-    const row = Database.use((db) =>
-      db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
-    )
+  async function get(sessionID: SessionID) {
+    const row = await Database.use(async (db) => {
+      const rows = await db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID));
+      return rows[0];
+    });
     if (!row) return
     return { id: row.id, secret: row.secret, url: row.url }
   }
@@ -246,7 +247,7 @@ export namespace ShareNext {
       throw new Error(`Failed to remove share (${response.status}): ${message || response.statusText}`)
     }
 
-    Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
+    await Database.use(async (db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)))
   }
 
   async function fullSync(sessionID: SessionID) {

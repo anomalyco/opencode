@@ -31,5 +31,6 @@ target
 opencode-dev
 logs/
 *.bun-build
+.local-dev/
 tsconfig.tsbuildinfo
 packages/univer-sdk/python/veritly_univer_sdk.egg-info/**

@@ -14,6 +14,20 @@ import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { Project } from "@/project/project"
+import { ProjectID } from "@/project/schema"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -170,6 +184,7 @@ export const TuiThreadCommand = cmd({
       const prompt = await input(args.prompt)
       const config = await Instance.provide({
         directory: cwd,
+        project: localProject(cwd),
         fn: () => TuiConfig.get(),
       })
 

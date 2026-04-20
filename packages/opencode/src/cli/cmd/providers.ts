@@ -10,9 +10,23 @@ import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import { Project } from "../../project/project"
+import { ProjectID } from "../../project/schema"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+
+function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
+  const now = Date.now()
+  return {
+    id: ProjectID.make(directory),
+    time: {
+      created: now,
+      updated: now,
+    },
+    vcs: "git" as const,
+  }
+}
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -267,8 +281,10 @@ export const ProvidersLoginCommand = cmd({
         type: "string",
       }),
   async handler(args) {
+    const dir = process.cwd()
     await Instance.provide({
-      directory: process.cwd(),
+      directory: dir,
+      project: localProject(dir),
       async fn() {
         UI.empty()
         prompts.intro("Add credential")

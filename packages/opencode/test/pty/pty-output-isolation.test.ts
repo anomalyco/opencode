@@ -4,7 +4,13 @@ import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
 import { setTimeout as sleep } from "node:timers/promises"
 
-describe("pty", () => {
+/**
+ * TODO: Migrate to testcontainers
+ * PTY tests require a local filesystem to run commands.
+ * With stateless architecture, these need executor container via testcontainers.
+ * Skipping for now until executor testcontainer is ready.
+ */
+describe.skip("pty output isolation (needs testcontainer)", () => {
   test("does not leak output when websocket objects are reused", async () => {
     await using dir = await tmpdir({ git: true })
 

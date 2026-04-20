@@ -120,7 +120,7 @@ export namespace Config {
 
     // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.worktree)) {
+      for (const file of await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.directory)) {
         result = mergeConfigConcatArrays(result, await loadFile(file))
       }
     }
@@ -129,7 +129,7 @@ export namespace Config {
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
 
-    const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
+    const directories = await ConfigPaths.directories(Instance.directory, Instance.directory)
 
     // .opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
@@ -180,7 +180,7 @@ export namespace Config {
       })
     }
 
-    const active = Account.active()
+    const active = await Account.active()
     if (active?.active_org_id) {
       try {
         const [config, token] = await Promise.all([
