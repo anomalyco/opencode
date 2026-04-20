@@ -122,14 +122,18 @@ export function retryable(error: Err, provider: string) {
     return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
   }
 
-  // Check for rate limit patterns in plain text error messages
+  // Check for stream interruption and rate limit patterns in plain text error messages
   const msg = isRecord(error.data) ? error.data.message : undefined
   if (typeof msg === "string") {
     const lower = msg.toLowerCase()
     if (
       lower.includes("rate increased too quickly") ||
       lower.includes("rate limit") ||
-      lower.includes("too many requests")
+      lower.includes("too many requests") ||
+      lower.includes("sse read timed out") ||
+      lower.includes("connection reset") ||
+      lower.includes("aborted") ||
+      lower.includes("stream ended unexpectedly")
     ) {
       return { message: msg }
     }

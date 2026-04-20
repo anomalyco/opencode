@@ -978,6 +978,7 @@ const ProviderCapabilities = Schema.Struct({
   input: ProviderModalities,
   output: ProviderModalities,
   interleaved: ProviderInterleaved,
+  systemMessage: Schema.optional(Schema.Union([Schema.Literal("single"), Schema.Literal("multiple")])),
 })
 
 const ProviderCacheCost = Schema.Struct({
