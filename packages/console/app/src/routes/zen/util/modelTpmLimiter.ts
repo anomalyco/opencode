@@ -32,13 +32,7 @@ export function createModelTpmLimiter(providers: { id: string; model: string; tp
     track: async (id: string, model: string, usageInfo: UsageInfo) => {
       const key = `${id}/${model}`
       if (!keys.includes(key)) return
-      const usage =
-        usageInfo.inputTokens +
-        usageInfo.outputTokens +
-        (usageInfo.reasoningTokens ?? 0) +
-        (usageInfo.cacheReadTokens ?? 0) +
-        (usageInfo.cacheWrite5mTokens ?? 0) +
-        (usageInfo.cacheWrite1hTokens ?? 0)
+      const usage = usageInfo.inputTokens
       if (usage <= 0) return
       await Database.use((tx) =>
         tx

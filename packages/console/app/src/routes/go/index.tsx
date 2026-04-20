@@ -26,6 +26,7 @@ const models = [
   { name: "GLM-5.1", provider: "DeepInfra, Z.ai" },
   { name: "GLM-5", provider: "DeepInfra, Z.ai" },
   { name: "Kimi K2.5", provider: "Moonshot AI" },
+  { name: "Kimi K2.6", provider: "Moonshot AI" },
   { name: "MiMo-V2-Pro", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2-Omni", provider: "Xiaomi MiMo" },
   { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
@@ -58,8 +59,9 @@ function LimitsGraph(props: { href: string }) {
   const free = 200
   const graph = [
     { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
+    { id: "kimi-k2.6", name: "Kimi K2.6", req: 1150, d: "150ms" },
     { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
-    { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
+    { id: "kimi-k2.5", name: "Kimi K2.5", req: 1850, d: "240ms" },
     { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "300ms" },
     { id: "qwen3.5-plus", name: "Qwen3.5 Plus", req: 10200, d: "360ms" },
@@ -437,28 +439,26 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("go.faq.q2")}>
                   {i18n.t("go.faq.a2")}
-                  {language.locale() === "en" && (
-                    <div data-slot="faq-models">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>{i18n.t("workspace.models.table.model")}</th>
-                            <th>{i18n.t("workspace.providers.table.provider")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <For each={models}>
-                            {(m) => (
-                              <tr>
-                                <td>{m.name}</td>
-                                <td>{m.provider}</td>
-                              </tr>
-                            )}
-                          </For>
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  <div data-slot="faq-models">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{i18n.t("workspace.models.table.model")}</th>
+                          <th>{i18n.t("workspace.providers.table.provider")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={models}>
+                          {(m) => (
+                            <tr>
+                              <td>{m.name}</td>
+                              <td>{m.provider}</td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </div>
                 </Faq>
               </li>
               <li>
