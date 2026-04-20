@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "องค์กร",
   "nav.zen": "Zen",
   "nav.login": "เข้าสู่ระบบ",
-  "nav.free": "ฟรี",
+  "nav.free": "ดาวน์โหลด",
   "nav.home": "หน้าหลัก",
   "nav.openMenu": "เปิดเมนู",
   "nav.getStartedFree": "เริ่มต้นฟรี",
@@ -559,6 +559,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "ไม่ได้ตั้งขีดจำกัดการใช้งาน",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "การใช้งานปัจจุบันสำหรับ",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "คือ $",
+
+  "workspace.redeem.title": "แลกคูปอง",
+  "workspace.redeem.subtitle": "แลกรหัสคูปองเพื่อรับเครดิตหรือสิทธิพิเศษ",
+  "workspace.redeem.placeholder": "กรอกรหัสคูปอง",
+  "workspace.redeem.redeem": "แลก",
+  "workspace.redeem.redeeming": "กำลังแลก...",
+  "workspace.redeem.success": "แลกคูปองสำเร็จ",
 
   "workspace.reload.title": "โหลดซ้ำอัตโนมัติ",
   "workspace.reload.disabled.before": "การโหลดซ้ำอัตโนมัติ",
