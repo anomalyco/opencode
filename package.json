@@ -6,9 +6,9 @@
 	"type": "module",
 	"packageManager": "bun@1.3.10",
 	"scripts": {
+		"dev:all": "bun --env-file=.env.development local-dev.ts",
 		"dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
-		"build:veritly-hosted": "VITE_OPENCODE_SERVER_URL=/api bun run --cwd packages/app build",
-		"dev:web": "bun --cwd packages/app dev",
+		"dev:app": "bun run local-dev.ts --service frontend --conditions=browser",
 		"typecheck": "bun turbo typecheck",
 		"prepare": "husky",
 		"random": "echo 'Random script'",
@@ -18,7 +18,6 @@
 	"workspaces": {
 		"packages": [
 			"packages/*",
-			"packages/sdk/js",
 			"packages/auth-shared"
 		],
 		"catalog": {
@@ -89,7 +88,7 @@
 		"@veritly/telemetry-veritly": "workspace:*",
 		"@opencode-ai/plugin": "workspace:*",
 		"@opencode-ai/script": "workspace:*",
-		"@opencode-ai/sdk": "workspace:*",
+		"@opencode-ai/sdk": "^1.14.19",
 		"http-proxy": "^1.18.1",
 		"typescript": "catalog:",
 		"xlsx": "0.18.5"

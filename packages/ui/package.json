@@ -44,7 +44,7 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@mdx-js/mdx": "catalog:",
-    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/sdk": "^1.14.19",
     "@opencode-ai/util": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",

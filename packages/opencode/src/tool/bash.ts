@@ -22,8 +22,13 @@ import { Session } from "@/session"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
+function executorUrl() {
+  const url = process.env.VERITLY_EXECUTOR_URL?.trim()
+  if (url) return url
+  throw new Error("Missing required env var: VERITLY_EXECUTOR_URL")
+}
+
 // Executor configuration
-const EXECUTOR_URL = process.env.VERITLY_EXECUTOR_URL ?? "http://executor:7777"
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 1000
 
@@ -67,8 +72,9 @@ async function executeOnExecutor(
   timeout: number,
   retryCount = 0,
 ): Promise<{ output: string; exitCode: number; vmId?: string }> {
+  const url = executorUrl()
   try {
-    const response = await fetch(`${EXECUTOR_URL}/v1/sessions/${sessionId}/exec`, {
+    const response = await fetch(`${url}/v1/sessions/${sessionId}/exec`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command, timeout }),
@@ -109,7 +115,7 @@ async function executeOnExecutor(
       // Executor is not available
       log.error("Executor unavailable", { error: error.message, sessionId })
       return {
-        output: `Error: Executor service unavailable at ${EXECUTOR_URL}. Please ensure the executor is running.`,
+        output: `Error: Executor service unavailable at ${url}. Please ensure the executor is running.`,
         exitCode: 1,
       }
     }
@@ -120,7 +126,7 @@ async function executeOnExecutor(
 // Check executor health
 async function checkExecutorHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${EXECUTOR_URL}/health`, { timeout: 5000 } as any)
+    const response = await fetch(`${executorUrl()}/health`, { timeout: 5000 } as any)
     return response.ok
   } catch {
     return false
@@ -131,7 +137,7 @@ async function checkExecutorHealth(): Promise<boolean> {
 export const BashTool = Tool.define("bash", async () => {
   const executorHealthy = await checkExecutorHealth()
   if (!executorHealthy) {
-    log.warn("Executor is not healthy, bash commands will fail", { executorUrl: EXECUTOR_URL })
+    log.warn("Executor is not healthy, bash commands will fail", { executorUrl: process.env.VERITLY_EXECUTOR_URL })
   }
 
   return {

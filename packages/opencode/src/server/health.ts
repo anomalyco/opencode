@@ -73,13 +73,17 @@ function normalizeBaseUrl(input: string) {
   return input.replace(/\/+$/, "")
 }
 
+function localDev() {
+  return !!process.env.DEV_BACKEND_HOST?.trim()
+}
+
 function relayHealthUrl() {
   const explicit = process.env.VERITLY_HEALTH_RELAY_URL?.trim()
   if (explicit) return explicit
   if (explicit === "") return undefined
 
   const ws = process.env.VITE_UNIVER_SDK_WS?.trim()
-  if (!ws) return "http://relay:8080/healthz"
+  if (!ws) return undefined
 
   try {
     const url = new URL(ws)
@@ -97,7 +101,7 @@ function executorUrl() {
   const explicit = process.env.VERITLY_EXECUTOR_URL?.trim()
   if (explicit) return explicit
   if (explicit === "") return undefined
-  return "http://executor:7777"
+  return undefined
 }
 
 function univerHealthTargets() {
@@ -195,6 +199,13 @@ async function checkExecutor() {
         ok: false,
         status: healthResponse.status,
         detail: `executor health check failed: ${healthResponse.status}`,
+      }
+    }
+
+    if (localDev()) {
+      return {
+        ok: true,
+        detail: "executor reachable",
       }
     }
 
