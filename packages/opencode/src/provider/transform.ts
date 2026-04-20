@@ -45,6 +45,14 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isOfficialAnthropicBaseURL(baseURL: string): boolean {
+  try {
+    return new URL(baseURL).hostname === "api.anthropic.com"
+  } catch {
+    return baseURL.includes("api.anthropic.com")
+  }
+}
+
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
@@ -795,6 +803,7 @@ export function options(input: {
   providerOptions?: Record<string, any>
 }): Record<string, any> {
   const result: Record<string, any> = {}
+  const providerBaseURL = input.providerOptions?.baseURL
 
   // openai and providers using openai package should set store to false by default.
   if (
@@ -908,6 +917,19 @@ export function options(input: {
       result["include"] = ["reasoning.encrypted_content"]
       result["reasoningSummary"] = "auto"
     }
+  }
+
+  // Anthropic-compatible gateways/proxies often reject tool schema fields injected
+  // by the SDK's default tool streaming behavior (e.g. eager_input_streaming).
+  // Default to compatibility mode for non-official Anthropic endpoints, while still
+  // allowing model/agent options to override later in the merge chain.
+  if (
+    input.model.api.npm === "@ai-sdk/anthropic" &&
+    typeof providerBaseURL === "string" &&
+    providerBaseURL.length > 0 &&
+    !isOfficialAnthropicBaseURL(providerBaseURL)
+  ) {
+    result["toolStreaming"] = false
   }
 
   if (input.model.providerID === "venice") {

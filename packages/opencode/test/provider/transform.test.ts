@@ -358,6 +358,88 @@ describe("ProviderTransform.options - gateway", () => {
   })
 })
 
+describe("ProviderTransform.options - anthropic proxy tool streaming compatibility", () => {
+  const sessionID = "test-session-123"
+
+  const createAnthropicModel = () =>
+    ({
+      id: "mify-claude/pa/claude-opus-4-7",
+      providerID: "mify-claude",
+      api: {
+        id: "pa/claude-opus-4-7",
+        url: "http://model.mify.ai.srv/anthropic/v1",
+        npm: "@ai-sdk/anthropic",
+      },
+      name: "Claude Opus 4.7",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 260_000,
+        output: 128_000,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("defaults toolStreaming=false for custom anthropic-compatible baseURL", () => {
+    const result = ProviderTransform.options({
+      model: createAnthropicModel(),
+      sessionID,
+      providerOptions: {
+        baseURL: "http://model.mify.ai.srv/anthropic/v1",
+      },
+    })
+
+    expect(result.toolStreaming).toBe(false)
+  })
+
+  test("does not force toolStreaming for official anthropic baseURL", () => {
+    const model = {
+      ...createAnthropicModel(),
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4-20250514",
+        url: "https://api.anthropic.com/v1",
+        npm: "@ai-sdk/anthropic",
+      },
+    }
+    const result = ProviderTransform.options({
+      model,
+      sessionID,
+      providerOptions: {
+        baseURL: "https://api.anthropic.com/v1",
+      },
+    })
+
+    expect(result.toolStreaming).toBeUndefined()
+  })
+
+  test("matches official anthropic host even when URL is invalid but contains hostname", () => {
+    const result = ProviderTransform.options({
+      model: createAnthropicModel(),
+      sessionID,
+      providerOptions: {
+        baseURL: "api.anthropic.com/v1",
+      },
+    })
+
+    expect(result.toolStreaming).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.providerOptions", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({
