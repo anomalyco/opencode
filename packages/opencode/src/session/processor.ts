@@ -12,7 +12,7 @@ import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { parseAnthropicRawChunk } from "./raw-chunk-anthropic"
-import { computeContextUtilization, getContextLimit, computeCacheHitRate } from "./context-window"
+import { computeContextUtilization, computeCacheHitRate } from "./context-window"
 import { computeUsageCost, getModelPricing } from "./pricing"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
@@ -371,9 +371,7 @@ export namespace SessionProcessor {
                 const modelID = ctx.model.id
                 if (parsed.kind === "message_start") {
                    liveInputTokens = { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite }
-                   // Use OpenCode's canonical model.limit.context — already accounts for context-1m beta and
-                   // per-model overrides. getContextLimit() is a fallback when model.limit is absent.
-                   const contextLimit = ctx.model.limit?.context ?? getContextLimit(modelID, false)
+                   const contextLimit = ctx.model.limit?.context ?? 200_000
                   const ctxUtil = computeContextUtilization(
                     { input: parsed.input, cacheRead: parsed.cacheRead, cacheWrite: parsed.cacheWrite },
                     contextLimit,
@@ -412,7 +410,7 @@ export namespace SessionProcessor {
                      { input, output: parsed.output, cacheRead, cacheWrite },
                      getModelPricing(modelID),
                    )
-                   const contextLimit = ctx.model.limit?.context ?? getContextLimit(modelID, false)
+                   const contextLimit = ctx.model.limit?.context ?? 200_000
                   const ctxUtil = computeContextUtilization({ input, cacheRead, cacheWrite }, contextLimit)
                   const cacheHitPct = computeCacheHitRate({ input, cacheRead, cacheWrite })
                   const payload = MessageV2.buildLiveTokenEvent({
