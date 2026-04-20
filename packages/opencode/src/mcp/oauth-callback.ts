@@ -225,6 +225,12 @@ export async function stop(): Promise<void> {
   mcpNameToState.clear()
 }
 
+export async function stopIfIdle(): Promise<void> {
+  if (pendingAuths.size === 0) {
+    await stop()
+  }
+}
+
 export function isRunning(): boolean {
   return server !== undefined
 }
