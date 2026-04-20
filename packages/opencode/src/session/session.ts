@@ -250,6 +250,12 @@ export const Event = {
       error: z.lazy(() => MessageV2.Assistant.shape.error),
     }),
   ),
+  TurnCompleted: BusEvent.define(
+    "session.turn.completed",
+    z.object({
+      sessionID: SessionID.zod,
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }) {
