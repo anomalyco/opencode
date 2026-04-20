@@ -7,12 +7,13 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 
-import { ConfigPaths } from "@/config/paths"
+import * as ConfigPaths from "@/config/paths"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@/util/flock"
+import { Filesystem } from "@/util"
+import { Flock } from "@opencode-ai/shared/util/flock"
+import { isRecord } from "@/util/record"
 
-import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./shared"
+import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"
 
 type Mode = "noop" | "add" | "replace"
 type Kind = "server" | "tui"
@@ -94,33 +95,98 @@ function pluginSpec(item: unknown) {
   return item[0]
 }
 
-function parseTarget(item: unknown): Target | undefined {
-  if (item === "server" || item === "tui") return { kind: item }
-  if (!Array.isArray(item)) return
-  if (item[0] !== "server" && item[0] !== "tui") return
-  if (item.length < 2) return { kind: item[0] }
-  const opt = item[1]
-  if (!opt || typeof opt !== "object" || Array.isArray(opt)) return { kind: item[0] }
-  return {
-    kind: item[0],
-    opts: opt,
-  }
+function pluginList(data: unknown) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return
+  const item = data as { plugin?: unknown }
+  if (!Array.isArray(item.plugin)) return
+  return item.plugin
 }
 
-function parseTargets(raw: unknown) {
-  if (!Array.isArray(raw)) return []
-  const map = new Map<Kind, Target>()
-  for (const item of raw) {
-    const hit = parseTarget(item)
+function exportValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const next = value.trim()
+    if (next) return next
+    return
+  }
+  if (!isRecord(value)) return
+  for (const key of ["import", "default"]) {
+    const next = value[key]
+    if (typeof next !== "string") continue
+    const hit = next.trim()
     if (!hit) continue
-    map.set(hit.kind, hit)
+    return hit
   }
-  return [...map.values()]
 }
 
-function patchPluginList(list: unknown[], spec: string, next: unknown, force = false): { mode: Mode; list: unknown[] } {
+function exportOptions(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return
+  const config = value.config
+  if (!isRecord(config)) return
+  return config
+}
+
+function exportTarget(pkg: Record<string, unknown>, kind: Kind) {
+  const exports = pkg.exports
+  if (!isRecord(exports)) return
+  const value = exports[`./${kind}`]
+  const entry = exportValue(value)
+  if (!entry) return
+  return {
+    opts: exportOptions(value),
+  }
+}
+
+function hasMainTarget(pkg: Record<string, unknown>) {
+  const main = pkg.main
+  if (typeof main !== "string") return false
+  return Boolean(main.trim())
+}
+
+function packageTargets(pkg: { json: Record<string, unknown>; dir: string; pkg: string }) {
+  const spec =
+    typeof pkg.json.name === "string" && pkg.json.name.trim().length > 0 ? pkg.json.name.trim() : path.basename(pkg.dir)
+  const targets: Target[] = []
+  const server = exportTarget(pkg.json, "server")
+  if (server) {
+    targets.push({ kind: "server", opts: server.opts })
+  } else if (hasMainTarget(pkg.json)) {
+    targets.push({ kind: "server" })
+  }
+
+  const tui = exportTarget(pkg.json, "tui")
+  if (tui) {
+    targets.push({ kind: "tui", opts: tui.opts })
+  }
+
+  if (!targets.some((item) => item.kind === "tui") && readPackageThemes(spec, pkg).length) {
+    targets.push({ kind: "tui" })
+  }
+
+  return targets
+}
+
+function patch(text: string, path: Array<string | number>, value: unknown, insert = false) {
+  return applyEdits(
+    text,
+    modify(text, path, value, {
+      formattingOptions: {
+        tabSize: 2,
+        insertSpaces: true,
+      },
+      isArrayInsertion: insert,
+    }),
+  )
+}
+
+function patchPluginList(
+  text: string,
+  list: unknown[] | undefined,
+  spec: string,
+  next: unknown,
+  force = false,
+): { mode: Mode; text: string } {
   const pkg = parsePluginSpecifier(spec).pkg
-  const rows = list.map((item, i) => ({
+  const rows = (list ?? []).map((item, i) => ({
     item,
     i,
     spec: pluginSpec(item),
@@ -133,16 +199,22 @@ function patchPluginList(list: unknown[], spec: string, next: unknown, force = f
   })
 
   if (!dup.length) {
+    if (!list) {
+      return {
+        mode: "add",
+        text: patch(text, ["plugin"], [next]),
+      }
+    }
     return {
       mode: "add",
-      list: [...list, next],
+      text: patch(text, ["plugin", list.length], next, true),
     }
   }
 
   if (!force) {
     return {
       mode: "noop",
-      list,
+      text,
     }
   }
 
@@ -150,29 +222,37 @@ function patchPluginList(list: unknown[], spec: string, next: unknown, force = f
   if (!keep) {
     return {
       mode: "noop",
-      list,
+      text,
     }
   }
 
   if (dup.length === 1 && keep.spec === spec) {
     return {
       mode: "noop",
-      list,
+      text,
     }
   }
 
-  const idx = new Set(dup.map((item) => item.i))
+  let out = text
+  if (typeof keep.item === "string") {
+    out = patch(out, ["plugin", keep.i], next)
+  }
+  if (Array.isArray(keep.item) && typeof keep.item[0] === "string") {
+    out = patch(out, ["plugin", keep.i, 0], spec)
+  }
+
+  const del = dup
+    .map((item) => item.i)
+    .filter((i) => i !== keep.i)
+    .sort((a, b) => b - a)
+
+  for (const i of del) {
+    out = patch(out, ["plugin", i], undefined)
+  }
+
   return {
     mode: "replace",
-    list: rows.flatMap((row) => {
-      if (!idx.has(row.i)) return [row.item]
-      if (row.i !== keep.i) return []
-      if (typeof row.item === "string") return [next]
-      if (Array.isArray(row.item) && typeof row.item[0] === "string") {
-        return [[spec, ...row.item.slice(1)]]
-      }
-      return [row.item]
-    }),
+    text: out,
   }
 }
 
@@ -220,8 +300,23 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
     }
   }
 
-  const targets = parseTargets(pkg.item.json["oc-plugin"])
-  if (!targets.length) {
+  const targets = await Promise.resolve()
+    .then(() => packageTargets(pkg.item))
+    .then(
+      (item) => ({ ok: true as const, item }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+
+  if (!targets.ok) {
+    return {
+      ok: false,
+      code: "manifest_read_failed",
+      file: pkg.item.pkg,
+      error: targets.error,
+    }
+  }
+
+  if (!targets.item.length) {
     return {
       ok: false,
       code: "manifest_no_targets",
@@ -231,7 +326,7 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
 
   return {
     ok: true,
-    targets,
+    targets: targets.item,
   }
 }
 
@@ -289,10 +384,9 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
     }
   }
 
-  const list: unknown[] =
-    data && typeof data === "object" && !Array.isArray(data) && Array.isArray(data.plugin) ? data.plugin : []
-  const item = target.opts ? [spec, target.opts] : spec
-  const out = patchPluginList(list, spec, item, force)
+  const list = pluginList(data)
+  const item = target.opts ? ([spec, target.opts] as const) : spec
+  const out = patchPluginList(text, list, spec, item, force)
   if (out.mode === "noop") {
     return {
       ok: true,
@@ -304,13 +398,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
     }
   }
 
-  const edits = modify(text, ["plugin"], out.list, {
-    formattingOptions: {
-      tabSize: 2,
-      insertSpaces: true,
-    },
-  })
-  const write = await dep.write(cfg, applyEdits(text, edits)).catch((error: unknown) => error)
+  const write = await dep.write(cfg, out.text).catch((error: unknown) => error)
   if (write instanceof Error) {
     return {
       ok: false,

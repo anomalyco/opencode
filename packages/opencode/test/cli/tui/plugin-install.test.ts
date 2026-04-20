@@ -4,7 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { TuiConfig } from "../../../src/config/tui"
+import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -21,8 +21,12 @@ test("installs plugin without loading it", async () => {
           {
             name: "demo-install-plugin",
             type: "module",
-            main: "./install-plugin.ts",
-            "oc-plugin": [["tui", { marker }]],
+            exports: {
+              "./tui": {
+                import: "./install-plugin.ts",
+                config: { marker },
+              },
+            },
           },
           null,
           2,
@@ -46,11 +50,10 @@ test("installs plugin without loading it", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  let cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
+  const config: TuiConfig.Info = {
     plugin: [],
-    plugin_meta: undefined,
+    plugin_origins: undefined,
   }
-  const get = spyOn(TuiConfig, "get").mockImplementation(async () => cfg)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const api = createTuiPluginApi({
@@ -65,17 +68,7 @@ test("installs plugin without loading it", async () => {
   })
 
   try {
-    await TuiPluginRuntime.init(api)
-    cfg = {
-      plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-      plugin_meta: {
-        [tmp.extra.spec]: {
-          scope: "local",
-          source: path.join(tmp.path, "tui.json"),
-        },
-      },
-    }
-
+    await TuiPluginRuntime.init({ api, config })
     const out = await TuiPluginRuntime.installPlugin(tmp.extra.spec)
     expect(out).toMatchObject({
       ok: true,
@@ -88,7 +81,6 @@ test("installs plugin without loading it", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }

@@ -1,6 +1,6 @@
 import { JSX } from "solid-js"
 
-export function IconZen(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconZen(_props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg width="84" height="30" viewBox="0 0 84 30" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M24 24H6V18H18V12H24V24ZM6 18H0V12H6V18Z" fill="currentColor" fill-opacity="0.2" />
@@ -13,7 +13,7 @@ export function IconZen(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   )
 }
 
-export function IconGo(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconGo(_props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg width="54" height="30" viewBox="0 0 54 30" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M24 30H0V0H24V6H6V24H18V18H12V12H24V30Z" fill="currentColor" />
@@ -200,6 +200,14 @@ export function IconGemini(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg {...props} viewBox="0 0 50 50" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <path d="M49.04,24.001l-1.082-0.043h-0.001C36.134,23.492,26.508,13.866,26.042,2.043L25.999,0.96C25.978,0.424,25.537,0,25,0	s-0.978,0.424-0.999,0.96l-0.043,1.083C23.492,13.866,13.866,23.492,2.042,23.958L0.96,24.001C0.424,24.022,0,24.463,0,25	c0,0.537,0.424,0.978,0.961,0.999l1.082,0.042c11.823,0.467,21.449,10.093,21.915,21.916l0.043,1.083C24.022,49.576,24.463,50,25,50	s0.978-0.424,0.999-0.96l0.043-1.083c0.466-11.823,10.092-21.449,21.915-21.916l1.082-0.042C49.576,25.978,50,25.537,50,25	C50,24.463,49.576,24.022,49.04,24.001z"></path>
+    </svg>
+  )
+}
+
+export function IconMiMo(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C8.016 0 4.756.255 2.493 2.516.23 4.776 0 8.033 0 12.012c0 3.98.23 7.235 2.494 9.497C4.757 23.77 8.017 24 12 24c3.983 0 7.243-.23 9.506-2.491C23.77 19.247 24 15.99 24 12.012c0-3.984-.233-7.243-2.502-9.504C19.234.252 15.978 0 12 0zM4.906 7.405h5.624c1.47 0 3.007.068 3.764.827.746.746.827 2.233.83 3.676v4.54a.15.15 0 0 1-.152.147h-1.947a.15.15 0 0 1-.152-.148V11.83c-.002-.806-.048-1.634-.464-2.051-.358-.36-1.026-.441-1.72-.458H7.158a.15.15 0 0 0-.151.147v6.98a.15.15 0 0 1-.152.148H4.906a.15.15 0 0 1-.15-.148V7.554a.15.15 0 0 1 .15-.149zm12.131 0h1.949a.15.15 0 0 1 .15.15v8.892a.15.15 0 0 1-.15.148h-1.949a.15.15 0 0 1-.151-.148V7.554a.15.15 0 0 1 .151-.149zM8.92 10.948h2.046c.083 0 .15.066.15.147v5.352a.15.15 0 0 1-.15.148H8.92a.15.15 0 0 1-.152-.148v-5.352a.15.15 0 0 1 .152-.147Z" />
     </svg>
   )
 }

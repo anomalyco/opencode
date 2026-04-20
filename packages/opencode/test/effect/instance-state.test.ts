@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test"
-import { Duration, Effect, Layer, ManagedRuntime, ServiceMap } from "effect"
-import { InstanceState } from "../../src/effect/instance-state"
+import { Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
+import { InstanceState } from "../../src/effect"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-async function access<A, E>(state: InstanceState<A, E>, dir: string) {
+async function access<A, E>(state: InstanceState.InstanceState<A, E>, dir: string) {
   return Instance.provide({
     directory: dir,
     fn: () => Effect.runPromise(InstanceState.get(state)),
@@ -121,7 +122,7 @@ test("InstanceState.get reads the current directory lazily", async () => {
     readonly get: () => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/InstanceStateLazy") {
+  class Test extends Context.Service<Test, Api>()("@test/InstanceStateLazy") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -165,7 +166,7 @@ test("InstanceState preserves directory across async boundaries", async () => {
     readonly get: () => Effect.Effect<{ directory: string; worktree: string; project: string }>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/InstanceStateAsync") {
+  class Test extends Context.Service<Test, Api>()("@test/InstanceStateAsync") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -233,7 +234,7 @@ test("InstanceState survives high-contention concurrent access", async () => {
     readonly get: () => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/HighContention") {
+  class Test extends Context.Service<Test, Api>()("@test/HighContention") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -283,7 +284,7 @@ test("InstanceState correct after interleaved init and dispose", async () => {
     readonly get: () => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/InterleavedDispose") {
+  class Test extends Context.Service<Test, Api>()("@test/InterleavedDispose") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -381,4 +382,101 @@ test("InstanceState dedupes concurrent lookups", async () => {
       }),
     ),
   )
+})
+
+test("InstanceState survives deferred resume from the same instance context", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  interface Api {
+    readonly get: (gate: Deferred.Deferred<void>) => Effect.Effect<string>
+  }
+
+  class Test extends Context.Service<Test, Api>()("@test/DeferredResume") {
+    static readonly layer = Layer.effect(
+      Test,
+      Effect.gen(function* () {
+        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
+
+        return Test.of({
+          get: Effect.fn("Test.get")(function* (gate: Deferred.Deferred<void>) {
+            yield* Deferred.await(gate)
+            return yield* InstanceState.get(state)
+          }),
+        })
+      }),
+    )
+  }
+
+  const rt = ManagedRuntime.make(Test.layer)
+
+  try {
+    const gate = await Effect.runPromise(Deferred.make<void>())
+    const fiber = await Instance.provide({
+      directory: tmp.path,
+      fn: () => Promise.resolve(rt.runFork(Test.use((svc) => svc.get(gate)))),
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => Effect.runPromise(Deferred.succeed(gate, void 0)),
+    })
+    const exit = await Effect.runPromise(Fiber.await(fiber))
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value).toBe(tmp.path)
+    }
+  } finally {
+    await rt.dispose()
+  }
+})
+
+test("InstanceState survives deferred resume outside ALS when InstanceRef is set", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  interface Api {
+    readonly get: (gate: Deferred.Deferred<void>) => Effect.Effect<string>
+  }
+
+  class Test extends Context.Service<Test, Api>()("@test/DeferredResumeOutside") {
+    static readonly layer = Layer.effect(
+      Test,
+      Effect.gen(function* () {
+        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
+
+        return Test.of({
+          get: Effect.fn("Test.get")(function* (gate: Deferred.Deferred<void>) {
+            yield* Deferred.await(gate)
+            return yield* InstanceState.get(state)
+          }),
+        })
+      }),
+    )
+  }
+
+  const rt = ManagedRuntime.make(Test.layer)
+
+  try {
+    const gate = await Effect.runPromise(Deferred.make<void>())
+    // Provide InstanceRef so the fiber carries the context even when
+    // the deferred is resolved from outside Instance.provide ALS.
+    const fiber = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        Promise.resolve(
+          rt.runFork(Test.use((svc) => svc.get(gate)).pipe(Effect.provideService(InstanceRef, Instance.current))),
+        ),
+    })
+
+    // Resume from outside any Instance.provide — ALS is NOT set here
+    await Effect.runPromise(Deferred.succeed(gate, void 0))
+    const exit = await Effect.runPromise(Fiber.await(fiber))
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value).toBe(tmp.path)
+    }
+  } finally {
+    await rt.dispose()
+  }
 })

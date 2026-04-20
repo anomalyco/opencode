@@ -1,8 +1,7 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { Effect, Exit, Layer, Stream } from "effect"
+import { Effect, Exit, Stream } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
@@ -159,7 +158,17 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures both stdout and stderr",
       Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")')
+        const handle = yield* js(
+          [
+            "let pending = 2",
+            "const done = () => {",
+            "  pending -= 1",
+            "  if (pending === 0) setTimeout(() => process.exit(0), 0)",
+            "}",
+            'process.stdout.write("stdout\\n", done)',
+            'process.stderr.write("stderr\\n", done)',
+          ].join("\n"),
+        )
         const [stdout, stderr] = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)])
         expect(stdout).toBe("stdout")
         expect(stderr).toBe("stderr")

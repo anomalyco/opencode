@@ -1,8 +1,8 @@
 import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
@@ -23,11 +23,10 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
   })
 
-  createEffect(() => {
-    const id = params.id
-    if (!id) return
-    void sync.session.sync(id)
-  })
+  createResource(
+    () => params.id,
+    (id) => sync.session.sync(id),
+  )
 
   return (
     <DataProvider

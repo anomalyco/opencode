@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "엔터프라이즈",
   "nav.zen": "Zen",
   "nav.login": "로그인",
-  "nav.free": "무료",
+  "nav.free": "다운로드",
   "nav.home": "홈",
   "nav.openMenu": "메뉴 열기",
   "nav.getStartedFree": "무료로 시작하기",
@@ -247,7 +247,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description":
-    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
+    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
@@ -296,7 +296,8 @@ export const dict = {
   "go.problem.item1": "저렴한 구독 가격",
   "go.problem.item2": "넉넉한 한도와 안정적인 액세스",
   "go.problem.item3": "가능한 한 많은 프로그래머를 위해 제작됨",
-  "go.problem.item4": "GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7 포함",
+  "go.problem.item4":
+    "GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7 포함",
   "go.how.title": "Go 작동 방식",
   "go.how.body": "Go는 첫 달 $5, 이후 $10/월로 시작합니다. OpenCode 또는 어떤 에이전트와도 함께 사용할 수 있습니다.",
   "go.how.step1.title": "계정 생성",
@@ -317,11 +318,10 @@ export const dict = {
   "go.faq.q1": "OpenCode Go란 무엇인가요?",
   "go.faq.a1": "Go는 에이전트 코딩을 위한 유능한 오픈 소스 모델에 대해 안정적인 액세스를 제공하는 저비용 구독입니다.",
   "go.faq.q2": "Go에는 어떤 모델이 포함되나요?",
-  "go.faq.a2":
-    "Go에는 넉넉한 한도와 안정적인 액세스를 제공하는 GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7가 포함됩니다.",
+  "go.faq.a2": "Go에는 넉넉한 한도와 안정적인 액세스를 제공하는 아래 모델이 포함됩니다.",
   "go.faq.q3": "Go는 Zen과 같은가요?",
   "go.faq.a3":
-    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
+    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
   "go.faq.q4": "Go 비용은 얼마인가요?",
   "go.faq.a4.p1.beforePricing": "Go 비용은",
   "go.faq.a4.p1.pricingLink": "첫 달 $5",
@@ -344,7 +344,7 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
 
   "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
   "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",
@@ -363,6 +363,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{membersUrl}}",
   "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
+  "zen.api.error.trialEnded":
+    "{{model}}의 무료 프로모션이 종료되었습니다. OpenCode Go를 구독하면 모델을 계속 사용할 수 있습니다 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 세계 최고의 코딩 모델에 액세스하세요",
   "black.meta.description": "OpenCode Black 구독 플랜으로 Claude, GPT, Gemini 등에 액세스하세요.",
@@ -555,6 +557,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "사용 한도가 설정되지 않았습니다.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "현재",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "사용량: $",
+
+  "workspace.redeem.title": "쿠폰 사용",
+  "workspace.redeem.subtitle": "쿠폰 코드를 사용해 크레딧이나 혜택을 받으세요.",
+  "workspace.redeem.placeholder": "쿠폰 코드를 입력하세요",
+  "workspace.redeem.redeem": "사용",
+  "workspace.redeem.redeeming": "사용 중...",
+  "workspace.redeem.success": "쿠폰을 성공적으로 사용했습니다.",
 
   "workspace.reload.title": "자동 충전",
   "workspace.reload.disabled.before": "자동 충전이",

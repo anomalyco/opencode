@@ -79,6 +79,7 @@ You can also access our models through the following API endpoints.
 | GPT 5                 | gpt-5                 | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Codex           | gpt-5-codex           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Nano            | gpt-5-nano            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Opus 4.7       | claude-opus-4-7       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6       | claude-opus-4-6       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Opus 4.5       | claude-opus-4-5       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Opus 4.1       | claude-opus-4-1       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
@@ -89,13 +90,15 @@ You can also access our models through the following API endpoints.
 | Claude Haiku 3.5      | claude-3-5-haiku      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3.1 Pro        | gemini-3.1-pro        | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Flash        | gemini-3-flash        | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
 | MiniMax M2.5          | minimax-m2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 Free     | minimax-m2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 5.1               | glm-5.1               | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 5                 | glm-5                 | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.5             | kimi-k2.5             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiMo V2 Pro Free      | mimo-v2-pro-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiMo V2 Omni Free     | mimo-v2-omni-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
@@ -121,14 +124,16 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Model                             | Input  | Output  | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
-| MiMo V2 Pro Free                  | Free   | Free    | Free        | -            |
-| MiMo V2 Omni Free                 | Free   | Free    | Free        | -            |
 | Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.5 Free                 | Free   | Free    | Free        | -            |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
+| GLM 5.1                           | $1.40  | $4.40   | $0.26       | -            |
 | GLM 5                             | $1.00  | $3.20   | $0.20       | -            |
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10       | -            |
-| Qwen3 Coder 480B                  | $0.45  | $1.50   | -           | -            |
+| Kimi K2.6                         | $0.95  | $4.00   | $0.16       | -            |
+| Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
+| Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
+| Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.6                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.5                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.1                   | $15.00 | $75.00  | $1.50       | $18.75       |
@@ -167,8 +172,6 @@ Credit card fees are passed along at cost (4.4% + $0.30 per transaction); we don
 The free models:
 
 - MiniMax M2.5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- MiMo V2 Pro Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- MiMo V2 Omni Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3 Super Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 
@@ -215,9 +218,7 @@ All our models are hosted in the US. Our providers follow a zero-retention polic
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
 - MiniMax M2.5 Free: During its free period, collected data may be used to improve the model.
-- MiMo V2 Pro Free: During its free period, collected data may be used to improve the model.
-- MiMo V2 Omni Free: During its free period, collected data may be used to improve the model.
-- Nemotron 3 Super Free: During its free period, collected data may be used to improve the model.
+- Nemotron 3 Super Free (NVIDIA free endpoints): Provided under the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Trial use only — not for production or sensitive data. Prompts and outputs are logged by NVIDIA to improve its models and services. Do not submit personal or confidential data.
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 

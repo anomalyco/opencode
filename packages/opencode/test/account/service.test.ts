@@ -1,11 +1,21 @@
 import { expect } from "bun:test"
 import { Duration, Effect, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
-import { Account } from "../../src/account"
-import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
-import { Database } from "../../src/storage/db"
+import { Account } from "../../src/account/account"
+import {
+  AccessToken,
+  AccountID,
+  AccountTransportError,
+  DeviceCode,
+  Login,
+  Org,
+  OrgID,
+  RefreshToken,
+  UserCode,
+} from "../../src/account/schema"
+import { Database } from "../../src/storage"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(
@@ -17,6 +27,9 @@ const truncate = Layer.effectDiscard(
 )
 
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
+
+const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
+const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
 
 const live = (client: HttpClient.HttpClient) =>
   Account.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
@@ -54,28 +67,81 @@ const deviceTokenClient = (body: unknown, status = 400) =>
 const poll = (body: unknown, status = 400) =>
   Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
-it.effect("orgsByAccount groups orgs per account", () =>
+it.live("login normalizes trailing slashes in the provided server URL", () =>
   Effect.gen(function* () {
-    yield* AccountRepo.use((r) =>
+    const seen: Array<string> = []
+    const client = HttpClient.make((req) =>
+      Effect.gen(function* () {
+        seen.push(`${req.method} ${req.url}`)
+
+        if (req.url === "https://one.example.com/auth/device/code") {
+          return json(req, {
+            device_code: "device-code",
+            user_code: "user-code",
+            verification_uri_complete: "/device?user_code=user-code",
+            expires_in: 600,
+            interval: 5,
+          })
+        }
+
+        return json(req, {}, 404)
+      }),
+    )
+
+    const result = yield* Account.Service.use((s) => s.login("https://one.example.com/")).pipe(
+      Effect.provide(live(client)),
+    )
+
+    expect(seen).toEqual(["POST https://one.example.com/auth/device/code"])
+    expect(result.server).toBe("https://one.example.com")
+    expect(result.url).toBe("https://one.example.com/device?user_code=user-code")
+  }),
+)
+
+it.live("login maps transport failures to account transport errors", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((req) =>
+      Effect.fail(
+        new HttpClientError.HttpClientError({
+          reason: new HttpClientError.TransportError({ request: req }),
+        }),
+      ),
+    )
+
+    const error = yield* Effect.flip(
+      Account.Service.use((s) => s.login("https://one.example.com")).pipe(Effect.provide(live(client))),
+    )
+
+    expect(error).toBeInstanceOf(AccountTransportError)
+    if (error instanceof AccountTransportError) {
+      expect(error.method).toBe("POST")
+      expect(error.url).toBe("https://one.example.com/auth/device/code")
+    }
+  }),
+)
+
+it.live("orgsByAccount groups orgs per account", () =>
+  Effect.gen(function* () {
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id: AccountID.make("user-1"),
         email: "one@example.com",
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_1"),
         refreshToken: RefreshToken.make("rt_1"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + outsideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id: AccountID.make("user-2"),
         email: "two@example.com",
         url: "https://two.example.com",
         accessToken: AccessToken.make("at_2"),
         refreshToken: RefreshToken.make("rt_2"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + outsideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
@@ -107,11 +173,11 @@ it.effect("orgsByAccount groups orgs per account", () =>
   }),
 )
 
-it.effect("token refresh persists the new token", () =>
+it.live("token refresh persists the new token", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id,
         email: "user@example.com",
@@ -140,7 +206,7 @@ it.effect("token refresh persists the new token", () =>
     expect(Option.getOrThrow(token)).toBeDefined()
     expect(String(Option.getOrThrow(token))).toBe("at_new")
 
-    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
@@ -148,18 +214,126 @@ it.effect("token refresh persists the new token", () =>
   }),
 )
 
-it.effect("config sends the selected org header", () =>
+it.live("token refreshes before expiry when inside the eager refresh window", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
-    yield* AccountRepo.use((r) =>
+    yield* AccountRepo.Service.use((r) =>
+      r.persistAccount({
+        id,
+        email: "user@example.com",
+        url: "https://one.example.com",
+        accessToken: AccessToken.make("at_old"),
+        refreshToken: RefreshToken.make("rt_old"),
+        expiry: Date.now() + insideEagerRefreshWindow,
+        orgID: Option.none(),
+      }),
+    )
+
+    let refreshCalls = 0
+    const client = HttpClient.make((req) =>
+      Effect.promise(async () => {
+        if (req.url === "https://one.example.com/auth/device/token") {
+          refreshCalls += 1
+          return json(req, {
+            access_token: "at_new",
+            refresh_token: "rt_new",
+            expires_in: 60,
+          })
+        }
+
+        return json(req, {}, 404)
+      }),
+    )
+
+    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+
+    expect(String(Option.getOrThrow(token))).toBe("at_new")
+    expect(refreshCalls).toBe(1)
+
+    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const value = Option.getOrThrow(row)
+    expect(value.access_token).toBe(AccessToken.make("at_new"))
+    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
+  }),
+)
+
+it.live("concurrent config and token requests coalesce token refresh", () =>
+  Effect.gen(function* () {
+    const id = AccountID.make("user-1")
+
+    yield* AccountRepo.Service.use((r) =>
+      r.persistAccount({
+        id,
+        email: "user@example.com",
+        url: "https://one.example.com",
+        accessToken: AccessToken.make("at_old"),
+        refreshToken: RefreshToken.make("rt_old"),
+        expiry: Date.now() - 1_000,
+        orgID: Option.some(OrgID.make("org-9")),
+      }),
+    )
+
+    let refreshCalls = 0
+    const client = HttpClient.make((req) =>
+      Effect.promise(async () => {
+        if (req.url === "https://one.example.com/auth/device/token") {
+          refreshCalls += 1
+
+          if (refreshCalls === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 25))
+            return json(req, {
+              access_token: "at_new",
+              refresh_token: "rt_new",
+              expires_in: 60,
+            })
+          }
+
+          return json(
+            req,
+            {
+              error: "invalid_grant",
+              error_description: "refresh token already used",
+            },
+            400,
+          )
+        }
+
+        if (req.url === "https://one.example.com/api/config") {
+          return json(req, { config: { theme: "light", seats: 5 } })
+        }
+
+        return json(req, {}, 404)
+      }),
+    )
+
+    const [cfg, token] = yield* Account.Service.use((s) =>
+      Effect.all([s.config(id, OrgID.make("org-9")), s.token(id)], { concurrency: 2 }),
+    ).pipe(Effect.provide(live(client)))
+
+    expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
+    expect(String(Option.getOrThrow(token))).toBe("at_new")
+    expect(refreshCalls).toBe(1)
+
+    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const value = Option.getOrThrow(row)
+    expect(value.access_token).toBe(AccessToken.make("at_new"))
+    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
+  }),
+)
+
+it.live("config sends the selected org header", () =>
+  Effect.gen(function* () {
+    const id = AccountID.make("user-1")
+
+    yield* AccountRepo.Service.use((r) =>
       r.persistAccount({
         id,
         email: "user@example.com",
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_1"),
         refreshToken: RefreshToken.make("rt_1"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + outsideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
@@ -188,7 +362,7 @@ it.effect("config sends the selected org header", () =>
   }),
 )
 
-it.effect("poll stores the account and first org on success", () =>
+it.live("poll stores the account and first org on success", () =>
   Effect.gen(function* () {
     const client = HttpClient.make((req) =>
       Effect.succeed(
@@ -214,7 +388,7 @@ it.effect("poll stores the account and first org on success", () =>
       expect(res.email).toBe("user@example.com")
     }
 
-    const active = yield* AccountRepo.use((r) => r.active())
+    const active = yield* AccountRepo.Service.use((r) => r.active())
     expect(Option.getOrThrow(active)).toEqual(
       expect.objectContaining({
         id: "user-1",
@@ -259,7 +433,7 @@ for (const [name, body, expectedTag] of [
     "PollExpired",
   ],
 ] as const) {
-  it.effect(`poll returns ${name} for ${body.error}`, () =>
+  it.live(`poll returns ${name} for ${body.error}`, () =>
     Effect.gen(function* () {
       const result = yield* poll(body)
       expect(result._tag).toBe(expectedTag)
@@ -267,7 +441,7 @@ for (const [name, body, expectedTag] of [
   )
 }
 
-it.effect("poll returns poll error for other OAuth errors", () =>
+it.live("poll returns poll error for other OAuth errors", () =>
   Effect.gen(function* () {
     const result = yield* poll({
       error: "server_error",

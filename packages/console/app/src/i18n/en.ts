@@ -8,7 +8,7 @@ export const dict = {
   "nav.zen": "Zen",
   "nav.go": "Go",
   "nav.login": "Login",
-  "nav.free": "Free",
+  "nav.free": "Download",
   "nav.home": "Home",
   "nav.openMenu": "Open menu",
   "nav.getStartedFree": "Get started for free",
@@ -248,7 +248,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description":
-    "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7.",
+    "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, and MiniMax M2.7.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
@@ -295,7 +295,8 @@ export const dict = {
   "go.problem.item1": "Low cost subscription pricing",
   "go.problem.item2": "Generous limits and reliable access",
   "go.problem.item3": "Built for as many programmers as possible",
-  "go.problem.item4": "Includes GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7",
+  "go.problem.item4":
+    "Includes GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, and MiniMax M2.7",
   "go.how.title": "How Go works",
   "go.how.body": "Go starts at $5 for your first month, then $10/month. You can use it with OpenCode or any agent.",
   "go.how.step1.title": "Create an account",
@@ -317,11 +318,10 @@ export const dict = {
   "go.faq.a1":
     "Go is a low-cost subscription that gives you reliable access to capable open-source models for agentic coding.",
   "go.faq.q2": "What models does Go include?",
-  "go.faq.a2":
-    "Go includes GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7, with generous limits and reliable access.",
+  "go.faq.a2": "Go includes the models listed below, with generous limits and reliable access.",
   "go.faq.q3": "Is Go the same as Zen?",
   "go.faq.a3":
-    "No. Zen is pay-as-you-go, while Go starts at $5 for your first month, then $10/month, with generous limits and reliable access to open-source models GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7.",
+    "No. Zen is pay-as-you-go, while Go starts at $5 for your first month, then $10/month, with generous limits and reliable access to open-source models GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, and MiniMax M2.7.",
   "go.faq.q4": "How much does Go cost?",
   "go.faq.a4.p1.beforePricing": "Go costs",
   "go.faq.a4.p1.pricingLink": "$5 first month",
@@ -345,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, and MiniMax M2.7 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
   "zen.api.error.modelNotSupported": "Model {{model}} not supported",
@@ -364,6 +364,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "You have reached your monthly spending limit of ${{amount}}. Manage your limits here: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model is disabled",
+  "zen.api.error.trialEnded":
+    "Free promotion has ended for {{model}}. You can continue using the model by subscribing to OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Access all the world's best coding models",
   "black.meta.description": "Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans.",
@@ -556,6 +558,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "No usage limit set.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Current usage for",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "is $",
+
+  "workspace.redeem.title": "Redeem Coupon",
+  "workspace.redeem.subtitle": "Redeem a coupon code to claim credits or perks.",
+  "workspace.redeem.placeholder": "Enter coupon code",
+  "workspace.redeem.redeem": "Redeem",
+  "workspace.redeem.redeeming": "Redeeming...",
+  "workspace.redeem.success": "Coupon redeemed successfully.",
 
   "workspace.reload.title": "Auto Reload",
   "workspace.reload.disabled.before": "Auto reload is",

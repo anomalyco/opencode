@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "المؤسسات",
   "nav.zen": "Zen",
   "nav.login": "تسجيل الدخول",
-  "nav.free": "مجانا",
+  "nav.free": "تحميل",
   "nav.home": "الرئيسية",
   "nav.openMenu": "فتح القائمة",
   "nav.getStartedFree": "ابدأ مجانا",
@@ -249,7 +249,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description":
-    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5 و Kimi K2.5 و MiniMax M2.5 وMiniMax M2.7.",
+    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -297,7 +297,8 @@ export const dict = {
   "go.problem.item1": "أسعار اشتراك منخفضة التكلفة",
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
-  "go.problem.item4": "يتضمن GLM-5 وKimi K2.5 وMiniMax M2.5 وMiniMax M2.7",
+  "go.problem.item4":
+    "يتضمن GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7",
   "go.how.title": "كيف يعمل Go",
   "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
@@ -318,10 +319,10 @@ export const dict = {
   "go.faq.q1": "ما هو OpenCode Go؟",
   "go.faq.a1": "Go هو اشتراك منخفض التكلفة يمنحك وصولًا موثوقًا إلى نماذج مفتوحة المصدر قادرة على البرمجة الوكيلة.",
   "go.faq.q2": "ما النماذج التي يتضمنها Go؟",
-  "go.faq.a2": "يتضمن Go نماذج GLM-5 وKimi K2.5 وMiniMax M2.5 وMiniMax M2.7، مع حدود سخية ووصول موثوق.",
+  "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5 و Kimi K2.5 و MiniMax M2.5 وMiniMax M2.7.",
+    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
@@ -344,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5 وKimi K2.5 وMiniMax M2.5 وMiniMax M2.7 مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
@@ -363,6 +364,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "لقد وصلت إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{membersUrl}}",
   "zen.api.error.modelDisabled": "النموذج معطل",
+  "zen.api.error.trialEnded":
+    "انتهى العرض المجاني لـ {{model}}. يمكنك مواصلة استخدام النموذج بالاشتراك في OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | الوصول إلى أفضل نماذج البرمجة في العالم",
   "black.meta.description": "احصل على وصول إلى Claude، GPT، Gemini والمزيد مع خطط اشتراك OpenCode Black.",
@@ -554,6 +557,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "لم يتم تعيين حد للاستخدام.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "الاستخدام الحالي لـ",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "هو $",
+
+  "workspace.redeem.title": "استرداد قسيمة",
+  "workspace.redeem.subtitle": "استرد رمز القسيمة للحصول على رصيد أو مزايا.",
+  "workspace.redeem.placeholder": "أدخل رمز القسيمة",
+  "workspace.redeem.redeem": "استرداد",
+  "workspace.redeem.redeeming": "جارٍ الاسترداد...",
+  "workspace.redeem.success": "تم استرداد القسيمة بنجاح.",
 
   "workspace.reload.title": "إعادة الشحن التلقائي",
   "workspace.reload.disabled.before": "إعادة الشحن التلقائي",

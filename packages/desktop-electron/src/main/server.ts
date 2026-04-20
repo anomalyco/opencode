@@ -1,36 +1,45 @@
-import { serve, type CommandChild } from "./cli"
+import { app } from "electron"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
-import { store } from "./store"
+import { getUserShell, loadShellEnv } from "./shell-env"
+import { getStore } from "./store"
 
 export type WslConfig = { enabled: boolean }
 
 export type HealthCheck = { wait: Promise<void> }
 
 export function getDefaultServerUrl(): string | null {
-  const value = store.get(DEFAULT_SERVER_URL_KEY)
+  const value = getStore().get(DEFAULT_SERVER_URL_KEY)
   return typeof value === "string" ? value : null
 }
 
 export function setDefaultServerUrl(url: string | null) {
   if (url) {
-    store.set(DEFAULT_SERVER_URL_KEY, url)
+    getStore().set(DEFAULT_SERVER_URL_KEY, url)
     return
   }
 
-  store.delete(DEFAULT_SERVER_URL_KEY)
+  getStore().delete(DEFAULT_SERVER_URL_KEY)
 }
 
 export function getWslConfig(): WslConfig {
-  const value = store.get(WSL_ENABLED_KEY)
+  const value = getStore().get(WSL_ENABLED_KEY)
   return { enabled: typeof value === "boolean" ? value : false }
 }
 
 export function setWslConfig(config: WslConfig) {
-  store.set(WSL_ENABLED_KEY, config.enabled)
+  getStore().set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export function spawnLocalServer(hostname: string, port: number, password: string) {
-  const { child, exit, events } = serve(hostname, port, password)
+export async function spawnLocalServer(hostname: string, port: number, password: string) {
+  prepareServerEnv(password)
+  const { Log, Server } = await import("virtual:opencode-server")
+  await Log.init({ level: "WARN" })
+  const listener = await Server.listen({
+    port,
+    hostname,
+    username: "opencode",
+    password,
+  })
 
   const wait = (async () => {
     const url = `http://${hostname}:${port}`
@@ -42,19 +51,26 @@ export function spawnLocalServer(hostname: string, port: number, password: strin
       }
     }
 
-    const terminated = async () => {
-      const payload = await exit
-      throw new Error(
-        `Sidecar terminated before becoming healthy (code=${payload.code ?? "unknown"} signal=${
-          payload.signal ?? "unknown"
-        })`,
-      )
-    }
-
-    await Promise.race([ready(), terminated()])
+    await ready()
   })()
 
-  return { child, health: { wait }, events }
+  return { listener, health: { wait } }
+}
+
+function prepareServerEnv(password: string) {
+  const shell = process.platform === "win32" ? null : getUserShell()
+  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
+  const env = {
+    ...process.env,
+    ...shellEnv,
+    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_CLIENT: "desktop",
+    OPENCODE_SERVER_USERNAME: "opencode",
+    OPENCODE_SERVER_PASSWORD: password,
+    XDG_STATE_HOME: app.getPath("userData"),
+  }
+  Object.assign(process.env, env)
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
@@ -82,5 +98,3 @@ export async function checkHealth(url: string, password?: string | null): Promis
     return false
   }
 }
-
-export type { CommandChild }

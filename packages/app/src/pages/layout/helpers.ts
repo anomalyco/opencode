@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/shared/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 
 type SessionStore = {
@@ -31,7 +31,7 @@ function sortSessions(now: number) {
 const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
-const roots = (store: SessionStore) =>
+export const roots = (store: SessionStore) =>
   (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
 
 export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
@@ -46,18 +46,17 @@ export function hasProjectPermissions<T>(
   return Object.values(request ?? {}).some((list) => list?.some(include))
 }
 
-export const childMapByParent = (sessions: Session[] | undefined) => {
-  const map = new Map<string, string[]>()
-  for (const session of sessions ?? []) {
-    if (!session.parentID) continue
-    const existing = map.get(session.parentID)
-    if (existing) {
-      existing.push(session.id)
-      continue
-    }
-    map.set(session.parentID, [session.id])
+export const childSessionOnPath = (sessions: Session[] | undefined, rootID: string, activeID?: string) => {
+  if (!activeID || activeID === rootID) return
+  const map = new Map((sessions ?? []).map((session) => [session.id, session]))
+  let id = activeID
+
+  while (id) {
+    const session = map.get(id)
+    if (!session?.parentID) return
+    if (session.parentID === rootID) return session
+    id = session.parentID
   }
-  return map
 }
 
 export const displayName = (project: { name?: string; worktree: string }) =>
