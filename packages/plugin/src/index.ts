@@ -238,7 +238,7 @@ export interface Hooks {
       messageID?: string
       variant?: string
     },
-    output: { message: UserMessage; parts: Part[] },
+    output: { message: Message; parts: Part[] },
   ) => Promise<void>
   /**
    * Modify parameters sent to LLM

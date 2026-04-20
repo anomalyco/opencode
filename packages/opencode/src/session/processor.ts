@@ -213,6 +213,27 @@ export const layer: Layer.Layer<
         return true
       })
 
+      const emitAssistantChatMessage = Effect.fn("SessionProcessor.emitAssistantChatMessage")(function* () {
+        const parts = MessageV2.parts(ctx.assistantMessage.id)
+        yield* plugin.trigger(
+          "chat.message",
+          {
+            sessionID: ctx.sessionID,
+            agent: ctx.assistantMessage.agent,
+            model: {
+              providerID: ctx.assistantMessage.providerID,
+              modelID: ctx.assistantMessage.modelID,
+            },
+            messageID: ctx.assistantMessage.id,
+            variant: ctx.assistantMessage.variant,
+          },
+          {
+            message: ctx.assistantMessage,
+            parts,
+          },
+        )
+      })
+
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "start":
@@ -518,6 +539,7 @@ export const layer: Layer.Layer<
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
+        yield* emitAssistantChatMessage()
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {

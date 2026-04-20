@@ -35,6 +35,39 @@ const summary = Layer.succeed(
   }),
 )
 
+type ChatMessageCapture = {
+  input: {
+    sessionID: string
+    agent?: string
+    model?: { providerID: string; modelID: string }
+    messageID?: string
+    variant?: string
+  }
+  output: {
+    message: MessageV2.Info
+    parts: MessageV2.Part[]
+  }
+}
+
+function pluginSpy(options?: { chatMessages?: ChatMessageCapture[]; textComplete?: (text: string) => string }) {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) => {
+      if (name === "chat.message" && options?.chatMessages) {
+        options.chatMessages.push({
+          input: structuredClone(input as ChatMessageCapture["input"]),
+          output: structuredClone(output as ChatMessageCapture["output"]),
+        })
+      }
+      if (name === "experimental.text.complete" && options?.textComplete) {
+        ;(output as { text: string }).text = options.textComplete((output as { text: string }).text)
+      }
+      return Effect.succeed(output)
+    },
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
 const ref = {
   providerID: ProviderID.make("test"),
   modelID: ModelID.make("test-model"),
@@ -155,23 +188,28 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
 
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-const deps = Layer.mergeAll(
-  Session.defaultLayer,
-  Snapshot.defaultLayer,
-  AgentSvc.defaultLayer,
-  Permission.defaultLayer,
-  Plugin.defaultLayer,
-  Config.defaultLayer,
-  LLM.defaultLayer,
-  Provider.defaultLayer,
-  status,
-).pipe(Layer.provideMerge(infra))
-const env = Layer.mergeAll(
-  TestLLMServer.layer,
-  SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps)),
-)
+function makeEnv(pluginLayer: Layer.Layer<Plugin.Service> = Plugin.defaultLayer) {
+  const deps = Layer.mergeAll(
+    Session.defaultLayer,
+    Snapshot.defaultLayer,
+    AgentSvc.defaultLayer,
+    Permission.defaultLayer,
+    pluginLayer,
+    Config.defaultLayer,
+    LLM.defaultLayer,
+    Provider.defaultLayer,
+    status,
+  ).pipe(Layer.provideMerge(infra))
+  return Layer.mergeAll(
+    TestLLMServer.layer,
+    SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps)),
+  )
+}
+
+const env = makeEnv()
 
 const it = testEffect(env)
+const itWithPlugin = (pluginLayer: Layer.Layer<Plugin.Service>) => testEffect(makeEnv(pluginLayer))
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -230,6 +268,61 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
     { git: true, config: (url) => providerCfg(url) },
   ),
 )
+
+{
+  const chatMessages: ChatMessageCapture[] = []
+  itWithPlugin(
+    pluginSpy({
+      chatMessages,
+      textComplete: (text) => `${text}!`,
+    }),
+  ).live("session.processor emits one assistant chat.message with finalized text", () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+
+          yield* llm.text("hello")
+
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "hi")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({
+            assistantMessage: msg,
+            sessionID: chat.id,
+            model: mdl,
+          })
+
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "hi" }],
+            tools: {},
+          })
+
+          expect(value).toBe("continue")
+          expect(chatMessages).toHaveLength(1)
+          expect(chatMessages[0]?.output.message.role).toBe("assistant")
+          expect(chatMessages[0]?.output.parts.filter((part) => part.type === "text")).toHaveLength(1)
+          expect(chatMessages[0]?.output.parts.some((part) => part.type === "text" && part.text === "hello!")).toBe(
+            true,
+          )
+        }),
+      { git: true, config: (url) => providerCfg(url) },
+    ),
+  )
+}
 
 it.live("session.processor effect tests preserve text start time", () =>
   provideTmpdirServer(
