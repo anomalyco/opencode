@@ -5,13 +5,13 @@ import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Identifier } from "../../src/id/id"
+import { MessageID, PartID } from "../../src/session/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-describe("session.started event", () => {
-  test("should emit session.started event when session is created", async () => {
+describe("session.created event", () => {
+  test("should emit session.created event when session is created", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -41,14 +41,14 @@ describe("session.started event", () => {
     })
   })
 
-  test("session.started event should be emitted before session.updated", async () => {
+  test("session.created event should be emitted before session.updated", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const events: string[] = []
 
-        const unsubStarted = Bus.subscribe(Session.Event.Created, () => {
-          events.push("started")
+        const unsubCreated = Bus.subscribe(Session.Event.Created, () => {
+          events.push("created")
         })
 
         const unsubUpdated = Bus.subscribe(Session.Event.Updated, () => {
@@ -59,12 +59,12 @@ describe("session.started event", () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100))
 
-        unsubStarted()
+        unsubCreated()
         unsubUpdated()
 
-        expect(events).toContain("started")
+        expect(events).toContain("created")
         expect(events).toContain("updated")
-        expect(events.indexOf("started")).toBeLessThan(events.indexOf("updated"))
+        expect(events.indexOf("created")).toBeLessThan(events.indexOf("updated"))
 
         await Session.remove(session.id)
       },
@@ -81,7 +81,7 @@ describe("step-finish token propagation via Bus event", () => {
         fn: async () => {
           const session = await Session.create({})
 
-          const messageID = Identifier.ascending("message")
+          const messageID = MessageID.ascending()
           await Session.updateMessage({
             id: messageID,
             sessionID: session.id,
@@ -107,7 +107,7 @@ describe("step-finish token propagation via Bus event", () => {
           }
 
           const partInput = {
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID,
             sessionID: session.id,
             type: "step-finish" as const,

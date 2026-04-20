@@ -9,12 +9,12 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
-import { sleep } from "bun"
+import { CONSOLE_MANAGED_ICON, isConsoleManagedProvider } from "@tui/util/provider-origin"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   "mammouth-ai": 0,
@@ -30,69 +30,120 @@ export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const toast = useToast()
+  const { theme } = useTheme()
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
-      map((provider) => ({
-        title: provider.name,
-        value: provider.id,
-        description: {
-          opencode: "(Recommended)",
-          anthropic: "(Claude Max or API key)",
-          "mammouth-ai": "(Mammouth API key)",
-          openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
-        }[provider.id],
-        category: provider.id == "mammouth-ai" ? "Mammouth AI" : provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
-        async onSelect() {
-          const methods = sync.data.provider_auth[provider.id] ?? [
-            {
-              type: "api",
-              label: "API key",
-            },
-          ]
-          let index: number | null = 0
-          if (methods.length > 1) {
-            index = await new Promise<number | null>((resolve) => {
-              dialog.replace(
-                () => (
-                  <DialogSelect
-                    title="Select auth method"
-                    options={methods.map((x, index) => ({
-                      title: x.label,
-                      value: index,
-                    }))}
-                    onSelect={(option) => resolve(option.value)}
+      map((provider) => {
+        const consoleManaged = isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, provider.id)
+        const connected = sync.data.provider_next.connected.includes(provider.id)
+
+        return {
+          title: provider.name,
+          value: provider.id,
+          description: {
+            mammouth: "(Recommended)",
+            anthropic: "(API key)",
+            openai: "(ChatGPT Plus/Pro or API key)",
+            "mammouth-ai": "(Mammouth API key)",
+          }[provider.id],
+          footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
+          category: provider.id == "mammouth-ai" ? "Mammouth AI" : provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+          gutter: consoleManaged ? (
+            <text fg={theme.textMuted}>{CONSOLE_MANAGED_ICON}</text>
+          ) : connected ? (
+            <text fg={theme.success}>✓</text>
+          ) : undefined,
+          async onSelect() {
+            if (consoleManaged) return
+
+            const methods = sync.data.provider_auth[provider.id] ?? [
+              {
+                type: "api",
+                label: "API key",
+              },
+            ]
+            let index: number | null = 0
+            if (methods.length > 1) {
+              index = await new Promise<number | null>((resolve) => {
+                dialog.replace(
+                  () => (
+                    <DialogSelect
+                      title="Select auth method"
+                      options={methods.map((x, index) => ({
+                        title: x.label,
+                        value: index,
+                      }))}
+                      onSelect={(option) => resolve(option.value)}
+                    />
+                  ),
+                  () => resolve(null),
+                )
+              })
+            }
+            if (index == null) return
+            const method = methods[index]
+            if (method.type === "oauth") {
+              let inputs: Record<string, string> | undefined
+              if (method.prompts?.length) {
+                const value = await PromptsMethod({
+                  dialog,
+                  prompts: method.prompts,
+                })
+                if (!value) return
+                inputs = value
+              }
+
+              const result = await sdk.client.provider.oauth.authorize({
+                providerID: provider.id,
+                method: index,
+                inputs,
+              })
+              if (result.error) {
+                toast.show({
+                  variant: "error",
+                  message: JSON.stringify(result.error),
+                })
+                dialog.clear()
+                return
+              }
+              if (result.data?.method === "code") {
+                dialog.replace(() => (
+                  <CodeMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
                   />
-                ),
-                () => resolve(null),
-              )
-            })
-          }
-          if (index == null) return
-          const method = methods[index]
-          if (method.type === "oauth") {
-            const result = await sdk.client.provider.oauth.authorize({
-              providerID: provider.id,
-              method: index,
-            })
-            if (result.data?.method === "code") {
-              dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                ))
+              }
+              if (result.data?.method === "auto") {
+                dialog.replace(() => (
+                  <AutoMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
+                  />
+                ))
+              }
+            }
+            if (method.type === "api") {
+              let metadata: Record<string, string> | undefined
+              if (method.prompts?.length) {
+                const value = await PromptsMethod({ dialog, prompts: method.prompts })
+                if (!value) return
+                metadata = value
+              }
+              return dialog.replace(() => (
+                <ApiMethod providerID={provider.id} title={method.label} metadata={metadata} />
               ))
             }
-            if (result.data?.method === "auto") {
-              dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
-            }
-          }
-          if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
-          }
-        },
-      })),
+          },
+        }
+      }),
     )
   })
   return options
@@ -105,7 +156,7 @@ export function DialogProvider() {
     const opts = options()
     if (opts.length === 1) {
       // sleep to avoid race condition with dialog opening
-      sleep(5).then(() => {
+      Bun.sleep(5).then(() => {
         opts[0].onSelect?.()
       })
     }
@@ -219,6 +270,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  metadata?: Record<string, string>
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -266,6 +318,7 @@ function ApiMethod(props: ApiMethodProps) {
           auth: {
             type: "api",
             key: value,
+            ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })
         await sdk.client.instance.dispose()
@@ -274,4 +327,54 @@ function ApiMethod(props: ApiMethodProps) {
       }}
     />
   )
+}
+
+interface PromptsMethodProps {
+  dialog: ReturnType<typeof useDialog>
+  prompts: NonNullable<ProviderAuthMethod["prompts"]>[number][]
+}
+async function PromptsMethod(props: PromptsMethodProps) {
+  const inputs: Record<string, string> = {}
+  for (const prompt of props.prompts) {
+    if (prompt.when) {
+      const value = inputs[prompt.when.key]
+      if (value === undefined) continue
+      const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
+      if (!matches) continue
+    }
+
+    if (prompt.type === "select") {
+      const value = await new Promise<string | null>((resolve) => {
+        props.dialog.replace(
+          () => (
+            <DialogSelect
+              title={prompt.message}
+              options={prompt.options.map((x) => ({
+                title: x.label,
+                value: x.value,
+                description: x.hint,
+              }))}
+              onSelect={(option) => resolve(option.value)}
+            />
+          ),
+          () => resolve(null),
+        )
+      })
+      if (value === null) return null
+      inputs[prompt.key] = value
+      continue
+    }
+
+    const value = await new Promise<string | null>((resolve) => {
+      props.dialog.replace(
+        () => (
+          <DialogPrompt title={prompt.message} placeholder={prompt.placeholder} onConfirm={(value) => resolve(value)} />
+        ),
+        () => resolve(null),
+      )
+    })
+    if (value === null) return null
+    inputs[prompt.key] = value
+  }
+  return inputs
 }

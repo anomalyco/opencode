@@ -1,17 +1,17 @@
 import { Log } from "../util/log"
 import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
-import { createRequire } from "module"
+import { pathToFileURL } from "url"
 import os from "os"
+import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
-import fs from "fs/promises"
-import { lazy } from "../util/lazy"
+import fsNode from "fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
+import { Env } from "../env"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -19,9 +19,8 @@ import {
   parse as parseJsonc,
   printParseErrorCode,
 } from "jsonc-parser"
-import { Instance } from "../project/instance"
+import { Instance, type InstanceContext } from "../project/instance"
 import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { constants, existsSync } from "fs"
@@ -29,15 +28,33 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
-import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
-import { Control } from "@/control"
+import { Account } from "@/account"
+import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
+import type { ConsoleState } from "./console-state"
+import { AppFileSystem } from "@/filesystem"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
+import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
+import { Flock } from "@/util/flock"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { Npm } from "@/npm"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+  const PluginOptions = z.record(z.string(), z.unknown())
+  export const PluginSpec = z.union([z.string(), z.tuple([z.string(), PluginOptions])])
+
+  export type PluginOptions = z.infer<typeof PluginOptions>
+  export type PluginSpec = z.infer<typeof PluginSpec>
+  export type PluginScope = "global" | "local"
+  export type PluginOrigin = {
+    spec: PluginSpec
+    source: string
+    scope: PluginScope
+  }
 
   const log = Log.create({ service: "config" })
 
@@ -60,267 +77,116 @@ export namespace Config {
 
   const managedDir = managedConfigDir()
 
+  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+
+  // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+  const PLIST_META = new Set([
+    "PayloadDisplayName",
+    "PayloadIdentifier",
+    "PayloadType",
+    "PayloadUUID",
+    "PayloadVersion",
+    "_manualProfile",
+  ])
+
+  /**
+   * Parse raw JSON (from plutil conversion of a managed plist) into OpenCode config.
+   * Strips MDM metadata keys before parsing through the config schema.
+   * Pure function — no OS interaction, safe to unit test directly.
+   */
+  export function parseManagedPlist(json: string, source: string): Info {
+    const raw = JSON.parse(json)
+    for (const key of Object.keys(raw)) {
+      if (PLIST_META.has(key)) delete raw[key]
+    }
+    return parseConfig(JSON.stringify(raw), source)
+  }
+
+  /**
+   * Read macOS managed preferences deployed via .mobileconfig / MDM (Jamf, Kandji, etc).
+   * MDM-installed profiles write to /Library/Managed Preferences/ which is only writable by root.
+   * User-scoped plists are checked first, then machine-scoped.
+   */
+  async function readManagedPreferences(): Promise<Info> {
+    if (process.platform !== "darwin") return {}
+
+    const domain = MANAGED_PLIST_DOMAIN
+    const user = os.userInfo().username
+    const paths = [
+      path.join("/Library/Managed Preferences", user, `${domain}.plist`),
+      path.join("/Library/Managed Preferences", `${domain}.plist`),
+    ]
+
+    for (const plist of paths) {
+      if (!existsSync(plist)) continue
+      log.info("reading macOS managed preferences", { path: plist })
+      const result = await Process.run(["plutil", "-convert", "json", "-o", "-", plist], { nothrow: true })
+      if (result.code !== 0) {
+        log.warn("failed to convert managed preferences plist", { path: plist })
+        continue
+      }
+      return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    }
+    return {}
+  }
+
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
-    }
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
     return merged
   }
 
-  export const state = Instance.state(async () => {
-    const auth = await Auth.all()
-
-    // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
-    // 1) Remote .well-known/opencode (org defaults)
-    // 2) Global config (~/.config/opencode/opencode.json{,c})
-    // 3) Custom config (OPENCODE_CONFIG)
-    // 4) Project config (opencode.json{,c})
-    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
-    // 6) Inline config (OPENCODE_CONFIG_CONTENT)
-    // Managed config directory is enterprise-only and always overrides everything above.
-    let result: Info = {}
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        const url = key.replace(/\/+$/, "")
-        process.env[value.key] = value.token
-        log.debug("fetching remote config", { url: `${url}/.well-known/mammouth` })
-        const response = await fetch(`${url}/.well-known/mammouth`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
-        }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), {
-            dir: path.dirname(`${url}/.well-known/mammouth`),
-            source: `${url}/.well-known/mammouth`,
-          }),
-        )
-        log.debug("loaded remote config from well-known", { url })
-      }
-    }
-
-    const token = await Control.token()
-    if (token) {
-    }
-
-    // Global user config overrides remote config.
-    result = mergeConfigConcatArrays(result, await global())
-
-    // Custom config path overrides global config.
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-    }
-
-    // Project config overrides global and remote config.
-    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of await ConfigPaths.projectFiles("mammouth", Instance.directory, Instance.worktree)) {
-        result = mergeConfigConcatArrays(result, await loadFile(file))
-      }
-    }
-
-    result.agent = result.agent || {}
-    result.mode = result.mode || {}
-    result.plugin = result.plugin || []
-
-    const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
-
-    // .opencode directory config overrides (project and global) config sources.
-    if (Flag.OPENCODE_CONFIG_DIR) {
-      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
-    }
-
-    const deps = []
-
-    for (const dir of unique(directories)) {
-      if (dir.endsWith(".mammouth") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["mammouth.jsonc", "mammouth.json"]) {
-          log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
-          // to satisfy the type checker
-          result.agent ??= {}
-          result.mode ??= {}
-          result.plugin ??= []
-        }
-      }
-
-      deps.push(
-        iife(async () => {
-          const shouldInstall = await needsInstall(dir)
-          if (shouldInstall) await installDependencies(dir)
-        }),
-      )
-
-      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
-      result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
-    }
-
-    // Inline config content overrides all non-managed config sources.
-    if (process.env.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(
-        result,
-        await load(process.env.OPENCODE_CONFIG_CONTENT, {
-          dir: Instance.directory,
-          source: "OPENCODE_CONFIG_CONTENT",
-        }),
-      )
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
-
-    // Load managed config files last (highest priority) - enterprise admin-controlled
-    // Kept separate from directories array to avoid write operations when installing plugins
-    // which would fail on system directories requiring elevated permissions
-    // This way it only loads config file and not skills/plugins/commands
-    if (existsSync(managedDir)) {
-      for (const file of ["mammouth.jsonc", "mammouth.json"]) {
-        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedDir, file)))
-      }
-    }
-
-    // Migrate deprecated mode field to agent field
-    for (const [name, mode] of Object.entries(result.mode ?? {})) {
-      result.agent = mergeDeep(result.agent ?? {}, {
-        [name]: {
-          ...mode,
-          mode: "primary" as const,
-        },
-      })
-    }
-
-    if (Flag.OPENCODE_PERMISSION) {
-      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
-    }
-
-    // Backwards compatibility: legacy top-level `tools` config
-    if (result.tools) {
-      const perms: Record<string, Config.PermissionAction> = {}
-      for (const [tool, enabled] of Object.entries(result.tools)) {
-        const action: Config.PermissionAction = enabled ? "allow" : "deny"
-        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
-          perms.edit = action
-          continue
-        }
-        perms[tool] = action
-      }
-      result.permission = mergeDeep(perms, result.permission ?? {})
-    }
-
-    if (!result.username) result.username = os.userInfo().username
-
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
-
-    // Apply flag overrides for compaction settings
-    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
-      result.compaction = { ...result.compaction, auto: false }
-    }
-    if (Flag.OPENCODE_DISABLE_PRUNE) {
-      result.compaction = { ...result.compaction, prune: false }
-    }
-
-    result.plugin = deduplicatePlugins(result.plugin ?? [])
-
-    return {
-      config: result,
-      directories,
-      deps,
-    }
-  })
-
-  export async function waitForDependencies() {
-    const deps = await state().then((x) => x.deps)
-    await Promise.all(deps)
+  export type InstallInput = {
+    signal?: AbortSignal
+    waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
   }
 
-  export async function installDependencies(dir: string) {
-    const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+  export async function installDependencies(dir: string, input?: InstallInput) {
+    if (!(await isWritable(dir))) return
+    await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
+      signal: input?.signal,
+      onWait: (tick) =>
+        input?.waitTick?.({
+          dir,
+          attempt: tick.attempt,
+          delay: tick.delay,
+          waited: tick.waited,
+        }),
+    })
+    input?.signal?.throwIfAborted()
 
+    const pkg = path.join(dir, "package.json")
+    const target = Installation.isLocal() ? "*" : Installation.VERSION
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
     }))
     json.dependencies = {
       ...json.dependencies,
-      "@opencode-ai/plugin": targetVersion,
+      "@opencode-ai/plugin": target,
     }
     await Filesystem.writeJson(pkg, json)
 
     const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Filesystem.exists(gitignore)
-    if (!hasGitIgnore)
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
-
-    if (process.env.OPENCODE_TEST_HOME) return
-
-    // Install any additional dependencies defined in the package.json
-    // This allows local plugins and custom tools to use external packages
-    await BunProc.run(
-      [
-        "install",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
-      ],
-      { cwd: dir },
-    ).catch((err) => {
-      log.warn("failed to install dependencies", { dir, error: err })
-    })
+    const ignore = await Filesystem.exists(gitignore)
+    if (!ignore) {
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
+    }
+    await Npm.install(dir)
   }
 
   async function isWritable(dir: string) {
     try {
-      await fs.access(dir, constants.W_OK)
+      await fsNode.access(dir, constants.W_OK)
       return true
     } catch {
       return false
     }
-  }
-
-  export async function needsInstall(dir: string) {
-    // Some config dirs may be read-only.
-    // Installing deps there will fail; skip installation in that case.
-    const writable = await isWritable(dir)
-    if (!writable) {
-      log.debug("config dir is not writable, skipping dependency install", { dir })
-      return false
-    }
-
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
-
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
-
-    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
-
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!isOutdated) return false
-      log.info("Cached version is outdated, proceeding with install", {
-        pkg: "@opencode-ai/plugin",
-        cachedVersion: depVersion,
-      })
-      return true
-    }
-    if (depVersion === targetVersion) return false
-    return true
   }
 
   function rel(item: string, patterns: string[]) {
@@ -451,7 +317,7 @@ export namespace Config {
   }
 
   async function loadPlugin(dir: string) {
-    const plugins: string[] = []
+    const plugins: PluginSpec[] = []
 
     for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
       cwd: dir,
@@ -464,56 +330,44 @@ export namespace Config {
     return plugins
   }
 
-  /**
-   * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
-   * - For npm packages: extracts package name without version
-   *
-   * @example
-   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
-   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
-   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
-   */
-  export function getPluginName(plugin: string): string {
-    if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
-    }
-    const lastAt = plugin.lastIndexOf("@")
-    if (lastAt > 0) {
-      return plugin.substring(0, lastAt)
-    }
-    return plugin
+  export function pluginSpecifier(plugin: PluginSpec): string {
+    return Array.isArray(plugin) ? plugin[0] : plugin
   }
 
-  /**
-   * Deduplicates plugins by name, with later entries (higher priority) winning.
-   * Priority order (highest to lowest):
-   * 1. Local plugin/ directory
-   * 2. Local opencode.json
-   * 3. Global plugin/ directory
-   * 4. Global opencode.json
-   *
-   * Since plugins are added in low-to-high priority order,
-   * we reverse, deduplicate (keeping first occurrence), then restore order.
-   */
-  export function deduplicatePlugins(plugins: string[]): string[] {
-    // seenNames: canonical plugin names for duplicate detection
-    // e.g., "oh-my-opencode", "@scope/pkg"
-    const seenNames = new Set<string>()
+  export function pluginOptions(plugin: PluginSpec): PluginOptions | undefined {
+    return Array.isArray(plugin) ? plugin[1] : undefined
+  }
 
-    // uniqueSpecifiers: full plugin specifiers to return
-    // e.g., "oh-my-opencode@2.4.3", "file:///path/to/plugin.js"
-    const uniqueSpecifiers: string[] = []
+  export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
+    const spec = pluginSpecifier(plugin)
+    if (!isPathPluginSpec(spec)) return plugin
 
-    for (const specifier of plugins.toReversed()) {
-      const name = getPluginName(specifier)
-      if (!seenNames.has(name)) {
-        seenNames.add(name)
-        uniqueSpecifiers.push(specifier)
-      }
+    const base = path.dirname(configFilepath)
+    const file = (() => {
+      if (spec.startsWith("file://")) return spec
+      if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
+      return pathToFileURL(path.resolve(base, spec)).href
+    })()
+
+    const resolved = await resolvePathPluginTarget(file).catch(() => file)
+
+    if (Array.isArray(plugin)) return [resolved, plugin[1]]
+    return resolved
+  }
+
+  export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
+    const seen = new Set<string>()
+    const list: PluginOrigin[] = []
+
+    for (const plugin of plugins.toReversed()) {
+      const spec = pluginSpecifier(plugin.spec)
+      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
+      if (seen.has(name)) continue
+      seen.add(name)
+      list.push(plugin)
     }
 
-    return uniqueSpecifiers.toReversed()
+    return list.toReversed()
   }
 
   export const McpLocal = z
@@ -629,7 +483,6 @@ export namespace Config {
           task: PermissionRule.optional(),
           external_directory: PermissionRule.optional(),
           todowrite: PermissionAction.optional(),
-          todoread: PermissionAction.optional(),
           question: PermissionAction.optional(),
           webfetch: PermissionAction.optional(),
           websearch: PermissionAction.optional(),
@@ -816,6 +669,7 @@ export namespace Config {
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
+      variant_list: z.string().optional().default("none").describe("List model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
@@ -906,6 +760,7 @@ export namespace Config {
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
     })
     .strict()
@@ -974,6 +829,14 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
+          chunkTimeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
+            ),
         })
         .catchall(z.any())
         .optional(),
@@ -999,8 +862,13 @@ export namespace Config {
           ignore: z.array(z.string()).optional(),
         })
         .optional(),
-      plugin: z.string().array().optional(),
-      snapshot: z.boolean().optional(),
+      snapshot: z
+        .boolean()
+        .optional()
+        .describe(
+          "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+        ),
+      plugin: PluginSpec.array().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -1176,125 +1044,29 @@ export namespace Config {
       ref: "Config",
     })
 
-  export type Info = z.output<typeof Info>
-
-  export const global = lazy(async () => {
-    let result: Info = pipe(
-      {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "mammouth.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "mammouth.jsonc"))),
-    )
-
-    const legacy = path.join(Global.Path.config, "config")
-    if (existsSync(legacy)) {
-      await import(pathToFileURL(legacy).href, {
-        with: {
-          type: "toml",
-        },
-      })
-        .then(async (mod) => {
-          const { provider, model, ...rest } = mod.default
-          if (provider && model) result.model = `${provider}/${model}`
-          result["$schema"] = "https://opencode.ai/config.json"
-          result = mergeDeep(result, rest)
-          await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
-          await fs.unlink(legacy)
-        })
-        .catch(() => {})
-    }
-
-    return result
-  })
-
-  export const { readFile } = ConfigPaths
-
-  async function loadFile(filepath: string): Promise<Info> {
-    log.info("loading", { path: filepath })
-    const text = await readFile(filepath)
-    if (!text) return {}
-    return load(text, { path: filepath })
+  export type Info = z.output<typeof Info> & {
+    plugin_origins?: PluginOrigin[]
   }
 
-  async function load(text: string, options: { path: string } | { dir: string; source: string }) {
-    const original = text
-    const source = "path" in options ? options.path : options.source
-    const isFile = "path" in options
-    const data = await ConfigPaths.parseText(
-      text,
-      "path" in options ? options.path : { source: options.source, dir: options.dir },
-    )
-
-    const normalized = (() => {
-      if (!data || typeof data !== "object" || Array.isArray(data)) return data
-      const copy = { ...(data as Record<string, unknown>) }
-      const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
-      if (!hadLegacy) return copy
-      delete copy.theme
-      delete copy.keybinds
-      delete copy.tui
-      log.warn("tui keys in mammouth config are deprecated; move them to tui.json", { path: source })
-      return copy
-    })()
-
-    const parsed = Info.safeParse(normalized)
-    if (parsed.success) {
-      if (!parsed.data.$schema && isFile) {
-        parsed.data.$schema = "https://opencode.ai/config.json"
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Filesystem.write(options.path, updated).catch(() => {})
-      }
-      const data = parsed.data
-      if (data.plugin && isFile) {
-        for (let i = 0; i < data.plugin.length; i++) {
-          const plugin = data.plugin[i]
-          try {
-            data.plugin[i] = import.meta.resolve!(plugin, options.path)
-          } catch (e) {
-            try {
-              // import.meta.resolve sometimes fails with newly created node_modules
-              const require = createRequire(options.path)
-              const resolvedPath = require.resolve(plugin)
-              data.plugin[i] = pathToFileURL(resolvedPath).href
-            } catch {
-              // Ignore, plugin might be a generic string identifier like "mcp-server"
-            }
-          }
-        }
-      }
-      return data
-    }
-
-    throw new InvalidError({
-      path: source,
-      issues: parsed.error.issues,
-    })
-  }
-  export const { JsonError, InvalidError } = ConfigPaths
-
-  export const ConfigDirectoryTypoError = NamedError.create(
-    "ConfigDirectoryTypoError",
-    z.object({
-      path: z.string(),
-      dir: z.string(),
-      suggestion: z.string(),
-    }),
-  )
-
-  export async function get() {
-    return state().then((x) => x.config)
+  type State = {
+    config: Info
+    directories: string[]
+    deps: Promise<void>[]
+    consoleState: ConsoleState
   }
 
-  export async function getGlobal() {
-    return global()
+  export interface Interface {
+    readonly get: () => Effect.Effect<Info>
+    readonly getGlobal: () => Effect.Effect<Info>
+    readonly getConsoleState: () => Effect.Effect<ConsoleState>
+    readonly update: (config: Info) => Effect.Effect<void>
+    readonly updateGlobal: (config: Info) => Effect.Effect<Info>
+    readonly invalidate: (wait?: boolean) => Effect.Effect<void>
+    readonly directories: () => Effect.Effect<string[]>
+    readonly waitForDependencies: () => Effect.Effect<void>
   }
 
-  export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
-    const existing = await loadFile(filepath)
-    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
-    await Instance.dispose()
-  }
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
 
   function globalConfigFile() {
     const candidates = ["mammouth.jsonc", "mammouth.json", "config.json"].map((file) =>
@@ -1304,10 +1076,6 @@ export namespace Config {
       if (existsSync(file)) return file
     }
     return candidates[0]
-  }
-
-  function isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === "object" && !Array.isArray(value)
   }
 
   function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
@@ -1325,6 +1093,11 @@ export namespace Config {
       if (value === undefined) return result
       return patchJsonc(result, value, [...path, key])
     }, input)
+  }
+
+  function writable(info: Info) {
+    const { plugin_origins, ...next } = info
+    return next
   }
 
   function parseConfig(text: string, filepath: string): Info {
@@ -1361,47 +1134,467 @@ export namespace Config {
     })
   }
 
-  export async function updateGlobal(config: Info) {
-    const filepath = globalConfigFile()
-    const before = await Filesystem.readText(filepath).catch((err: any) => {
-      if (err.code === "ENOENT") return "{}"
-      throw new JsonError({ path: filepath }, { cause: err })
-    })
+  export const { JsonError, InvalidError } = ConfigPaths
 
-    const next = await (async () => {
-      if (!filepath.endsWith(".jsonc")) {
-        const existing = parseConfig(before, filepath)
-        const merged = mergeDeep(existing, config)
-        await Filesystem.writeJson(filepath, merged)
-        return merged
-      }
+  export const ConfigDirectoryTypoError = NamedError.create(
+    "ConfigDirectoryTypoError",
+    z.object({
+      path: z.string(),
+      dir: z.string(),
+      suggestion: z.string(),
+    }),
+  )
 
-      const updated = patchJsonc(before, config)
-      const merged = parseConfig(updated, filepath)
-      await Filesystem.write(filepath, updated)
-      return merged
-    })()
+  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Auth.Service | Account.Service> =
+    Layer.effect(
+      Service,
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const authSvc = yield* Auth.Service
+        const accountSvc = yield* Account.Service
 
-    global.reset()
-
-    void Instance.disposeAll()
-      .catch(() => undefined)
-      .finally(() => {
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: {
-            type: Event.Disposed.type,
-            properties: {},
-          },
+        const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
+          return yield* fs.readFileString(filepath).pipe(
+            Effect.catchIf(
+              (e) => e.reason._tag === "NotFound",
+              () => Effect.succeed(undefined),
+            ),
+            Effect.orDie,
+          )
         })
-      })
 
-    return next
+        const loadConfig = Effect.fnUntraced(function* (
+          text: string,
+          options: { path: string } | { dir: string; source: string },
+        ) {
+          const original = text
+          const source = "path" in options ? options.path : options.source
+          const isFile = "path" in options
+          const data = yield* Effect.promise(() =>
+            ConfigPaths.parseText(
+              text,
+              "path" in options ? options.path : { source: options.source, dir: options.dir },
+            ),
+          )
+
+          const normalized = (() => {
+            if (!data || typeof data !== "object" || Array.isArray(data)) return data
+            const copy = { ...(data as Record<string, unknown>) }
+            const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
+            if (!hadLegacy) return copy
+            delete copy.theme
+            delete copy.keybinds
+            delete copy.tui
+            log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
+            return copy
+          })()
+
+          const parsed = Info.safeParse(normalized)
+          if (parsed.success) {
+            if (!parsed.data.$schema && isFile) {
+              parsed.data.$schema = "https://opencode.ai/config.json"
+              const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+              yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
+            }
+            const data = parsed.data
+            if (data.plugin && isFile) {
+              const list = data.plugin
+              for (let i = 0; i < list.length; i++) {
+                list[i] = yield* Effect.promise(() => resolvePluginSpec(list[i], options.path))
+              }
+            }
+            return data
+          }
+
+          throw new InvalidError({
+            path: source,
+            issues: parsed.error.issues,
+          })
+        })
+
+        const loadFile = Effect.fnUntraced(function* (filepath: string) {
+          log.info("loading", { path: filepath })
+          const text = yield* readConfigFile(filepath)
+          if (!text) return {} as Info
+          return yield* loadConfig(text, { path: filepath })
+        })
+
+        const loadGlobal = Effect.fnUntraced(function* () {
+          let result: Info = pipe(
+            {},
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+          )
+
+          const legacy = path.join(Global.Path.config, "config")
+          if (existsSync(legacy)) {
+            yield* Effect.promise(() =>
+              import(pathToFileURL(legacy).href, { with: { type: "toml" } })
+                .then(async (mod) => {
+                  const { provider, model, ...rest } = mod.default
+                  if (provider && model) result.model = `${provider}/${model}`
+                  result["$schema"] = "https://opencode.ai/config.json"
+                  result = mergeDeep(result, rest)
+                  await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+                  await fsNode.unlink(legacy)
+                })
+                .catch(() => {}),
+            )
+          }
+
+          return result
+        })
+
+        const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
+          loadGlobal().pipe(
+            Effect.tapError((error) =>
+              Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
+            ),
+            Effect.orElseSucceed((): Info => ({})),
+          ),
+          Duration.infinity,
+        )
+
+        const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+          return yield* cachedGlobal
+        })
+
+        const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
+          const auth = yield* authSvc.all().pipe(Effect.orDie)
+
+          let result: Info = {}
+          const consoleManagedProviders = new Set<string>()
+          let activeOrgName: string | undefined
+
+          const scope = (source: string): PluginScope => {
+            if (source.startsWith("http://") || source.startsWith("https://")) return "global"
+            if (source === "OPENCODE_CONFIG_CONTENT") return "local"
+            if (Instance.containsPath(source)) return "local"
+            return "global"
+          }
+
+          const track = (source: string, list: PluginSpec[] | undefined, kind?: PluginScope) => {
+            if (!list?.length) return
+            const hit = kind ?? scope(source)
+            const plugins = deduplicatePluginOrigins([
+              ...(result.plugin_origins ?? []),
+              ...list.map((spec) => ({ spec, source, scope: hit })),
+            ])
+            result.plugin = plugins.map((item) => item.spec)
+            result.plugin_origins = plugins
+          }
+
+          const merge = (source: string, next: Info, kind?: PluginScope) => {
+            result = mergeConfigConcatArrays(result, next)
+            track(source, next.plugin, kind)
+          }
+
+          for (const [key, value] of Object.entries(auth)) {
+            if (value.type === "wellknown") {
+              const url = key.replace(/\/+$/, "")
+              process.env[value.key] = value.token
+              log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
+              const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
+              if (!response.ok) {
+                throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
+              }
+              const wellknown = (yield* Effect.promise(() => response.json())) as any
+              const remoteConfig = wellknown.config ?? {}
+              if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+              const source = `${url}/.well-known/opencode`
+              const next = yield* loadConfig(JSON.stringify(remoteConfig), {
+                dir: path.dirname(source),
+                source,
+              })
+              merge(source, next, "global")
+              log.debug("loaded remote config from well-known", { url })
+            }
+          }
+
+          const global = yield* getGlobal()
+          merge(Global.Path.config, global, "global")
+
+          if (Flag.MAMMOUTH_CONFIG) {
+            merge(Flag.MAMMOUTH_CONFIG, yield* loadFile(Flag.MAMMOUTH_CONFIG))
+            log.debug("loaded custom config", { path: Flag.MAMMOUTH_CONFIG })
+          }
+
+          if (!Flag.MAMMOUTH_DISABLE_PROJECT_CONFIG) {
+            for (const file of yield* Effect.promise(() =>
+              ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
+            )) {
+              merge(file, yield* loadFile(file), "local")
+            }
+          }
+
+          result.agent = result.agent || {}
+          result.mode = result.mode || {}
+          result.plugin = result.plugin || []
+
+          const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
+
+          if (Flag.MAMMOUTH_CONFIG_DIR) {
+            log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.MAMMOUTH_CONFIG_DIR })
+          }
+
+          const deps: Promise<void>[] = []
+
+          for (const dir of unique(directories)) {
+            if (dir.endsWith(".opencode") || dir === Flag.MAMMOUTH_CONFIG_DIR) {
+              for (const file of ["opencode.json", "opencode.jsonc"]) {
+                const source = path.join(dir, file)
+                log.debug(`loading config from ${source}`)
+                merge(source, yield* loadFile(source))
+                result.agent ??= {}
+                result.mode ??= {}
+                result.plugin ??= []
+              }
+            }
+
+            const dep = iife(async () => {
+              await installDependencies(dir)
+            })
+            void dep.catch((err) => {
+              log.warn("background dependency install failed", { dir, error: err })
+            })
+            deps.push(dep)
+
+            result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
+            result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
+            result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
+            const list = yield* Effect.promise(() => loadPlugin(dir))
+            track(dir, list)
+          }
+
+          if (process.env.OPENCODE_CONFIG_CONTENT) {
+            const source = "OPENCODE_CONFIG_CONTENT"
+            const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+              dir: ctx.directory,
+              source,
+            })
+            merge(source, next, "local")
+            log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+          }
+
+          const activeOrg = Option.getOrUndefined(
+            yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+          )
+          if (activeOrg) {
+            yield* Effect.gen(function* () {
+              const [configOpt, tokenOpt] = yield* Effect.all(
+                [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
+                { concurrency: 2 },
+              )
+              if (Option.isSome(tokenOpt)) {
+                process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
+                Env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
+              }
+
+              activeOrgName = activeOrg.org.name
+
+              if (Option.isSome(configOpt)) {
+                const source = `${activeOrg.account.url}/api/config`
+                const next = yield* loadConfig(JSON.stringify(configOpt.value), {
+                  dir: path.dirname(source),
+                  source,
+                })
+                for (const providerID of Object.keys(next.provider ?? {})) {
+                  consoleManagedProviders.add(providerID)
+                }
+                merge(source, next, "global")
+              }
+            }).pipe(
+              Effect.catch((err) => {
+                log.debug("failed to fetch remote account config", {
+                  error: err instanceof Error ? err.message : String(err),
+                })
+                return Effect.void
+              }),
+            )
+          }
+
+          if (existsSync(managedDir)) {
+            for (const file of ["opencode.json", "opencode.jsonc"]) {
+              const source = path.join(managedDir, file)
+              merge(source, yield* loadFile(source), "global")
+            }
+          }
+
+          // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+          result = mergeConfigConcatArrays(result, yield* Effect.promise(() => readManagedPreferences()))
+
+          for (const [name, mode] of Object.entries(result.mode ?? {})) {
+            result.agent = mergeDeep(result.agent ?? {}, {
+              [name]: {
+                ...mode,
+                mode: "primary" as const,
+              },
+            })
+          }
+
+          if (Flag.MAMMOUTH_PERMISSION) {
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.MAMMOUTH_PERMISSION))
+          }
+
+          if (result.tools) {
+            const perms: Record<string, Config.PermissionAction> = {}
+            for (const [tool, enabled] of Object.entries(result.tools)) {
+              const action: Config.PermissionAction = enabled ? "allow" : "deny"
+              if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+                perms.edit = action
+                continue
+              }
+              perms[tool] = action
+            }
+            result.permission = mergeDeep(perms, result.permission ?? {})
+          }
+
+          if (!result.username) result.username = os.userInfo().username
+
+          if (result.autoshare === true && !result.share) {
+            result.share = "auto"
+          }
+
+          if (Flag.MAMMOUTH_DISABLE_AUTOCOMPACT) {
+            result.compaction = { ...result.compaction, auto: false }
+          }
+          if (Flag.MAMMOUTH_DISABLE_PRUNE) {
+            result.compaction = { ...result.compaction, prune: false }
+          }
+
+          return {
+            config: result,
+            directories,
+            deps,
+            consoleState: {
+              consoleManagedProviders: Array.from(consoleManagedProviders),
+              activeOrgName,
+              switchableOrgCount: 0,
+            },
+          }
+        })
+
+        const state = yield* InstanceState.make<State>(
+          Effect.fn("Config.state")(function* (ctx) {
+            return yield* loadInstanceState(ctx)
+          }),
+        )
+
+        const get = Effect.fn("Config.get")(function* () {
+          return yield* InstanceState.use(state, (s) => s.config)
+        })
+
+        const directories = Effect.fn("Config.directories")(function* () {
+          return yield* InstanceState.use(state, (s) => s.directories)
+        })
+
+        const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
+          return yield* InstanceState.use(state, (s) => s.consoleState)
+        })
+
+        const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+          yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
+        })
+
+        const update = Effect.fn("Config.update")(function* (config: Info) {
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
+          const existing = yield* loadFile(file)
+          yield* fs
+            .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
+            .pipe(Effect.orDie)
+          yield* Effect.promise(() => Instance.dispose())
+        })
+
+        const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
+          yield* invalidateGlobal
+          const task = Instance.disposeAll()
+            .catch(() => undefined)
+            .finally(() =>
+              GlobalBus.emit("event", {
+                directory: "global",
+                payload: {
+                  type: Event.Disposed.type,
+                  properties: {},
+                },
+              }),
+            )
+          if (wait) yield* Effect.promise(() => task)
+          else void task
+        })
+
+        const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+          const file = globalConfigFile()
+          const before = (yield* readConfigFile(file)) ?? "{}"
+          const input = writable(config)
+
+          let next: Info
+          if (!file.endsWith(".jsonc")) {
+            const existing = parseConfig(before, file)
+            const merged = mergeDeep(writable(existing), input)
+            yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
+            next = merged
+          } else {
+            const updated = patchJsonc(before, input)
+            next = parseConfig(updated, file)
+            yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+          }
+
+          yield* invalidate()
+          return next
+        })
+
+        return Service.of({
+          get,
+          getGlobal,
+          getConsoleState,
+          update,
+          updateGlobal,
+          invalidate,
+          directories,
+          waitForDependencies,
+        })
+      }),
+    )
+
+  export const defaultLayer = layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Account.defaultLayer),
+  )
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function get() {
+    return runPromise((svc) => svc.get())
+  }
+
+  export async function getGlobal() {
+    return runPromise((svc) => svc.getGlobal())
+  }
+
+  export async function getConsoleState() {
+    return runPromise((svc) => svc.getConsoleState())
+  }
+
+  export async function update(config: Info) {
+    return runPromise((svc) => svc.update(config))
+  }
+
+  export async function updateGlobal(config: Info) {
+    return runPromise((svc) => svc.updateGlobal(config))
+  }
+
+  export async function invalidate(wait = false) {
+    return runPromise((svc) => svc.invalidate(wait))
   }
 
   export async function directories() {
-    return state().then((x) => x.directories)
+    return runPromise((svc) => svc.directories())
+  }
+
+  export async function waitForDependencies() {
+    return runPromise((svc) => svc.waitForDependencies())
   }
 }
-Filesystem.write
-Filesystem.write

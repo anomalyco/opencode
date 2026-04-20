@@ -4,7 +4,8 @@
   "id": "oc-2",
   "light": {
     "palette": {
-      "neutral": "#8f8f8f",
+      "neutral": "#f7f7f7",
+      "ink": "#171311",
       "primary": "#dcde8d",
       "success": "#12c905",
       "warning": "#ffdc17",
@@ -13,11 +14,40 @@
       "interactive": "#034cff",
       "diffAdd": "#9ff29a",
       "diffDelete": "#fc533a"
+    },
+    "overrides": {
+      "text-strong": "#171717",
+      "text-base": "#6F6F6F",
+      "text-weak": "#8F8F8F",
+      "text-weaker": "#C7C7C7",
+      "border-weak-base": "#DBDBDB",
+      "border-weaker-base": "#E8E8E8",
+      "icon-base": "#8F8F8F",
+      "icon-weak-base": "C7C7C7",
+      "surface-raised-base": "#F3F3F3",
+      "surface-raised-base-hover": "#EDEDED",
+      "surface-base": "#F8F8F8",
+      "surface-base-hover": "#0000000A",
+      "surface-interactive-weak": "#F5FAFF",
+      "icon-success-base": "#0ABE00",
+      "surface-success-base": "#E6FFE5",
+      "syntax-comment": "#7a7a7a",
+      "syntax-keyword": "#a753ae",
+      "syntax-string": "#00ceb9",
+      "syntax-primitive": "#034cff",
+      "syntax-property": "#a753ae",
+      "syntax-type": "#8a6f00",
+      "syntax-constant": "#007b80",
+      "syntax-critical": "#ff8c00",
+      "syntax-diff-delete": "#ff8c00",
+      "syntax-diff-unknown": "#a753ae",
+      "surface-critical-base": "#FFF2F0"
     }
   },
   "dark": {
     "palette": {
-      "neutral": "#707070",
+      "neutral": "#1f1f1f",
+      "ink": "#f1ece8",
       "primary": "#fab283",
       "success": "#12c905",
       "warning": "#fcd53a",
@@ -26,6 +56,33 @@
       "interactive": "#034cff",
       "diffAdd": "#c8ffc4",
       "diffDelete": "#fc533a"
+    },
+    "overrides": {
+      "text-strong": "#EDEDED",
+      "text-base": "#A0A0A0",
+      "text-weak": "#707070",
+      "text-weaker": "#505050",
+      "border-weak-base": "#282828",
+      "border-weaker-base": "#232323",
+      "icon-base": "#7E7E7E",
+      "icon-weak-base": "#343434",
+      "surface-raised-base": "#232323",
+      "surface-raised-base-hover": "#282828",
+      "surface-base": "#1C1C1C",
+      "surface-base-hover": "#FFFFFF0D",
+      "surface-interactive-weak": "#0D172B",
+      "surface-success-base": "#022B00",
+      "syntax-comment": "#8f8f8f",
+      "syntax-keyword": "#edb2f1",
+      "syntax-string": "#00ceb9",
+      "syntax-primitive": "#8cb0ff",
+      "syntax-property": "#fab283",
+      "syntax-type": "#fcd53a",
+      "syntax-constant": "#93e9f6",
+      "syntax-critical": "#fab283",
+      "syntax-diff-delete": "#fab283",
+      "syntax-diff-unknown": "#edb2f1",
+      "surface-critical-base": "#1F0603"
     }
   }
 }

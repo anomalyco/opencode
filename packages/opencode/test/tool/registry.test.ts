@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 
@@ -20,6 +20,10 @@ import { Instance } from "../../src/project/instance"
 async function registry() {
   return await import("../../src/tool/registry").then((mod) => mod.ToolRegistry)
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.registry", () => {
   test("loads tools from .opencode/tool (singular)", async () => {

@@ -6,6 +6,14 @@ import { logo as glyphs } from "./logo"
 const reset = "\x1b[0m"
 
 export namespace UI {
+  const wordmark = [
+  "███    ███  █████  ███    ███ ███    ███  ██████  ██    ██ ████████ ██   ██",
+  "████  ████ ██   ██ ████  ████ ████  ████ ██    ██ ██    ██    ██    ██   ██",
+  "██ ████ ██ ███████ ██ ████ ██ ██ ████ ██ ██    ██ ██    ██    ██    ███████",
+  "██  ██  ██ ██   ██ ██  ██  ██ ██  ██  ██ ██    ██ ██    ██    ██    ██   ██",
+  "██      ██ ██   ██ ██      ██ ██      ██  ██████   ██████     ██    ██   ██",
+]
+
   export const CancelledError = NamedError.create("UICancelledError", z.void())
 
   export const Style = {
@@ -43,6 +51,16 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
+    if (!process.stdout.isTTY && !process.stderr.isTTY) {
+      const result = []
+      for (const row of wordmark) {
+        if (pad) result.push(pad)
+        result.push(row)
+        result.push(EOL)
+      }
+      return result.join("").trimEnd()
+    }
+
     const result: string[] = []
     for (const row of glyphs) {
       if (pad) result.push(pad)
