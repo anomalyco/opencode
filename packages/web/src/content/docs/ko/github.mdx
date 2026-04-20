@@ -67,11 +67,10 @@ opencode github install
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-             # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
            with:
              model: anthropic/claude-sonnet-4-20250514
              # share: true
-             # use_github_token: true
+             # github_token: xxxx
    ```
 
 3. **Store the API keys in secrets**
@@ -86,9 +85,9 @@ opencode github install
 - `agent`: 사용할 agent입니다. primary agent여야 합니다. 찾지 못하면 config의 `default_agent`를 사용하고, 그것도 없으면 `"build"`로 fallback합니다.
 - `share`: OpenCode 세션 공유 여부입니다. public repo에서는 기본값이 **true**입니다.
 - `prompt`: 기본 동작을 override하는 선택형 custom prompt입니다. OpenCode의 요청 처리 방식을 조정할 때 사용합니다.
-- `use_github_token`: **true**로 설정하면 OpenCode GitHub App token exchange 대신 `GITHUB_TOKEN` 환경 변수를 직접 사용합니다. 기본적으로 OpenCode는 OpenCode GitHub App의 installation access token을 사용하므로, 커밋/댓글/PR 작성 주체가 app으로 표시됩니다.
+- `token`: 댓글 생성, 커밋, PR 생성 같은 작업을 수행할 때 사용하는 선택형 GitHub access token입니다. 기본적으로 OpenCode는 OpenCode GitHub App의 installation access token을 사용하므로, 커밋/댓글/PR 작성 주체가 app으로 표시됩니다.
 
-  GitHub Action runner의 [기본 제공 `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)을 사용하려면 `use_github_token: true`를 설정하고, 토큰을 `env`로 전달한 뒤, workflow에 필요한 permission을 부여하세요.
+  또는 OpenCode GitHub App을 설치하지 않고도 GitHub Action runner의 [기본 제공 `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)을 사용할 수 있습니다. 이 경우 workflow에 필요한 permission을 반드시 부여하세요.
 
   ```yaml
   permissions:
@@ -98,7 +97,7 @@ opencode github install
     issues: write
   ```
 
-  필요하면 [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT)도 `GITHUB_TOKEN`으로 전달해 사용할 수 있습니다.
+  필요하면 [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT)도 사용할 수 있습니다.
 
 ---
 
