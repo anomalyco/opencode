@@ -34,18 +34,21 @@ export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
-const MIN_TAIL_TOKENS = 2_000
-const MAX_TAIL_TOKENS = 8_000
+const MIN_PRESERVE_RECENT_TOKENS = 2_000
+const MAX_PRESERVE_RECENT_TOKENS = 8_000
 type Turn = {
   start: number
   end: number
   id: MessageID
 }
 
-function tailBudget(input: { cfg: Config.Info; model: Provider.Model }) {
+function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
   return (
-    input.cfg.compaction?.tail_tokens ??
-    Math.min(MAX_TAIL_TOKENS, Math.max(MIN_TAIL_TOKENS, Math.floor(usable(input) * 0.25)))
+    input.cfg.compaction?.preserve_recent_tokens ??
+    Math.min(
+      MAX_PRESERVE_RECENT_TOKENS,
+      Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)),
+    )
   )
 }
 
@@ -134,7 +137,7 @@ export const layer: Layer.Layer<
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
       if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
-      const budget = tailBudget({ cfg: input.cfg, model: input.model })
+      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = all.slice(-limit)

@@ -208,8 +208,8 @@ const InfoSchema = Schema.Struct({
         description:
           "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
       }),
-      tail_tokens: Schema.optional(NonNegativeInt).annotate({
-        description: "Token budget for retained recent turn spans during compaction",
+      preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
+        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",

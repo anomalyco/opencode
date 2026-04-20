@@ -925,7 +925,7 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const rt = runtime("continue", Plugin.defaultLayer, wide(), cfg({ tail_turns: 2, tail_tokens: 10_000 }))
+        const rt = runtime("continue", Plugin.defaultLayer, wide(), cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }))
         try {
           const msgs = await svc.messages({ sessionID: session.id })
           const parent = msgs.at(-1)?.info.id
@@ -954,7 +954,7 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("shrinks retained tail to fit tail token budget", async () => {
+  test("shrinks retained tail to fit preserve token budget", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -970,7 +970,7 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const rt = runtime("continue", Plugin.defaultLayer, wide(), cfg({ tail_turns: 2, tail_tokens: 100 }))
+        const rt = runtime("continue", Plugin.defaultLayer, wide(), cfg({ tail_turns: 2, preserve_recent_tokens: 100 }))
         try {
           const msgs = await svc.messages({ sessionID: session.id })
           const parent = msgs.at(-1)?.info.id
@@ -999,7 +999,7 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("falls back to full summary when even one recent turn exceeds tail budget", async () => {
+  test("falls back to full summary when even one recent turn exceeds preserve token budget", async () => {
     await using tmp = await tmpdir({ git: true })
     const stub = llm()
     let captured = ""
@@ -1021,7 +1021,7 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 1, tail_tokens: 20 }))
+        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 1, preserve_recent_tokens: 20 }))
         try {
           const msgs = await svc.messages({ sessionID: session.id })
           const parent = msgs.at(-1)?.info.id
@@ -1051,7 +1051,7 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("falls back to full summary when retained tail media exceeds tail budget", async () => {
+  test("falls back to full summary when retained tail media exceeds preserve token budget", async () => {
     await using tmp = await tmpdir({ git: true })
     const stub = llm()
     let captured = ""
@@ -1082,7 +1082,7 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 1, tail_tokens: 100 }))
+        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 1, preserve_recent_tokens: 100 }))
         try {
           const msgs = await svc.messages({ sessionID: session.id })
           const parent = msgs.at(-1)?.info.id
@@ -1544,7 +1544,7 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 2, tail_tokens: 10_000 }))
+        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }))
         try {
           let msgs = await svc.messages({ sessionID: session.id })
           let parent = msgs.at(-1)?.info.id
