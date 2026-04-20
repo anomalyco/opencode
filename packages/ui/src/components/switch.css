@@ -20,25 +20,38 @@
   [data-slot="switch-control"] {
     display: inline-flex;
     align-items: center;
-    width: 28px;
-    height: 16px;
+    width: 32px;
+    height: 18px;
     flex-shrink: 0;
-    border-radius: 3px;
+    border-radius: 5px;
+    corner-shape: squircle;
     border: 1px solid var(--border-weak-base);
     background: var(--surface-base);
+    padding: 1px;
     transition:
       background-color 150ms,
       border-color 150ms;
   }
 
+  @supports (corner-shape: squircle) {
+    [data-slot="switch-control"] {
+      border-radius: 10px;
+    }
+
+    [data-slot="switch-thumb"] {
+      border-radius: 8px;
+    }
+  }
+
   [data-slot="switch-thumb"] {
     width: 14px;
     height: 14px;
-    box-sizing: content-box;
+    box-sizing: border-box;
 
-    border-radius: 2px;
-    border: 1px solid var(--border-base);
-    background: var(--icon-invert-base);
+    border-radius: 4px;
+    corner-shape: squircle;
+    border: none;
+    background: var(--icon-weak-base);
 
     /* shadows/shadow-xs */
     box-shadow:
@@ -46,7 +59,7 @@
       0 1px 2px 0 rgba(19, 16, 16, 0.06),
       0 1px 3px 0 rgba(19, 16, 16, 0.08);
 
-    transform: translateX(-1px);
+    transform: translateX(0px);
     transition:
       transform 150ms,
       background-color 150ms;
@@ -93,19 +106,20 @@
 
   &[data-checked] [data-slot="switch-control"] {
     box-sizing: border-box;
-    border-color: var(--icon-strong-base);
-    background-color: var(--icon-strong-base);
+    border-color: var(--icon-success-base, var(--icon-strong-base));
+    background-color: var(--icon-success-base, var(--icon-strong-base));
   }
 
   &[data-checked] [data-slot="switch-thumb"] {
     border: none;
-    transform: translateX(12px);
-    background-color: var(--icon-invert-base);
+    transform: translateX(14px);
+    background-color: #ffffff;
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
-    background-color: var(--surface-hover);
+    border-color: var(--icon-success-base, var(--icon-strong-base));
+    background-color: var(--icon-success-base, var(--icon-strong-base));
+    opacity: 0.85;
   }
 
   &[data-disabled] {

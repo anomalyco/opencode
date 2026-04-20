@@ -1,6 +1,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useMutation } from "@tanstack/solid-query"
@@ -373,7 +374,10 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                           }}
                         />
                         <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
-                        <div onClick={(event) => event.stopPropagation()}>
+                        <div class="flex items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
+                          <Show when={toggleMcp.isPending && toggleMcp.variables === name}>
+                            <Spinner class="size-3.5 text-text-weak" />
+                          </Show>
                           <Switch
                             checked={enabled()}
                             disabled={toggleMcp.isPending && toggleMcp.variables === name}
@@ -381,7 +385,11 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                               if (toggleMcp.isPending) return
                               toggleMcp.mutate(name)
                             }}
-                          />
+                            hideLabel
+                          >
+                            {enabled() ? `Disable ${name}` : `Enable ${name}`}
+                          </Switch>
+                          <span classList={{ "text-12-regular w-5 select-none": true, "text-text-base": enabled(), "text-text-weak": !enabled() }}>{enabled() ? "On" : "Off"}</span>
                         </div>
                       </button>
                     )
