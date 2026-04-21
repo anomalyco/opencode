@@ -132,14 +132,14 @@ async function main() {
 
   // Summary
   console.log(`\n${"=".repeat(60)}`)
-  console.log(`下载完成: ${downloaded} 个文件`)
-  console.log(`已跳过: ${skipped} 个文件`)
+  console.log(`Downloaded: ${downloaded} files`)
+  console.log(`Skipped: ${skipped} files`)
   if (failed > 0) {
-    console.log(`失败: ${failed} 个文件`)
-    console.log(`\n⚠ 部分文件下载失败，请检查网络连接后重试。`)
+    console.log(`Failed: ${failed} files`)
+    console.log(`\nWarning: Some files failed to download.`)
     process.exit(1)
   }
-  console.log(`\n缓存目录: ${CACHE_DIR}`)
+  console.log(`\nCache dir: ${CACHE_DIR}`)
 }
 
 main().catch((err) => {

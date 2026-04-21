@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     OpenCode one-click build, package, and release script
 
@@ -144,7 +144,7 @@ function Write-Utf8File {
     param([string]$FilePath, [string]$Content)
     $dir = Split-Path $FilePath -Parent
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    [System.IO.File]::WriteAllText($FilePath, $Content, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($FilePath, $Content, [System.Text.UTF8Encoding]::new($true))
 }
 
 function Write-AsciiFile {
@@ -461,24 +461,24 @@ try {
 
 # 6.5 Generate deploy instructions
 $deployInfo = @"
-Configuration Deployment Guide
+配置部署指南
 ==============================
 
-1. Edit opencode.json, replace the following placeholders:
-   - YOUR_LLM_SERVER:8080/v1 -> Intranet LLM service URL
-   - your-model-name -> Model name
-   - {env:ENTERPRISE_API_KEY} -> API Key or env variable reference
+1. 编辑 opencode.json 文件，替换以下占位内容：
+   - YOUR_LLM_SERVER:8080/v1 -> 内网大模型服务地址
+   - your-model-name -> 模型名称
+   - {env:ENTERPRISE_API_KEY} -> API密钥 或 环境变量引用
 
-2. Deploy config to user-level directory:
+2. 将配置部署到用户目录:
    copy opencode.json %APPDATA%\opencode\opencode.json
 
-3. Deploy config to system-level directory (requires admin):
+3. 将配置部署到系统全局目录（需要管理员权限）:
    copy opencode.json C:\ProgramData\opencode\opencode.json
 
-4. If using {env:ENTERPRISE_API_KEY}, set environment variable:
-   setx ENTERPRISE_API_KEY "sk-your-key-here"
+4. 若使用 {env:ENTERPRISE_API_KEY} 格式，请设置环境变量:
+   set ENTERPRISE_API_KEY "sk-your-key-here"
 
-Troubleshooting
+故障排查
 ---------------
 Run: scripts\diagnose-config.ps1
 "@
@@ -495,6 +495,7 @@ REM ========================================
 set OPENCODE_PARSERS_DIR=%~dp0parsers
 set OPENCODE_DISABLE_AUTOUPDATE=true
 set OPENCODE_DISABLE_MODELS_FETCH=true
+REM set OPENCODE_CONFIG_DIR=%~dp0config-examples
 
 REM set ENTERPRISE_API_KEY=sk-your-key-here
 
@@ -513,6 +514,7 @@ REM ========================================
 set OPENCODE_PARSERS_DIR=%~dp0parsers
 set OPENCODE_DISABLE_AUTOUPDATE=true
 set OPENCODE_DISABLE_MODELS_FETCH=true
+REM set OPENCODE_CONFIG_DIR=%~dp0config-examples
 
 if exist "C:\ProgramData\opencode\opencode.json" (
     echo Using system config: C:\ProgramData\opencode\opencode.json
@@ -659,39 +661,51 @@ Write-Ok "scripts/diagnose-config.ps1"
 
 # 6.9 Generate README.txt
 $readme = @"
-OpenCode Offline v${Version}
+LINGXI CODE CLI - 企业内网离线版 v${Version}
 ========================
 
-Quick Start
+快速开始
 -----------
-1. Double-click run.bat to launch OpenCode
-2. First time use requires configuring intranet LLM service:
-   - Edit config-examples\opencode.json
-   - Replace YOUR_LLM_SERVER:8080/v1 with actual LLM service URL
-   - Replace your-model-name with actual model name
-   - Set API Key: set ENTERPRISE_API_KEY=sk-your-key-here
-3. Use run-with-config.bat to launch (auto-loads config file)
+1. 双击 run.bat 启动
+2. 首次使用需要配置内网大语言模型服务：
+   - 编辑 config-examples\opencode.json 文件
+   - 将 YOUR_LLM_SERVER:8080/v1 替换为真实大模型服务地址
+   - 将 your-model-name 替换为实际模型名称
+   - 设置接口密钥: set ENTERPRISE_API_KEY=sk-your-key-here（run.bat里去掉主）
+3. 运行 run-with-config.bat 启动（自动加载配置文件） 或 set OPENCODE_CONFIG_DIR=%~dp0config-examples（run.bat里去掉注释）
 
-System-level Config (multi-user shared)
+系统级配置（多用户共用）
 ---------------------------------------
-Run as administrator:
+以管理员身份运行:
   scripts\install-system-config.ps1 -ApiBase "http://10.0.1.100:8000/v1" -ModelName "deepseek-v3"
 
-Diagnostics
+配置诊断
 -----------
   scripts\diagnose-config.ps1
 
-Environment Variables
+环境变量说明
 --------------------
-  OPENCODE_PARSERS_DIR          - Parser directory (default: parsers/)
-  OPENCODE_DISABLE_AUTOUPDATE   - Disable auto-update (default: true)
-  OPENCODE_DISABLE_MODELS_FETCH - Disable model list fetch (default: true)
-  ENTERPRISE_API_KEY            - Enterprise LLM API Key
+  OPENCODE_PARSERS_DIR          - tree-sitter 解析器目录（默认: 同目录 parsers\）
+  OPENCODE_DISABLE_AUTOUPDATE   - 禁用自动更新（已设为 true）
+  OPENCODE_DISABLE_MODELS_FETCH - 禁止从 models.dev 拉取模型数据 (已设为 true)
+  OPENCODE_CONFIG_DIR           - 额外配置目录
+  ENTERPRISE_API_KEY            - 内网 LLM 服务 API Key
 
-No Internet Required
+文件说明
 --------------------
-All resources (Bun runtime, parsers) are embedded.
-No external network requests at runtime (except AI conversations).
+opencode.exe           - CLI 主程序（含 Bun 运行时 + 内嵌解析器）
+parsers/               - tree-sitter 离线解析器（外置备用）
+run.bat                - 快速启动脚本
+run-with-config.bat    - 带配置初始化的启动脚本
+config-examples/       - 配置模板目录
+scripts/               - 运维脚本目录
+
+日志
+--------------------
+日志文件写入位置：
+- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\opencode\log`
+
+日志文件以时间戳命名（例如 `2025-01-09T123456.log`），并保留最近的 10 个日志文件。
 "@
 Write-Utf8File (Join-Path $OutputDir "README.txt") $readme
 Write-Ok "README.txt"
