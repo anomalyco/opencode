@@ -438,12 +438,22 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               title="Permission required"
               header={header()}
               body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={{ once: "Allow once", always: "Allow always", explain: "Explain", reject: "Reject" }}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
                   setStore("stage", "always")
+                  return
+                }
+                if (option === "explain") {
+                  void sdk.client.permission.reply({
+                    reply: "reject",
+                    requestID: props.request.id,
+                    workspace: project.workspace.current(),
+                    message:
+                      "Before I approve this, explain what this tool call does: which files or commands are affected, what behavior changes, and any risks. Then call the tool again with the same arguments.",
+                  })
                   return
                 }
                 if (option === "reject") {
