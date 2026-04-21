@@ -159,6 +159,17 @@ describe("tool.question", () => {
     ])
   })
 
+  test("[issue #67] Qwen's truncated-JSON input collapses to a single question", () => {
+    // Qwen occasionally emits `questions` as an unterminated JSON string; the
+    // state.input used by the TUI used to receive this raw string and render
+    // "Asked N questions" where N was the string length.
+    const qwenInput =
+      '\n\n[{"header": "具体的内容", "question": "TypeScript/JavaScriptに関する具体的な質問は何ですか？\n\n'
+    const normalized = normalizeQuestionsInput(qwenInput)
+    expect(Array.isArray(normalized)).toBe(true)
+    expect((normalized as unknown[]).length).toBe(1)
+  })
+
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {
   //     const tool = await QuestionTool.init()
