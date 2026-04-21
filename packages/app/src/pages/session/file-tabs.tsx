@@ -13,6 +13,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Markdown } from "@opencode-ai/ui/markdown"
+import mermaid from "mermaid"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
@@ -217,6 +218,67 @@ export function FileTabContent(props: { tab: string }) {
     return p ? /\.(?:md|markdown)$/i.test(p) : false
   })
   const [preview, setPreview] = createSignal(true)
+
+  let mermaidContainer: HTMLDivElement | undefined
+
+  const setupMermaidContainer = (el: HTMLDivElement) => {
+    mermaidContainer = el
+  }
+
+  createEffect(
+    on(
+      () => [mermaidContainer, preview(), contents()] as const,
+      ([container, isPreview]) => {
+        if (typeof window === "undefined") return
+        if (!container || !isPreview) return
+        if (!isMarkdown()) return
+
+        const renderMermaid = () => {
+          mermaid.initialize({ startOnLoad: false })
+
+          const preBlocks = container.querySelectorAll("pre.shiki")
+          if (preBlocks.length === 0) return
+
+          preBlocks.forEach((pre) => {
+            if (!(pre instanceof HTMLPreElement)) return
+
+            const code = pre.querySelector("code")
+            if (!code) return
+
+            const lines = code.querySelectorAll(".line")
+            const text = Array.from(lines).map((line) => line.textContent).join("\n")
+
+            const mermaidKeywords =
+              /\b(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|requirement|timeline|zenuml)\b|->>|-->>|Note\b|loop\b|alt\b|opt\b\par\b/i.test(
+                text,
+              )
+            if (!mermaidKeywords) return
+
+            const div = document.createElement("div")
+            div.className = "mermaid"
+            div.textContent = text
+
+            pre.replaceWith(div)
+          })
+
+          const blocks = container.querySelectorAll(".mermaid")
+          if (blocks.length === 0) return
+
+          mermaid.run({ nodes: Array.from(blocks) as HTMLElement[] }).catch(() => {})
+        }
+
+        const tryRender = () => {
+          renderMermaid()
+          if (container.querySelectorAll(".mermaid").length === 0) {
+            setTimeout(tryRender, 100)
+          }
+        }
+
+        setTimeout(tryRender, 0)
+      },
+      { defer: true },
+    ),
+  )
 
   const selectionPreview = (source: string, selection: FileSelection) => {
     return previewSelectedLines(source, {
@@ -478,7 +540,7 @@ export function FileTabContent(props: { tab: string }) {
         </Show>
         <Switch>
           <Match when={state()?.loaded && isMarkdown() && preview() && state()?.content?.type !== "binary"}>
-            <div class="px-6 py-4 pb-40">
+            <div ref={setupMermaidContainer} class="px-6 py-4 pb-40">
               <Markdown text={contents()} cacheKey={cacheKey()} />
             </div>
           </Match>
