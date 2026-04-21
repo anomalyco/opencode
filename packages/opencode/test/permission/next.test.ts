@@ -128,6 +128,67 @@ test("fromConfig - does not expand tilde in middle of path", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
 })
 
+// Top-level wildcard-vs-specific precedence semantics.
+//
+// fromConfig sorts top-level keys so wildcard permissions (containing "*")
+// come before specific permissions. Combined with `findLast` in evaluate(),
+// this gives the intuitive semantic "specific tool rules override the `*`
+// fallback", regardless of the order the user wrote the keys in their JSON.
+//
+// Sub-pattern order inside a single permission key (e.g. `bash: { "*": "allow", "rm": "deny" }`)
+// still depends on insertion order — only top-level keys are sorted.
+
+test("fromConfig - specific key beats wildcard regardless of JSON key order", () => {
+  const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
+  const specificFirst = Permission.fromConfig({ bash: "allow", "*": "deny" })
+
+  // Both orderings produce the same ruleset
+  expect(wildcardFirst).toEqual(specificFirst)
+
+  // And both evaluate bash → allow (bash rule wins over * fallback)
+  expect(Permission.evaluate("bash", "ls", wildcardFirst).action).toBe("allow")
+  expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("allow")
+})
+
+test("fromConfig - wildcard acts as fallback for permissions with no specific rule", () => {
+  const ruleset = Permission.fromConfig({ bash: "allow", "*": "ask" })
+  expect(Permission.evaluate("edit", "foo.ts", ruleset).action).toBe("ask")
+  expect(Permission.evaluate("bash", "ls", ruleset).action).toBe("allow")
+})
+
+test("fromConfig - top-level ordering: wildcards first, specifics after", () => {
+  const ruleset = Permission.fromConfig({
+    bash: "allow",
+    "*": "ask",
+    edit: "deny",
+    "mcp_*": "allow",
+  })
+  // wildcards (* and mcp_*) come before specifics (bash, edit)
+  const permissions = ruleset.map((r) => r.permission)
+  expect(permissions.slice(0, 2).sort()).toEqual(["*", "mcp_*"])
+  expect(permissions.slice(2)).toEqual(["bash", "edit"])
+})
+
+test("fromConfig - sub-pattern insertion order inside a tool key is preserved (only top-level sorts)", () => {
+  // Sub-patterns within a single tool key use the documented "`*` first,
+  // specific patterns after" convention (findLast picks specifics). The
+  // top-level sort must not touch sub-pattern ordering.
+  const ruleset = Permission.fromConfig({ bash: { "*": "deny", "git *": "allow" } })
+  expect(ruleset.map((r) => r.pattern)).toEqual(["*", "git *"])
+  // * fallback for unknown commands
+  expect(Permission.evaluate("bash", "rm foo", ruleset).action).toBe("deny")
+  // specific pattern wins for git commands (it's last, findLast picks it)
+  expect(Permission.evaluate("bash", "git status", ruleset).action).toBe("allow")
+})
+
+test("fromConfig - canonical documented example unchanged", () => {
+  // Regression guard for the example in docs/permissions.mdx
+  const ruleset = Permission.fromConfig({ "*": "ask", bash: "allow", edit: "deny" })
+  expect(Permission.evaluate("bash", "ls", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("edit", "foo.ts", ruleset).action).toBe("deny")
+  expect(Permission.evaluate("read", "foo.ts", ruleset).action).toBe("ask")
+})
+
 test("fromConfig - expands exact tilde to home directory", () => {
   const result = Permission.fromConfig({ external_directory: { "~": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])

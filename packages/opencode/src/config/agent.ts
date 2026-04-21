@@ -22,12 +22,6 @@ const Color = Schema.Union([
   Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
 ])
 
-// ConfigPermission.Info is a zod schema (its `.preprocess(...).transform(...)`
-// shape lives outside the Effect Schema type system), so the walker reaches it
-// via ZodOverride rather than a pure Schema reference.  This preserves the
-// `$ref: PermissionConfig` emitted in openapi.json.
-const PermissionRef = Schema.Any.annotate({ [ZodOverride]: ConfigPermission.Info })
-
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
     model: Schema.optional(ConfigModelID),
@@ -54,7 +48,7 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
-    permission: Schema.optional(PermissionRef),
+    permission: Schema.optional(ConfigPermission.Info),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
