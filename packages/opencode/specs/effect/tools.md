@@ -46,7 +46,6 @@ These exported tool definitions currently use `Tool.define(...)` in `src/tool`:
 - [x] `grep.ts`
 - [x] `invalid.ts`
 - [x] `lsp.ts`
-- [x] `multiedit.ts`
 - [x] `plan.ts`
 - [x] `question.ts`
 - [x] `read.ts`
@@ -82,7 +81,6 @@ Notable items that are already effectively on the target path and do not need se
 - `write.ts`
 - `codesearch.ts`
 - `websearch.ts`
-- `multiedit.ts`
 - `edit.ts`
 
 ## Filesystem notes
