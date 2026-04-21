@@ -1110,5 +1110,20 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
     schema = sanitizeGemini(schema)
   }
 
+  if (model.providerID === "openrouter" && model.api.id.startsWith("x-ai/")) {
+    const sanitizeXai = (obj: unknown): unknown => {
+      if (obj === null || typeof obj !== "object") return obj
+      if (Array.isArray(obj)) return obj.map(sanitizeXai)
+
+      return Object.fromEntries(
+        Object.entries(obj)
+          .filter(([key, value]) => !(key === "additionalProperties" && value === false))
+          .map(([key, value]) => [key, sanitizeXai(value)]),
+      )
+    }
+
+    schema = sanitizeXai(schema) as JSONSchema7
+  }
+
   return schema as JSONSchema7
 }
