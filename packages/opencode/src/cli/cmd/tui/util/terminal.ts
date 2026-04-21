@@ -17,6 +17,12 @@ function parse(color: string): RGBA | null {
   return null
 }
 
+function mode(background: RGBA | null): "dark" | "light" {
+  if (!background) return "dark"
+  const luminance = (0.299 * background.r + 0.587 * background.g + 0.114 * background.b) / 255
+  return luminance > 0.5 ? "light" : "dark"
+}
+
 /**
  * Query terminal colors including background, foreground, and palette (0-15).
  * Uses OSC escape sequences to retrieve actual terminal color values.
@@ -91,6 +97,39 @@ export async function colors(): Promise<{
     timeout = setTimeout(() => {
       cleanup()
       resolve({ background, foreground, colors: paletteColors })
+    }, 1000)
+  })
+}
+
+// Keep startup mode detection separate from `colors()`: the TUI boot path only
+// needs OSC 11 and should resolve on the first background response instead of
+// waiting on the full palette query used by system theme generation.
+export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
+  if (!process.stdin.isTTY) return "dark"
+
+  return new Promise((resolve) => {
+    let timeout: NodeJS.Timeout
+
+    const cleanup = () => {
+      process.stdin.setRawMode(false)
+      process.stdin.removeListener("data", handler)
+      clearTimeout(timeout)
+    }
+
+    const handler = (data: Buffer) => {
+      const match = data.toString().match(/\x1b]11;([^\x07\x1b]+)/)
+      if (!match) return
+      cleanup()
+      resolve(mode(parse(match[1])))
+    }
+
+    process.stdin.setRawMode(true)
+    process.stdin.on("data", handler)
+    process.stdout.write("\x1b]11;?\x07")
+
+    timeout = setTimeout(() => {
+      cleanup()
+      resolve("dark")
     }, 1000)
   })
 }

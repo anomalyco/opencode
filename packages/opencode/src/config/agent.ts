@@ -93,7 +93,7 @@ const normalize = (agent: z.infer<typeof Info>) => {
   const permission: ConfigPermission.Info = {}
   for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
     const action = enabled ? "allow" : "deny"
-    if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+    if (tool === "write" || tool === "edit" || tool === "patch") {
       permission.edit = action
       continue
     }
@@ -101,7 +101,8 @@ const normalize = (agent: z.infer<typeof Info>) => {
   }
   globalThis.Object.assign(permission, agent.permission)
 
-  return { ...agent, options, permission, steps: agent.steps ?? agent.maxSteps }
+  const steps = agent.steps ?? agent.maxSteps
+  return { ...agent, options, permission, ...(steps !== undefined ? { steps } : {}) }
 }
 
 export const Info = zod(AgentSchema).transform(normalize).meta({ ref: "AgentConfig" }) as unknown as z.ZodType<
