@@ -1,8 +1,11 @@
 import { afterEach, describe, test, expect } from "bun:test"
 import { Permission } from "../src/permission"
-import { Config } from "../src/config/config"
+import { Config } from "../src/config"
 import { Instance } from "../src/project/instance"
 import { tmpdir } from "./fixture/fixture"
+import { AppRuntime } from "../src/effect/app-runtime"
+
+const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -158,7 +161,7 @@ describe("permission.task with real config files", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await Config.get()
+        const config = await load()
         const ruleset = Permission.fromConfig(config.permission ?? {})
         // general and orchestrator-fast should be allowed, code-reviewer denied
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
@@ -183,7 +186,7 @@ describe("permission.task with real config files", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await Config.get()
+        const config = await load()
         const ruleset = Permission.fromConfig(config.permission ?? {})
         // general and code-reviewer should be ask, orchestrator-* denied
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("ask")
@@ -208,7 +211,7 @@ describe("permission.task with real config files", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await Config.get()
+        const config = await load()
         const ruleset = Permission.fromConfig(config.permission ?? {})
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
         expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
@@ -235,7 +238,7 @@ describe("permission.task with real config files", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await Config.get()
+        const config = await load()
         const ruleset = Permission.fromConfig(config.permission ?? {})
 
         // Verify task permissions
@@ -273,7 +276,7 @@ describe("permission.task with real config files", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await Config.get()
+        const config = await load()
         const ruleset = Permission.fromConfig(config.permission ?? {})
 
         // Last matching rule wins - "*" deny is last, so all agents are denied
@@ -304,7 +307,7 @@ describe("permission.task with real config files", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await Config.get()
+        const config = await load()
         const ruleset = Permission.fromConfig(config.permission ?? {})
 
         // Evaluate uses findLast - "general" allow comes after "*" deny

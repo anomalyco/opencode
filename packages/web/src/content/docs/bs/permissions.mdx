@@ -87,7 +87,7 @@ Možete koristiti `~` ili `$HOME` na početku obrasca da referencirate svoj poč
 
 ### Vanjski direktoriji
 
-Koristite `external_directory` da dozvolite pozive alata koji dodiruju putanje izvan radnog direktorija gdje je OpenCode pokrenut. Ovo se odnosi na bilo koji alat koji uzima putanju kao ulaz (na primjer `read`, `edit`, `list`, `glob`, `grep` i mnoge `bash` komande).
+Koristite `external_directory` da dozvolite pozive alata koji dodiruju putanje izvan radnog direktorija gdje je OpenCode pokrenut. Ovo se odnosi na bilo koji alat koji uzima putanju kao ulaz (na primjer `read`, `edit`, `glob`, `grep` i mnoge `bash` komande).
 Proširenje kuće (poput `~/...`) utiče samo na način na koji je obrazac napisan. Ne čini vanjsku stazu dijelom trenutnog radnog prostora, tako da staze izvan radnog direktorija i dalje moraju biti dozvoljene preko `external_directory`.
 Na primjer, ovo omogućava pristup svemu pod `~/projects/personal/`:
 
@@ -128,7 +128,6 @@ Dozvole OpenCode su označene imenom alata, plus nekoliko sigurnosnih mjera:
 - `edit` — sve izmjene fajlova (pokriva `edit`, `write`, `patch`, `multiedit`)
 - `glob` — globbiranje fajla (odgovara glob uzorku)
 - `grep` — pretraga sadržaja (podudara se sa regularnim izrazom)
-- `list` — lista fajlova u direktorijumu (podudara se sa putanjom direktorijuma)
 - `bash` — izvođenje komandi ljuske (podudara se s raščlanjenim komandama kao što je `git status --porcelain`)
 - `task` — pokretanje subagenta (odgovara tipu podagenta)
 - `skill` — učitavanje vještine (odgovara nazivu vještine)
