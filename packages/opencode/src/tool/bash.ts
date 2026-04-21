@@ -283,7 +283,11 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
 
 function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && PS.has(name)) {
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    // Fix encoding for PowerShell on Windows to properly display non-ASCII characters
+    // Without this, [Console]::OutputEncoding defaults to system encoding (e.g., GB2312 on Chinese Windows)
+    // which causes garbled output when the terminal expects UTF-8
+    const encodedCommand = `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ${command}`
+    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", encodedCommand], {
       cwd,
       env,
       stdin: "ignore",
