@@ -12,6 +12,7 @@ import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util"
 import { Env } from "../../src/env"
 import { Effect } from "effect"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { makeRuntime } from "../../src/effect/run-service"
 
@@ -54,6 +55,30 @@ async function getSmallModel(providerID: ProviderID) {
 async function defaultModel() {
   return run((provider) => provider.defaultModel())
 }
+
+async function collect<T>(stream: ReadableStream<T>) {
+  const reader = stream.getReader()
+  const result: T[] = []
+  for (;;) {
+    const part = await reader.read()
+    if (part.done) return result
+    result.push(part.value)
+  }
+}
+
+function sse(lines: string[]) {
+  return new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      const enc = new TextEncoder()
+      for (const line of lines) {
+        ctrl.enqueue(enc.encode(line + "\n\n"))
+      }
+      ctrl.close()
+    },
+  })
+}
+
+const prompt: LanguageModelV3Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
 
 function paid(providers: Awaited<ReturnType<typeof list>>) {
   const item = providers[ProviderID.make("opencode")]
@@ -2373,6 +2398,86 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
       expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
     },
   })
+})
+
+test("openai-compatible normalizes numeric tool call ids in stream responses", async () => {
+  const prev = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response(
+      sse([
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/README.md\\"}","name":"read_file"},"id":123,"index":0,"type":"function"}]}}],"created":1769917420,"id":"response-1","model":"nvidia-nim"}',
+        'data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{}}],"created":1769917421,"id":"response-1","usage":{"completion_tokens":25,"prompt_tokens":100,"total_tokens":125},"model":"nvidia-nim"}',
+        "data: [DONE]",
+      ]),
+      {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    )) as unknown as typeof fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "nim-test": {
+                name: "NVIDIA NIM",
+                npm: "@ai-sdk/openai-compatible",
+                api: "https://integrate.api.nvidia.com/v1",
+                env: [],
+                options: { apiKey: "test-key" },
+                models: {
+                  "moonshotai/Kimi-K2.5": {
+                    name: "Kimi K2.5",
+                    tool_call: true,
+                    reasoning: true,
+                    limit: { context: 256000, output: 8192 },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await getModel(ProviderID.make("nim-test"), ModelID.make("moonshotai/Kimi-K2.5"))
+        const language = await getLanguage(model)
+        const { stream } = await language.doStream({
+          prompt,
+          includeRawChunks: false,
+        })
+        const parts = await collect(stream)
+
+        expect(parts).toContainEqual({
+          type: "tool-input-start",
+          id: "123",
+          toolName: "read_file",
+        })
+        expect(parts).toContainEqual(
+          expect.objectContaining({
+            type: "tool-call",
+            toolCallId: "123",
+            toolName: "read_file",
+          }),
+        )
+
+        const finish = parts.find((part) => part.type === "finish")
+        expect(finish).toMatchObject({
+          type: "finish",
+          finishReason: { unified: "tool-calls" },
+        })
+      },
+    })
+  } finally {
+    globalThis.fetch = prev
+  }
 })
 
 test("cloudflare-ai-gateway loads with env variables", async () => {

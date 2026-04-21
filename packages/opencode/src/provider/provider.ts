@@ -86,6 +86,96 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
+function copy(res: Response, body: BodyInit | null) {
+  return new Response(body, {
+    headers: new Headers(res.headers),
+    status: res.status,
+    statusText: res.statusText,
+  })
+}
+
+function ids(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(ids)
+  if (!isRecord(value)) return false
+
+  const calls = Array.isArray(value.tool_calls)
+    ? value.tool_calls.reduce((hit, item) => {
+        if (!isRecord(item)) return hit
+        if (typeof item.id !== "number") return hit
+        item.id = String(item.id)
+        return true
+      }, false)
+    : false
+
+  return Object.values(value).some(ids) || calls
+}
+
+function line(value: string) {
+  const end = value.endsWith("\r\n") ? "\r\n" : value.endsWith("\n") ? "\n" : ""
+  const text = end ? value.slice(0, -end.length) : value
+  if (!text.startsWith("data:")) return value
+
+  const data = text.slice(5).trimStart()
+  if (data === "[DONE]") return value
+
+  try {
+    const json = JSON.parse(data)
+    if (!ids(json)) return value
+    return `data: ${JSON.stringify(json)}${end}`
+  } catch {
+    return value
+  }
+}
+
+async function fix(res: Response) {
+  if (!res.body) return res
+
+  const type = res.headers.get("content-type") ?? ""
+  if (type.includes("text/event-stream")) {
+    let buf = ""
+    return copy(
+      res,
+      res.body
+        .pipeThrough(new TextDecoderStream())
+        .pipeThrough(
+          new TransformStream<string, string>({
+            transform(chunk, ctrl) {
+              buf += chunk
+              for (;;) {
+                const idx = buf.indexOf("\n")
+                if (idx < 0) return
+                ctrl.enqueue(line(buf.slice(0, idx + 1)))
+                buf = buf.slice(idx + 1)
+              }
+            },
+            flush(ctrl) {
+              if (!buf) return
+              ctrl.enqueue(line(buf))
+            },
+          }),
+        )
+        .pipeThrough(new TextEncoderStream()),
+    )
+  }
+
+  if (!type.includes("json")) return res
+
+  const text = await res.text()
+
+  try {
+    const json = JSON.parse(text)
+    if (!ids(json)) return copy(res, text)
+    return copy(res, JSON.stringify(json))
+  } catch {
+    return copy(res, text)
+  }
+}
+
+function chat(input: RequestInfo | URL) {
+  const url = input instanceof URL ? input.href : input instanceof Request ? input.url : String(input)
+  return url.includes("/chat/completions")
+}
+
 type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
 }
@@ -1472,11 +1562,15 @@ const layer: Layer.Layer<
             }
           }
 
-          const res = await fetchFn(input, {
+          let res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
           })
+
+          if (model.api.npm === "@ai-sdk/openai-compatible" && chat(input)) {
+            res = await fix(res)
+          }
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
