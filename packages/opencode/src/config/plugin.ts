@@ -5,6 +5,7 @@ import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from 
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import path from "path"
+import os from "os"
 
 export const Options = Schema.Record(Schema.String, Schema.Unknown).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Options = Schema.Schema.Type<typeof Options>
@@ -58,6 +59,7 @@ export async function resolvePluginSpec(plugin: Spec, configFilepath: string): P
   const base = path.dirname(configFilepath)
   const file = (() => {
     if (spec.startsWith("file://")) return spec
+    if (spec.startsWith("~/")) return pathToFileURL(path.join(os.homedir(), spec.slice(2))).href
     if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
     return pathToFileURL(path.resolve(base, spec)).href
   })()

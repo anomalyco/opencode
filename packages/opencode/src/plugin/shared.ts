@@ -1,4 +1,5 @@
 import path from "path"
+import os from "os"
 import { fileURLToPath, pathToFileURL } from "url"
 import npa from "npm-package-arg"
 import semver from "semver"
@@ -169,12 +170,13 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
 }
 
 export function isPathPluginSpec(spec: string) {
-  return spec.startsWith("file://") || spec.startsWith(".") || isAbsolutePath(spec)
+  return spec.startsWith("file://") || spec.startsWith(".") || spec.startsWith("~/") || isAbsolutePath(spec)
 }
 
 export async function resolvePathPluginTarget(spec: string) {
   const raw = spec.startsWith("file://") ? fileURLToPath(spec) : spec
-  const file = path.isAbsolute(raw) || /^[A-Za-z]:[\\/]/.test(raw) ? raw : path.resolve(raw)
+  const expanded = raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : raw
+  const file = path.isAbsolute(expanded) || /^[A-Za-z]:[\\/]/.test(expanded) ? expanded : path.resolve(expanded)
   const stat = await Filesystem.statAsync(file)
   if (!stat?.isDirectory()) {
     if (spec.startsWith("file://")) return spec

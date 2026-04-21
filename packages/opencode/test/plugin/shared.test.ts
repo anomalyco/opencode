@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import os from "os"
+import path from "path"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +86,46 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+describe("isPathPluginSpec", () => {
+  test("recognizes file:// URL", () => {
+    expect(isPathPluginSpec("file:///home/user/plugin")).toBe(true)
+  })
+
+  test("recognizes relative path", () => {
+    expect(isPathPluginSpec("./my-plugin")).toBe(true)
+  })
+
+  test("recognizes absolute path", () => {
+    expect(isPathPluginSpec("/home/user/plugin")).toBe(true)
+  })
+
+  test("recognizes ~/ tilde path", () => {
+    expect(isPathPluginSpec("~/my-plugin")).toBe(true)
+  })
+
+  test("does not treat npm package as path", () => {
+    expect(isPathPluginSpec("my-package")).toBe(false)
+  })
+
+  test("does not treat scoped npm package as path", () => {
+    expect(isPathPluginSpec("@opencode/my-plugin")).toBe(false)
+  })
+})
+
+describe("resolvePathPluginTarget", () => {
+  test("expands ~/ to home directory", async () => {
+    // Create a real temp file under home dir to resolve against
+    const tmpName = `opencode-test-plugin-${Date.now()}.ts`
+    const tmpFile = path.join(os.homedir(), tmpName)
+    await Bun.write(tmpFile, "export default {}")
+    try {
+      const result = await resolvePathPluginTarget(`~/${tmpName}`)
+      expect(result).toBe(`file://${tmpFile}`)
+    } finally {
+      await Bun.file(tmpFile).exists() && (await import("fs")).promises.unlink(tmpFile)
+    }
   })
 })
