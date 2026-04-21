@@ -59,7 +59,7 @@ function LimitsGraph(props: { href: string }) {
   const free = 200
   const graph = [
     { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
-    { id: "kimi-k2.6", name: "Kimi K2.6", req: 1150, d: "150ms" },
+    { id: "kimi-k2.6", name: "Kimi K2.6", req: 3450, baseReq: 1150, multiplier: 3, d: "150ms" },
     { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
     { id: "kimi-k2.5", name: "Kimi K2.5", req: 1850, d: "240ms" },
     { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
@@ -152,12 +152,24 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.req)) - left)}
+                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
                     height={bh}
                     data-bar
                     data-kind="go"
                     data-model={m.id}
+                    data-segment={m.baseReq ? "base" : undefined}
                   />
+                  {m.baseReq && (
+                    <rect
+                      x={x(ratio(m.baseReq))}
+                      y={gy(i()) - bh / 2}
+                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)))}
+                      height={bh}
+                      data-bar
+                      data-kind="promo"
+                      data-model={m.id}
+                    />
+                  )}
                 </g>
               )}
             </For>
@@ -197,6 +209,14 @@ function LimitsGraph(props: { href: string }) {
                 style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
               >
                 <span data-value>{m.req.toLocaleString()}</span>
+                {m.baseReq && (
+                  <span data-bonus>
+                    {i18n.t("go.graph.promoValue", {
+                      base: m.baseReq.toLocaleString(),
+                      multiplier: m.multiplier ?? 3,
+                    })}
+                  </span>
+                )}
                 <span data-name>{m.name}</span>
               </span>
             )}
@@ -247,6 +267,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+              </div>
+            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />

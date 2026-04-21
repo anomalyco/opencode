@@ -259,6 +259,8 @@ export const dict = {
   "go.cta.promo": "첫 달 $5",
   "go.pricing.body":
     "어떤 에이전트와도 사용할 수 있습니다. 첫 달 $5, 이후 $10/월. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6, 4월 27일까지 사용 한도 3배 확대",
   "go.graph.free": "무료",
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
@@ -266,6 +268,7 @@ export const dict = {
   "go.graph.usageLimits": "사용 한도",
   "go.graph.tick": "{{n}}배",
   "go.graph.aria": "5시간당 요청 수: {{free}} 대 {{go}}",
+  "go.graph.promoValue": "({{base}} × {{multiplier}})",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",

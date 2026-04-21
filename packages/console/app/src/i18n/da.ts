@@ -263,6 +263,8 @@ export const dict = {
   "go.cta.promo": "$5 første måned",
   "go.pricing.body":
     "Brug med enhver agent. $5 første måned, derefter $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6: brugsgrænsen tredoblet til 27. april",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
@@ -270,6 +272,7 @@ export const dict = {
   "go.graph.usageLimits": "Brugsgrænser",
   "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Forespørgsler pr. 5t: {{free}} vs {{go}}",
+  "go.graph.promoValue": "({{base}} × {{multiplier}})",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",

@@ -261,6 +261,8 @@ export const dict = {
   "go.cta.promo": "$5 للشهر الأول",
   "go.pricing.body":
     "استخدمه مع أي وكيل. $5 للشهر الأول، ثم $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6: حد الاستخدام 3 أضعاف حتى 27 أبريل",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
@@ -268,6 +270,7 @@ export const dict = {
   "go.graph.usageLimits": "حدود الاستخدام",
   "go.graph.tick": "{{n}}x",
   "go.graph.aria": "الطلبات كل 5 ساعات: {{free}} مقابل {{go}}",
+  "go.graph.promoValue": "({{base}} × {{multiplier}})",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
