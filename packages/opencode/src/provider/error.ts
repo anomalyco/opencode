@@ -57,6 +57,22 @@ function message(providerID: ProviderID, e: APICallError) {
       return "Unknown error"
     }
 
+    // Handle Vercel AI SDK wrapper error that loses upstream error details
+    // When providers like Kimi, OpenRouter, etc. return errors, the SDK wraps them
+    // with "Provider returned error" and stores the real error in metadata.raw
+    if (msg === "Provider returned error") {
+      try {
+        const body = JSON.parse(e.responseBody ?? "{}")
+        if (body.error?.metadata?.raw) {
+          const raw = JSON.parse(body.error.metadata.raw)
+          if (raw.error?.message) {
+            const providerName = body.error.metadata.provider_name ?? ""
+            return `${msg}: ${raw.error.message}${providerName ? ` (${providerName})` : ""}`
+          }
+        }
+      } catch {}
+    }
+
     if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
       return msg
     }

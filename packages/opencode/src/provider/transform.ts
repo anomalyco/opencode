@@ -1031,6 +1031,53 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
   }
   */
 
+  // Handle Moonshot/Kimi models - they reject schemas with conflicting keywords after $ref expansion
+  // This typically happens when $ref is used and description exists both in ref and expanded schema
+  // Solution: completely remove $ref and inline the schema definition
+  if (model.providerID === "opencode" || model.api.id.includes("kimi") || model.api.id.includes("moonshot")) {
+    const definitions = (schema as JSONSchema7).definitions
+
+    const resolveRef = (ref: string): any => {
+      if (!ref.startsWith("#/") || !definitions) return undefined
+      const path = ref.slice(2).split("/")
+      let result: any = definitions
+      for (const key of path) {
+        result = result?.[key]
+      }
+      return result
+    }
+
+    const sanitizeMoonshot = (obj: any): any => {
+      if (obj === null || typeof obj !== "object") {
+        return obj
+      }
+
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeMoonshot)
+      }
+
+      const result: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === "$ref" && typeof value === "string") {
+          // Resolve $ref inline instead of keeping it
+          const resolved = resolveRef(value)
+          if (resolved) {
+            // Recursively sanitize the resolved schema and merge
+            Object.assign(result, sanitizeMoonshot(resolved))
+          }
+        } else if (typeof value === "object" && value !== null) {
+          result[key] = sanitizeMoonshot(value)
+        } else {
+          result[key] = value
+        }
+      }
+
+      return result
+    }
+
+    schema = sanitizeMoonshot(schema) as JSONSchema7
+  }
+
   // Convert integer enums to string enums for Google/Gemini
   if (model.providerID === "google" || model.api.id.includes("gemini")) {
     const isPlainObject = (node: unknown): node is Record<string, any> =>
