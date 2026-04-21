@@ -4,7 +4,8 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
-import { ShellTool } from "./shell"
+import { BashTool } from "./bash"
+import { TerminalTool } from "./terminal"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -33,6 +34,8 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
+import { Pty } from "@/pty"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Format } from "../format"
@@ -83,7 +86,28 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-const layer = Layer.effect(
+export const layer: Layer.Layer<
+  Service,
+  never,
+  | Config.Service
+  | Plugin.Service
+  | Question.Service
+  | Todo.Service
+  | Agent.Service
+  | Skill.Service
+  | Session.Service
+  | Provider.Service
+  | LSP.Service
+  | Instruction.Service
+  | AppFileSystem.Service
+  | Bus.Service
+  | HttpClient.HttpClient
+  | ChildProcessSpawner
+  | Pty.Service
+  | Ripgrep.Service
+  | Format.Service
+  | Truncate.Service
+> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -102,7 +126,9 @@ const layer = Layer.effect(
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
-    const shell = yield* ShellTool
+    const bash = yield* BashTool
+    const terminal = yield* TerminalTool
+    const codesearch = yield* CodeSearchTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
     const edit = yield* EditTool
@@ -203,7 +229,8 @@ const layer = Layer.effect(
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
-          shell: Tool.init(shell),
+          bash: Tool.init(bash),
+          terminal: Tool.init(terminal),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -226,7 +253,8 @@ const layer = Layer.effect(
           builtin: [
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
-            tool.shell,
+            tool.bash,
+            tool.terminal,
             tool.read,
             tool.glob,
             tool.grep,
@@ -343,108 +371,25 @@ const layer = Layer.effect(
   }),
 )
 
-function isZodType(value: unknown): value is z.ZodType {
-  return typeof value === "object" && value !== null && "_zod" in value
-}
-
-function isPluginTool(value: unknown): value is ToolDefinition {
-  return typeof value === "object" && value !== null && "args" in value && "description" in value && "execute" in value
-}
-
-function isJsonSchemaDefinition(value: unknown): value is JSONSchema7Definition {
-  return typeof value === "boolean" || (typeof value === "object" && value !== null && !Array.isArray(value))
-}
-
-function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
-  const properties = Object.fromEntries(
-    entries.filter((entry): entry is [string, JSONSchema7Definition] => isJsonSchemaDefinition(entry[1])),
-  )
-  return {
-    type: "object",
-    properties,
-    required: Object.keys(properties),
-  }
-}
-
-function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
-  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input", metadata: zodMetadataRegistry(schema) }))
-  if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
-  const { $defs, ...rest } = result
-  return (
-    $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
-  ) as JSONSchema7
-}
-
-function zodMetadataRegistry(schema: z.ZodType) {
-  const registry = z.registry<Record<string, unknown>>()
-  const seen = new WeakSet<object>()
-  const collect = (value: unknown) => {
-    if (typeof value !== "object" || value === null) return
-    if (seen.has(value)) return
-    seen.add(value)
-
-    if (isZodType(value)) {
-      const metadata = typeof value.meta === "function" ? value.meta() : undefined
-      const description = typeof value.description === "string" ? value.description : undefined
-      const merged = {
-        ...(metadata && typeof metadata === "object" ? metadata : {}),
-        ...(description ? { description } : {}),
-      }
-      if (Object.keys(merged).length) registry.add(value, merged)
-      collect(value._zod.def)
-      return
-    }
-
-    for (const item of Object.values(value)) collect(item)
-  }
-  collect(schema)
-  return registry
-}
-
-function normalizeZodJsonSchema(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => normalizeZodJsonSchema(item))
-  if (typeof value !== "object" || value === null) return value
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter((entry) =>
-        (entry[0] === "exclusiveMaximum" || entry[0] === "exclusiveMinimum") && typeof entry[1] === "boolean"
-          ? false
-          : true,
-      )
-      .map(([key, item]) => [key, normalizeZodJsonSchema(item)]),
-  )
-}
-
-function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-export const node = LayerNode.make({
-  service: Service,
-  layer,
-  deps: [
-    Config.node,
-    Plugin.node,
-    Question.node,
-    Todo.node,
-    Agent.node,
-    Skill.node,
-    Session.node,
-    BackgroundJob.node,
-    Provider.node,
-    LSP.node,
-    Instruction.node,
-    FSUtil.node,
-    EventV2Bridge.node,
-    httpClient,
-    CrossSpawnSpawner.node,
-    Format.node,
-    Truncate.node,
-    RuntimeFlags.node,
-    MCP.node,
-    Database.node,
-    Ripgrep.node,
-  ],
-})
-
-export * as ToolRegistry from "./registry"
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(Question.defaultLayer),
+    Layer.provide(Todo.defaultLayer),
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(Agent.defaultLayer),
+    Layer.provide(Session.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(LSP.defaultLayer),
+    Layer.provide(Instruction.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Bus.layer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(Format.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Pty.defaultLayer),
+    Layer.provide(Truncate.defaultLayer),
+  ),
+)
