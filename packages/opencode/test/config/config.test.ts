@@ -27,7 +27,7 @@ import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util"
 import { ConfigPlugin } from "@/config/plugin"
-import { Npm } from "@opencode-ai/shared/npm"
+import { Npm } from "@/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
@@ -1422,35 +1422,6 @@ test("migrates legacy patch tool to edit permission", async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
         edit: "allow",
-      })
-    },
-  })
-})
-
-test("migrates legacy multiedit tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                multiedit: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "deny",
       })
     },
   })

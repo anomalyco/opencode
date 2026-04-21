@@ -11,6 +11,7 @@ import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderError } from "@/provider"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
+import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -25,10 +26,7 @@ interface FetchDecompressionError extends Error {
 }
 
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
-
-export function isMedia(mime: string) {
-  return mime.startsWith("image/") || mime === "application/pdf"
-}
+export { isMedia }
 
 export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
 export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
@@ -210,6 +208,7 @@ export const CompactionPart = PartBase.extend({
   type: z.literal("compaction"),
   auto: z.boolean(),
   overflow: z.boolean().optional(),
+  tail_start_id: MessageID.zod.optional(),
 }).meta({
   ref: "CompactionPart",
 })
@@ -925,8 +924,21 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
   const completed = new Set<string>()
+  let retain: MessageID | undefined
   for (const msg of msgs) {
     result.push(msg)
+    if (retain) {
+      if (msg.info.id === retain) break
+      continue
+    }
+    if (msg.info.role === "user" && completed.has(msg.info.id)) {
+      const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
+      if (!part) continue
+      if (!part.tail_start_id) break
+      retain = part.tail_start_id
+      if (msg.info.id === retain) break
+      continue
+    }
     if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction"))
       break
     if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)

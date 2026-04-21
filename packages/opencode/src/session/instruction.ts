@@ -8,7 +8,6 @@ import { Flag } from "@/flag/flag"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "../global"
-import { Instance } from "../project/instance"
 import { Log } from "../util"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
@@ -82,9 +81,10 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
       )
 
       const relative = Effect.fnUntraced(function* (instruction: string) {
+        const ctx = yield* InstanceState.context
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           return yield* fs
-            .globUp(instruction, Instance.directory, Instance.worktree)
+            .globUp(instruction, ctx.directory, ctx.worktree)
             .pipe(Effect.catch(() => Effect.succeed([] as string[])))
         }
         if (!Flag.OPENCODE_CONFIG_DIR) {
@@ -119,12 +119,13 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
 
       const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
         const config = yield* cfg.get()
+        const ctx = yield* InstanceState.context
         const paths = new Set<string>()
 
         // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of FILES) {
-            const matches = yield* fs.findUp(file, Instance.directory, Instance.worktree)
+            const matches = yield* fs.findUp(file, ctx.directory, ctx.worktree)
             if (matches.length > 0) {
               matches.forEach((item) => paths.add(path.resolve(item)))
               break
@@ -191,9 +192,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         const already = extract(messages)
         const results: { filepath: string; content: string }[] = []
         const s = yield* InstanceState.get(state)
+        const root = path.resolve(yield* InstanceState.directory)
 
         const target = path.resolve(filepath)
-        const root = path.resolve(Instance.directory)
         let current = path.dirname(target)
 
         // Walk upward from the file being read and attach nearby instruction files once per message.

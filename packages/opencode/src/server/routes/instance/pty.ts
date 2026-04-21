@@ -8,6 +8,7 @@ import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { NotFoundError } from "@/storage"
 import { errors } from "../../error"
+import { jsonRequest, runRequest } from "./trace"
 
 export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
   return new Hono()
@@ -28,16 +29,11 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
           },
         },
       }),
-      async (c) => {
-        return c.json(
-          await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const pty = yield* Pty.Service
-              return yield* pty.list()
-            }),
-          ),
-        )
-      },
+      async (c) =>
+        jsonRequest("PtyRoutes.list", c, function* () {
+          const pty = yield* Pty.Service
+          return yield* pty.list()
+        }),
     )
     .post(
       "/",
@@ -58,15 +54,11 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         },
       }),
       validator("json", Pty.CreateInput),
-      async (c) => {
-        const info = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const pty = yield* Pty.Service
-            return yield* pty.create(c.req.valid("json"))
-          }),
-        )
-        return c.json(info)
-      },
+      async (c) =>
+        jsonRequest("PtyRoutes.create", c, function* () {
+          const pty = yield* Pty.Service
+          return yield* pty.create(c.req.valid("json"))
+        }),
     )
     .get(
       "/:ptyID",
@@ -88,7 +80,9 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
-        const info = await AppRuntime.runPromise(
+        const info = await runRequest(
+          "PtyRoutes.get",
+          c,
           Effect.gen(function* () {
             const pty = yield* Pty.Service
             return yield* pty.get(c.req.valid("param").ptyID)
@@ -120,15 +114,11 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
       validator("json", Pty.UpdateInput),
-      async (c) => {
-        const info = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const pty = yield* Pty.Service
-            return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
-          }),
-        )
-        return c.json(info)
-      },
+      async (c) =>
+        jsonRequest("PtyRoutes.update", c, function* () {
+          const pty = yield* Pty.Service
+          return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
+        }),
     )
     .delete(
       "/:ptyID",
@@ -149,15 +139,12 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         },
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
-      async (c) => {
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const pty = yield* Pty.Service
-            yield* pty.remove(c.req.valid("param").ptyID)
-          }),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("PtyRoutes.remove", c, function* () {
+          const pty = yield* Pty.Service
+          yield* pty.remove(c.req.valid("param").ptyID)
+          return true
+        }),
     )
     .get(
       "/:ptyID/connect",
@@ -194,7 +181,9 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         })()
         let handler: Handler | undefined
         if (
-          !(await AppRuntime.runPromise(
+          !(await runRequest(
+            "PtyRoutes.connect",
+            c,
             Effect.gen(function* () {
               const pty = yield* Pty.Service
               return yield* pty.get(id)
@@ -232,7 +221,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
               Effect.gen(function* () {
                 const pty = yield* Pty.Service
                 return yield* pty.connect(id, socket, cursor)
-              }),
+              }).pipe(Effect.withSpan("PtyRoutes.connect.open")),
             )
             ready = true
             for (const msg of pending) handler?.onMessage(msg)
