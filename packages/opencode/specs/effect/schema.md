@@ -97,7 +97,7 @@ creating a parallel schema source of truth.
 
 ## Escape hatches
 
-The walker in `@/util/effect-zod` exposes three explicit escape hatches for
+The walker in `@/util/effect-zod` exposes two explicit escape hatches for
 cases the pure-Schema path cannot express. Each one stays in the codebase
 only as long as its upstream or local dependency requires it — inline
 comments document when each can be deleted.
@@ -109,19 +109,7 @@ Replaces the entire derivation with a hand-crafted zod schema. Used when:
 - the target carries external `$ref` metadata (e.g.
   `config/model-id.ts` points at `https://models.dev/...`)
 - the target is a zod-only schema that cannot yet be expressed as Schema
-  (e.g. `ConfigAgent.Info`, `ConfigPermission.Info`, `Log.Level`)
-
-### `ZodPreprocess` annotation
-
-Wraps the derived zod schema with `z.preprocess(fn, inner)`. Used by
-`config/permission.ts` to inject `__originalKeys` before parsing, because
-`Schema.StructWithRest` canonicalises output (known fields first, catchall
-after) and destroys the user's original property order — which permission
-rule precedence depends on.
-
-Tracked upstream as `effect:core/wlh553`: "Schema: add preserveInputOrder
-(or pre-parse hook) for open structs." Once that lands, `ZodPreprocess` and
-the `__originalKeys` hack can both be deleted.
+  (e.g. `ConfigAgent.Info`, `Log.Level`)
 
 ### Local `DeepMutable<T>` in `config/config.ts`
 
