@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let sendFollowupDraft: typeof import("./submit").sendFollowupDraft
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -22,13 +23,16 @@ const sentShell: string[] = []
 const syncedDirectories: string[] = []
 const activatedAccounts: Array<{ directory: string; providerID: string; accountKey: string }> = []
 const providerAccountsByDirectory: Record<string, Array<{ accountKey: string; active: boolean }>> = {}
+const promptAsyncPayloads: Array<{ directory: string; payload: any }> = []
+const commandPayloads: Array<{ directory: string; payload: any }> = []
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 let selectedModelAccountKey: string | undefined
+let commandList: Array<{ name: string }> = []
 
-const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
 const clientFor = (directory: string) => {
   createdClients.push(directory)
@@ -48,8 +52,14 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
-      promptAsync: async () => ({ data: undefined }),
-      command: async () => ({ data: undefined }),
+      promptAsync: async (payload: any) => {
+        promptAsyncPayloads.push({ directory, payload })
+        return { data: undefined }
+      },
+      command: async (payload: any) => {
+        commandPayloads.push({ directory, payload })
+        return { data: undefined }
+      },
       abort: async () => ({ data: undefined }),
     },
     worktree: {
@@ -158,7 +168,7 @@ beforeAll(async () => {
 
   mock.module("@/context/sync", () => ({
     useSync: () => ({
-      data: { command: [] },
+      data: { command: commandList },
       session: {
         optimistic: {
           add: (value: {
@@ -217,6 +227,7 @@ beforeAll(async () => {
 
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
+  sendFollowupDraft = mod.sendFollowupDraft
 })
 
 beforeEach(() => {
@@ -233,6 +244,10 @@ beforeEach(() => {
   selected = "/repo/worktree-a"
   variant = undefined
   selectedModelAccountKey = undefined
+  promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
+  commandList = []
+  promptAsyncPayloads.length = 0
+  commandPayloads.length = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
   for (const key of Object.keys(providerAccountsByDirectory)) delete providerAccountsByDirectory[key]
 })
@@ -389,7 +404,44 @@ describe("prompt submit worktree selection", () => {
     const event = { preventDefault: () => undefined } as unknown as Event
 
     await submit.handleSubmit(event)
+    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(activatedAccounts).toEqual([{ directory: "/repo/main", providerID: "provider", accountKey: "work" }])
+    expect(optimistic[0]?.message?.model).toMatchObject({
+      providerID: "provider",
+      modelID: "model",
+      accountKey: "work",
+    })
+  })
+
+  test("includes selected account key for slash command requests", async () => {
+    const client = clientFor("/repo/main")
+
+    await sendFollowupDraft({
+      client: client as any,
+      globalSync: {
+        child: () => [{}, () => undefined],
+      } as any,
+      sync: {
+        data: { command: [{ name: "test" }] },
+        session: {
+          optimistic: {
+            add: () => undefined,
+            remove: () => undefined,
+          },
+        },
+      } as any,
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/main",
+        prompt: [{ type: "text", content: "/test arg", start: 0, end: 9 }],
+        context: [],
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model", accountKey: "work" },
+      },
+    })
+
+    expect(commandPayloads[0]?.payload?.accountKey).toBe("work")
   })
 })

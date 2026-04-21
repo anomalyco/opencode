@@ -2,28 +2,27 @@
 
 ## Current Status
 
-The multi-account foundation is in place:
+The multi-account foundation is in place and account identity now survives session persistence:
 - Multiple provider accounts can be connected and switched.
 - Model selection now stores `accountKey` in session-local state and recent picks.
 - Prompt submit and session compact now enforce the selected account is active.
+- Backend user/subtask message metadata now stores optional `accountKey`.
+- Session init/command flows now accept and thread `accountKey`.
+- Replayed session history now restores model selection with `accountKey` when present.
 
-## Immediate Next Step (P0)
+## Completed (P0)
 
-Persist `accountKey` in backend session/user message model metadata so account selection survives full session history restore.
+Persist `accountKey` across backend session/user metadata and API flows so account selection survives full session history restore.
 
-### Implementation Outline
+## Immediate Next Steps (P1)
 
-1. Extend backend message/session model payloads to carry optional `accountKey`.
-2. Thread `accountKey` through session prompt/command APIs and persistence layer.
-3. Regenerate SDK types/clients and update app calls.
-4. Restore local session model from backend `accountKey` when replaying session history.
-5. Add migration-safe behavior for older messages with no `accountKey`.
-
-## Follow-Up Steps (P1)
-
-1. Add tests for account-aware restore and compact flows.
+1. Expand tests for account-aware restore and compact on a full session replay path.
 2. Clean up generated SDK method naming (`accounts2.activate`) if route generation allows.
-3. Add a subtle UI indicator in prompt header when a non-default account is selected.
+3. Add a subtle prompt-header indicator when a non-default provider account is selected.
+
+## Migration Safety Note
+
+Older messages without `accountKey` remain valid and continue to load (field is optional).
 
 ## Ship Exit Criteria For This Track
 

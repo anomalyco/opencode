@@ -737,7 +737,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         time: { created: Date.now() },
         role: "user",
         agent: input.agent,
-        model: { providerID: model.providerID, modelID: model.modelID },
+        model: { providerID: model.providerID, modelID: model.modelID, accountKey: accountKeyOf(model) },
       }
       yield* sessions.updateMessage(userMsg)
       const userPart: MessageV2.Part = {
@@ -947,6 +947,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: {
           providerID: model.providerID,
           modelID: model.modelID,
+          accountKey: accountKeyOf(model),
           variant,
         },
         system: input.system,
@@ -1594,13 +1595,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       template = template.trim()
 
+      const accountKey = input.accountKey?.trim() || undefined
+      const parseModel = (value: string) => {
+        const parsed = Provider.parseModel(value)
+        if (!accountKey) return parsed
+        return { ...parsed, accountKey }
+      }
+
       const taskModel = yield* Effect.gen(function* () {
-        if (cmd.model) return Provider.parseModel(cmd.model)
+        if (cmd.model) return parseModel(cmd.model)
         if (cmd.agent) {
           const cmdAgent = yield* agents.get(cmd.agent)
           if (cmdAgent?.model) return cmdAgent.model
         }
-        if (input.model) return Provider.parseModel(input.model)
+        if (input.model) return parseModel(input.model)
         return yield* lastModel(input.sessionID)
       })
 
@@ -1617,6 +1625,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const templateParts = yield* resolvePromptParts(template)
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
+      const taskModelAccountKey = accountKeyOf(taskModel)
       const parts = isSubtask
         ? [
             {
@@ -1624,7 +1633,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               agent: agent.name,
               description: cmd.description ?? "",
               command: input.command,
-              model: { providerID: taskModel.providerID, modelID: taskModel.modelID },
+              model: {
+                providerID: taskModel.providerID,
+                modelID: taskModel.modelID,
+                ...(taskModelAccountKey ? { accountKey: taskModelAccountKey } : {}),
+              },
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
@@ -1633,7 +1646,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
       const userModel = isSubtask
         ? input.model
-          ? Provider.parseModel(input.model)
+          ? parseModel(input.model)
           : yield* lastModel(input.sessionID)
         : taskModel
 
@@ -1708,6 +1721,7 @@ export const PromptInput = z.object({
     .object({
       providerID: ProviderID.zod,
       modelID: ModelID.zod,
+      accountKey: z.string().optional(),
     })
     .optional(),
   agent: z.string().optional(),
@@ -1778,6 +1792,7 @@ export const ShellInput = z.object({
     .object({
       providerID: ProviderID.zod,
       modelID: ModelID.zod,
+      accountKey: z.string().optional(),
     })
     .optional(),
   command: z.string(),
@@ -1789,6 +1804,7 @@ export const CommandInput = z.object({
   sessionID: SessionID.zod,
   agent: z.string().optional(),
   model: z.string().optional(),
+  accountKey: z.string().optional(),
   arguments: z.string(),
   command: z.string(),
   variant: z.string().optional(),
@@ -1840,5 +1856,6 @@ const bashRegex = /!`([^`]+)`/g
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
+const accountKeyOf = (model: { providerID: ProviderID; modelID: ModelID; accountKey?: string }) => model.accountKey
 
 export * as SessionPrompt from "./prompt"

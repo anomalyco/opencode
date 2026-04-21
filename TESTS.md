@@ -56,4 +56,4 @@ bun --cwd packages/app test:e2e:local
 2. Pick a model under account A, send a prompt, and confirm it succeeds.
 3. Switch to account B for the same provider, pick the same model, and send a prompt.
 4. Run session compact and verify it succeeds under the selected account.
-5. Reload app/session and confirm selected provider/model remains valid (account persistence end-to-end is tracked in `NEXT_STEPS.md`).
+5. Reload app/session and confirm selected provider/model/account remains valid.

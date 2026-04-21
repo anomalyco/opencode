@@ -571,6 +571,7 @@ export type UserMessage = {
   model: {
     providerID: string
     modelID: string
+    accountKey?: string
     variant?: string
   }
   system?: string
@@ -667,6 +668,7 @@ export type SubtaskPart = {
   model?: {
     providerID: string
     modelID: string
+    accountKey?: string
   }
   command?: string
 }
@@ -1955,6 +1957,7 @@ export type SubtaskPartInput = {
   model?: {
     providerID: string
     modelID: string
+    accountKey?: string
   }
   command?: string
 }
@@ -3534,6 +3537,7 @@ export type SessionInitData = {
   body?: {
     modelID: string
     providerID: string
+    accountKey?: string
     messageID: string
   }
   path: {
@@ -3801,6 +3805,7 @@ export type SessionPromptData = {
     model?: {
       providerID: string
       modelID: string
+      accountKey?: string
     }
     agent?: string
     noReply?: boolean
@@ -4001,6 +4006,7 @@ export type SessionPromptAsyncData = {
     model?: {
       providerID: string
       modelID: string
+      accountKey?: string
     }
     agent?: string
     noReply?: boolean
@@ -4052,6 +4058,7 @@ export type SessionCommandData = {
     messageID?: string
     agent?: string
     model?: string
+    accountKey?: string
     arguments: string
     command: string
     variant?: string
@@ -4106,6 +4113,7 @@ export type SessionShellData = {
     model?: {
       providerID: string
       modelID: string
+      accountKey?: string
     }
     command: string
   }

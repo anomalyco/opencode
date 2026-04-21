@@ -223,6 +223,7 @@ export const SubtaskPart = PartBase.extend({
     .object({
       providerID: ProviderID.zod,
       modelID: ModelID.zod,
+      accountKey: z.string().optional(),
     })
     .optional(),
   command: z.string().optional(),
@@ -372,6 +373,7 @@ export const User = Base.extend({
   model: z.object({
     providerID: ProviderID.zod,
     modelID: ModelID.zod,
+    accountKey: z.string().optional(),
     variant: z.string().optional(),
   }),
   system: z.string().optional(),

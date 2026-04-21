@@ -33,7 +33,7 @@ export type FollowupDraft = {
   prompt: Prompt
   context: (ContextItem & { key: string })[]
   agent: string
-  model: { providerID: string; modelID: string }
+  model: { providerID: string; modelID: string; accountKey?: string }
   variant?: string
 }
 
@@ -88,6 +88,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         arguments: tail.join(" "),
         agent: input.draft.agent,
         model: `${input.draft.model.providerID}/${input.draft.model.modelID}`,
+        accountKey: input.draft.model.accountKey,
         variant: input.draft.variant,
         parts: images.map((attachment) => ({
           id: Identifier.ascending("part"),
@@ -405,6 +406,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const model = {
       modelID: currentModel.id,
       providerID: currentModel.provider.id,
+      accountKey: currentModelKey.accountKey,
     }
     const agent = currentAgent.name
     const context = prompt.context.items().slice()

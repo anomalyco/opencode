@@ -1907,6 +1907,7 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       modelID?: string
       providerID?: string
+      accountKey?: string
       messageID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1921,6 +1922,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "modelID" },
             { in: "body", key: "providerID" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "messageID" },
           ],
         },
@@ -2200,6 +2202,7 @@ export class Session2 extends HeyApiClient {
       model?: {
         providerID: string
         modelID: string
+        accountKey?: string
       }
       agent?: string
       noReply?: boolean
@@ -2332,6 +2335,7 @@ export class Session2 extends HeyApiClient {
       model?: {
         providerID: string
         modelID: string
+        accountKey?: string
       }
       agent?: string
       noReply?: boolean
@@ -2391,6 +2395,7 @@ export class Session2 extends HeyApiClient {
       messageID?: string
       agent?: string
       model?: string
+      accountKey?: string
       arguments?: string
       command?: string
       variant?: string
@@ -2416,6 +2421,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "messageID" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
@@ -2451,6 +2457,7 @@ export class Session2 extends HeyApiClient {
       model?: {
         providerID: string
         modelID: string
+        accountKey?: string
       }
       command?: string
     },
