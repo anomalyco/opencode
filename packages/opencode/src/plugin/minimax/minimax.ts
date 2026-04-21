@@ -18,9 +18,10 @@ const REFRESH_BUFFER_MS = 5 * 60 * 1000
 const POLL_SAFETY_MARGIN_MS = 1_000
 
 // Lane header for swimlane routing (test environments)
-const LANE_HEADERS: Record<string, string> = process.env.BEDROCK_LANE
-  ? { bedrock_lane: process.env.BEDROCK_LANE }
-  : {}
+const LANE_HEADERS: Record<string, string> = {
+  ...(process.env.BEDROCK_LANE ? { bedrock_lane: process.env.BEDROCK_LANE } : {}),
+  ...(process.env.X_USER_PRE ? { "X-User-Pre": "true" } : {}),
+}
 
 function generateCodeVerifier(): string {
   return randomBytes(32).toString("base64url")
