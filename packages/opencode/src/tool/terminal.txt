@@ -1,0 +1,112 @@
+Executes a command in a TTY-aware terminal session with full PTY support. Unlike the bash tool which spawns a new process for each call, this tool uses an interactive pseudo-terminal (PTY), giving commands access to a real TTY.
+
+Use this tool when:
+- Running commands that require a TTY (sudo, ssh, vim, htop, top, gpg)
+- Executing commands that need interactive input (passwords, passphrases, confirmations)
+- Running programs that check `isatty()` or require terminal features
+
+Be aware: OS: ${os}, Shell: ${shell}
+
+## Actions
+
+This tool supports multiple actions via the `action` parameter:
+
+### action="run" (default)
+One-shot command execution — identical to the original terminal tool. Creates a PTY, runs the command, waits for exit, then tears down the session.
+
+- `command` (required): The command to execute
+- `timeout` (optional): Timeout in milliseconds (default: 120000ms)
+- `workdir` (optional): Working directory (defaults to current directory)
+- `description` (required): Brief description of what the command does
+
+Example:
+```json
+{ "command": "ssh user@host", "description": "Connect to remote host" }
+```
+
+### action="create"
+Create a persistent interactive PTY session. The session stays alive between tool calls, allowing you to send input and read output incrementally.
+
+- `workdir` (optional): Working directory for the session
+- `description` (optional): Description for the session
+
+Returns a `sessionId` that you use with `send`, `read`, and `close`.
+
+Example:
+```json
+{ "action": "create", "description": "Interactive Python REPL" }
+```
+
+### action="send"
+Send input to an existing session. Input is appended with a newline automatically for commands. For control sequences, use escape codes:
+
+- `sessionId` (required): The session ID from `create`
+- `input` (required): Text to send. Use `\x03` for Ctrl+C, `\x04` for Ctrl+D, `\x1a` for Ctrl+Z
+- `description` (required): Brief description of what this input does
+
+Example (run a command):
+```json
+{ "action": "send", "sessionId": "pty01ABC", "input": "ls -la", "description": "List files" }
+```
+
+Example (send Ctrl+C):
+```json
+{ "action": "send", "sessionId": "pty01ABC", "input": "\x03", "description": "Interrupt running process" }
+```
+
+### action="read"
+Read new output from a session since the last read. Output is cursor-based — each read returns only what was produced since the previous read.
+
+- `sessionId` (required): The session ID from `create`
+- `description` (required): Brief description of what you are reading
+
+Returns the new output and the session's exit code if the process has exited.
+
+Example:
+```json
+{ "action": "read", "sessionId": "pty01ABC", "description": "Check output" }
+```
+
+### action="close"
+Terminate a persistent session and clean up resources.
+
+- `sessionId` (required): The session ID to close
+
+Example:
+```json
+{ "action": "close", "sessionId": "pty01ABC" }
+```
+
+## Session Lifecycle
+
+1. `create` → get a `sessionId`
+2. `send` → send commands or input
+3. `read` → check output (repeat as needed)
+4. `close` → terminate when done
+
+Maximum concurrent sessions: 20. Oldest sessions are evicted automatically.
+
+## Usage Notes
+
+- All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.
+- IMPORTANT: This tool is for commands that REQUIRE a TTY. For simple non-interactive commands (git, ls, npm, docker), prefer the `bash` tool instead — it is faster and more efficient for non-interactive operations.
+- The command argument is required for `action="run"`.
+- You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+- It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+- If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file.
+- The PTY echoes input, so you may see the command repeated in the output. This is normal and is automatically filtered.
+- stdout and stderr are combined in PTY output (no separate streams). This is inherent to the PTY model.
+- For interactive programs that wait for user input (like `sudo`), the tool will wait until the program exits or times out. If you need to provide input to an interactive program, use `action="create"` to start a session, then `action="send"` to provide input.
+
+## Exit Code Detection
+
+On Windows PowerShell, the exit code is detected using `$LASTEXITCODE`. On Unix shells (bash, zsh, sh), `$?` is used.
+
+## Examples of when to use terminal vs bash:
+  - `ssh user@host` → Use **terminal** (requires TTY)
+  - `sudo apt update` → Use **terminal** (requires TTY for password)
+  - `gpg --gen-key` → Use **terminal** (requires TTY)
+  - `htop` → Use **terminal** (requires TTY)
+  - `git status` → Use **bash** (no TTY needed, faster)
+  - `npm install` → Use **bash** (no TTY needed, faster)
+  - `ls -la` → Use **bash** (no TTY needed, faster)
