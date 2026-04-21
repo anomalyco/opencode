@@ -141,8 +141,11 @@ describe("Workspace.sessionRestore", () => {
       Object.assign(
         async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
           const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url)
-          if (url.pathname !== "/base/sync/replay") {
+          if (url.pathname === "/base/global/event") {
             return eventStreamResponse()
+          }
+          if (url.pathname === "/base/sync/history") {
+            return Response.json([])
           }
           const body = JSON.parse(String(init?.body))
           posts.push({

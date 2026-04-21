@@ -410,7 +410,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("glm") ||
     id.includes("mistral") ||
     id.includes("kimi") ||
-    id.includes("k2p5") ||
+    id.includes("k2p") ||
     id.includes("qwen") ||
     id.includes("big-pickle")
   )
@@ -587,6 +587,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/google-vertex/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
+      if (model.providerID === "github-copilot") {
+        if (model.api.id.includes("opus-4.7")) {
+          return Object.fromEntries(["medium"].map((effort) => [effort, { reasoningEffort: effort }]))
+        }
+      }
+
       if (adaptiveEfforts) {
         return Object.fromEntries(
           adaptiveEfforts.map((effort) => [
@@ -629,6 +635,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               reasoningConfig: {
                 type: "adaptive",
                 maxReasoningEffort: effort,
+                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
+                  ? { display: "summarized" }
+                  : {}),
               },
             },
           ]),
@@ -801,7 +810,7 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
+  if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
     result["usage"] = {
       include: true,
     }
@@ -842,11 +851,11 @@ export function options(input: {
     }
   }
 
-  // Enable thinking by default for kimi-k2.5/k2p5 models using anthropic SDK
+  // Enable thinking by default for kimi models using anthropic SDK
   const modelId = input.model.api.id.toLowerCase()
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
-    (modelId.includes("k2p5") || modelId.includes("kimi-k2.5") || modelId.includes("kimi-k2p5"))
+    (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
   ) {
     result["thinking"] = {
       type: "enabled",
@@ -938,7 +947,7 @@ export function smallOptions(model: Provider.Model) {
     }
     return { thinkingConfig: { thinkingBudget: 0 } }
   }
-  if (model.providerID === "openrouter") {
+  if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
     if (model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }

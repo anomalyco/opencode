@@ -181,27 +181,32 @@ export function Session() {
   const sdk = useSDK()
 
   createEffect(async () => {
-    await sdk.client.session
-      .get({ sessionID: route.sessionID }, { throwOnError: true })
-      .then((x) => {
-        project.workspace.set(x.data?.workspaceID)
+    const previousWorkspace = project.workspace.current()
+    const result = await sdk.client.session.get({ sessionID: route.sessionID }, { throwOnError: true })
+    if (!result.data) {
+      toast.show({
+        message: `Session not found: ${route.sessionID}`,
+        variant: "error",
       })
-      .then(() => sync.session.sync(route.sessionID))
-      .then(() => {
-        if (scroll) scroll.scrollBy(100_000)
-      })
-      .catch((e) => {
-        console.error(e)
-        toast.show({
-          message: `Session not found: ${route.sessionID}`,
-          variant: "error",
-        })
-        return navigate({ type: "home" })
-      })
+      navigate({ type: "home" })
+      return
+    }
+
+    if (result.data.workspaceID !== previousWorkspace) {
+      project.workspace.set(result.data.workspaceID)
+
+      // Sync all the data for this workspace. Note that this
+      // workspace may not exist anymore which is why this is not
+      // fatal. If it doesn't we still want to show the session
+      // (which will be non-interactive)
+      try {
+        await sync.bootstrap({ fatal: false })
+      } catch (e) {}
+    }
+    await sync.session.sync(route.sessionID)
+    if (scroll) scroll.scrollBy(100_000)
   })
 
-  // Handle initial prompt from fork
-  let seeded = false
   let lastSwitch: string | undefined = undefined
   event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
@@ -219,14 +224,15 @@ export function Session() {
     }
   })
 
+  let seeded = false
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
-    if (seeded || !route.initialPrompt || !r) return
+    if (seeded || !route.prompt || !r) return
     seeded = true
-    r.set(route.initialPrompt)
+    r.set(route.prompt)
   }
   const keybind = useKeybind()
   const dialog = useDialog()
@@ -445,7 +451,7 @@ export function Session() {
       },
     },
     {
-      title: "Fork from message",
+      title: "Fork session",
       value: "session.fork",
       keybind: "session_fork",
       category: "Session",
@@ -456,6 +462,7 @@ export function Session() {
         dialog.replace(() => (
           <DialogForkFromTimeline
             onMove={(messageID) => {
+              if (!messageID) return
               const child = scroll.getChildren().find((child) => {
                 return child.id === messageID
               })

@@ -582,7 +582,9 @@ export const dict = {
   "settings.general.row.theme.title": "Thema",
   "settings.general.row.theme.description": "Das Thema von OpenCode anpassen.",
   "settings.general.row.font.title": "Code-Schriftart",
-  "settings.general.row.font.description": "Die in Codeblöcken und Terminals verwendete Schriftart anpassen",
+  "settings.general.row.font.description": "Die in Codeblöcken verwendete Schriftart anpassen",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI-Schriftart",
   "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
   "settings.general.row.followup.title": "Verhalten bei Folgefragen",
@@ -599,6 +601,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
   "settings.general.row.editToolPartsExpanded.description":
     "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
+  "settings.general.row.showSessionProgressBar.title": "Sitzungsfortschrittsleiste anzeigen",
+  "settings.general.row.showSessionProgressBar.description":
+    "Die animierte Fortschrittsleiste oben in der Sitzung anzeigen, wenn der Agent arbeitet",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",
   "settings.general.row.wayland.description": "X11-Fallback unter Wayland deaktivieren. Erfordert Neustart.",
   "settings.general.row.wayland.tooltip":
