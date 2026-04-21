@@ -15,7 +15,8 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { zod } from "@/util/effect-zod"
 import { EffectLogger } from "@/effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
@@ -61,28 +62,28 @@ export const ContextOverflowError = NamedError.create(
   z.object({ message: z.string(), responseBody: z.string().optional() }),
 )
 
-export const OutputFormatText = z
-  .object({
-    type: z.literal("text"),
-  })
-  .meta({
-    ref: "OutputFormatText",
-  })
+export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
+  type: Schema.Literal("text"),
+}) {
+  static readonly zod = zod(this)
+}
 
-export const OutputFormatJsonSchema = z
-  .object({
-    type: z.literal("json_schema"),
-    schema: z.record(z.string(), z.any()).meta({ ref: "JSONSchema" }),
-    retryCount: z.number().int().min(0).default(2),
-  })
-  .meta({
-    ref: "OutputFormatJsonSchema",
-  })
+export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
+  type: Schema.Literal("json_schema"),
+  schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
+  retryCount: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(0))
+    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
+}) {
+  static readonly zod = zod(this)
+}
 
-export const Format = z.discriminatedUnion("type", [OutputFormatText, OutputFormatJsonSchema]).meta({
-  ref: "OutputFormat",
+const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
+  discriminator: "type",
+  identifier: "OutputFormat",
 })
-export type OutputFormat = z.infer<typeof Format>
+export const Format = Object.assign(_Format, { zod: zod(_Format) })
+export type OutputFormat = Schema.Schema.Type<typeof _Format>
 
 const PartBase = z.object({
   id: PartID.zod,
@@ -360,7 +361,7 @@ export const User = Base.extend({
   time: z.object({
     created: z.number(),
   }),
-  format: Format.optional(),
+  format: Format.zod.optional(),
   summary: z
     .object({
       title: z.string().optional(),

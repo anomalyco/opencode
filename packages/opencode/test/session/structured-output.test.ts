@@ -5,7 +5,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
-    const result = MessageV2.Format.safeParse({ type: "text" })
+    const result = MessageV2.Format.zod.safeParse({ type: "text" })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.type).toBe("text")
@@ -13,7 +13,7 @@ describe("structured-output.OutputFormat", () => {
   })
 
   test("parses json_schema format with defaults", () => {
-    const result = MessageV2.Format.safeParse({
+    const result = MessageV2.Format.zod.safeParse({
       type: "json_schema",
       schema: { type: "object", properties: { name: { type: "string" } } },
     })
@@ -27,7 +27,7 @@ describe("structured-output.OutputFormat", () => {
   })
 
   test("parses json_schema format with custom retryCount", () => {
-    const result = MessageV2.Format.safeParse({
+    const result = MessageV2.Format.zod.safeParse({
       type: "json_schema",
       schema: { type: "object" },
       retryCount: 5,
@@ -39,17 +39,17 @@ describe("structured-output.OutputFormat", () => {
   })
 
   test("rejects invalid type", () => {
-    const result = MessageV2.Format.safeParse({ type: "invalid" })
+    const result = MessageV2.Format.zod.safeParse({ type: "invalid" })
     expect(result.success).toBe(false)
   })
 
   test("rejects json_schema without schema", () => {
-    const result = MessageV2.Format.safeParse({ type: "json_schema" })
+    const result = MessageV2.Format.zod.safeParse({ type: "json_schema" })
     expect(result.success).toBe(false)
   })
 
   test("rejects negative retryCount", () => {
-    const result = MessageV2.Format.safeParse({
+    const result = MessageV2.Format.zod.safeParse({
       type: "json_schema",
       schema: { type: "object" },
       retryCount: -1,
