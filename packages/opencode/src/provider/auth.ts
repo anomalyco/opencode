@@ -58,6 +58,26 @@ export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuth
   static readonly zod = zod(this)
 }
 
+export class AccountInfo extends Schema.Class<AccountInfo>("ProviderAuthAccountInfo")({
+  providerID: Schema.String,
+  accountKey: Schema.String,
+  type: Schema.Literals(["oauth", "api", "wellknown"]),
+  active: Schema.Boolean,
+  label: Schema.optional(Schema.String),
+  email: Schema.optional(Schema.String),
+  accountID: Schema.optional(Schema.String),
+}) {
+  static readonly zod = zod(this)
+}
+
+export const AccountInfos = Schema.Array(AccountInfo).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type AccountInfos = typeof AccountInfos.Type
+
+export const ActivateAccountInput = Schema.Struct({
+  accountKey: Schema.String.annotate({ description: "Account key to activate" }),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ActivateAccountInput = Schema.Schema.Type<typeof ActivateAccountInput>
+
 export const AuthorizeInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
   accountKey: Schema.optional(Schema.String).annotate({ description: "Optional account key for multi-account auth" }),
@@ -100,6 +120,8 @@ type Hook = NonNullable<Hooks["auth"]>
 
 export interface Interface {
   readonly methods: () => Effect.Effect<Methods>
+  readonly accounts: (input: { providerID: ProviderID }) => Effect.Effect<AccountInfo[], Error>
+  readonly activateAccount: (input: { providerID: ProviderID } & ActivateAccountInput) => Effect.Effect<void, Error>
   readonly authorize: (
     input: {
       providerID: ProviderID
@@ -167,6 +189,45 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
           })),
         ),
       )
+    })
+
+    const accounts = Effect.fn("ProviderAuth.accounts")(function* (input: { providerID: ProviderID }) {
+      const all = yield* auth.accounts(input.providerID)
+      const active = yield* auth.active(input.providerID)
+      const list: AccountInfo[] = []
+      for (const [accountKey, info] of Object.entries(all)) {
+        if (accountKey === Auth.DEFAULT_ACCOUNT_KEY) continue
+        if (!info?.type) continue
+        const label =
+          (("_accountLabel" in info ? info._accountLabel : undefined) ?? undefined) ||
+          (("_accountEmail" in info ? info._accountEmail : undefined) ?? undefined) ||
+          (("_accountId" in info ? info._accountId : undefined) ?? undefined) ||
+          accountKey
+        const email = "_accountEmail" in info ? info._accountEmail : undefined
+        const accountID = ("_accountId" in info ? info._accountId : undefined) ?? ("accountId" in info ? info.accountId : undefined)
+        list.push(
+          new AccountInfo({
+            providerID: input.providerID,
+            accountKey,
+            type: info.type,
+            active: active?.accountKey === accountKey,
+            label,
+            email,
+            accountID,
+          }),
+        )
+      }
+      return list.sort((a, b) => {
+        if (a.active && !b.active) return -1
+        if (!a.active && b.active) return 1
+        return a.accountKey.localeCompare(b.accountKey)
+      })
+    })
+
+    const activateAccount = Effect.fn("ProviderAuth.activateAccount")(function* (
+      input: { providerID: ProviderID } & ActivateAccountInput,
+    ) {
+      yield* auth.activate(input.providerID, input.accountKey)
     })
 
     const authorize = Effect.fn("ProviderAuth.authorize")(function* (
@@ -237,7 +298,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
       pending.delete(key)
     })
 
-    return Service.of({ methods, authorize, callback })
+    return Service.of({ methods, accounts, activateAccount, authorize, callback })
   }),
 )
 

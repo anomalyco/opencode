@@ -1959,6 +1959,16 @@ export type SubtaskPartInput = {
   command?: string
 }
 
+export type ProviderAuthAccountInfo = {
+  providerID: string
+  accountKey: string
+  type: "oauth" | "api" | "wellknown"
+  active: boolean
+  label?: string
+  email?: string
+  accountID?: string
+}
+
 export type ProviderAuthMethod = {
   type: "oauth" | "api"
   label: string
@@ -4414,6 +4424,78 @@ export type ProviderListResponses = {
 }
 
 export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
+
+export type ProviderAccountsData = {
+  body?: never
+  path: {
+    /**
+     * Provider ID
+     */
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/accounts"
+}
+
+export type ProviderAccountsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderAccountsError = ProviderAccountsErrors[keyof ProviderAccountsErrors]
+
+export type ProviderAccountsResponses = {
+  /**
+   * Provider accounts
+   */
+  200: Array<ProviderAuthAccountInfo>
+}
+
+export type ProviderAccountsResponse = ProviderAccountsResponses[keyof ProviderAccountsResponses]
+
+export type ProviderAccountsActivateData = {
+  body?: {
+    /**
+     * Account key to activate
+     */
+    accountKey: string
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/accounts/activate"
+}
+
+export type ProviderAccountsActivateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderAccountsActivateError = ProviderAccountsActivateErrors[keyof ProviderAccountsActivateErrors]
+
+export type ProviderAccountsActivateResponses = {
+  /**
+   * Account activation processed successfully
+   */
+  200: boolean
+}
+
+export type ProviderAccountsActivateResponse =
+  ProviderAccountsActivateResponses[keyof ProviderAccountsActivateResponses]
 
 export type ProviderAuthData = {
   body?: never

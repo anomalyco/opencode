@@ -31,6 +31,27 @@ export const ProviderApi = HttpApi.make("provider")
             description: "Retrieve available authentication methods for all AI providers.",
           }),
         ),
+        HttpApiEndpoint.get("accounts", `${root}/:providerID/accounts`, {
+          params: { providerID: ProviderID },
+          success: Schema.Array(ProviderAuth.AccountInfo),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.accounts",
+            summary: "List provider accounts",
+            description: "List connected accounts for a specific provider and indicate the active account.",
+          }),
+        ),
+        HttpApiEndpoint.post("activateAccount", `${root}/:providerID/accounts/activate`, {
+          params: { providerID: ProviderID },
+          payload: ProviderAuth.ActivateAccountInput,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.accounts.activate",
+            summary: "Activate provider account",
+            description: "Set the active account for a specific provider.",
+          }),
+        ),
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {
           params: { providerID: ProviderID },
           payload: ProviderAuth.AuthorizeInput,
@@ -102,6 +123,25 @@ export const providerHandlers = Layer.unwrap(
       return yield* svc.methods()
     })
 
+    const accounts = Effect.fn("ProviderHttpApi.accounts")(function* (ctx: { params: { providerID: ProviderID } }) {
+      return yield* svc
+        .accounts({ providerID: ctx.params.providerID })
+        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+    })
+
+    const activateAccount = Effect.fn("ProviderHttpApi.activateAccount")(function* (ctx: {
+      params: { providerID: ProviderID }
+      payload: ProviderAuth.ActivateAccountInput
+    }) {
+      yield* svc
+        .activateAccount({
+          providerID: ctx.params.providerID,
+          accountKey: ctx.payload.accountKey,
+        })
+        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+      return true
+    })
+
     const authorize = Effect.fn("ProviderHttpApi.authorize")(function* (ctx: {
       params: { providerID: ProviderID }
       payload: ProviderAuth.AuthorizeInput
@@ -134,7 +174,13 @@ export const providerHandlers = Layer.unwrap(
     })
 
     return HttpApiBuilder.group(ProviderApi, "provider", (handlers) =>
-      handlers.handle("list", list).handle("auth", auth).handle("authorize", authorize).handle("callback", callback),
+      handlers
+        .handle("list", list)
+        .handle("auth", auth)
+        .handle("accounts", accounts)
+        .handle("activateAccount", activateAccount)
+        .handle("authorize", authorize)
+        .handle("callback", callback),
     )
   }),
 ).pipe(

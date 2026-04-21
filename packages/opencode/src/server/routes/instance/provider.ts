@@ -58,6 +58,71 @@ export const ProviderRoutes = lazy(() =>
         }),
     )
     .get(
+      "/:providerID/accounts",
+      describeRoute({
+        summary: "List provider accounts",
+        description: "List connected accounts for a specific provider and indicate the active account.",
+        operationId: "provider.accounts",
+        responses: {
+          200: {
+            description: "Provider accounts",
+            content: {
+              "application/json": {
+                schema: resolver(ProviderAuth.AccountInfos.zod),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: ProviderID.zod.meta({ description: "Provider ID" }),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("ProviderRoutes.accounts", c, function* () {
+          const providerID = c.req.valid("param").providerID
+          const svc = yield* ProviderAuth.Service
+          return yield* svc.accounts({ providerID })
+        }),
+    )
+    .post(
+      "/:providerID/accounts/activate",
+      describeRoute({
+        summary: "Activate provider account",
+        description: "Set the active account for a specific provider.",
+        operationId: "provider.accounts.activate",
+        responses: {
+          200: {
+            description: "Account activation processed successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: ProviderID.zod.meta({ description: "Provider ID" }),
+        }),
+      ),
+      validator("json", ProviderAuth.ActivateAccountInput.zod),
+      async (c) =>
+        jsonRequest("ProviderRoutes.accounts.activate", c, function* () {
+          const providerID = c.req.valid("param").providerID
+          const { accountKey } = c.req.valid("json")
+          const svc = yield* ProviderAuth.Service
+          yield* svc.activateAccount({ providerID, accountKey })
+          return true
+        }),
+    )
+    .get(
       "/auth",
       describeRoute({
         summary: "Get provider auth methods",

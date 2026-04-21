@@ -90,6 +90,10 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  ProviderAccountsActivateErrors,
+  ProviderAccountsActivateResponses,
+  ProviderAccountsErrors,
+  ProviderAccountsResponses,
   ProviderAuthResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -2850,6 +2854,51 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class Accounts extends HeyApiClient {
+  /**
+   * Activate provider account
+   *
+   * Set the active account for a specific provider.
+   */
+  public activate<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+      accountKey?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "accountKey" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProviderAccountsActivateResponses,
+      ProviderAccountsActivateErrors,
+      ThrowOnError
+    >({
+      url: "/provider/{providerID}/accounts/activate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -2980,6 +3029,38 @@ export class Provider extends HeyApiClient {
   }
 
   /**
+   * List provider accounts
+   *
+   * List connected accounts for a specific provider and indicate the active account.
+   */
+  public accounts<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderAccountsResponses, ProviderAccountsErrors, ThrowOnError>({
+      url: "/provider/{providerID}/accounts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get provider auth methods
    *
    * Retrieve available authentication methods for all AI providers.
@@ -3007,6 +3088,11 @@ export class Provider extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _accounts?: Accounts
+  get accounts2(): Accounts {
+    return (this._accounts ??= new Accounts({ client: this.client }))
   }
 
   private _oauth?: Oauth
