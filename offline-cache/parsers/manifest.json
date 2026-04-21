@@ -1,0 +1,238 @@
+{
+  "python": {
+    "wasm": "tree-sitter-python.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "rust": {
+    "wasm": "tree-sitter-rust.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "go": {
+    "wasm": "tree-sitter-go.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "cpp": {
+    "wasm": "tree-sitter-cpp.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "csharp": {
+    "wasm": "tree-sitter-c_sharp.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "bash": {
+    "wasm": "tree-sitter-bash.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "c": {
+    "wasm": "tree-sitter-c.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "java": {
+    "wasm": "tree-sitter-java.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "kotlin": {
+    "wasm": "tree-sitter-kotlin.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "ruby": {
+    "wasm": "tree-sitter-ruby.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "php": {
+    "wasm": "tree-sitter-php.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "scala": {
+    "wasm": "tree-sitter-scala.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "html": {
+    "wasm": "tree-sitter-html.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "hcl": {
+    "wasm": "tree-sitter-hcl.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "json": {
+    "wasm": "tree-sitter-json.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "yaml": {
+    "wasm": "tree-sitter-yaml.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "haskell": {
+    "wasm": "tree-sitter-haskell.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "css": {
+    "wasm": "tree-sitter-css.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "julia": {
+    "wasm": "tree-sitter-julia.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "lua": {
+    "wasm": "tree-sitter-lua.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "ocaml": {
+    "wasm": "tree-sitter-ocaml.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "clojure": {
+    "wasm": "tree-sitter-clojure.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "swift": {
+    "wasm": "tree-sitter-swift.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  },
+  "toml": {
+    "wasm": "tree-sitter-toml.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ]
+    }
+  },
+  "nix": {
+    "wasm": "tree-sitter-nix.wasm",
+    "queries": {
+      "highlights": [
+        "highlights.scm"
+      ],
+      "locals": [
+        "locals.scm"
+      ]
+    }
+  }
+}

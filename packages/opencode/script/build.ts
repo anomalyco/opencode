@@ -193,6 +193,22 @@ for (const item of targets) {
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
   const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
 
+  // Embed offline parser resources into binary (when available)
+  const offlineCacheDir = path.resolve(dir, "../../offline-cache/parsers")
+  const parserExtraFiles: Record<string, string> = {}
+  if (fs.existsSync(offlineCacheDir)) {
+    const allParserFiles = await Array.fromAsync(
+      new Bun.Glob("**/*.{wasm,scm}").scan({ cwd: offlineCacheDir }),
+    )
+    for (const file of allParserFiles) {
+      const src = path.join(offlineCacheDir, file)
+      parserExtraFiles[`parsers/${file}`] = await Bun.file(src).text()
+    }
+    if (Object.keys(parserExtraFiles).length > 0) {
+      console.log(`  Embedded ${Object.keys(parserExtraFiles).length} offline parser files`)
+    }
+  }
+
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
@@ -211,7 +227,10 @@ for (const item of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
-    files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
+    files: {
+      ...(embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {}),
+      ...parserExtraFiles,
+    },
     entrypoints: [
       "./src/index.ts",
       parserWorker,
