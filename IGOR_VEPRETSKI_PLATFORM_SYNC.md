@@ -107,6 +107,23 @@ Based on the published title and existing brand context in this repo, the video 
 
 ---
 
+## Video Intake: `איגור ופרצקי | #7YA🥷`
+
+Linked video: `https://youtu.be/5F8-g_ACPlk`
+
+### What this implies for platform management
+
+This title reinforces bilingual identity branding (Hebrew + Latin-script naming) with a strong **#7YA** tag. Push this as an additional top-of-funnel narrative touchpoint and keep the destination CTA consistent: `https://7ya.io`.
+
+### Content extraction actions
+
+- [ ] Add this video to the active campaign calendar and cross-platform distribution queue
+- [ ] Reuse a single CTA variant across all cuts: `Manage 7ya.io` + `https://7ya.io`
+- [ ] Publish one Hebrew-first caption variant and one English-first caption variant per platform
+- [ ] Track engagement split by language variant and feed winner back into the 7ya.io canonical page copy
+
+---
+
 ## 7ya.io Operations Runbook
 
 ### 1) Domain and DNS
