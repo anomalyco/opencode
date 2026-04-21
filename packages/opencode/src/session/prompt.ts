@@ -1243,7 +1243,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         { message: info, parts },
       )
 
-      const parsed = MessageV2.Info.safeParse(info)
+      const parsed = MessageV2.Info.zod.safeParse(info)
       if (!parsed.success) {
         log.error("invalid user message before save", {
           sessionID: input.sessionID,
@@ -1254,7 +1254,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
       }
       parts.forEach((part, index) => {
-        const p = MessageV2.Part.safeParse(part)
+        const p = MessageV2.Part.zod.safeParse(part)
         if (p.success) return
         log.error("invalid user part before save", {
           sessionID: input.sessionID,
