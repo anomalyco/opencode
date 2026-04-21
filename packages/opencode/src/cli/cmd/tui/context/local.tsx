@@ -398,9 +398,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     // Automatically update model when agent changes
+    let prevAgentName: string | undefined
     createEffect(() => {
       const value = agent.current()
       if (!value) return
+      if (value.name === prevAgentName) return
+      prevAgentName = value.name
       if (value.model) {
         if (isModelValid(value.model))
           model.set({
