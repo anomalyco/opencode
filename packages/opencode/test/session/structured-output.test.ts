@@ -121,6 +121,18 @@ describe("structured-output.UserMessage", () => {
     })
     expect(result.success).toBe(true)
   })
+
+  test("user message accepts optional accountKey in model metadata", () => {
+    const result = MessageV2.User.safeParse({
+      id: MessageID.ascending(),
+      sessionID: SessionID.descending(),
+      role: "user",
+      time: { created: Date.now() },
+      agent: "default",
+      model: { providerID: "anthropic", modelID: "claude-3", accountKey: "work" },
+    })
+    expect(result.success).toBe(true)
+  })
 })
 
 describe("structured-output.AssistantMessage", () => {

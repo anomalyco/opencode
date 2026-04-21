@@ -17,6 +17,22 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 
+const ACCOUNT_KEY_SEPARATOR = "::"
+
+function normalizeAccountKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+}
+
+function providerAccountStorageKey(providerID: string, accountKey?: string) {
+  if (!accountKey) return providerID
+  return `${providerID}${ACCOUNT_KEY_SEPARATOR}${accountKey}`
+}
+
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
@@ -64,17 +80,13 @@ export function DialogConnectProvider(props: { provider: string }) {
   )
   const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
   const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
-  const isConnected = createMemo(() =>
-    providers.connected().some((p) => p.id === props.provider),
-  )
-
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
     state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
     error: undefined as string | undefined,
     accountLabel: "",
-    accountStep: false as boolean,
+    accountError: undefined as string | undefined,
   })
 
   type Action =
@@ -84,9 +96,6 @@ export function DialogConnectProvider(props: { provider: string }) {
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
     | { type: "auth.error"; error: string }
-    | { type: "account.show" }
-    | { type: "account.confirm" }
-    | { type: "account.setLabel"; label: string }
 
   function dispatch(action: Action) {
     setStore(
@@ -103,7 +112,6 @@ export function DialogConnectProvider(props: { provider: string }) {
           draft.authorization = undefined
           draft.state = undefined
           draft.error = undefined
-          draft.accountStep = false
           return
         }
         if (action.type === "auth.prompt") {
@@ -122,28 +130,15 @@ export function DialogConnectProvider(props: { provider: string }) {
           draft.error = undefined
           return
         }
-        if (action.type === "auth.error") {
-          draft.state = "error"
-          draft.error = action.error
-          return
-        }
-        if (action.type === "account.show") {
-          draft.accountStep = true
-          return
-        }
-        if (action.type === "account.confirm") {
-          draft.accountStep = false
-          return
-        }
-        if (action.type === "account.setLabel") {
-          draft.accountLabel = action.label
-          return
-        }
+        draft.state = "error"
+        draft.error = action.error
       }),
     )
   }
 
   const method = createMemo(() => (store.methodIndex !== undefined ? methods().at(store.methodIndex!) : undefined))
+  const isAdditionalAccount = createMemo(() => globalSync.data.provider.connected.includes(props.provider))
+  const accountKey = createMemo(() => normalizeAccountKey(store.accountLabel))
 
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""
@@ -169,11 +164,6 @@ export function DialogConnectProvider(props: { provider: string }) {
     return fallback
   }
 
-  function accountKey() {
-    if (!isConnected() || !store.accountLabel.trim()) return undefined
-    return `${props.provider}:${store.accountLabel.trim().toLowerCase().replace(/\s+/g, "-")}`
-  }
-
   async function selectMethod(index: number, inputs?: Record<string, string>) {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
@@ -181,13 +171,11 @@ export function DialogConnectProvider(props: { provider: string }) {
     }
 
     const method = methods()[index]
-
-    if (isConnected() && !store.accountStep && store.accountLabel.trim() === "" && method.type !== undefined) {
-      dispatch({ type: "method.select", index })
-      dispatch({ type: "account.show" })
+    if (isAdditionalAccount() && !accountKey()) {
+      setStore("accountError", "Account label is required when connecting another account.")
       return
     }
-
+    setStore("accountError", undefined)
     dispatch({ type: "method.select", index })
 
     if (method.type === "oauth") {
@@ -202,6 +190,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           {
             providerID: props.provider,
             method: index,
+            accountKey: accountKey(),
             inputs,
           },
           { throwOnError: true },
@@ -380,10 +369,6 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   function goBack() {
-    if (store.accountStep) {
-      dispatch({ type: "method.reset" })
-      return
-    }
     if (methods().length === 1) {
       all()
       return
@@ -397,39 +382,6 @@ export function DialogConnectProvider(props: { provider: string }) {
       return
     }
     all()
-  }
-
-  function AccountLabelView() {
-    async function handleSubmit(e: SubmitEvent) {
-      e.preventDefault()
-      if (!store.accountLabel.trim()) return
-      dispatch({ type: "account.confirm" })
-    }
-
-    return (
-      <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-        <div class="text-14-regular text-text-base">
-          {language.t("provider.connect.account.description", { provider: provider().name })}
-        </div>
-        <TextField
-          autofocus
-          type="text"
-          label={language.t("provider.connect.account.label")}
-          placeholder={language.t("provider.connect.account.placeholder")}
-          value={store.accountLabel}
-          onChange={(v) => dispatch({ type: "account.setLabel", label: v })}
-        />
-        <Button
-          class="w-auto"
-          type="submit"
-          size="large"
-          variant="primary"
-          disabled={!store.accountLabel.trim()}
-        >
-          {language.t("common.continue")}
-        </Button>
-      </form>
-    )
   }
 
   function MethodSelection() {
@@ -483,14 +435,25 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      await globalSDK.client.auth.set({
-        providerID: props.provider,
-        auth: {
-          type: "api",
-          key: apiKey,
-          ...(accountKey() ? { accountKey: accountKey(), accountLabel: store.accountLabel.trim() } : {}),
-        },
-      })
+      if (isAdditionalAccount() && !accountKey()) {
+        setStore("accountError", "Account label is required when connecting another account.")
+        return
+      }
+      setStore("accountError", undefined)
+
+      const authPayload = {
+        type: "api" as const,
+        key: apiKey,
+        _accountLabel: store.accountLabel.trim() || undefined,
+        _accountId: accountKey() || undefined,
+      }
+      const key = providerAccountStorageKey(props.provider, accountKey())
+      await globalSDK.client.auth.set({ providerID: key, auth: authPayload })
+
+      // Keep provider root key aligned to the selected active account.
+      if (key !== props.provider) {
+        await globalSDK.client.auth.set({ providerID: props.provider, auth: authPayload })
+      }
       await complete()
     }
 
@@ -555,17 +518,13 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      const callbackBody: Record<string, unknown> = {
-        providerID: props.provider,
-        method: store.methodIndex,
-        code,
-      }
-      if (accountKey()) {
-        callbackBody.accountKey = accountKey()
-        callbackBody.accountLabel = store.accountLabel.trim()
-      }
       const result = await globalSDK.client.provider.oauth
-        .callback(callbackBody as Parameters<typeof globalSDK.client.provider.oauth.callback>[0])
+        .callback({
+          providerID: props.provider,
+          method: store.methodIndex,
+          accountKey: accountKey(),
+          code,
+        })
         .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
         .catch((error) => ({ ok: false as const, error }))
       if (result.ok) {
@@ -613,16 +572,12 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
-        const callbackBody: Record<string, unknown> = {
-          providerID: props.provider,
-          method: store.methodIndex,
-        }
-        if (accountKey()) {
-          callbackBody.accountKey = accountKey()
-          callbackBody.accountLabel = store.accountLabel.trim()
-        }
         const result = await globalSDK.client.provider.oauth
-          .callback(callbackBody as Parameters<typeof globalSDK.client.provider.oauth.callback>[0])
+          .callback({
+            providerID: props.provider,
+            method: store.methodIndex,
+            accountKey: accountKey(),
+          })
           .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
           .catch((error) => ({ ok: false as const, error }))
 
@@ -685,6 +640,20 @@ export function DialogConnectProvider(props: { provider: string }) {
           </div>
         </div>
         <div class="px-2.5 pb-10 flex flex-col gap-6">
+          {isAdditionalAccount() && (
+            <TextField
+              type="text"
+              label="Account Label"
+              placeholder="work, personal, team-a"
+              value={store.accountLabel}
+              onChange={(value) => {
+                setStore("accountLabel", value)
+                if (store.accountError) setStore("accountError", undefined)
+              }}
+              validationState={store.accountError ? "invalid" : undefined}
+              error={store.accountError}
+            />
+          )}
           <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
             <Switch>
               <Match when={loading()}>
@@ -694,9 +663,6 @@ export function DialogConnectProvider(props: { provider: string }) {
                     <span>{language.t("provider.connect.status.inProgress")}</span>
                   </div>
                 </div>
-              </Match>
-              <Match when={store.accountStep}>
-                <AccountLabelView />
               </Match>
               <Match when={store.methodIndex === undefined}>
                 <MethodSelection />

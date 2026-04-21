@@ -18,6 +18,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { ensureProviderAccountActive } from "@/utils/provider-account"
 
 type PendingPrompt = {
   abort: AbortController
@@ -32,7 +33,7 @@ export type FollowupDraft = {
   prompt: Prompt
   context: (ContextItem & { key: string })[]
   agent: string
-  model: { providerID: string; modelID: string }
+  model: { providerID: string; modelID: string; accountKey?: string }
   variant?: string
 }
 
@@ -87,6 +88,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         arguments: tail.join(" "),
         agent: input.draft.agent,
         model: `${input.draft.model.providerID}/${input.draft.model.modelID}`,
+        accountKey: input.draft.model.accountKey,
         variant: input.draft.variant,
         parts: images.map((attachment) => ({
           id: Identifier.ascending("part"),
@@ -300,9 +302,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const currentModel = local.model.current()
+    const currentModelKey = local.model.selected()
     const currentAgent = local.agent.current()
     const variant = local.model.variant.current()
-    if (!currentModel || !currentAgent) {
+    if (!currentModel || !currentModelKey || !currentAgent) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
         description: language.t("prompt.toast.modelAgentRequired.description"),
@@ -389,9 +392,21 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    const accountReady = await ensureProviderAccountActive(client, currentModelKey)
+      .then(() => true)
+      .catch((err) => {
+        showToast({
+          title: language.t("prompt.toast.promptSendFailed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+    if (!accountReady) return
+
     const model = {
       modelID: currentModel.id,
       providerID: currentModel.provider.id,
+      accountKey: currentModelKey.accountKey,
     }
     const agent = currentAgent.name
     const context = prompt.context.items().slice()

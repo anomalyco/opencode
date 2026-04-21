@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createEffect, createMemo, createSignal, JSX, Show, ValidComponent } from "solid-js"
+import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -7,12 +7,15 @@ import { popularProviders } from "@/hooks/use-providers"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tag } from "@opencode-ai/ui/tag"
+import { showToast } from "@opencode-ai/ui/toast"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ModelTooltip } from "./model-tooltip"
+import { useProviderAccounts } from "@/hooks/use-provider-accounts"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
-import { useGlobalSync, type ProviderAccount } from "@/context/global-sync"
+import { ensureProviderAccountActive } from "@/utils/provider-account"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -27,112 +30,81 @@ const ModelList: Component<{
   model?: ModelState
 }> = (props) => {
   const model = props.model ?? useLocal().model
+  const globalSDK = useGlobalSDK()
   const language = useLanguage()
-  const globalSync = useGlobalSync()
+  const accounts = useProviderAccounts()
 
-  const models = createMemo(() =>
-    model
+  type ModelEntry = ReturnType<typeof model.list>[number] & {
+    accountKey?: string
+    accountLabel?: string
+    accountActive: boolean
+    groupLabel: string
+  }
+
+  const models = createMemo<ModelEntry[]>(() => {
+    const base = model
       .list()
       .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
-      .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
-  )
-
-  const [accountsMap, setAccountsMap] = createSignal<Record<string, ProviderAccount[]>>({})
-  const [activeAccountMap, setActiveAccountMap] = createSignal<Record<string, string | undefined>>({})
-  const fetched = new Set<string>()
-
-  createEffect(() => {
-    const providerIDs = new Set(models().map((m) => m.provider.id))
-    for (const pid of providerIDs) {
-      if (fetched.has(pid)) continue
-      fetched.add(pid)
-      void globalSync.provider.listAccounts(pid).then((accs) => {
-        setAccountsMap((prev) => ({ ...prev, [pid]: accs }))
-      })
-      void globalSync.provider.getActiveAccount(pid).then((active) => {
-        setActiveAccountMap((prev) => ({ ...prev, [pid]: active }))
-      })
+      .filter((m) => (props.provider ? m.provider.id === props.provider : true))
+    const next: ModelEntry[] = []
+    for (const item of base) {
+      const providerAccounts = accounts.list(item.provider.id)
+      if (providerAccounts.length === 0) {
+        next.push({
+          ...item,
+          accountActive: true,
+          groupLabel: item.provider.name,
+        })
+        continue
+      }
+      for (const account of providerAccounts) {
+        const label = account.label ?? account.accountKey
+        next.push({
+          ...item,
+          accountKey: account.accountKey,
+          accountLabel: label,
+          accountActive: account.active,
+          groupLabel: `${item.provider.name} · ${label}`,
+        })
+      }
     }
+    return next
   })
 
-  function getAccountLabel(providerID: string, accountKey: string | undefined): string {
-    if (!accountKey) return "Default"
-    const accounts = accountsMap()[providerID]
-    const account = accounts?.find((a) => a.key === accountKey)
-    return account?.label || account?.email || accountKey
-  }
-
-  function modelAccountKey(m: { provider: { id: string; name: string }; id: string; name: string }): string | undefined {
-    const raw = m as Record<string, unknown>
-    if (typeof raw.accountKey === "string") return raw.accountKey
-    return undefined
-  }
-
-  const providerHasMultipleAccounts = (providerID: string) => {
-    const accounts = accountsMap()[providerID]
-    return accounts && accounts.length > 1
-  }
-
-  const groupByFn = (x: { provider: { id: string; name: string }; id: string; name: string }) => {
-    if (providerHasMultipleAccounts(x.provider.id)) {
-      const accKey = modelAccountKey(x)
-      const active = activeAccountMap()[x.provider.id]
-      if (accKey) {
-        const label = getAccountLabel(x.provider.id, accKey)
-        return `${x.provider.name}\0${accKey}\0${label}\0${accKey === active ? "0" : "1"}`
-      }
-      const activeLabel = active ? getAccountLabel(x.provider.id, active) : "Default"
-      return `${x.provider.name}\0${active ?? "default"}\0${activeLabel}\0${active ? "0" : "1"}`
-    }
-    return x.provider.name
-  }
-
-  const groupHeaderFn = (group: { category: string; items: unknown[] }) => {
-    const parts = group.category.split("\0")
-    if (parts.length === 4) {
-      const providerName = parts[0]
-      const accountLabel = parts[2]
-      return (
-        <div class="flex flex-col gap-0.5">
-          <span class="text-12-medium text-text-strong">{providerName}</span>
-          <span class="text-11-regular text-text-weak pl-2">{accountLabel}</span>
-        </div>
-      )
-    }
-    return <span class="text-12-medium text-text-strong">{group.category}</span>
-  }
+  const current = createMemo(() => {
+    const selected = model.selected()
+    if (!selected) return
+    return (
+      models().find(
+        (item) =>
+          item.provider.id === selected.providerID &&
+          item.id === selected.modelID &&
+          (selected.accountKey ? item.accountKey === selected.accountKey : !item.accountKey || item.accountActive),
+      ) ??
+      models().find((item) => item.provider.id === selected.providerID && item.id === selected.modelID)
+    )
+  })
 
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
-      key={(x) => `${x.provider.id}:${x.id}`}
+      key={(x) => `${x.provider.id}:${x.id}:${x.accountKey ?? "default"}`}
       items={models}
-      current={model.current()}
-      filterKeys={["provider.name", "name", "id"]}
+      current={current()}
+      filterKeys={["provider.name", "name", "id", "accountLabel"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={groupByFn}
-      groupHeader={groupHeaderFn}
+      groupBy={(x) => x.groupLabel}
       sortGroupsBy={(a, b) => {
-        const aParts = a.category.split("\0")
-        const bParts = b.category.split("\0")
-        const aProvider = aParts[0]
-        const bProvider = bParts[0]
-        const aFirstItem = a.items[0] as { provider?: { id?: string } } | undefined
-        const bFirstItem = b.items[0] as { provider?: { id?: string } } | undefined
-        const aProviderID = aFirstItem?.provider?.id ?? ""
-        const bProviderID = bFirstItem?.provider?.id ?? ""
-
-        if (aProvider !== bProvider) {
-          if (popularProviders.includes(aProviderID) && !popularProviders.includes(bProviderID)) return -1
-          if (!popularProviders.includes(aProviderID) && popularProviders.includes(bProviderID)) return 1
-          return popularProviders.indexOf(aProviderID) - popularProviders.indexOf(bProviderID)
-        }
-
-        const aOrder = aParts[3] ?? "1"
-        const bOrder = bParts[3] ?? "1"
-        return aOrder.localeCompare(bOrder)
+        const aProvider = a.items[0].provider.id
+        const bProvider = b.items[0].provider.id
+        if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
+        if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
+        const aActive = a.items[0].accountActive ? 0 : 1
+        const bActive = b.items[0].accountActive ? 0 : 1
+        if (aActive !== bActive) return aActive - bActive
+        return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
       }}
       itemWrapper={(item, node) => (
         <Tooltip
@@ -145,15 +117,51 @@ const ModelList: Component<{
         </Tooltip>
       )}
       onSelect={(x) => {
-        model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
-          recent: true,
-        })
-        props.onSelect()
+        void (async () => {
+          try {
+            if (!x) {
+              model.set(undefined, { recent: true })
+              props.onSelect()
+              return
+            }
+            if (x.accountKey) {
+              await ensureProviderAccountActive(globalSDK.client, {
+                providerID: x.provider.id,
+                accountKey: x.accountKey,
+              })
+              await accounts.refetch()
+            }
+            model.set(
+              {
+                modelID: x.id,
+                providerID: x.provider.id,
+                accountKey: x.accountKey,
+              },
+              { recent: true },
+            )
+            props.onSelect()
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : typeof error === "string"
+                  ? error
+                  : language.t("common.requestFailed")
+            showToast({
+              variant: "error",
+              title: language.t("common.requestFailed"),
+              description: message,
+            })
+          }
+        })()
       }}
     >
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
+          <Show when={i.accountLabel}>
+            <Tag>{i.accountLabel}</Tag>
+          </Show>
           <Show when={isFree(i.provider.id, i.cost)}>
             <Tag>{language.t("model.tag.free")}</Tag>
           </Show>

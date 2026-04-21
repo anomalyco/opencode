@@ -1060,6 +1060,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const selectedAccountKey = createMemo(() => {
+    const key = local.model.selected()?.accountKey?.trim()
+    if (!key || key === "default") return undefined
+    return key
+  })
   const accepting = createMemo(() => {
     const id = params.id
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
@@ -1527,6 +1532,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               <span class="truncate">
                                 {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                               </span>
+                              <Show when={selectedAccountKey()}>
+                                {(value) => (
+                                  <span
+                                    class="max-w-[96px] shrink-0 truncate rounded-sm bg-surface-base px-1.5 py-0.5 text-11-regular text-text-weaker"
+                                    title={value()}
+                                  >
+                                    @{value()}
+                                  </span>
+                                )}
+                              </Show>
                               <Icon name="chevron-down" size="small" class="shrink-0" />
                             </Button>
                           </TooltipKeybind>
@@ -1560,6 +1575,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             <span class="truncate">
                               {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                             </span>
+                            <Show when={selectedAccountKey()}>
+                              {(value) => (
+                                <span
+                                  class="max-w-[96px] shrink-0 truncate rounded-sm bg-surface-base px-1.5 py-0.5 text-11-regular text-text-weaker"
+                                  title={value()}
+                                >
+                                  @{value()}
+                                </span>
+                              )}
+                            </Show>
                             <Icon name="chevron-down" size="small" class="shrink-0" />
                           </ModelSelectorPopover>
                         </TooltipKeybind>

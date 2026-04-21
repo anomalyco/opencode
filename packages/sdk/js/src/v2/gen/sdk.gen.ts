@@ -90,6 +90,10 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  ProviderAccountsActivateErrors,
+  ProviderAccountsActivateResponses,
+  ProviderAccountsErrors,
+  ProviderAccountsResponses,
   ProviderAuthResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -1903,6 +1907,7 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       modelID?: string
       providerID?: string
+      accountKey?: string
       messageID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1917,6 +1922,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "modelID" },
             { in: "body", key: "providerID" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "messageID" },
           ],
         },
@@ -2196,6 +2202,7 @@ export class Session2 extends HeyApiClient {
       model?: {
         providerID: string
         modelID: string
+        accountKey?: string
       }
       agent?: string
       noReply?: boolean
@@ -2328,6 +2335,7 @@ export class Session2 extends HeyApiClient {
       model?: {
         providerID: string
         modelID: string
+        accountKey?: string
       }
       agent?: string
       noReply?: boolean
@@ -2387,6 +2395,7 @@ export class Session2 extends HeyApiClient {
       messageID?: string
       agent?: string
       model?: string
+      accountKey?: string
       arguments?: string
       command?: string
       variant?: string
@@ -2412,6 +2421,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "messageID" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
@@ -2447,6 +2457,7 @@ export class Session2 extends HeyApiClient {
       model?: {
         providerID: string
         modelID: string
+        accountKey?: string
       }
       command?: string
     },
@@ -2850,6 +2861,51 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class Accounts extends HeyApiClient {
+  /**
+   * Activate provider account
+   *
+   * Set the active account for a specific provider.
+   */
+  public activate<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+      accountKey?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "accountKey" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProviderAccountsActivateResponses,
+      ProviderAccountsActivateErrors,
+      ThrowOnError
+    >({
+      url: "/provider/{providerID}/accounts/activate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -2862,6 +2918,7 @@ export class Oauth extends HeyApiClient {
       directory?: string
       workspace?: string
       method?: number
+      accountKey?: string
       inputs?: {
         [key: string]: string
       }
@@ -2877,6 +2934,7 @@ export class Oauth extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "method" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "inputs" },
           ],
         },
@@ -2909,6 +2967,7 @@ export class Oauth extends HeyApiClient {
       directory?: string
       workspace?: string
       method?: number
+      accountKey?: string
       code?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -2922,6 +2981,7 @@ export class Oauth extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "method" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "code" },
           ],
         },
@@ -2976,6 +3036,38 @@ export class Provider extends HeyApiClient {
   }
 
   /**
+   * List provider accounts
+   *
+   * List connected accounts for a specific provider and indicate the active account.
+   */
+  public accounts<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderAccountsResponses, ProviderAccountsErrors, ThrowOnError>({
+      url: "/provider/{providerID}/accounts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get provider auth methods
    *
    * Retrieve available authentication methods for all AI providers.
@@ -3003,6 +3095,11 @@ export class Provider extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _accounts?: Accounts
+  get accounts2(): Accounts {
+    return (this._accounts ??= new Accounts({ client: this.client }))
   }
 
   private _oauth?: Oauth

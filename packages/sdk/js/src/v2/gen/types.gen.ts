@@ -571,6 +571,7 @@ export type UserMessage = {
   model: {
     providerID: string
     modelID: string
+    accountKey?: string
     variant?: string
   }
   system?: string
@@ -667,6 +668,7 @@ export type SubtaskPart = {
   model?: {
     providerID: string
     modelID: string
+    accountKey?: string
   }
   command?: string
 }
@@ -1694,6 +1696,9 @@ export type OAuth = {
   refresh: string
   access: string
   expires: number
+  _accountLabel?: string
+  _accountEmail?: string
+  _accountId?: string
   accountId?: string
   enterpriseUrl?: string
 }
@@ -1701,6 +1706,9 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  _accountLabel?: string
+  _accountEmail?: string
+  _accountId?: string
   metadata?: {
     [key: string]: string
   }
@@ -1710,6 +1718,9 @@ export type WellKnownAuth = {
   type: "wellknown"
   key: string
   token: string
+  _accountLabel?: string
+  _accountEmail?: string
+  _accountId?: string
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
@@ -1946,8 +1957,19 @@ export type SubtaskPartInput = {
   model?: {
     providerID: string
     modelID: string
+    accountKey?: string
   }
   command?: string
+}
+
+export type ProviderAuthAccountInfo = {
+  providerID: string
+  accountKey: string
+  type: "oauth" | "api" | "wellknown"
+  active: boolean
+  label?: string
+  email?: string
+  accountID?: string
 }
 
 export type ProviderAuthMethod = {
@@ -3515,6 +3537,7 @@ export type SessionInitData = {
   body?: {
     modelID: string
     providerID: string
+    accountKey?: string
     messageID: string
   }
   path: {
@@ -3782,6 +3805,7 @@ export type SessionPromptData = {
     model?: {
       providerID: string
       modelID: string
+      accountKey?: string
     }
     agent?: string
     noReply?: boolean
@@ -3982,6 +4006,7 @@ export type SessionPromptAsyncData = {
     model?: {
       providerID: string
       modelID: string
+      accountKey?: string
     }
     agent?: string
     noReply?: boolean
@@ -4033,6 +4058,7 @@ export type SessionCommandData = {
     messageID?: string
     agent?: string
     model?: string
+    accountKey?: string
     arguments: string
     command: string
     variant?: string
@@ -4087,6 +4113,7 @@ export type SessionShellData = {
     model?: {
       providerID: string
       modelID: string
+      accountKey?: string
     }
     command: string
   }
@@ -4406,6 +4433,78 @@ export type ProviderListResponses = {
 
 export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
 
+export type ProviderAccountsData = {
+  body?: never
+  path: {
+    /**
+     * Provider ID
+     */
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/accounts"
+}
+
+export type ProviderAccountsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderAccountsError = ProviderAccountsErrors[keyof ProviderAccountsErrors]
+
+export type ProviderAccountsResponses = {
+  /**
+   * Provider accounts
+   */
+  200: Array<ProviderAuthAccountInfo>
+}
+
+export type ProviderAccountsResponse = ProviderAccountsResponses[keyof ProviderAccountsResponses]
+
+export type ProviderAccountsActivateData = {
+  body?: {
+    /**
+     * Account key to activate
+     */
+    accountKey: string
+  }
+  path: {
+    /**
+     * Provider ID
+     */
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/accounts/activate"
+}
+
+export type ProviderAccountsActivateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderAccountsActivateError = ProviderAccountsActivateErrors[keyof ProviderAccountsActivateErrors]
+
+export type ProviderAccountsActivateResponses = {
+  /**
+   * Account activation processed successfully
+   */
+  200: boolean
+}
+
+export type ProviderAccountsActivateResponse =
+  ProviderAccountsActivateResponses[keyof ProviderAccountsActivateResponses]
+
 export type ProviderAuthData = {
   body?: never
   path?: never
@@ -4433,6 +4532,10 @@ export type ProviderOauthAuthorizeData = {
      * Auth method index
      */
     method: number
+    /**
+     * Optional account key for multi-account auth
+     */
+    accountKey?: string
     /**
      * Prompt inputs
      */
@@ -4477,6 +4580,10 @@ export type ProviderOauthCallbackData = {
      * Auth method index
      */
     method: number
+    /**
+     * Optional account key for multi-account auth
+     */
+    accountKey?: string
     /**
      * OAuth authorization code
      */

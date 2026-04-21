@@ -83,4 +83,72 @@ describe("Auth", () => {
       }),
     ),
   )
+
+  it.live("supports storing and switching provider accounts", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        yield* auth.set(
+          Auth.accountStorageKey("openai", "work"),
+          new Auth.Api({
+            type: "api",
+            key: "sk-work",
+            _accountLabel: "Work",
+            _accountId: "work",
+          }),
+        )
+        yield* auth.set(
+          Auth.accountStorageKey("openai", "personal"),
+          new Auth.Api({
+            type: "api",
+            key: "sk-personal",
+            _accountLabel: "Personal",
+            _accountId: "personal",
+          }),
+        )
+
+        const before = yield* auth.active("openai")
+        expect(before?.accountKey).toBe("work")
+        if (before?.info.type === "api") expect(before.info.key).toBe("sk-work")
+
+        yield* auth.activate("openai", "personal")
+
+        const after = yield* auth.active("openai")
+        expect(after?.accountKey).toBe("personal")
+        if (after?.info.type === "api") expect(after.info.key).toBe("sk-personal")
+
+        const accounts = yield* auth.accounts("openai")
+        expect(Object.keys(accounts).sort()).toEqual(["default", "personal", "work"])
+      }),
+    ),
+  )
+
+  it.live("remove on provider key deletes all provider accounts", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        yield* auth.set(
+          Auth.accountStorageKey("openai", "work"),
+          new Auth.Api({
+            type: "api",
+            key: "sk-work",
+            _accountId: "work",
+          }),
+        )
+        yield* auth.set(
+          Auth.accountStorageKey("openai", "personal"),
+          new Auth.Api({
+            type: "api",
+            key: "sk-personal",
+            _accountId: "personal",
+          }),
+        )
+
+        yield* auth.remove("openai")
+
+        expect(yield* auth.get("openai")).toBeUndefined()
+        expect(yield* auth.accounts("openai")).toEqual({})
+      }),
+    ),
+  )
 })

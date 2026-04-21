@@ -10,7 +10,7 @@ import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } fro
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 
-export type ModelKey = { providerID: string; modelID: string; variant?: string }
+export type ModelKey = { providerID: string; modelID: string; accountKey?: string; variant?: string }
 
 type State = {
   agent?: string
@@ -50,6 +50,9 @@ const clone = (value: State | undefined) => {
     model: value.model ? { ...value.model } : undefined,
   } satisfies State
 }
+
+const sameModel = (a: ModelKey | undefined, b: ModelKey | undefined) =>
+  a?.providerID === b?.providerID && a?.modelID === b?.modelID && a?.accountKey === b?.accountKey
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -221,12 +224,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    const current = () => {
-      const item = firstModel(
+    const selectedModel = () =>
+      firstModel(
         () => scope()?.model,
         () => agent.current()?.model,
         fallback,
       )
+
+    const current = () => {
+      const item = selectedModel()
       if (!item) return undefined
       return models.find(item)
     }
@@ -244,10 +250,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const selected = () => scope()?.variant
 
     const snapshot = () => {
-      const model = current()
+      const activeModel = current()
+      const model = selectedModel() ?? (activeModel ? { providerID: activeModel.provider.id, modelID: activeModel.id } : undefined)
       return {
         agent: agent.current()?.name,
-        model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
+        model: model ? { ...model } : undefined,
         variant: selected(),
       } satisfies State
     }
@@ -274,11 +281,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       recent,
       list: models.list,
       cycle(direction: 1 | -1) {
-        const items = recent()
-        const item = current()
+        const items = models.recent.list()
+        const item = selectedModel()
         if (!item) return
 
-        const index = items.findIndex((entry) => entry?.provider.id === item.provider.id && entry?.id === item.id)
+        const index = items.findIndex((entry) => sameModel(entry, item))
         if (index === -1) return
 
         let next = index + direction
@@ -287,8 +294,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
         const entry = items[next]
         if (!entry) return
-        model.set({ providerID: entry.provider.id, modelID: entry.id })
+        model.set(entry)
       },
+      selected: selectedModel,
       set(item: ModelKey | undefined, options?: { recent?: boolean }) {
         batch(() => {
           setStore("last", {
@@ -327,11 +335,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         set(value: string | undefined) {
           batch(() => {
-            const model = current()
+            const model = selectedModel()
             setStore("last", {
               type: "variant",
               agent: agent.current()?.name,
-              model: model ? { providerID: model.provider.id, modelID: model.id } : null,
+              model: model ?? null,
               variant: value ?? null,
             })
             write({ variant: value ?? null })

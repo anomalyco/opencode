@@ -346,6 +346,7 @@ export const SessionRoutes = lazy(() =>
         z.object({
           modelID: ModelID.zod,
           providerID: ProviderID.zod,
+          accountKey: z.string().optional(),
           messageID: MessageID.zod,
         }),
       ),
@@ -358,6 +359,7 @@ export const SessionRoutes = lazy(() =>
             sessionID,
             messageID: body.messageID,
             model: body.providerID + "/" + body.modelID,
+            accountKey: body.accountKey,
             command: Command.Default.INIT,
             arguments: "",
           })

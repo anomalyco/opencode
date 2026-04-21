@@ -17,6 +17,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/shared/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { ensureProviderAccountActive } from "@/utils/provider-account"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
@@ -335,12 +336,25 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!sessionID) return
 
     const model = local.model.current()
+    const key = local.model.selected()
     if (!model) {
       showToast({
         title: language.t("toast.model.none.title"),
         description: language.t("toast.model.none.description"),
       })
       return
+    }
+    if (key) {
+      const ready = await ensureProviderAccountActive(sdk.client, key)
+        .then(() => true)
+        .catch((err) => {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: err instanceof Error ? err.message : language.t("common.requestFailed"),
+          })
+          return false
+        })
+      if (!ready) return
     }
 
     await sdk.client.session.summarize({
