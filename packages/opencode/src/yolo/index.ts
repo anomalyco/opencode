@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import z from "zod"
 
 export namespace Yolo {

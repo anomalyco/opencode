@@ -7,7 +7,7 @@ import { Provider } from "@/provider"
 import { Yolo } from "@/yolo"
 import { Global } from "@/global"
 import { errors } from "../../error"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import { lazy } from "@/util/lazy"
 import { jsonRequest } from "./trace"
 
