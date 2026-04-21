@@ -29,11 +29,6 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-async function touch(file: string, time: number) {
-  const date = new Date(time)
-  await fs.utimes(file, date, date)
-}
-
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     LSP.defaultLayer,
@@ -639,42 +634,56 @@ describe("tool.edit", () => {
   })
 
   describe("concurrent editing", () => {
-    test("serializes concurrent edits to same file", async () => {
+    test("preserves concurrent edits to different sections of the same file", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "0", "utf-8")
+      await fs.writeFile(filepath, "top = 0\nmiddle = keep\nbottom = 0\n", "utf-8")
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
+          let asks = 0
+          const firstAsk = Promise.withResolvers<void>()
+          const delayedCtx = {
+            ...ctx,
+            ask: () =>
+              Effect.gen(function* () {
+                asks++
+                if (asks !== 1) return
+                firstAsk.resolve()
+                yield* Effect.promise(() => Bun.sleep(50))
+              }),
+          }
 
-          // Two concurrent edits
           const promise1 = Effect.runPromise(
             edit.execute(
               {
                 filePath: filepath,
-                oldString: "0",
-                newString: "1",
+                oldString: "top = 0",
+                newString: "top = 1",
               },
-              ctx,
+              delayedCtx,
             ),
           )
+
+          await firstAsk.promise
 
           const promise2 = Effect.runPromise(
             edit.execute(
               {
                 filePath: filepath,
-                oldString: "0",
-                newString: "2",
+                oldString: "bottom = 0",
+                newString: "bottom = 2",
               },
-              ctx,
+              delayedCtx,
             ),
           )
 
-          // Both should complete without error (though one might fail due to content mismatch)
           const results = await Promise.allSettled([promise1, promise2])
-          expect(results.some((r) => r.status === "fulfilled")).toBe(true)
+          expect(results[0]?.status).toBe("fulfilled")
+          expect(results[1]?.status).toBe("fulfilled")
+          expect(await fs.readFile(filepath, "utf-8")).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
         },
       })
     })
