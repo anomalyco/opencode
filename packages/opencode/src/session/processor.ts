@@ -14,8 +14,22 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { normalizeQuestionsInput } from "@/tool/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
+
+// Apply the same preprocessing `z.preprocess` runs on the tool's schema so that
+// `ToolPart.state.input` matches what `execute()` actually received. Otherwise
+// Qwen-style malformed inputs (e.g. `questions` as a truncated JSON string)
+// leak into the UI and render as "Asked N questions" with N === string length.
+// See issue #67.
+function normalizeToolInput<T>(toolName: string, input: T): T {
+  if (toolName !== "question") return input
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input
+  const obj = input as Record<string, unknown>
+  if (!("questions" in obj)) return input
+  return { ...obj, questions: normalizeQuestionsInput(obj.questions) } as T
+}
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -135,12 +149,13 @@ export namespace SessionProcessor {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
+                    const toolInput = normalizeToolInput(value.toolName, value.input)
                     const part = await Session.updatePart({
                       ...match,
                       tool: value.toolName,
                       state: {
                         status: "running",
-                        input: value.input,
+                        input: toolInput,
                         time: {
                           start: Date.now(),
                         },
@@ -159,7 +174,7 @@ export namespace SessionProcessor {
                           p.type === "tool" &&
                           p.tool === value.toolName &&
                           p.state.status !== "pending" &&
-                          JSON.stringify(p.state.input) === JSON.stringify(value.input),
+                          JSON.stringify(p.state.input) === JSON.stringify(toolInput),
                       )
                     ) {
                       const agent = await Agent.get(input.assistantMessage.agent)
@@ -169,7 +184,7 @@ export namespace SessionProcessor {
                         sessionID: input.assistantMessage.sessionID,
                         metadata: {
                           tool: value.toolName,
-                          input: value.input,
+                          input: toolInput,
                         },
                         always: [value.toolName],
                         ruleset: agent.permission,
@@ -185,7 +200,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input ?? match.state.input,
+                        input: normalizeToolInput(match.tool, value.input ?? match.state.input),
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -209,7 +224,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input ?? match.state.input,
+                        input: normalizeToolInput(match.tool, value.input ?? match.state.input),
                         error: (value.error as any).toString(),
                         time: {
                           start: match.state.time.start,
