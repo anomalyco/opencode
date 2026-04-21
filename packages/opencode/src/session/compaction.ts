@@ -15,7 +15,9 @@ import { NotFoundError } from "@/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect"
-import { isOverflow as overflow } from "./overflow"
+import { isOverflow as overflow, usable } from "./overflow"
+import { makeRuntime } from "@/effect/run-service"
+import { fn } from "@/util/fn"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -31,6 +33,39 @@ export const Event = {
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
+const DEFAULT_TAIL_TURNS = 2
+const MIN_PRESERVE_RECENT_TOKENS = 2_000
+const MAX_PRESERVE_RECENT_TOKENS = 8_000
+type Turn = {
+  start: number
+  end: number
+  id: MessageID
+}
+
+function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
+  return (
+    input.cfg.compaction?.preserve_recent_tokens ??
+    Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
+  )
+}
+
+function turns(messages: MessageV2.WithParts[]) {
+  const result: Turn[] = []
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    if (msg.info.role !== "user") continue
+    if (msg.parts.some((part) => part.type === "compaction")) continue
+    result.push({
+      start: i,
+      end: messages.length,
+      id: msg.info.id,
+    })
+  }
+  for (let i = 0; i < result.length - 1; i++) {
+    result[i].end = result[i + 1].start
+  }
+  return result
+}
 
 export interface Interface {
   readonly isOverflow: (input: {
@@ -84,11 +119,60 @@ export const layer: Layer.Layer<
       return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
     })
 
+    const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
+      messages: MessageV2.WithParts[]
+      model: Provider.Model
+    }) {
+      const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
+      return Token.estimate(JSON.stringify(msgs))
+    })
+
+    const select = Effect.fn("SessionCompaction.select")(function* (input: {
+      messages: MessageV2.WithParts[]
+      cfg: Config.Info
+      model: Provider.Model
+    }) {
+      const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
+      if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
+      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      const all = turns(input.messages)
+      if (!all.length) return { head: input.messages, tail_start_id: undefined }
+      const recent = all.slice(-limit)
+      const sizes = yield* Effect.forEach(
+        recent,
+        (turn) =>
+          estimate({
+            messages: input.messages.slice(turn.start, turn.end),
+            model: input.model,
+          }),
+        { concurrency: 1 },
+      )
+      if (sizes.at(-1)! > budget) {
+        log.info("tail fallback", { budget, size: sizes.at(-1) })
+        return { head: input.messages, tail_start_id: undefined }
+      }
+
+      let total = 0
+      let keep: Turn | undefined
+      for (let i = recent.length - 1; i >= 0; i--) {
+        const size = sizes[i]
+        if (total + size > budget) break
+        total += size
+        keep = recent[i]
+      }
+
+      if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
+      return {
+        head: input.messages.slice(0, keep.start),
+        tail_start_id: keep.id,
+      }
+    })
+
     // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
     // calls, then erases output of older tool calls to free context space
     const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
       const cfg = yield* config.get()
-      if (cfg.compaction?.prune === false) return
+      if (!cfg.compaction?.prune) return
       log.info("pruning")
 
       const msgs = yield* session
@@ -146,6 +230,7 @@ export const layer: Layer.Layer<
         throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
       }
       const userMessage = parent.info
+      const compactionPart = parent.parts.find((part): part is MessageV2.CompactionPart => part.type === "compaction")
 
       let messages = input.messages
       let replay:
@@ -176,19 +261,20 @@ export const layer: Layer.Layer<
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+      const cfg = yield* config.get()
+      const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
+      const selected = yield* select({
+        messages: history,
+        cfg,
+        model,
+      })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
         "experimental.session.compacting",
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
-Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
-The summary that you construct will be used so that another agent can read it and continue the work.
-Do not call any tools. Respond only with the summary text.
-Respond in the same language as the user's messages in the conversation.
-
-When constructing the summary, try to stick to this template:
+      const defaultPrompt = `When constructing the summary, try to stick to this template:
 ---
 ## Goal
 
@@ -213,7 +299,7 @@ When constructing the summary, try to stick to this template:
 ---`
 
       const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-      const msgs = structuredClone(messages)
+      const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
       const ctx = yield* InstanceState.context
@@ -274,6 +360,13 @@ When constructing the summary, try to stick to this template:
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
         return "stop"
+      }
+
+      if (compactionPart && selected.tail_start_id && compactionPart.tail_start_id !== selected.tail_start_id) {
+        yield* session.updatePart({
+          ...compactionPart,
+          tail_start_id: selected.tail_start_id,
+        })
       }
 
       if (result === "continue" && input.auto) {
@@ -407,6 +500,27 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
   ),
+)
+
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+  return runPromise((svc) => svc.isOverflow(input))
+}
+
+export async function prune(input: { sessionID: SessionID }) {
+  return runPromise((svc) => svc.prune(input))
+}
+
+export const create = fn(
+  z.object({
+    sessionID: SessionID.zod,
+    agent: z.string(),
+    model: z.object({ providerID: ProviderID.zod, modelID: ModelID.zod }),
+    auto: z.boolean(),
+    overflow: z.boolean().optional(),
+  }),
+  (input) => runPromise((svc) => svc.create(input)),
 )
 
 export * as SessionCompaction from "./compaction"
