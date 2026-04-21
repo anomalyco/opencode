@@ -159,7 +159,7 @@ export const FileSource = FilePartSourceBase.extend({
 export const SymbolSource = FilePartSourceBase.extend({
   type: z.literal("symbol"),
   path: z.string(),
-  range: LSP.Range,
+  range: LSP.Range.zod,
   name: z.string(),
   kind: z.number().int(),
 }).meta({
