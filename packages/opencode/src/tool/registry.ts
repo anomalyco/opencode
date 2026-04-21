@@ -2,6 +2,7 @@ import { PlanExitTool } from "./plan"
 import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
+import { TerminalTool } from "./terminal"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -32,6 +33,7 @@ import { Glob } from "@opencode-ai/shared/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
+import { Pty } from "@/pty"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
@@ -86,6 +88,7 @@ export const layer: Layer.Layer<
   | Bus.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
+  | Pty.Service
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
@@ -108,6 +111,7 @@ export const layer: Layer.Layer<
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
     const bash = yield* BashTool
+    const terminal = yield* TerminalTool
     const codesearch = yield* CodeSearchTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
@@ -189,6 +193,7 @@ export const layer: Layer.Layer<
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           bash: Tool.init(bash),
+          terminal: Tool.init(terminal),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -212,6 +217,7 @@ export const layer: Layer.Layer<
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.bash,
+            tool.terminal,
             tool.read,
             tool.glob,
             tool.grep,
@@ -344,6 +350,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Format.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Pty.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
   ),
 )
