@@ -1,4 +1,4 @@
-import { createRoot, createEffect, getOwner, onCleanup, runWithOwner, type Accessor, type Owner } from "solid-js"
+import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
@@ -14,6 +14,8 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
+import { useQuery } from "@tanstack/solid-query"
+import { loadPathQuery } from "./bootstrap"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -21,6 +23,7 @@ export function createChildStoreManager(input: {
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
+  translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
@@ -129,10 +132,9 @@ export function createChildStoreManager(input: {
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )
-      if (!vcs) throw new Error("Failed to create persisted cache")
+      if (!vcs) throw new Error(input.translate("error.childStore.persistedCacheCreateFailed"))
       const vcsStore = vcs[0]
-      const vcsReady = vcs[3]
-      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcsReady })
+      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
         persisted(
@@ -140,7 +142,7 @@ export function createChildStoreManager(input: {
           createStore({ value: undefined as ProjectMeta | undefined }),
         ),
       )
-      if (!meta) throw new Error("Failed to create persisted project metadata")
+      if (!meta) throw new Error(input.translate("error.childStore.persistedProjectMetadataCreateFailed"))
       metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
@@ -149,18 +151,27 @@ export function createChildStoreManager(input: {
           createStore({ value: undefined as string | undefined }),
         ),
       )
-      if (!icon) throw new Error("Failed to create persisted project icon")
+      if (!icon) throw new Error(input.translate("error.childStore.persistedProjectIconCreateFailed"))
       iconCache.set(directory, { store: icon[0], setStore: icon[1], ready: icon[3] })
 
       const init = () =>
         createRoot((dispose) => {
+          const initialMeta = meta[0].value
+          const initialIcon = icon[0].value
+
+          const pathQuery = useQuery(() => loadPathQuery(directory))
           const child = createStore<State>({
             project: "",
-            projectMeta: meta[0].value,
-            icon: icon[0].value,
+            projectMeta: initialMeta,
+            icon: initialIcon,
+            provider_ready: false,
             provider: { all: [], connected: [], default: {} },
             config: {},
-            path: { state: "", config: "", worktree: "", directory: "", home: "" },
+            get path() {
+              if (pathQuery.isLoading || !pathQuery.data)
+                return { state: "", config: "", worktree: "", directory: "", home: "" }
+              return pathQuery.data
+            },
             status: "loading" as const,
             agent: [],
             command: [],
@@ -171,7 +182,9 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
+            mcp_ready: false,
             mcp: {},
+            lsp_ready: false,
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
@@ -181,16 +194,27 @@ export function createChildStoreManager(input: {
           children[directory] = child
           disposers.set(directory, dispose)
 
-          createEffect(() => {
-            if (!vcsReady()) return
+          const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
+            if (!(init instanceof Promise)) return
+            void init.then(() => {
+              if (children[directory] !== child) return
+              run()
+            })
+          }
+
+          onPersistedInit(vcs[2], () => {
             const cached = vcsStore.value
             if (!cached?.branch) return
             child[1]("vcs", (value) => value ?? cached)
           })
-          createEffect(() => {
+
+          onPersistedInit(meta[2], () => {
+            if (child[0].projectMeta !== initialMeta) return
             child[1]("projectMeta", meta[0].value)
           })
-          createEffect(() => {
+
+          onPersistedInit(icon[2], () => {
+            if (child[0].icon !== initialIcon) return
             child[1]("icon", icon[0].value)
           })
         })
@@ -199,7 +223,7 @@ export function createChildStoreManager(input: {
     }
     mark(directory)
     const childStore = children[directory]
-    if (!childStore) throw new Error("Failed to create store")
+    if (!childStore) throw new Error(input.translate("error.childStore.storeCreateFailed"))
     return childStore
   }
 
@@ -213,13 +237,22 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
+  function peek(directory: string, options: ChildOptions = {}) {
+    const childStore = ensureChild(directory)
+    const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap && childStore[0].status === "loading") {
+      input.onBootstrap(directory)
+    }
+    return childStore
+  }
+
   function projectMeta(directory: string, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,
@@ -243,6 +276,7 @@ export function createChildStoreManager(input: {
     children,
     ensureChild,
     child,
+    peek,
     projectMeta,
     projectIcon,
     mark,

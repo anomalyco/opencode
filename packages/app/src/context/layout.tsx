@@ -1,17 +1,21 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
+import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_PANEL_WIDTH = 344
+const DEFAULT_SIDEBAR_WIDTH = 344
+const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -96,6 +100,38 @@ function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): 
   return { all, active: tab }
 }
 
+const sessionPath = (key: string) => {
+  const dir = key.split("/")[0]
+  if (!dir) return
+  const root = decode64(dir)
+  if (!root) return
+  return createPathHelpers(() => root)
+}
+
+const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
+  if (!tab.startsWith("file://")) return tab
+  if (!path) return tab
+  return path.tab(tab)
+}
+
+const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {
+  const seen = new Set<string>()
+  return all.flatMap((tab) => {
+    const value = normalizeSessionTab(path, tab)
+    if (seen.has(value)) return []
+    seen.add(value)
+    return [value]
+  })
+}
+
+const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
+  const path = sessionPath(key)
+  return {
+    all: normalizeSessionTabList(path, tabs.all),
+    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
+  }
+}
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -127,11 +163,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(fileTree)) return fileTree
         if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
 
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
+        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
         return {
           ...fileTree,
           opened: true,
-          width: width === 260 ? DEFAULT_PANEL_WIDTH : width,
+          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
           tab: "changes",
         }
       })()
@@ -147,12 +183,46 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       })()
 
-      if (migratedSidebar === sidebar && migratedReview === review && migratedFileTree === fileTree) return value
+      const sessionTabs = value.sessionTabs
+      const migratedSessionTabs = (() => {
+        if (!isRecord(sessionTabs)) return sessionTabs
+
+        let changed = false
+        const next = Object.fromEntries(
+          Object.entries(sessionTabs).map(([key, tabs]) => {
+            if (!isRecord(tabs) || !Array.isArray(tabs.all)) return [key, tabs]
+
+            const current = {
+              all: tabs.all.filter((tab): tab is string => typeof tab === "string"),
+              active: typeof tabs.active === "string" ? tabs.active : undefined,
+            }
+            const normalized = normalizeStoredSessionTabs(key, current)
+            if (current.all.length !== tabs.all.length) changed = true
+            if (!same(current.all, normalized.all) || current.active !== normalized.active) changed = true
+            if (tabs.active !== undefined && typeof tabs.active !== "string") changed = true
+            return [key, normalized]
+          }),
+        )
+
+        if (!changed) return sessionTabs
+        return next
+      })()
+
+      if (
+        migratedSidebar === sidebar &&
+        migratedReview === review &&
+        migratedFileTree === fileTree &&
+        migratedSessionTabs === sessionTabs
+      ) {
+        return value
+      }
+
       return {
         ...value,
         sidebar: migratedSidebar,
         review: migratedReview,
         fileTree: migratedFileTree,
+        sessionTabs: migratedSessionTabs,
       }
     }
 
@@ -162,7 +232,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
-          width: DEFAULT_PANEL_WIDTH,
+          width: DEFAULT_SIDEBAR_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
@@ -175,8 +245,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           panelOpened: true,
         },
         fileTree: {
-          opened: true,
-          width: DEFAULT_PANEL_WIDTH,
+          opened: false,
+          width: DEFAULT_FILE_TREE_WIDTH,
           tab: "changes" as "changes" | "all",
         },
         session: {
@@ -274,7 +344,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return
         }
 
-        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
         prune(keep)
       },
     })
@@ -297,12 +367,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         flush()
       }
 
-      window.addEventListener("pagehide", flush)
-      document.addEventListener("visibilitychange", handleVisibility)
+      makeEventListener(window, "pagehide", flush)
+      makeEventListener(document, "visibilitychange", handleVisibility)
 
       onCleanup(() => {
-        window.removeEventListener("pagehide", flush)
-        document.removeEventListener("visibilitychange", handleVisibility)
         scroll.dispose()
       })
     })
@@ -331,7 +399,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         local?.icon?.color !== undefined
 
       const base = {
-        ...(metadata ?? {}),
+        ...metadata,
         ...project,
         icon: {
           url: metadata?.icon?.url,
@@ -475,12 +543,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
+    let sessionFrame: number | undefined
+    let sessionTimer: number | undefined
+
     onMount(() => {
-      Promise.all(
-        server.projects.list().map((project) => {
-          return globalSync.project.loadSessions(project.worktree)
-        }),
-      )
+      sessionFrame = requestAnimationFrame(() => {
+        sessionFrame = undefined
+        sessionTimer = window.setTimeout(() => {
+          sessionTimer = undefined
+          void Promise.all(
+            server.projects.list().map((project) => {
+              return globalSync.project.loadSessions(project.worktree)
+            }),
+          )
+        }, 0)
+      })
+    })
+
+    onCleanup(() => {
+      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
+      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
     })
 
     return {
@@ -500,7 +582,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          globalSync.project.loadSessions(root)
+          void globalSync.project.loadSessions(root)
           server.projects.open(root)
         },
         close(directory: string) {
@@ -560,32 +642,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
+        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
         setTab(tab: "changes" | "all") {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
             return
           }
           setStore("fileTree", "tab", tab)
         },
         open() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", (x) => !x)
@@ -725,42 +807,93 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
           },
           review: {
-            open: createMemo(() => s().reviewOpen),
+            open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {
+              const session = key()
+              const next = Array.from(new Set(open))
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, {
+                  scroll: {},
+                  reviewOpen: next,
+                })
+                return
+              }
+
+              if (same(current.reviewOpen, next)) return
+              setStore("sessionView", session, "reviewOpen", next)
+            },
+            openPath(path: string) {
               const session = key()
               const current = store.sessionView[session]
               if (!current) {
                 setStore("sessionView", session, {
                   scroll: {},
-                  reviewOpen: open,
+                  reviewOpen: [path],
                 })
                 return
               }
 
-              if (same(current.reviewOpen, open)) return
-              setStore("sessionView", session, "reviewOpen", open)
+              if (!current.reviewOpen) {
+                setStore("sessionView", session, "reviewOpen", [path])
+                return
+              }
+
+              if (current.reviewOpen.includes(path)) return
+              setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
+            },
+            closePath(path: string) {
+              const session = key()
+              const current = store.sessionView[session]?.reviewOpen
+              if (!current) return
+
+              const index = current.indexOf(path)
+              if (index === -1) return
+              setStore(
+                "sessionView",
+                session,
+                "reviewOpen",
+                produce((draft) => {
+                  if (!draft) return
+                  draft.splice(index, 1)
+                }),
+              )
+            },
+            togglePath(path: string) {
+              const session = key()
+              const current = store.sessionView[session]?.reviewOpen
+              if (!current || !current.includes(path)) {
+                this.openPath(path)
+                return
+              }
+
+              this.closePath(path)
             },
           },
         }
       },
       tabs(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
+        const path = createMemo(() => sessionPath(key()))
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
+        const normalize = (tab: string) => normalizeSessionTab(path(), tab)
+        const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
         return {
           tabs,
           active: createMemo(() => tabs().active),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
           setActive(tab: string | undefined) {
             const session = key()
+            const next = tab ? normalize(tab) : tab
             if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: [], active: tab })
+              setStore("sessionTabs", session, { all: [], active: next })
             } else {
-              setStore("sessionTabs", session, "active", tab)
+              setStore("sessionTabs", session, "active", next)
             }
           },
           setAll(all: string[]) {
             const session = key()
-            const next = all.filter((tab) => tab !== "review")
+            const next = normalizeAll(all).filter((tab) => tab !== "review")
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: next, active: undefined })
             } else {
@@ -769,7 +902,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           async open(tab: string) {
             const session = key()
-            const next = nextSessionTabsForOpen(store.sessionTabs[session], tab)
+            const next = nextSessionTabsForOpen(store.sessionTabs[session], normalize(tab))
             setStore("sessionTabs", session, next)
           },
           close(tab: string) {

@@ -1,34 +1,22 @@
-import type {
-  Message,
-  Session,
-  Part,
-  FileDiff,
-  SessionStatus,
-  PermissionRequest,
-  QuestionRequest,
-  QuestionAnswer,
-  ProviderListResponse,
-} from "@opencode-ai/sdk/v2"
+import type { Message, Session, Part, SnapshotFileDiff, SessionStatus, ProviderListResponse } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 type Data = {
+  agent?: {
+    name: string
+    color?: string
+  }[]
   provider?: ProviderListResponse
   session: Session[]
   session_status: {
     [sessionID: string]: SessionStatus
   }
   session_diff: {
-    [sessionID: string]: FileDiff[]
+    [sessionID: string]: SnapshotFileDiff[]
   }
   session_diff_preload?: {
     [sessionID: string]: PreloadMultiFileDiffResult<any>[]
-  }
-  permission?: {
-    [sessionID: string]: PermissionRequest[]
-  }
-  question?: {
-    [sessionID: string]: QuestionRequest[]
   }
   message: {
     [sessionID: string]: Message[]
@@ -37,16 +25,6 @@ type Data = {
     [messageID: string]: Part[]
   }
 }
-
-export type PermissionRespondFn = (input: {
-  sessionID: string
-  permissionID: string
-  response: "once" | "always" | "reject"
-}) => void
-
-export type QuestionReplyFn = (input: { requestID: string; answers: QuestionAnswer[] }) => void
-
-export type QuestionRejectFn = (input: { requestID: string }) => void
 
 export type NavigateToSessionFn = (sessionID: string) => void
 
@@ -57,9 +35,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   init: (props: {
     data: Data
     directory: string
-    onPermissionRespond?: PermissionRespondFn
-    onQuestionReply?: QuestionReplyFn
-    onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
   }) => {
@@ -70,9 +45,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       get directory() {
         return props.directory
       },
-      respondToPermission: props.onPermissionRespond,
-      replyToQuestion: props.onQuestionReply,
-      rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
     }

@@ -90,7 +90,7 @@ const enroll = action(async (workspaceID: string) => {
   "use server"
   return json(
     await withActor(async () => {
-      await Billing.subscribe({ seats: 1 })
+      await Billing.subscribeBlack({ seats: 1 })
       return { error: undefined }
     }, workspaceID).catch((e) => ({ error: e.message as string })),
     { revalidate: [queryBillingInfo.key, querySubscription.key] },
@@ -116,9 +116,9 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 
 const setUseBalance = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const useBalance = form.get("useBalance")?.toString() === "true"
+  const useBalance = (form.get("useBalance") as string | null) === "true"
 
   return json(
     await withActor(async () => {

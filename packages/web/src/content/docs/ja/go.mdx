@@ -1,0 +1,156 @@
+---
+title: Go
+description: オープンなコーディングモデルを利用するための低価格サブスクリプション。
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Goは低価格のサブスクリプションで、**初月は5ドル**、その後は**月額10ドル**で、人気のオープンなコーディングモデルに安定してアクセスできます。
+
+:::note
+OpenCode Goは現在ベータ版です。
+:::
+
+GoはOpenCodeの他のプロバイダーと同様に機能します。OpenCode GoをサブスクライブしてAPIキーを取得します。これは**完全に任意**であり、OpenCodeを使用するために必須ではありません。
+
+主に海外ユーザー向けに設計されており、世界中で安定してアクセスできるよう、モデルは米国、EU、シンガポールでホストされています。
+
+---
+
+## 背景
+
+オープンモデルは非常に優れています。現在では、コーディングタスクにおいてプロプライエタリ（独自）モデルに近いパフォーマンスを達成しています。そして、多くのプロバイダーが競争力を持って提供できるため、通常ははるかに安価です。
+
+しかし、これらのモデルに安定して低遅延でアクセスすることは困難な場合があります。プロバイダーによって品質や可用性が異なります。
+
+:::tip
+OpenCodeでうまく動作する一部のモデルとプロバイダーをテストしました。
+:::
+
+この問題を解決するために、私たちはいくつかの取り組みを行いました：
+
+1. 一部のオープンモデルをテストし、それらを最適に実行する方法について、そのチームと話し合いました。
+2. 次に、これらが正しく提供されていることを確認するために、いくつかのプロバイダーと協力しました。
+3. 最後に、モデルとプロバイダーの組み合わせをベンチマークし、自信を持ってお勧めできるリストを作成しました。
+
+OpenCode Goを使用すると、これらのモデルに**初月は5ドル**、その後は**月額10ドル**でアクセスできます。
+
+---
+
+## 仕組み
+
+OpenCode Goは、OpenCodeの他のプロバイダーと同様に機能します。
+
+1. **<a href={console}>OpenCode Zen</a>**にサインインし、GoをサブスクライブしてAPIキーをコピーします。
+2. TUIで`/connect`コマンドを実行し、`OpenCode Go`を選択して、APIキーを貼り付けます。
+3. TUIで`/models`を実行すると、Goを通じて利用可能なモデルのリストが表示されます。
+
+:::note
+OpenCode Goをサブスクライブできるのは、1つのワークスペースにつき1メンバーのみです。
+:::
+
+現在のモデルリストには以下が含まれます：
+
+- **GLM-5**
+- **GLM-5.1**
+- **Kimi K2.5**
+- **Kimi K2.6**
+- **MiMo-V2-Pro**
+- **MiMo-V2-Omni**
+- **MiniMax M2.5**
+- **Qwen3.5 Plus**
+- **Qwen3.6 Plus**
+- **MiniMax M2.7**
+
+新しいモデルをテストして追加するにつれて、モデルのリストは変更される場合があります。
+
+---
+
+## 利用制限
+
+OpenCode Goには以下の制限が含まれています：
+
+- **5時間の制限** — 12ドル分の利用
+- **週間の制限** — 30ドル分の利用
+- **月間の制限** — 60ドル分の利用
+
+制限はドル単位で定義されています。つまり、実際のリクエスト数は使用するモデルによって異なります。MiniMax M2.5のような安価なモデルではより多くのリクエストが可能ですが、GLM-5.1のような高コストのモデルではリクエスト数が少なくなります。
+
+以下の表は、一般的なGoの利用パターンに基づいた推定リクエスト数を示しています：
+
+| Model        | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
+| ------------ | ------------------------- | ---------------- | ---------------- |
+| GLM-5.1      | 880                       | 2,150            | 4,300            |
+| GLM-5        | 1,150                     | 2,880            | 5,750            |
+| Kimi K2.5    | 1,850                     | 4,630            | 9,250            |
+| Kimi K2.6    | 1,150                     | 2,880            | 5,750            |
+| MiMo-V2-Pro  | 1,290                     | 3,225            | 6,450            |
+| MiMo-V2-Omni | 2,150                     | 5,450            | 10,900           |
+| Qwen3.6 Plus | 3,300                     | 8,200            | 16,300           |
+| MiniMax M2.7 | 3,400                     | 8,500            | 17,000           |
+| MiniMax M2.5 | 6,300                     | 15,900           | 31,800           |
+| Qwen3.5 Plus | 10,200                    | 25,200           | 50,500           |
+
+推定値は、観測された平均的なリクエストパターンに基づいています：
+
+- GLM-5/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
+- Kimi K2.5/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
+- MiniMax M2.7/M2.5 — リクエストあたり 入力 300トークン、キャッシュ 55,000トークン、出力 125トークン
+- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
+- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- MiMo-V2-Pro — リクエストあたり 入力 350トークン、キャッシュ 41,000トークン、出力 250トークン
+- MiMo-V2-Omni — リクエストあたり 入力 1000トークン、キャッシュ 60,000トークン、出力 140トークン
+
+現在の利用状況は**<a href={console}>コンソール</a>**で追跡できます。
+
+:::tip
+利用制限に達した場合でも、無料モデルを引き続き使用できます。
+:::
+
+初期の利用状況やフィードバックから学ぶにつれて、利用制限は変更される場合があります。
+
+---
+
+### 制限を超えた利用
+
+Zen残高にクレジットがある場合は、コンソールで**Use balance**オプションを有効にすることができます。有効にすると、利用制限に達した後、リクエストをブロックする代わりに、GoはZen残高から利用するようになります。
+
+---
+
+## エンドポイント
+
+以下のAPIエンドポイントを通じて、Goモデルにアクセスすることもできます。
+
+| Model        | Model ID     | Endpoint                                         | AI SDK Package              |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6    | kimi-k2.6    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus | qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus | qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+
+OpenCode設定の[model id](/docs/config/#models)は、`opencode-go/<model-id>`という形式を使用します。たとえば、Kimi K2.6の場合は、設定で`opencode-go/kimi-k2.6`を使用します。
+
+---
+
+## プライバシー
+
+このプランは主に海外ユーザー向けに設計されており、安定したグローバルアクセスのため、モデルは US、EU、Singapore でホストされています。各プロバイダーはデータを保持しないポリシーに従っており、お客様のデータをモデルのトレーニングに使用することはありません。
+
+---
+
+## 目標
+
+OpenCode Goを作成した目的は以下の通りです：
+
+1. 低価格のサブスクリプションで、より多くの人がAIコーディングを**利用しやすく**する。
+2. 最高のオープンなコーディングモデルに**安定した**アクセスを提供する。
+3. コーディングエージェントの利用向けに**テストおよびベンチマークされた**モデルを厳選する。
+4. OpenCodeで他のプロバイダーも使用できるようにすることで、**ベンダーロックインをなくす**。

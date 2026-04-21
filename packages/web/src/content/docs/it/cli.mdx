@@ -558,6 +558,7 @@ OpenCode può essere configurato tramite variabili d'ambiente.
 | `OPENCODE_AUTO_SHARE`                 | boolean | Condivide automaticamente le sessioni                       |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Percorso all'eseguibile Git Bash su Windows                 |
 | `OPENCODE_CONFIG`                     | string  | Percorso al file di configurazione                          |
+| `OPENCODE_TUI_CONFIG`                 | string  | Percorso al file di configurazione TUI                      |
 | `OPENCODE_CONFIG_DIR`                 | string  | Percorso alla directory di configurazione                   |
 | `OPENCODE_CONFIG_CONTENT`             | string  | Contenuto JSON di config inline                             |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disabilita i controlli automatici di aggiornamento          |
@@ -573,7 +574,6 @@ OpenCode può essere configurato tramite variabili d'ambiente.
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disabilita caricamento di `.claude/skills`                  |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disabilita fetch dei modelli da fonti remote                |
 | `OPENCODE_FAKE_VCS`                   | string  | Provider VCS finto per scopi di test                        |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Disabilita controllo file time per ottimizzazione           |
 | `OPENCODE_CLIENT`                     | string  | Identificatore client (default `cli`)                       |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Abilita gli strumenti di web search Exa                     |
 | `OPENCODE_SERVER_PASSWORD`            | string  | Abilita basic auth per `serve`/`web`                        |
@@ -598,6 +598,6 @@ Queste variabili d'ambiente abilitano funzionalità sperimentali che potrebbero 
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Abilita strumento LSP sperimentale         |
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disabilita file watcher                    |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Abilita funzionalità Exa sperimentali      |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita type checking LSP sperimentale     |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita Abilita TY LSP per i file python   |
 | `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Abilita markdown sperimentale              |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Abilita plan mode                          |

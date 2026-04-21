@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Glob } from "../../src/util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { tmpdir } from "../fixture/fixture"
 
 describe("Glob", () => {
@@ -63,7 +63,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("**/*.txt", { cwd: tmp.path })
 
-      expect(results).toEqual(["nested/deep.txt"])
+      expect(results).toEqual([path.join("nested", "deep.txt")])
     })
 
     test("returns empty array for no matches", async () => {
@@ -82,7 +82,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("**/*.txt", { cwd: tmp.path })
 
-      expect(results).toEqual(["realdir/file.txt"])
+      expect(results).toEqual([path.join("realdir", "file.txt")])
     })
 
     test("follows symlinks when symlink option is true", async () => {
@@ -93,7 +93,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("**/*.txt", { cwd: tmp.path, symlink: true })
 
-      expect(results.sort()).toEqual(["linkdir/file.txt", "realdir/file.txt"])
+      expect(results.sort()).toEqual([path.join("linkdir", "file.txt"), path.join("realdir", "file.txt")])
     })
 
     test("includes dotfiles when dot option is true", async () => {

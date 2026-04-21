@@ -1,0 +1,156 @@
+---
+title: Go
+description: 專為開源寫程式模型提供的低成本訂閱服務。
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go 是一項低成本的訂閱服務——**首月 $5 美元**，之後**每月 $10 美元**——讓您能穩定使用受歡迎的開源寫程式模型。
+
+:::note
+OpenCode Go 目前處於 beta 測試階段。
+:::
+
+Go 的運作方式與 OpenCode 中的任何其他供應商相同。您訂閱 OpenCode Go 並取得您的 API key。這是**完全可選的**，您不需要使用它也能使用 OpenCode。
+
+它主要為國際使用者設計，模型託管於美國、歐盟和新加坡，以提供全球穩定的存取。
+
+---
+
+## 背景
+
+開源模型已經變得非常強大。它們在寫程式任務上的表現，現在已經接近專有模型。而且因為有許多供應商競爭提供服務，它們通常便宜得多。
+
+然而，要獲得穩定、低延遲的存取可能很困難。各家供應商的品質和可用性不一。
+
+:::tip
+我們測試了一組精選的模型和供應商，它們與 OpenCode 搭配運作良好。
+:::
+
+為了解決這個問題，我們做了幾件事：
+
+1. 我們測試了一組精選的開源模型，並與它們的團隊討論如何最佳化運行。
+2. 接著我們與幾家供應商合作，確保這些模型被正確地提供服務。
+3. 最後，我們對模型與供應商的組合進行了基準測試，並整理出一份我們樂於推薦的清單。
+
+OpenCode Go 讓您可以存取這些模型，**首月只需 $5 美元**，之後**每月 $10 美元**。
+
+---
+
+## 運作方式
+
+OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
+
+1. 您登入 **<a href={console}>OpenCode Zen</a>**，訂閱 Go，然後複製您的 API key。
+2. 您在 TUI 中執行 `/connect` 命令，選擇 `OpenCode Go`，然後貼上您的 API key。
+3. 在 TUI 中執行 `/models` 即可查看透過 Go 可用的模型清單。
+
+:::note
+每個工作區只能有一位成員訂閱 OpenCode Go。
+:::
+
+目前的模型清單包括：
+
+- **GLM-5**
+- **GLM-5.1**
+- **Kimi K2.5**
+- **Kimi K2.6**
+- **MiMo-V2-Pro**
+- **MiMo-V2-Omni**
+- **MiniMax M2.5**
+- **Qwen3.5 Plus**
+- **Qwen3.6 Plus**
+- **MiniMax M2.7**
+
+隨著我們測試並加入新模型，模型清單可能會有所變動。
+
+---
+
+## 使用限制
+
+OpenCode Go 包含以下限制：
+
+- **5 小時限制** — $12 美元的使用量
+- **每週限制** — $30 美元的使用量
+- **每月限制** — $60 美元的使用量
+
+限制是以美元價值來定義。這意味著您的實際請求次數取決於您使用的模型。像 MiniMax M2.5 這樣較便宜的模型允許更多的請求次數，而像 GLM-5.1 這樣成本較高的模型則允許較少次數。
+
+下表提供了基於典型 Go 使用模式的預估請求次數：
+
+| Model        | 每 5 小時請求數 | 每週請求數 | 每月請求數 |
+| ------------ | --------------- | ---------- | ---------- |
+| GLM-5.1      | 880             | 2,150      | 4,300      |
+| GLM-5        | 1,150           | 2,880      | 5,750      |
+| Kimi K2.5    | 1,850           | 4,630      | 9,250      |
+| Kimi K2.6    | 1,150           | 2,880      | 5,750      |
+| MiMo-V2-Pro  | 1,290           | 3,225      | 6,450      |
+| MiMo-V2-Omni | 2,150           | 5,450      | 10,900     |
+| Qwen3.6 Plus | 3,300           | 8,200      | 16,300     |
+| MiniMax M2.7 | 3,400           | 8,500      | 17,000     |
+| MiniMax M2.5 | 6,300           | 15,900     | 31,800     |
+| Qwen3.5 Plus | 10,200          | 25,200     | 50,500     |
+
+預估值是基於觀察到的平均請求模式：
+
+- GLM-5/5.1 — 每次請求 700 個輸入 token、52,000 個快取 token、150 個輸出 token
+- Kimi K2.5/K2.6 — 每次請求 870 個輸入 token、55,000 個快取 token、200 個輸出 token
+- MiniMax M2.7/M2.5 — 每次請求 300 個輸入 token、55,000 個快取 token、125 個輸出 token
+- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
+- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- MiMo-V2-Pro — 每次請求 350 個輸入 token、41,000 個快取 token、250 個輸出 token
+- MiMo-V2-Omni — 每次請求 1000 個輸入 token、60,000 個快取 token、140 個輸出 token
+
+您可以在 **<a href={console}>console</a>** 中追蹤您目前的使用量。
+
+:::tip
+如果您達到了使用限制，您可以繼續使用免費模型。
+:::
+
+使用限制可能會隨著我們從早期使用情況和回饋中學習而有所調整。
+
+---
+
+### 超出限制的使用量
+
+如果您在您的 Zen 餘額中也有額度，您可以在 console 中啟用 **Use balance** 選項。啟用後，當您達到使用限制時，Go 將會改用您的 Zen 餘額，而不是阻擋請求。
+
+---
+
+## 端點
+
+您也可以透過以下 API 端點存取 Go 模型。
+
+| 模型         | 模型 ID      | 端點                                             | AI SDK 套件                 |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6    | kimi-k2.6    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus | qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus | qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+
+您的 OpenCode 設定中的 [model id](/docs/config/#models) 使用 `opencode-go/<model-id>` 格式。例如，Kimi K2.6 在設定中應使用 `opencode-go/kimi-k2.6`。
+
+---
+
+## 隱私權
+
+此方案主要為國際使用者設計，模型部署於 US、EU 與 Singapore，以提供穩定的全球存取體驗。我們的供應商遵循零保留政策，不會將你的資料用於模型訓練。
+
+---
+
+## 目標
+
+我們建立 OpenCode Go 的目的是：
+
+1. 透過低成本的訂閱服務，讓更多人能**輕鬆獲得** AI 寫程式的協助。
+2. 提供**穩定可靠**的途徑來存取最好的開源寫程式模型。
+3. 精選經過**測試與效能評估**、適合寫程式代理使用的模型。
+4. 允許您在 OpenCode 中同時使用任何其他供應商，確保**不被單一廠商綁定**。

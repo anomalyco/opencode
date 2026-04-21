@@ -27,7 +27,7 @@ export function applyTheme(theme: DesktopTheme, themeId?: string): void {
 }
 
 function buildThemeCss(light: ResolvedTheme, dark: ResolvedTheme, themeId: string): string {
-  const isDefaultTheme = themeId === "oc-1"
+  const isDefaultTheme = themeId === "oc-2"
   const lightCss = themeToCss(light)
   const darkCss = themeToCss(dark)
 

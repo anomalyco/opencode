@@ -2,6 +2,7 @@ import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -63,8 +64,10 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
+      const config = await TuiConfig.get()
       await tui({
         url: args.url,
+        config,
         args: {
           continue: args.continue,
           sessionID: args.session,

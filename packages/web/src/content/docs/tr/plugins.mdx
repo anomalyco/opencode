@@ -1,9 +1,9 @@
 ---
 title: Eklentiler
-description: opencode'u genişletmek için kendi eklentilerinizi yazın.
+description: OpenCode'u genişletmek için kendi eklentilerinizi yazın.
 ---
 
-Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek opencode'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya opencode'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
+Eklentiler, çeşitli olaylara bağlanarak ve davranışı özelleştirerek OpenCode'u genişletmenize olanak tanır. Yeni özellikler eklemek, harici hizmetlerle entegrasyon sağlamak veya OpenCode'un varsayılan davranışını değiştirmek için eklentiler oluşturabilirsiniz.
 
 Örnekler için topluluk tarafından oluşturulan [eklentilere](/docs/ecosystem#plugins) göz atın.
 
@@ -47,7 +47,7 @@ Hem normal hem de kapsamlı npm paketleri desteklenir.
 
 **npm eklentileri** başlangıçta Bun kullanılarak otomatik olarak yüklenir. Paketler ve bağımlılıkları `~/.cache/opencode/node_modules/`'da önbelleğe alınır.
 
-**Yerel eklentiler** doğrudan eklenti dizininden yüklenir. Harici paketleri kullanmak için, sisteminizin dizininde bir `package.json` oluşturmanız (bkz. [Bağımlılıklar](#dependencies)) veya eklentiyi npm ve [add it to your config](/docs/config#plugins)'de yayınlamanız gerekir.
+**Yerel eklentiler** doğrudan eklenti dizininden yüklenir. Harici paketleri kullanmak için, sisteminizin dizininde bir `package.json` oluşturmanız (bkz. [Bağımlılıklar](#dependencies)) veya eklentiyi npm ve [yapılandırmanıza eklemeniz](/docs/config#plugins) gerekir.
 
 ---
 
@@ -66,8 +66,7 @@ Aynı ad ve sürüme sahip yinelenen npm paketleri bir kez yüklenir. Ancak benz
 
 ## Eklenti oluşturma
 
-Eklenti, bir veya daha fazla eklentiyi dışa aktaran bir **JavaScript/TypeScript modülüdür**
-işlevler. Her işlev bir bağlam nesnesi alır ve bir kanca nesnesi döndürür.
+Eklenti, bir veya daha fazla eklenti işlevini dışa aktaran bir **JavaScript/TypeScript modülüdür**. Her işlev bir bağlam nesnesi alır ve bir kanca nesnesi döndürür.
 
 ---
 
@@ -83,7 +82,7 @@ Yerel eklentiler ve özel araçlar harici npm paketlerini kullanabilir. İhtiyac
 }
 ```
 
-opencode bunları yüklemek için başlangıçta `bun install` komutunu çalıştırır. Eklentileriniz ve araçlarınız daha sonra bunları içe aktarabilir.
+OpenCode bunları yüklemek için başlangıçta `bun install` komutunu çalıştırır. Eklentileriniz ve araçlarınız daha sonra bunları içe aktarabilir.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -116,9 +115,9 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 Eklenti işlevi şunları alır:
 
 - `project`: Mevcut proje bilgisi.
-- `directory`: güncel çalışma dizini.
+- `directory`: Güncel çalışma dizini.
 - `worktree`: Git çalışma ağacı yolu.
-- `client`: Yapay zeka ile etkileşime geçmek için opencode'lu bir SDK istemcisi.
+- `client`: Yapay zeka ile etkileşim kurmak için bir OpenCode SDK istemcisi.
 - `$`: Bun'un komutları yürütmek için kullandığı [shell API](https://bun.com/docs/runtime/shell).
 
 ---
@@ -211,7 +210,7 @@ Eklentiler aşağıdaki Örnekler bölümünde görüldüğü gibi etkinliklere 
 
 ## Örnekler
 
-opencode'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
+OpenCode'u genişletmek için kullanabileceğiniz bazı eklenti örneklerini burada bulabilirsiniz.
 
 ---
 
@@ -232,17 +231,17 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 }
 ```
 
-MacOS'ta AppleScript'i çalıştırmak için `osascript` kullanıyoruz. Burada bildirim göndermek için kullanıyoruz.
+macOS'ta AppleScript'i çalıştırmak için `osascript` kullanıyoruz. Burada bildirim göndermek için kullanıyoruz.
 
 :::note
-opencode masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda veya oturum hataları oluştuğunda otomatik olarak sistem bildirimleri gönderebilir.
+OpenCode masaüstü uygulamasını kullanıyorsanız yanıt hazır olduğunda veya oturum hataları oluştuğunda otomatik olarak sistem bildirimleri gönderebilir.
 :::
 
 ---
 
 ### .env Koruması
 
-opencode'un `.env` dosyalarını okumasını önleyin:
+OpenCode'un `.env` dosyalarını okumasını önleyin:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -277,7 +276,7 @@ export const InjectEnvPlugin = async () => {
 
 ### Özel araçlar
 
-Eklentiler ayrıca opencode'a özel araçlar da ekleyebilir:
+Eklentiler ayrıca OpenCode'a özel araçlar da ekleyebilir:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -300,19 +299,23 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` yardımcısı, opencode'un çağırabileceği özel bir araç oluşturur. Bir Zod şeması işlevini alır ve aşağıdakileri içeren bir araç tanımı döndürür:
+`tool` yardımcısı, OpenCode'un çağırabileceği özel bir araç oluşturur. Bir Zod şeması işlevini alır ve aşağıdakileri içeren bir araç tanımı döndürür:
 
 - `description`: Araç ne yapar?
 - `args`: Aracın argümanları için Zod şeması
 - `execute`: Araç çağrıldığında çalışan fonksiyon
 
-Özel araçlarınız, yerleşik araçların yanı sıra kod açmaya da hazır olacaktır.
+Özel araçlarınız, yerleşik araçların yanı sıra OpenCode'a da hazır olacaktır.
+
+:::note
+Eğer bir eklenti aracı yerleşik bir araçla aynı adı kullanırsa, eklenti aracı öncelik kazanır.
+:::
 
 ---
 
 ### Günlüğe kaydetme
 
-Yapılandırılmış günlük kaydı için `client.app.log()` yerine `console.log` kullanın:
+Yapılandırılmış günlük kaydı için `console.log` yerine `client.app.log()` kullanın:
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
@@ -327,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK documentation](https://opencode.ai/docs/sdk)'e bakın.
+Seviyeler: `debug`, `info`, `warn`, `error`. Ayrıntılar için [SDK belgelerine](https://opencode.ai/docs/sdk) bakın.
 
 ---
 

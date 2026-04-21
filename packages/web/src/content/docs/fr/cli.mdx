@@ -558,6 +558,7 @@ OpenCode peut être configuré à l'aide de variables d'environnement.
 | `OPENCODE_AUTO_SHARE`                 | booléen | Partager automatiquement des sessions                                             |
 | `OPENCODE_GIT_BASH_PATH`              | chaîne  | Chemin vers l'exécutable Git Bash sur Windows                                     |
 | `OPENCODE_CONFIG`                     | chaîne  | Chemin d'accès au fichier de configuration                                        |
+| `OPENCODE_TUI_CONFIG`                 | chaîne  | Chemin d'accès au fichier de configuration TUI                                    |
 | `OPENCODE_CONFIG_DIR`                 | chaîne  | Chemin d'accès au répertoire de configuration                                     |
 | `OPENCODE_CONFIG_CONTENT`             | chaîne  | Contenu de configuration JSON en ligne                                            |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | booléen | Désactiver les vérifications automatiques des mises à jour                        |
@@ -573,7 +574,6 @@ OpenCode peut être configuré à l'aide de variables d'environnement.
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booléen | Désactiver le chargement de `.claude/skills`                                      |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | booléen | Désactiver la récupération de modèles à partir de sources distantes               |
 | `OPENCODE_FAKE_VCS`                   | chaîne  | Faux fournisseur VCS à des fins de test                                           |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | booléen | Désactiver la vérification de l'heure des fichiers pour l'optimisation            |
 | `OPENCODE_CLIENT`                     | chaîne  | Identifiant du client (par défaut `cli`)                                          |
 | `OPENCODE_ENABLE_EXA`                 | booléen | Activer les outils de recherche Web Exa                                           |
 | `OPENCODE_SERVER_PASSWORD`            | chaîne  | Activer l'authentification de base pour `serve`/`web`                             |
@@ -598,6 +598,6 @@ Ces variables d'environnement activent des fonctionnalités expérimentales qui 
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | booléen | Activer l'outil expérimental LSP                                |
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booléen | Désactiver l'observateur de fichiers                            |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | booléen | Activer les fonctionnalités Exa expérimentales                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer la vérification expérimentale de type LSP               |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer TY LSP pour les fichiers python                         |
 | `OPENCODE_EXPERIMENTAL_MARKDOWN`                | booléen | Activer les fonctionnalités Markdown expérimentales             |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booléen | Activer le mode plan                                            |

@@ -27,7 +27,7 @@ export default function Home() {
       const callback = () => {
         const text = button.textContent
         if (text) {
-          navigator.clipboard.writeText(text)
+          void navigator.clipboard.writeText(text)
           button.setAttribute("data-copied", "")
           setTimeout(() => {
             button.removeAttribute("data-copied")
@@ -47,8 +47,8 @@ export default function Home() {
 
       <div data-component="content">
         <section data-component="top">
-          <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
-          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
+          <img data-slot="logo light" src={logoLight} alt={i18n.t("temp.logoLightAlt")} />
+          <img data-slot="logo dark" src={logoDark} alt={i18n.t("temp.logoDarkAlt")} />
           <h1 data-slot="title">{i18n.t("temp.hero.title")}</h1>
           <div data-slot="login">
             <a href="/auth">{i18n.t("temp.zen")}</a>

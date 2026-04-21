@@ -558,6 +558,7 @@ OpenCode kan konfigureres ved hjelp av miljøvariabler.
 | `OPENCODE_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
 | `OPENCODE_GIT_BASH_PATH`              | streng | Bane til Git Bash-kjørbar på Windows                                  |
 | `OPENCODE_CONFIG`                     | streng | Bane til konfigurasjonsfil                                            |
+| `OPENCODE_TUI_CONFIG`                 | streng | Bane til TUI-konfigurasjonsfil                                        |
 | `OPENCODE_CONFIG_DIR`                 | streng | Bane til konfigurasjonskatalog                                        |
 | `OPENCODE_CONFIG_CONTENT`             | streng | Innebygd json-konfigurasjonsinnhold                                   |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolsk | Deaktiver automatiske oppdateringskontroller                          |
@@ -573,7 +574,6 @@ OpenCode kan konfigureres ved hjelp av miljøvariabler.
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolsk | Deaktiver innlasting av `.claude/skills`                              |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | boolsk | Deaktiver henting av modeller fra eksterne kilder                     |
 | `OPENCODE_FAKE_VCS`                   | streng | Falsk VCS-leverandør for testformål                                   |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolsk | Deaktiver filtidskontroll for optimalisering                          |
 | `OPENCODE_CLIENT`                     | streng | Klientidentifikator (standard til `cli`)                              |
 | `OPENCODE_ENABLE_EXA`                 | boolsk | Aktiver Exa-nettsøkeverktøy                                           |
 | `OPENCODE_SERVER_PASSWORD`            | streng | Aktiver grunnleggende autentisering for `serve`/`web`                 |
@@ -598,6 +598,6 @@ Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres elle
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolsk | Aktiver eksperimentelt LSP-verktøy            |
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolsk | Deaktiver filovervåking                       |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolsk | Aktiver eksperimentelle Exa-funksjoner        |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktiver eksperimentell LSP-typekontroll       |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktiver TY LSP for python-filer               |
 | `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolsk | Aktiver eksperimentelle Markdown-funksjoner   |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolsk | Aktiver planmodus                             |

@@ -1988,7 +1988,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -3136,7 +3136,8 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "webkit2gtk",
- "windows 0.62.2",
+ "windows-core 0.62.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

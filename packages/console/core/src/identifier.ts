@@ -8,6 +8,7 @@ export namespace Identifier {
     benchmark: "ben",
     billing: "bil",
     key: "key",
+    lite: "lit",
     model: "mod",
     payment: "pay",
     provider: "prv",
