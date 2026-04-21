@@ -82,9 +82,10 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
 
       const relative = Effect.fnUntraced(function* (instruction: string) {
         const ctx = yield* InstanceState.context
+        const stop = yield* cfg.localStop()
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           return yield* fs
-            .globUp(instruction, ctx.directory, ctx.worktree)
+            .globUp(instruction, ctx.directory, stop)
             .pipe(Effect.catch(() => Effect.succeed([] as string[])))
         }
         if (!Flag.OPENCODE_CONFIG_DIR) {
@@ -120,12 +121,13 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
       const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
         const config = yield* cfg.get()
         const ctx = yield* InstanceState.context
+        const stop = yield* cfg.localStop()
         const paths = new Set<string>()
 
         // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of FILES) {
-            const matches = yield* fs.findUp(file, ctx.directory, ctx.worktree)
+            const matches = yield* fs.findUp(file, ctx.directory, stop)
             if (matches.length > 0) {
               matches.forEach((item) => paths.add(path.resolve(item)))
               break

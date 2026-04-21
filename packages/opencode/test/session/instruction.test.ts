@@ -270,6 +270,50 @@ describe("Instruction.system", () => {
       }
     }
   })
+
+  test("config.find_up git_submodule includes AGENTS.md from the next enclosing git root", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const inner = path.join(dir, "vendor", "inner")
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Outer Instructions")
+        await Bun.$`mkdir -p ${path.join(dir, "shared")}`
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", instructions: ["shared/*.md"] }),
+        )
+        await Bun.write(path.join(dir, "shared", "outer.md"), "# Outer Shared")
+        await Bun.$`mkdir -p ${inner}`
+        await Bun.$`git init`.cwd(inner).quiet()
+        await Bun.$`git config core.fsmonitor false`.cwd(inner).quiet()
+        await Bun.$`git config commit.gpgsign false`.cwd(inner).quiet()
+        await Bun.$`git config user.email test@opencode.test`.cwd(inner).quiet()
+        await Bun.$`git config user.name Test`.cwd(inner).quiet()
+        await Bun.$`git commit --allow-empty -m init`.cwd(inner).quiet()
+        await Bun.$`mkdir -p ${path.join(inner, "src")}`
+        await Bun.write(
+          path.join(inner, "opencode.json"),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", config: { find_up: "git_submodule" } }),
+        )
+        return inner
+      },
+    })
+
+    await Instance.provide({
+      directory: path.join(tmp.extra, "src"),
+      fn: async () => {
+        await run(
+          Instruction.Service.use((svc) =>
+            Effect.gen(function* () {
+              const paths = yield* svc.systemPaths()
+              expect(paths.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
+              expect(paths.has(path.join(tmp.path, "shared", "outer.md"))).toBe(true)
+            }),
+          ),
+        )
+      },
+    })
+  })
 })
 
 describe("Instruction.systemPaths OPENCODE_CONFIG_DIR", () => {

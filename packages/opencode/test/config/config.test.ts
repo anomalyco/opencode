@@ -241,6 +241,48 @@ test("loads JSONC config file", async () => {
   })
 })
 
+test("config.find_up git_submodule loads project config from the next enclosing git root", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const inner = path.join(dir, "vendor", "inner")
+      await fs.mkdir(inner, { recursive: true })
+      await Bun.$`git init`.cwd(inner).quiet()
+      await Bun.$`git config core.fsmonitor false`.cwd(inner).quiet()
+      await Bun.$`git config commit.gpgsign false`.cwd(inner).quiet()
+      await Bun.$`git config user.email test@opencode.test`.cwd(inner).quiet()
+      await Bun.$`git config user.name Test`.cwd(inner).quiet()
+      await Bun.$`git commit --allow-empty -m init`.cwd(inner).quiet()
+
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "outer/model",
+      })
+      await writeConfig(inner, {
+        $schema: "https://opencode.ai/config.json",
+        config: { find_up: "git_submodule" },
+      })
+      await fs.mkdir(path.join(inner, "src"), { recursive: true })
+
+      const opencodeDir = path.join(dir, ".opencode", "command")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      await Filesystem.write(path.join(opencodeDir, "outer.md"), "# Outer command")
+
+      return inner
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.extra, "src"),
+    fn: async () => {
+      const config = await load()
+      const directories = await listDirs()
+      expect(config.model).toBe("outer/model")
+      expect(directories).toContain(path.join(tmp.path, ".opencode"))
+    },
+  })
+})
+
 test("jsonc overrides json in the same directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

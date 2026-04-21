@@ -28,6 +28,7 @@ import { zod, ZodOverride } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
+import { ConfigFindUp } from "./find-up"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLayout } from "./layout"
 import { ConfigLSP } from "./lsp"
@@ -110,6 +111,9 @@ export const Info = Schema.Struct({
   }),
   command: Schema.optional(Schema.Record(Schema.String, ConfigCommand.Info)).annotate({
     description: "Command configuration, see https://opencode.ai/docs/commands",
+  }),
+  config: Schema.optional(ConfigFindUp.Info).annotate({
+    description: "Configuration loading behavior",
   }),
   skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
   watcher: Schema.optional(
@@ -282,6 +286,7 @@ export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
 type State = {
   config: Info
   directories: string[]
+  stop: string
   deps: Fiber.Fiber<void, never>[]
   consoleState: ConsoleState
 }
@@ -289,6 +294,7 @@ type State = {
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getGlobal: () => Effect.Effect<Info>
+  readonly localStop: () => Effect.Effect<string>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<Info>
@@ -519,8 +525,19 @@ export const layer = Layer.effect(
           log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
-        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+        const projectFiles = !Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+          ? yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)
+          : []
+
+        for (const file of projectFiles) {
+          yield* merge(file, yield* loadFile(file), "local")
+        }
+
+        const stop = yield* ConfigFindUp.stop(fs, ctx.worktree, result.config)
+
+        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG && stop !== ctx.worktree) {
+          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, stop).pipe(Effect.orDie)) {
+            if (projectFiles.includes(file)) continue
             yield* merge(file, yield* loadFile(file), "local")
           }
         }
@@ -529,7 +546,7 @@ export const layer = Layer.effect(
         result.mode = result.mode || {}
         result.plugin = result.plugin || []
 
-        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+        const directories = yield* ConfigPaths.directories(ctx.directory, stop)
 
         if (Flag.OPENCODE_CONFIG_DIR) {
           log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
@@ -694,6 +711,7 @@ export const layer = Layer.effect(
         return {
           config: result,
           directories,
+          stop,
           deps,
           consoleState: {
             consoleManagedProviders: Array.from(consoleManagedProviders),
@@ -717,6 +735,10 @@ export const layer = Layer.effect(
 
     const directories = Effect.fn("Config.directories")(function* () {
       return yield* InstanceState.use(state, (s) => s.directories)
+    })
+
+    const localStop = Effect.fn("Config.localStop")(function* () {
+      return yield* InstanceState.use(state, (s) => s.stop)
     })
 
     const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
@@ -779,6 +801,7 @@ export const layer = Layer.effect(
     return Service.of({
       get,
       getGlobal,
+      localStop,
       getConsoleState,
       update,
       updateGlobal,

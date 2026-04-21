@@ -191,6 +191,48 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
+  it.live("config.find_up git_submodule discovers external skills from the next enclosing git root", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir({ git: true })),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+
+      const inner = path.join(tmp.path, "vendor", "inner")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(tmp.path, ".claude", "skills", "outer-skill"), { recursive: true })
+        await Bun.write(
+          path.join(tmp.path, ".claude", "skills", "outer-skill", "SKILL.md"),
+          `---
+name: outer-skill
+description: Skill from enclosing repo.
+---
+
+# Outer Skill
+`,
+        )
+        await fs.mkdir(inner, { recursive: true })
+        await Bun.$`git init`.cwd(inner).quiet()
+        await Bun.$`git config core.fsmonitor false`.cwd(inner).quiet()
+        await Bun.$`git config commit.gpgsign false`.cwd(inner).quiet()
+        await Bun.$`git config user.email test@opencode.test`.cwd(inner).quiet()
+        await Bun.$`git config user.name Test`.cwd(inner).quiet()
+        await Bun.$`git commit --allow-empty -m init`.cwd(inner).quiet()
+        await fs.mkdir(path.join(inner, "src"), { recursive: true })
+        await Bun.write(
+          path.join(inner, "opencode.json"),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", config: { find_up: "git_submodule" } }),
+        )
+      })
+
+      yield* Effect.gen(function* () {
+        const skill = yield* Skill.Service
+        const list = yield* skill.all()
+        expect(list.find((x) => x.name === "outer-skill")).toBeDefined()
+      }).pipe(provideInstance(path.join(inner, "src")))
+    }),
+  )
+
   it.live("discovers global skills from ~/.claude/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(

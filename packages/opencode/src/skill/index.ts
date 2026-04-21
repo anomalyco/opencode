@@ -146,9 +146,9 @@ const discoverSkills = Effect.fnUntraced(function* (
   discovery: Discovery.Interface,
   fsys: AppFileSystem.Interface,
   directory: string,
-  worktree: string,
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const stop = yield* config.localStop()
 
   if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
     for (const dir of EXTERNAL_DIRS) {
@@ -158,7 +158,7 @@ const discoverSkills = Effect.fnUntraced(function* (
     }
 
     const upDirs = yield* fsys
-      .up({ targets: EXTERNAL_DIRS, start: directory, stop: worktree })
+      .up({ targets: EXTERNAL_DIRS, start: directory, stop })
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
@@ -214,9 +214,9 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const bus = yield* Bus.Service
     const fsys = yield* AppFileSystem.Service
-    const discovered = yield* InstanceState.make(
+        const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
-        return yield* discoverSkills(config, discovery, fsys, ctx.directory, ctx.worktree)
+        return yield* discoverSkills(config, discovery, fsys, ctx.directory)
       }),
     )
     const state = yield* InstanceState.make(
