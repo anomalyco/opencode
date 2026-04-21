@@ -91,7 +91,7 @@ const LogLevelRef = Schema.Any.annotate({ [ZodOverride]: Log.Level })
 const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))
 
-const InfoSchema = Schema.Struct({
+export const InfoSchema = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
   }),
