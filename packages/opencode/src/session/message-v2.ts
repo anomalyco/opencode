@@ -638,18 +638,20 @@ export type WithParts = {
   parts: Part[]
 }
 
-const Cursor = z.object({
-  id: MessageID.zod,
-  time: z.number(),
+const Cursor = Schema.Struct({
+  id: MessageID,
+  time: Schema.Number,
 })
-type Cursor = z.infer<typeof Cursor>
+type Cursor = typeof Cursor.Type
+
+const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
 export const cursor = {
   encode(input: Cursor) {
     return Buffer.from(JSON.stringify(input)).toString("base64url")
   },
   decode(input: string) {
-    return Cursor.parse(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
+    return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
   },
 }
 
