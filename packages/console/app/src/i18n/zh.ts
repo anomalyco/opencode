@@ -261,7 +261,6 @@ export const dict = {
   "go.graph.usageLimits": "使用限制",
   "go.graph.tick": "{{n}}x",
   "go.graph.aria": "每 5 小时请求数: {{free}} vs {{go}}",
-  "go.graph.promoValue": "（{{base}} × {{multiplier}}）",
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",

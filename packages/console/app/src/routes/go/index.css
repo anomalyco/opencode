@@ -663,7 +663,7 @@ body {
       }
 
       [data-bar][data-kind="promo"] {
-        fill: color-mix(in srgb, var(--bar-go) 93%, var(--color-text-strong));
+        fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
       }
 
       [data-val] {
