@@ -998,13 +998,24 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     return result
   }
 
-  const key = sdkKey(model.api.npm) ?? model.providerID
   // @ai-sdk/azure delegates to OpenAIChatLanguageModel which reads from
   // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
   // "azure" first. Pass both so model options work on either code path.
   if (model.api.npm === "@ai-sdk/azure") {
     return { openai: options, azure: options }
   }
+
+  // @ai-sdk/openai-compatible reads from providerOptions["openaiCompatible"],
+  // and also from providerOptions[config.provider.split(".")[0]]. sdkKey()
+  // has no entry for this package, and model.providerID may contain dots
+  // (e.g. "example.com"), which doesn't match the SDK's split(".")[0]
+  // lookup. Pass both so model options work on either code path.
+  if (model.api.npm === "@ai-sdk/openai-compatible") {
+    const providerKey = model.providerID.split(".")[0]
+    return { openaiCompatible: options, [providerKey]: options }
+  }
+
+  const key = sdkKey(model.api.npm) ?? model.providerID
   return { [key]: options }
 }
 
