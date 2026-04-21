@@ -211,3 +211,112 @@ This title reinforces bilingual identity branding (Hebrew + Latin-script naming)
 - [ ] A/B test landing page headlines/CTA flows
 - [ ] Add CRM enrichment and lead scoring (if available)
 - [ ] Publish quarterly narrative recap and refresh campaign stack
+
+---
+
+## God-Level YouTube System (`@igor.vepretski`)
+
+This section upgrades the channel workflow into an execution system that turns each upload into a multi-platform campaign and routes attention back to **7ya.io**.
+
+### 1) Channel Positioning Matrix
+
+Use three recurring content pillars and keep every video mapped to one pillar:
+
+- **Identity / Story** (`#7YA`, founder energy, mindset, behind-the-scenes)
+- **Authority / Proof** (results, case studies, transformations, collaborations)
+- **Lifestyle / Symbolism** (high-contrast visuals, signature look, cinematic brand assets)
+
+Publishing target per 7-day cycle:
+- 1 long-form YouTube anchor (6-12 min)
+- 3-5 Shorts derived from the anchor
+- 2 community posts driving votes/comments
+
+### 2) Thumbnail + Hook Standard
+
+- Always include one dominant emotion and one symbolic prop (for memorability).
+- Keep text short: 2-5 words max.
+- Use visual contrast (dark background + bright subject or vice versa).
+- A/B test two thumbnail variants in the first 24 hours.
+
+**First 15 seconds script pattern:**
+1. Pattern interrupt visual.
+2. One-line promise.
+3. Credibility proof.
+4. CTA that opens loop ("watch till the end", "comment your story").
+
+### 3) Title and Packaging Framework
+
+Use one of these title formulas per upload:
+
+- `I did X in Y days (what changed)`
+- `Nobody tells you this about X`
+- `From X to Y: my real story`
+- `I tested X so you don't have to`
+
+Packaging QA before publish:
+- [ ] Title creates curiosity without clickbait mismatch
+- [ ] Thumbnail communicates story without title dependency
+- [ ] First 30s includes proof + narrative tension
+- [ ] Description has first-link CTA to `https://7ya.io`
+- [ ] Pinned comment routes to same campaign page on 7ya.io
+
+### 4) Conversion Plumbing to 7ya.io
+
+Every video must carry one specific conversion path (not multiple competing asks):
+
+- **Primary CTA:** `Manage 7ya.io`
+- **Destination:** campaign-specific landing URL on `https://7ya.io`
+- **Tracking:** required UTMs on description + pinned comment links
+
+UTM convention for YouTube:
+- `utm_source=youtube`
+- `utm_medium=video`
+- `utm_campaign=<video_slug>`
+- `utm_content=description|pinned_comment|shorts`
+
+### 5) Upload-Day SOP (90-minute execution)
+
+1. Publish long-form video.
+2. Add chapters, subtitles, end screens, cards.
+3. Post pinned comment with CTA + question.
+4. Export 1-2 Shorts immediately from best hook moments.
+5. Cross-publish teaser to Instagram/TikTok/X with same CTA URL.
+6. Reply to first 20 comments fast to boost session depth.
+
+### 6) Weekly Review Dashboard
+
+Track per video (D1, D3, D7):
+- CTR (thumbnail/title strength)
+- Avg view duration and first-30s retention
+- Returning viewers vs new viewers
+- Comments per 1,000 views
+- 7ya.io click-throughs and conversion rate
+
+Decision rules:
+- CTR low + retention strong -> improve thumbnail/title only
+- CTR high + retention weak -> rework hook/first minute structure
+- Good watch metrics + weak clicks -> improve CTA clarity and offer-page match
+
+### 7) Brand Asset System (Based on Existing Visual Direction)
+
+From current creative style, define a reusable asset bank:
+- Hero portraits (close-up confidence framing)
+- Cinematic campaign banners (`#7YA`, black/white contrast)
+- Symbolic animal-themed variants for attention hooks
+- Street/lifestyle documentary shots for authenticity
+
+Operational rule:
+- Build once, then reuse assets as templates across YouTube thumbnails, Shorts covers, and cross-platform promo cards.
+
+### 8) 14-Day Sprint to “God Level” Baseline
+
+- **Day 1-2:** Channel audit + packaging refresh for top 12 videos
+- **Day 3-4:** Produce 1 flagship long-form + 5 Shorts
+- **Day 5-7:** Daily Shorts + community post experiments
+- **Day 8-10:** Publish second long-form with improved hook from sprint learnings
+- **Day 11-14:** Retention and conversion review, then lock next monthly content map
+
+Definition of success for sprint:
+- +20% channel CTR average
+- +25% Shorts completion rate
+- measurable weekly traffic lift to 7ya.io from YouTube sources
