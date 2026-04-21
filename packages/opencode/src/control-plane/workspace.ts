@@ -121,18 +121,26 @@ export const create = fn(CreateInput, async (input) => {
   }
   await adaptor.create(config, env)
 
-  startSync(info)
-
-  await waitEvent({
-    timeout: TIMEOUT,
-    fn(event) {
-      if (event.workspace === info.id && event.payload.type === Event.Status.type) {
-        const { status } = event.payload.properties
-        return status === "error" || status === "connected"
-      }
-      return false
-    },
-  })
+  const target = await adaptor.target(info)
+  if (target.type === "local") {
+    // Local workspaces: directory was just created by adaptor.create().
+    // Set connected status eagerly to avoid racing startSync's async
+    // Filesystem.exists check against the waitEvent timeout.
+    setStatus(info.id, "connected")
+    startSync(info)
+  } else {
+    startSync(info)
+    await waitEvent({
+      timeout: TIMEOUT,
+      fn(event) {
+        if (event.workspace === info.id && event.payload.type === Event.Status.type) {
+          const { status } = event.payload.properties
+          return status === "error" || status === "connected"
+        }
+        return false
+      },
+    })
+  }
 
   return info
 })
@@ -567,9 +575,8 @@ async function startSync(space: Info) {
   const target = await adaptor.target(space)
 
   if (target.type === "local") {
-    void Filesystem.exists(target.directory).then((exists) => {
-      setStatus(space.id, exists ? "connected" : "error")
-    })
+    const exists = await Filesystem.exists(target.directory)
+    setStatus(space.id, exists ? "connected" : "error")
     return
   }
 
