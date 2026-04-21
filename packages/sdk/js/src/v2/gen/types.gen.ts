@@ -1694,6 +1694,9 @@ export type OAuth = {
   refresh: string
   access: string
   expires: number
+  _accountLabel?: string
+  _accountEmail?: string
+  _accountId?: string
   accountId?: string
   enterpriseUrl?: string
 }
@@ -1701,6 +1704,9 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  _accountLabel?: string
+  _accountEmail?: string
+  _accountId?: string
   metadata?: {
     [key: string]: string
   }
@@ -1710,6 +1716,9 @@ export type WellKnownAuth = {
   type: "wellknown"
   key: string
   token: string
+  _accountLabel?: string
+  _accountEmail?: string
+  _accountId?: string
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
@@ -4434,6 +4443,10 @@ export type ProviderOauthAuthorizeData = {
      */
     method: number
     /**
+     * Optional account key for multi-account auth
+     */
+    accountKey?: string
+    /**
      * Prompt inputs
      */
     inputs?: {
@@ -4477,6 +4490,10 @@ export type ProviderOauthCallbackData = {
      * Auth method index
      */
     method: number
+    /**
+     * Optional account key for multi-account auth
+     */
+    accountKey?: string
     /**
      * OAuth authorization code
      */

@@ -2862,6 +2862,7 @@ export class Oauth extends HeyApiClient {
       directory?: string
       workspace?: string
       method?: number
+      accountKey?: string
       inputs?: {
         [key: string]: string
       }
@@ -2877,6 +2878,7 @@ export class Oauth extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "method" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "inputs" },
           ],
         },
@@ -2909,6 +2911,7 @@ export class Oauth extends HeyApiClient {
       directory?: string
       workspace?: string
       method?: number
+      accountKey?: string
       code?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -2922,6 +2925,7 @@ export class Oauth extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "method" },
+            { in: "body", key: "accountKey" },
             { in: "body", key: "code" },
           ],
         },
