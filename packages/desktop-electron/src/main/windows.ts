@@ -100,6 +100,19 @@ export function createMainWindow() {
     },
   })
 
+  win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+    const { requestHeaders } = details
+    upsertKeyValue(requestHeaders, "Access-Control-Allow-Origin", ["*"])
+    callback({ requestHeaders })
+  })
+
+  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    const { responseHeaders = {} } = details
+    upsertKeyValue(responseHeaders, "Access-Control-Allow-Origin", ["*"])
+    upsertKeyValue(responseHeaders, "Access-Control-Allow-Headers", ["*"])
+    callback({ responseHeaders })
+  })
+
   state.manage(win)
   loadWindow(win, "index.html")
   wireZoom(win)
@@ -176,4 +189,18 @@ function wireZoom(win: BrowserWindow) {
   win.webContents.on("zoom-changed", () => {
     win.webContents.setZoomFactor(1)
   })
+}
+
+function upsertKeyValue(obj: Record<string, any>, keyToChange: string, value: any) {
+  const keyToChangeLower = keyToChange.toLowerCase()
+  for (const key of Object.keys(obj)) {
+    if (key.toLowerCase() === keyToChangeLower) {
+      // Reassign old key
+      obj[key] = value
+      // Done
+      return
+    }
+  }
+  // Insert at end instead
+  obj[keyToChange] = value
 }
