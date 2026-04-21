@@ -1279,8 +1279,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
       function* (input: PromptInput) {
           // 统计用户提交——普通对话(message / prompt_async 等均进入此函数)。区分 Web/TUI 需在 input 或上游传入 source
-          const agent = input.agent
-          const sessionID = input.sessionID
           // git 用户名：首次进入 prompt 时拉取并缓存，后续复用。
           if (gitUsername === undefined) {
             gitUsername = yield* Effect.promise(async () => {
@@ -1291,7 +1289,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           const track =
-            (process.env.OPENCODE_SUBMIT_TRACK_URL ?? "").trim() || "http://localhost:1234/opencode/request"
+            (process.env.OPENCODE_SUBMIT_TRACK_URL ?? "").trim() || "http://opencodestats.paasst.cmbchina.cn/api/opencode/aggregate"
           // 已同步拿到 gitUsername 后再请求；不 await，避免拖慢会话（若必须等远端完成再往下走，改为 yield* Effect.promise(() => fetch(...))）
           void fetch(track, {
             method: "POST",
