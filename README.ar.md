@@ -97,7 +97,7 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### Agents
+### الوكلاء
 
 يتضمن OpenCode وكيليْن (Agents) مدمجين يمكنك التبديل بينهما باستخدام زر `Tab`.
 
@@ -122,7 +122,7 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 إذا كنت تعمل على مشروع مرتبط بـ OpenCode ويستخدم "opencode" كجزء من اسمه (مثل "opencode-dashboard" أو "opencode-mobile")، يرجى إضافة ملاحظة في README توضح أنه ليس مبنيا بواسطة فريق OpenCode ولا يرتبط بنا بأي شكل.
 
-### FAQ
+### الأسئلة المتكررة
 
 #### ما الفرق عن Claude Code؟
 
