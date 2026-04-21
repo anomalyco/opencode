@@ -541,6 +541,78 @@ it.live("loop continues when finish is stop but assistant has tool parts", () =>
   ),
 )
 
+it.live("loop command self-paces until assistant signals stop", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.text("first iteration\n<loop:continue>")
+      yield* llm.text("second iteration\n<loop:stop>")
+
+      const result = yield* prompt.command({
+        sessionID: session.id,
+        command: "loop",
+        arguments: "check whether the deploy finished",
+      })
+
+      expect(result.parts.some((part) => part.type === "text" && part.text === "first iteration")).toBe(true)
+      let texts: string[] = []
+      for (let i = 0; i < 20; i++) {
+        yield* Effect.sleep(75)
+        const messages = yield* sessions.messages({ sessionID: session.id })
+        texts = messages.flatMap((message) =>
+          message.info.role === "assistant"
+            ? message.parts.flatMap((part) => (part.type === "text" ? [part.text] : []))
+            : [],
+        )
+        if (texts.includes("second iteration")) break
+      }
+
+      expect(texts).toContain("first iteration")
+      expect(texts).toContain("second iteration")
+      expect(texts.join("\n")).not.toContain("<loop:")
+      expect(yield* llm.calls).toBe(2)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop command stop cancels the pending next iteration", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.text("first iteration\n<loop:continue>")
+
+      yield* prompt.command({
+        sessionID: session.id,
+        command: "loop",
+        arguments: "watch the deploy",
+      })
+      const stop = yield* prompt.command({
+        sessionID: session.id,
+        command: "loop",
+        arguments: "stop",
+      })
+
+      expect(stop.parts.some((part) => part.type === "text" && part.text === "Stopped the active loop.")).toBe(true)
+      yield* Effect.sleep(1200)
+      expect(yield* llm.calls).toBe(1)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
 it.live("failed subtask preserves metadata on error tool state", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {

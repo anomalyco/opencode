@@ -65,6 +65,21 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
+const LOOP_CONTINUE_MARKER = "<loop:continue>"
+const LOOP_STOP_MARKER = "<loop:stop>"
+const LOOP_SELF_PACED_DELAY_MS = 1000
+
+type LoopCommandParsed =
+  | { action: "stop" }
+  | {
+      action: "start"
+      intervalMs?: number
+      prompt: string
+    }
+
+type LoopState = {
+  stop: () => void
+}
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -117,7 +132,185 @@ export const layer = Layer.effect(
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
+      stopLoop(sessionID)
       yield* state.cancel(sessionID)
+    })
+
+    const activeLoops = new Map<SessionID, LoopState>()
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        for (const loop of activeLoops.values()) loop.stop()
+        activeLoops.clear()
+      }),
+    )
+
+    const createSyntheticReply = Effect.fn("SessionPrompt.createSyntheticReply")(function* (input: {
+      sessionID: SessionID
+      userText: string
+      assistantText: string
+      agent: string
+      model: { providerID: ProviderID; modelID: ModelID }
+      variant?: string
+    }) {
+      const ctx = yield* InstanceState.context
+      const userMsg: MessageV2.User = {
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: input.sessionID,
+        time: { created: Date.now() },
+        agent: input.agent,
+        model: {
+          providerID: input.model.providerID,
+          modelID: input.model.modelID,
+          ...(input.variant ? { variant: input.variant } : {}),
+        },
+      }
+      yield* sessions.updateMessage(userMsg)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        type: "text",
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        text: input.userText,
+      })
+
+      const assistant: MessageV2.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        sessionID: input.sessionID,
+        parentID: userMsg.id,
+        mode: input.agent,
+        agent: input.agent,
+        cost: 0,
+        path: { cwd: ctx.directory, root: ctx.worktree },
+        time: { created: Date.now(), completed: Date.now() },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: input.model.modelID,
+        providerID: input.model.providerID,
+        ...(input.variant ? { variant: input.variant } : {}),
+        finish: "stop",
+      }
+      yield* sessions.updateMessage(assistant)
+      const part: MessageV2.TextPart = {
+        id: PartID.ascending(),
+        type: "text",
+        messageID: assistant.id,
+        sessionID: input.sessionID,
+        text: input.assistantText,
+      }
+      yield* sessions.updatePart(part)
+      return { info: assistant, parts: [part] }
+    })
+
+    const stopLoop = (sessionID: SessionID) => {
+      const loop = activeLoops.get(sessionID)
+      if (!loop) return false
+      loop.stop()
+      activeLoops.delete(sessionID)
+      return true
+    }
+
+    const readLoopPrompt = Effect.fn("SessionPrompt.readLoopPrompt")(function* () {
+      const ctx = yield* InstanceState.context
+      const filepath = path.join(ctx.worktree, ".claude", "loop.md")
+      const exists = yield* fsys.exists(filepath).pipe(Effect.orDie)
+      if (!exists) return undefined
+      const content = (yield* fsys.readFileString(filepath).pipe(Effect.orDie)).trim()
+      return content || undefined
+    })
+
+    const normalizeLoopResult = Effect.fn("SessionPrompt.normalizeLoopResult")(function* (result: MessageV2.WithParts) {
+      const textPart = result.parts.findLast((part): part is MessageV2.TextPart => part.type === "text")
+      if (!textPart) return { continueLoop: false, result }
+      const parsed = extractLoopControl(textPart.text)
+      if (parsed.text === textPart.text) return { continueLoop: false, result }
+      textPart.text = parsed.text
+      yield* sessions.updatePart(textPart)
+      return { continueLoop: parsed.action === "continue", result }
+    })
+
+    const loopStep = Effect.fn("SessionPrompt.loopStep")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: { providerID: ProviderID; modelID: ModelID }
+      variant?: string
+      promptText: string
+      parts?: CommandInput["parts"]
+    }) {
+      const result = yield* prompt({
+        sessionID: input.sessionID,
+        messageID: MessageID.ascending(),
+        agent: input.agent,
+        model: input.model,
+        variant: input.variant,
+        parts: [{ type: "text", text: input.promptText }, ...(input.parts ?? [])],
+      })
+      return yield* normalizeLoopResult(result)
+    })
+
+    const startLoop = Effect.fn("SessionPrompt.startLoop")(function* (input: {
+      sessionID: SessionID
+      agent: string
+      model: { providerID: ProviderID; modelID: ModelID }
+      variant?: string
+      promptText: string
+      intervalMs?: number
+    }) {
+      stopLoop(input.sessionID)
+      let stopped = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+
+      const schedule = (delayMs: number) => {
+        if (stopped) return
+        timer = setTimeout(() => {
+          void Effect.runPromiseExit(
+            loopStep({
+              sessionID: input.sessionID,
+              agent: input.agent,
+              model: input.model,
+              variant: input.variant,
+              promptText: input.promptText,
+            }).pipe(Effect.orDie),
+          ).then((exit) => {
+            if (stopped) return
+            if (Exit.isSuccess(exit)) {
+              const next = exit.value as { continueLoop: boolean }
+              if (!next.continueLoop) {
+                stopLoop(input.sessionID)
+                return
+              }
+              schedule(input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS)
+              return
+            }
+
+            const error = Cause.squash(exit.cause)
+            if (error instanceof Session.BusyError) {
+              schedule(input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS)
+              return
+            }
+
+            stopLoop(input.sessionID)
+            void Effect.runPromise(
+              bus.publish(Session.Event.Error, {
+                sessionID: input.sessionID,
+                error: new NamedError.Unknown({
+                  message: error instanceof Error ? error.message : String(error),
+                }).toObject(),
+              }),
+            )
+          })
+        }, delayMs)
+      }
+
+      activeLoops.set(input.sessionID, {
+        stop: () => {
+          stopped = true
+          if (timer) clearTimeout(timer)
+        },
+      })
+
+      schedule(input.intervalMs ?? LOOP_SELF_PACED_DELAY_MS)
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -1556,6 +1749,59 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
 
+      if (input.command === Command.Default.LOOP || input.command === Command.Default.PROACTIVE) {
+        const taskModel = input.model ? Provider.parseModel(input.model) : yield* lastModel(input.sessionID)
+        yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
+        const parsed = parseLoopCommandArguments(input.arguments)
+        if (parsed.action === "stop") {
+          const stopped = stopLoop(input.sessionID)
+          const result = yield* createSyntheticReply({
+            sessionID: input.sessionID,
+            userText: `/${input.command} stop`,
+            assistantText: stopped ? "Stopped the active loop." : "No active loop is running for this session.",
+            agent: agentName,
+            model: taskModel,
+            variant: input.variant,
+          }).pipe(Effect.orDie)
+          yield* bus.publish(Command.Event.Executed, {
+            name: input.command,
+            sessionID: input.sessionID,
+            arguments: input.arguments,
+            messageID: result.info.id,
+          })
+          return result
+        }
+
+        const loopPrompt = parsed.prompt || (yield* readLoopPrompt().pipe(Effect.orDie)) || DEFAULT_LOOP_PROMPT
+        const first = yield* loopStep({
+          sessionID: input.sessionID,
+          agent: agentName,
+          model: taskModel,
+          variant: input.variant,
+          promptText: loopPrompt,
+          parts: input.parts,
+        }).pipe(Effect.orDie)
+        if (first.continueLoop) {
+          yield* startLoop({
+            sessionID: input.sessionID,
+            agent: agentName,
+            model: taskModel,
+            variant: input.variant,
+            promptText: loopPrompt,
+            intervalMs: parsed.intervalMs,
+          }).pipe(Effect.orDie)
+        } else {
+          stopLoop(input.sessionID)
+        }
+        yield* bus.publish(Command.Event.Executed, {
+          name: input.command,
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+          messageID: first.result.info.id,
+        })
+        return first.result
+      }
+
       const raw = input.arguments.match(argsRegex) ?? []
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
       const templateCommand = yield* Effect.promise(async () => cmd.template)
@@ -1806,6 +2052,70 @@ export const CommandInput = z.object({
     .optional(),
 })
 export type CommandInput = z.infer<typeof CommandInput>
+
+const durationRegex = /^([1-9]\d*)(s|m|h|d)$/i
+export const DEFAULT_LOOP_PROMPT = [
+  "You are running in loop mode.",
+  "",
+  "Perform proactive maintenance for the current session and project.",
+  "If there is nothing useful to do right now, say what you checked and stop.",
+  "",
+  `End your final text response with exactly one control marker on its own line: ${LOOP_CONTINUE_MARKER} if another loop iteration should run, or ${LOOP_STOP_MARKER} if the work is complete or blocked until the user or an external system changes state.`,
+].join("\n")
+
+export function parseLoopCommandArguments(input: string): LoopCommandParsed {
+  const trimmed = input.trim()
+  if (!trimmed) return { action: "start", prompt: "" }
+  if (/^(stop|off)$/i.test(trimmed)) return { action: "stop" }
+  const [first, ...rest] = trimmed.split(/\s+/)
+  const match = first.match(durationRegex)
+  if (!match) return { action: "start", prompt: buildLoopPrompt(trimmed) }
+  const value = Number(match[1])
+  const unit = match[2].toLowerCase()
+  const intervalMs =
+    unit === "s"
+      ? value * 1000
+      : unit === "m"
+        ? value * 60 * 1000
+        : unit === "h"
+          ? value * 60 * 60 * 1000
+          : value * 24 * 60 * 60 * 1000
+  return {
+    action: "start",
+    intervalMs,
+    prompt: rest.length > 0 ? buildLoopPrompt(rest.join(" ")) : "",
+  }
+}
+
+export function buildLoopPrompt(goal: string) {
+  const trimmed = goal.trim()
+  return [
+    "You are running in loop mode.",
+    "",
+    trimmed ? `Goal:\n${trimmed}` : "Perform proactive maintenance for the current session and project.",
+    "",
+    "Work autonomously until the goal is complete or you are blocked by the user, permissions, or an external dependency.",
+    "Re-check relevant state before stopping so you do not miss new changes.",
+    `End your final text response with exactly one control marker on its own line: ${LOOP_CONTINUE_MARKER} if another loop iteration should run, or ${LOOP_STOP_MARKER} if the work is complete or blocked until the user or an external system changes state.`,
+  ].join("\n")
+}
+
+export function extractLoopControl(text: string): { action: "continue" | "stop"; text: string } {
+  const trimmedEnd = text.replace(/\s+$/, "")
+  if (trimmedEnd.endsWith(LOOP_CONTINUE_MARKER)) {
+    return {
+      action: "continue",
+      text: trimmedEnd.slice(0, -LOOP_CONTINUE_MARKER.length).replace(/\s+$/, ""),
+    }
+  }
+  if (trimmedEnd.endsWith(LOOP_STOP_MARKER)) {
+    return {
+      action: "stop",
+      text: trimmedEnd.slice(0, -LOOP_STOP_MARKER.length).replace(/\s+$/, ""),
+    }
+  }
+  return { action: "stop", text }
+}
 
 /** @internal Exported for testing */
 export function createStructuredOutputTool(input: {

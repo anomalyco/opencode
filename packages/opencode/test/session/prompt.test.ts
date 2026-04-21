@@ -586,4 +586,32 @@ describe("session.agent-resolution", () => {
         ),
     })
   }, 30000)
+
+  test("parseLoopCommandArguments handles stop, interval, and prompt text", () => {
+    expect(SessionPrompt.parseLoopCommandArguments("stop")).toEqual({ action: "stop" })
+    expect(SessionPrompt.parseLoopCommandArguments("5m check deploy")).toEqual({
+      action: "start",
+      intervalMs: 5 * 60 * 1000,
+      prompt: SessionPrompt.buildLoopPrompt("check deploy"),
+    })
+    expect(SessionPrompt.parseLoopCommandArguments("check deploy")).toEqual({
+      action: "start",
+      prompt: SessionPrompt.buildLoopPrompt("check deploy"),
+    })
+  })
+
+  test("extractLoopControl strips loop markers from assistant text", () => {
+    expect(SessionPrompt.extractLoopControl("still working\n<loop:continue>")).toEqual({
+      action: "continue",
+      text: "still working",
+    })
+    expect(SessionPrompt.extractLoopControl("all done\n<loop:stop>")).toEqual({
+      action: "stop",
+      text: "all done",
+    })
+    expect(SessionPrompt.extractLoopControl("no marker")).toEqual({
+      action: "stop",
+      text: "no marker",
+    })
+  })
 })
