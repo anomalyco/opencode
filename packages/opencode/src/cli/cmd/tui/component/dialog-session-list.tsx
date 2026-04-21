@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onMount } from "solid-js"
 import { Locale } from "@/util"
 import { useProject } from "@tui/context/project"
 import { useKeybind } from "../context/keybind"
@@ -17,6 +17,9 @@ import { DialogWorkspaceCreate, openWorkspaceSession, restoreWorkspaceSession } 
 import { Spinner } from "./spinner"
 import { errorMessage } from "@/util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
+import { createStore } from "solid-js/store"
+import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import { deriveSessionRecap, type SessionRecap } from "./session-recap"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
@@ -30,7 +33,20 @@ export function DialogSessionList() {
   const sdk = useSDK()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
+  const [activeSessionID, setActiveSessionID] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
+  const [recapBySession, setRecapBySession] = createStore<
+    Record<
+      string,
+      {
+        state: "loading" | "ready" | "error"
+        version?: string
+        recap?: SessionRecap
+      }
+    >
+  >({})
+
+  const loadingRecap = new Set<string>()
 
   const [searchResults, { refetch }] = createResource(search, async (query) => {
     if (!query) return undefined
@@ -40,6 +56,67 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => searchResults() ?? sync.data.session)
+
+  const sessionStatus = createMemo<Record<string, SessionStatus>>(() => sync.data.session_status ?? {})
+
+  function recapVersion(sessionID: string) {
+    const session = sessions().find((item) => item.id === sessionID)
+    const updated = session?.time.updated ?? 0
+    const status = sessionStatus()[sessionID]
+    const state =
+      !status ? "idle" : "attempt" in status ? `${status.type}:${status.attempt}:${status.message ?? ""}` : status.type
+    return `${updated}:${state}`
+  }
+
+  async function ensureRecap(sessionID: string | undefined) {
+    if (!sessionID) return
+    if (loadingRecap.has(sessionID)) return
+    const version = recapVersion(sessionID)
+    if (recapBySession[sessionID]?.state === "ready" && recapBySession[sessionID]?.version === version) return
+
+    loadingRecap.add(sessionID)
+    setRecapBySession(sessionID, {
+      state: "loading",
+      version,
+    })
+
+    try {
+      const [messagesResult, todosResult] = await Promise.all([
+        sdk.client.session.messages({ sessionID, limit: 100 }),
+        sdk.client.session.todo({ sessionID }),
+      ])
+      const recap = deriveSessionRecap({
+        messages: messagesResult.data ?? [],
+        todos: todosResult.data ?? [],
+        status: sessionStatus()[sessionID],
+      })
+      setRecapBySession(sessionID, {
+        state: "ready",
+        version,
+        recap,
+      })
+    } catch {
+      setRecapBySession(sessionID, {
+        state: "error",
+        version,
+      })
+    } finally {
+      loadingRecap.delete(sessionID)
+    }
+  }
+
+  createEffect(() => {
+    const current = currentSessionID()
+    if (!current) return
+    setActiveSessionID(current)
+    void ensureRecap(current)
+  })
+
+  createEffect(() => {
+    const active = activeSessionID()
+    if (!active) return
+    void ensureRecap(active)
+  })
 
   function createWorkspace() {
     dialog.replace(() => (
@@ -170,8 +247,22 @@ export function DialogSessionList() {
       })
   })
 
+  createEffect(() => {
+    if (activeSessionID()) return
+    const first = options()[0]?.value
+    if (!first) return
+    setActiveSessionID(first)
+    void ensureRecap(first)
+  })
+
   onMount(() => {
     dialog.setSize("large")
+  })
+
+  const selectedRecap = createMemo(() => {
+    const sessionID = activeSessionID()
+    if (!sessionID) return
+    return recapBySession[sessionID]
   })
 
   return (
@@ -181,10 +272,47 @@ export function DialogSessionList() {
       skipFilter={true}
       current={currentSessionID()}
       onFilter={setSearch}
-      onMove={() => {
+      onMove={(option) => {
         setToDelete(undefined)
+        setActiveSessionID(option.value)
+      }}
+      selectedDetails={() => {
+        const sessionID = activeSessionID()
+        if (!sessionID) return
+        const recap = selectedRecap()
+        return (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1} flexDirection="column">
+            <text fg={theme.accent}>
+              <b>Resume Aid</b>
+            </text>
+            {recap?.state === "loading" && (
+              <text fg={theme.textMuted} paddingTop={1}>
+                Loading recap...
+              </text>
+            )}
+            {recap?.state === "error" && (
+              <text fg={theme.warning} paddingTop={1}>
+                Recap unavailable.
+              </text>
+            )}
+            {recap?.state === "ready" && recap.recap && (
+              <box flexDirection="column" paddingTop={1}>
+                <text fg={theme.textMuted}>
+                  <b>Done:</b> {recap.recap.done}
+                </text>
+                <text fg={theme.textMuted}>
+                  <b>Blocked:</b> {recap.recap.blocked}
+                </text>
+                <text fg={theme.textMuted}>
+                  <b>Next:</b> {recap.recap.next}
+                </text>
+              </box>
+            )}
+          </box>
+        )
       }}
       onSelect={(option) => {
+        setActiveSessionID(option.value)
         route.navigate({
           type: "session",
           sessionID: option.value,
