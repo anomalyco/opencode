@@ -81,6 +81,11 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
     return
   }
 
+  if (name === "stats") {
+    route.navigate({ type: "stats" })
+    return
+  }
+
   route.navigate({ type: "plugin", id: name, data: params })
 }
 
@@ -94,6 +99,10 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
         prompt: route.data.prompt,
       },
     }
+  }
+
+  if (route.data.type === "stats") {
+    return { name: "stats" }
   }
 
   return {

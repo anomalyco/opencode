@@ -41,6 +41,7 @@ import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { Stats } from "@tui/routes/stats"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -319,6 +320,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     if (route.data.type === "plugin") {
       renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      return
+    }
+
+    if (route.data.type === "stats") {
+      renderer.setTerminalTitle("OC | Stats")
     }
   })
 
@@ -584,6 +590,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
+      },
+      category: "System",
+    },
+    {
+      title: "View usage stats",
+      value: "opencode.usage",
+      slash: {
+        name: "usage",
+        aliases: ["stats"],
+      },
+      onSelect: (dialog) => {
+        dialog.clear()
+        route.navigate({ type: "stats" })
       },
       category: "System",
     },
@@ -855,6 +874,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           </Match>
           <Match when={route.data.type === "session"}>
             <Session />
+          </Match>
+          <Match when={route.data.type === "stats"}>
+            <Stats />
           </Match>
         </Switch>
       </Show>
