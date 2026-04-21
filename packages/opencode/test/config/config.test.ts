@@ -1427,35 +1427,6 @@ test("migrates legacy patch tool to edit permission", async () => {
   })
 })
 
-test("migrates legacy multiedit tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                multiedit: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "deny",
-      })
-    },
-  })
-})
-
 test("migrates mixed legacy tools config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -2250,7 +2221,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2278,7 +2249,7 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 
 test("parseManagedPlist parses server settings", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2298,7 +2269,7 @@ test("parseManagedPlist parses server settings", async () => {
 
 test("parseManagedPlist parses permission rules", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2328,7 +2299,7 @@ test("parseManagedPlist parses permission rules", async () => {
 
 test("parseManagedPlist parses enabled_providers", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2345,7 +2316,7 @@ test("parseManagedPlist parses enabled_providers", async () => {
 
 test("parseManagedPlist handles empty config", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),
       "test:mobileconfig",

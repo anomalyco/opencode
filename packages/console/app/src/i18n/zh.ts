@@ -252,6 +252,8 @@ export const dict = {
   "go.cta.price": "$10/月",
   "go.cta.promo": "首月 $5",
   "go.pricing.body": "可配合任何代理使用。首月 $5，之后 $10/月。如有需要可充值。随时取消。",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6 使用额度提升至 3 倍，限时至 4 月 27 日",
   "go.graph.free": "免费",
   "go.graph.freePill": "Big Pickle 和免费模型",
   "go.graph.go": "Go",

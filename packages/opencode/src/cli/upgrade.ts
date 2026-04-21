@@ -7,6 +7,7 @@ import { InstallationVersion } from "@/installation/version"
 
 export async function upgrade() {
   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
+  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
   const method = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
   const latest = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.latest(method))).catch(() => {})
   if (!latest) return
@@ -17,7 +18,6 @@ export async function upgrade() {
   }
 
   if (InstallationVersion === latest) return
-  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
 
   const kind = Installation.getReleaseType(InstallationVersion, latest)
 
