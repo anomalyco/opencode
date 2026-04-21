@@ -287,6 +287,15 @@ export interface Hooks {
       }[]
     },
   ) => Promise<void>
+  /**
+   * Called after the base system prompt is assembled and before the request is sent.
+   *
+   * `output.system` is an ordered list of system prompt blocks. Plugins that are
+   * adding supplemental context should generally prefer merging that text into
+   * `output.system[0]` instead of pushing a new block, unless a separate system
+   * segment is explicitly required. Some OpenAI-compatible backends only accept a
+   * single system message at the start of the conversation.
+   */
   "experimental.chat.system.transform"?: (
     input: { sessionID?: string; model: Model },
     output: {
