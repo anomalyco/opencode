@@ -266,6 +266,8 @@ export const dict = {
   "go.cta.promo": "$5 el primer mes",
   "go.pricing.body":
     "Úsalo con cualquier agente. $5 el primer mes, luego 10 $/mes. Recarga crédito si es necesario. Cancela en cualquier momento.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6: límite de uso triplicado hasta el 27 de abril",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle y modelos gratuitos",
   "go.graph.go": "Go",
