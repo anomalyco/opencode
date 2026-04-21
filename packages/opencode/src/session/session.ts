@@ -127,7 +127,7 @@ export const Info = z
         additions: z.number(),
         deletions: z.number(),
         files: z.number(),
-        diffs: Snapshot.FileDiff.array().optional(),
+        diffs: Snapshot.FileDiff.zod.array().optional(),
       })
       .optional(),
     share: z
@@ -239,7 +239,7 @@ export const Event = {
     "session.diff",
     z.object({
       sessionID: SessionID.zod,
-      diff: Snapshot.FileDiff.array(),
+      diff: Snapshot.FileDiff.zod.array(),
     }),
   ),
   Error: BusEvent.define(
