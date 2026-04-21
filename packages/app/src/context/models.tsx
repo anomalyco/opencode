@@ -102,8 +102,11 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     const find = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
 
+    const userIndex = (model: ModelKey) =>
+      store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
+
     function update(model: ModelKey, state: Visibility) {
-      const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
+      const index = userIndex(model)
       if (index >= 0) {
         setStore("user", index, (current) => ({ ...current, visibility: state }))
         return
@@ -124,6 +127,27 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     const setVisibility = (model: ModelKey, state: boolean) => {
       update(model, state ? "show" : "hide")
+    }
+
+    const favorites = createMemo(() =>
+      store.user
+        .filter((item) => item.favorite)
+        .map((item) => ({ providerID: item.providerID, modelID: item.modelID })),
+    )
+
+    const isFavorite = (model: ModelKey) => {
+      const index = userIndex(model)
+      if (index === -1) return false
+      return !!store.user[index]?.favorite
+    }
+
+    const toggleFavorite = (model: ModelKey) => {
+      const index = userIndex(model)
+      if (index >= 0) {
+        setStore("user", index, (current) => ({ ...current, favorite: !current.favorite, visibility: "show" as const }))
+        return
+      }
+      setStore("user", store.user.length, { ...model, favorite: true, visibility: "show" })
     }
 
     const push = (model: ModelKey) => {
@@ -153,6 +177,11 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       recent: {
         list: createMemo(() => store.recent),
         push,
+      },
+      favorite: {
+        list: favorites,
+        has: isFavorite,
+        toggle: toggleFavorite,
       },
       variant: {
         get: getVariant,

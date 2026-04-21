@@ -1,23 +1,61 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { Icon } from "@opencode-ai/ui/icon"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Component, Show } from "solid-js"
+import { type Component, createMemo, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
+type ModelListItem = {
+  model: ReturnType<ModelState["list"]>[number]
+  category: string
+  order: number
+}
+
+function key(item: { provider: { id: string }; id: string }) {
+  return `${item.provider.id}:${item.id}`
+}
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
   const model = props.model ?? useLocal().model
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()
+
+  const items = createMemo<ModelListItem[]>(() => {
+    const favoritesLabel = language.t("dialog.model.group.favorites")
+    const recentLabel = language.t("dialog.model.group.recent")
+    const favorites = model.favorite().flatMap((item) => (item ? [item] : []))
+    const recent = model.recent().flatMap((item) => (item ? [item] : []))
+    const favoriteKeys = new Set(favorites.map(key))
+    const recentKeys = new Set(recent.map(key))
+    const rest = model
+      .list()
+      .filter((item) => !favoriteKeys.has(key(item)))
+      .filter((item) => !recentKeys.has(key(item)))
+      .map((item, order) => ({ model: item, category: item.provider.name, order }))
+
+    return [
+      ...favorites.map((item, order) => ({ model: item, category: favoritesLabel, order })),
+      ...recent
+        .filter((item) => !favoriteKeys.has(key(item)))
+        .map((item, order) => ({ model: item, category: recentLabel, order })),
+      ...rest,
+    ]
+  })
+
+  const current = createMemo(() => {
+    const item = model.current()
+    if (!item) return undefined
+    return items().find((entry) => entry.model.id === item.id && entry.model.provider.id === item.provider.id)
+  })
 
   const connect = (provider: string) => {
     void import("./dialog-connect-provider").then((x) => {
@@ -47,9 +85,27 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
         <List
           class="[&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
-          items={model.list}
-          current={model.current()}
-          key={(x) => `${x.provider.id}:${x.id}`}
+          items={items}
+          current={current()}
+          key={(x) => `${x.model.provider.id}:${x.model.id}`}
+          filterKeys={["model.provider.name", "model.name", "model.id", "category"]}
+          sortBy={(a, b) => {
+            const favoritesLabel = language.t("dialog.model.group.favorites")
+            const recentLabel = language.t("dialog.model.group.recent")
+            if (a.category === favoritesLabel && b.category === favoritesLabel) return a.order - b.order
+            if (a.category === recentLabel && b.category === recentLabel) return a.order - b.order
+            return a.model.name.localeCompare(b.model.name)
+          }}
+          groupBy={(x) => x.category}
+          sortGroupsBy={(a, b) => {
+            const favoritesLabel = language.t("dialog.model.group.favorites")
+            const recentLabel = language.t("dialog.model.group.recent")
+            if (a.category === favoritesLabel) return -1
+            if (b.category === favoritesLabel) return 1
+            if (a.category === recentLabel) return -1
+            if (b.category === recentLabel) return 1
+            return a.category.localeCompare(b.category)
+          }}
           itemWrapper={(item, node) => (
             <Tooltip
               class="w-full"
@@ -57,9 +113,9 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
               gutter={12}
               value={
                 <ModelTooltip
-                  model={item}
-                  latest={item.latest}
-                  free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+                  model={item.model}
+                  latest={item.model.latest}
+                  free={item.model.provider.id === "opencode" && (!item.model.cost || item.model.cost.input === 0)}
                 />
               }
             >
@@ -67,7 +123,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             </Tooltip>
           )}
           onSelect={(x) => {
-            model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+            model.set(x ? { modelID: x.model.id, providerID: x.model.provider.id } : undefined, {
               recent: true,
             })
             dialog.close()
@@ -75,11 +131,36 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
         >
           {(i) => (
             <div class="w-full flex items-center gap-x-2.5">
-              <span>{i.name}</span>
+              <span class="truncate">{i.model.name}</span>
               <Tag>{language.t("model.tag.free")}</Tag>
-              <Show when={i.latest}>
+              <Show when={i.model.latest}>
                 <Tag>{language.t("model.tag.latest")}</Tag>
               </Show>
+              <div
+                role="button"
+                tabIndex={-1}
+                data-component="icon-button"
+                data-size="normal"
+                data-variant="ghost"
+                class="ml-auto"
+                aria-label={
+                  model.isFavorite({ modelID: i.model.id, providerID: i.model.provider.id })
+                    ? language.t("dialog.model.favorite.remove")
+                    : language.t("dialog.model.favorite.add")
+                }
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  model.toggleFavorite({ modelID: i.model.id, providerID: i.model.provider.id })
+                }}
+              >
+                <Icon
+                  name="star"
+                  class={model.isFavorite({ modelID: i.model.id, providerID: i.model.provider.id })
+                    ? "text-icon-warning-base"
+                    : undefined}
+                />
+              </div>
             </div>
           )}
         </List>
