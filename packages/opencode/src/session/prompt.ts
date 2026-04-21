@@ -1721,50 +1721,25 @@ export const PromptInput = z.object({
   variant: z.string().optional(),
   parts: z.array(
     z.discriminatedUnion("type", [
-      MessageV2.TextPart.omit({
-        messageID: true,
-        sessionID: true,
-      })
-        .partial({
-          id: true,
-        })
-        .meta({
-          ref: "TextPartInput",
-        }),
-      MessageV2.FilePart.omit({
-        messageID: true,
-        sessionID: true,
-      })
-        .partial({
-          id: true,
-        })
-        .meta({
-          ref: "FilePartInput",
-        }),
-      MessageV2.AgentPart.omit({
-        messageID: true,
-        sessionID: true,
-      })
-        .partial({
-          id: true,
-        })
-        .meta({
-          ref: "AgentPartInput",
-        }),
-      MessageV2.SubtaskPart.omit({
-        messageID: true,
-        sessionID: true,
-      })
-        .partial({
-          id: true,
-        })
-        .meta({
-          ref: "SubtaskPartInput",
-        }),
+      MessageV2.TextPartInput.zod as unknown as z.ZodObject<any>,
+      MessageV2.FilePartInput.zod as unknown as z.ZodObject<any>,
+      MessageV2.AgentPartInput.zod as unknown as z.ZodObject<any>,
+      MessageV2.SubtaskPartInput.zod as unknown as z.ZodObject<any>,
     ]),
   ),
 })
-export type PromptInput = z.infer<typeof PromptInput>
+// `z.discriminatedUnion` erases the discriminated members' shapes back to
+// `{}` because the derived `.zod` on each input is typed as an opaque
+// `z.ZodType`. Restore the precise `parts` type from the exported Schema
+// input types so callers see a proper tagged union.
+type PartInputUnion =
+  | MessageV2.TextPartInput
+  | MessageV2.FilePartInput
+  | MessageV2.AgentPartInput
+  | MessageV2.SubtaskPartInput
+export type PromptInput = Omit<z.infer<typeof PromptInput>, "parts"> & {
+  parts: PartInputUnion[]
+}
 
 export const LoopInput = z.object({
   sessionID: SessionID.zod,
@@ -1792,14 +1767,19 @@ export const CommandInput = z.object({
   arguments: z.string(),
   command: z.string(),
   variant: z.string().optional(),
+  // Inlined (no `.meta({ ref })`) to keep the original SDK output — the
+  // PromptInput call site below references FilePartInput by ref via the
+  // Schema export in message-v2.ts.
   parts: z
     .array(
       z.discriminatedUnion("type", [
-        MessageV2.FilePart.omit({
-          messageID: true,
-          sessionID: true,
-        }).partial({
-          id: true,
+        z.object({
+          id: PartID.zod.optional(),
+          type: z.literal("file"),
+          mime: z.string(),
+          filename: z.string().optional(),
+          url: z.string(),
+          source: MessageV2.FilePartSource.zod.optional(),
         }),
       ]),
     )
