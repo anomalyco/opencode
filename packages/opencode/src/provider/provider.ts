@@ -19,6 +19,7 @@ import { zod } from "@/util/effect-zod"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
@@ -28,6 +29,7 @@ import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { RateLimit, RateLimitError, formatGateMessage } from "./rate-limit"
 
 const log = Log.create({ service: "provider" })
 
@@ -1442,6 +1444,11 @@ const layer: Layer.Layer<
         const chunkTimeout = options["chunkTimeout"]
         delete options["chunkTimeout"]
 
+        if (options["rateLimit"] && typeof options["rateLimit"] === "object") {
+          RateLimit.configure(model.providerID, options["rateLimit"] as any)
+        }
+        delete options["rateLimit"]
+
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
@@ -1471,11 +1478,26 @@ const layer: Layer.Layer<
             }
           }
 
+          const estimate = RateLimit.estimateRequestTokens(opts.body)
+          const gate = RateLimit.check(model.providerID, estimate)
+          if (!gate.ok) {
+            throw new RateLimitError({
+              providerID: model.providerID,
+              reason: gate.reason,
+              limit: gate.limit,
+              current: gate.current,
+              resetAt: gate.resetAt,
+              message: formatGateMessage(model.providerID, gate),
+            })
+          }
+          RateLimit.tick(model.providerID, estimate)
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
           })
+
+          RateLimit.recordResponse(model.providerID, res.headers)
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
@@ -1506,7 +1528,10 @@ const layer: Layer.Layer<
           installedPath = model.api.npm
         }
 
-        const mod = await import(installedPath)
+        // `installedPath` is a local entry path or an existing `file://` URL. Normalize
+        // only path inputs so Node on Windows accepts the dynamic import.
+        const importSpec = installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
+        const mod = await import(importSpec)
 
         const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
         const loaded = fn({

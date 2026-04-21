@@ -16,6 +16,7 @@ import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider"
+import { RateLimit } from "@/provider/rate-limit"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { Log } from "@/util"
@@ -360,6 +361,11 @@ export const layer: Layer.Layer<
               usage: value.usage,
               metadata: value.providerMetadata,
             })
+            RateLimit.recordUsage(
+              ctx.model.providerID,
+              Number(value.usage?.inputTokens ?? 0),
+              Number(value.usage?.outputTokens ?? 0),
+            )
             ctx.assistantMessage.finish = value.finishReason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
