@@ -20,13 +20,10 @@ export namespace Config {
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
-    let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await loadFile(resolved))
-      }
-    }
+    const base = await global()
+    const bounded = await loadProject(base, Instance.worktree)
+    const stop = await localStop(bounded)
+    let result = stop === Instance.worktree ? bounded : await loadProject(base, stop)
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
@@ -50,7 +47,7 @@ export namespace Config {
     result.agent = result.agent || {}
     const markdownAgents = [
       ...(await Filesystem.globUp("agent/**/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/agent/**/*.md", Instance.directory, Instance.worktree)),
+      ...(await Filesystem.globUp(".opencode/agent/**/*.md", Instance.directory, stop)),
     ]
     for (const item of markdownAgents) {
       const content = await Bun.file(item).text()
@@ -91,7 +88,7 @@ export namespace Config {
     result.mode = result.mode || {}
     const markdownModes = [
       ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/mode/*.md", Instance.directory, Instance.worktree)),
+      ...(await Filesystem.globUp(".opencode/mode/*.md", Instance.directory, stop)),
     ]
     for (const item of markdownModes) {
       const content = await Bun.file(item).text()
@@ -119,7 +116,7 @@ export namespace Config {
     result.command = result.command || {}
     const markdownCommands = [
       ...(await Filesystem.globUp("command/**/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/command/**/*.md", Instance.directory, Instance.worktree)),
+      ...(await Filesystem.globUp(".opencode/command/**/*.md", Instance.directory, stop)),
     ]
     for (const item of markdownCommands) {
       const content = await Bun.file(item).text()
@@ -165,7 +162,7 @@ export namespace Config {
     result.plugin.push(
       ...[
         ...(await Filesystem.globUp("plugin/*.{ts,js}", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/plugin/*.{ts,js}", Instance.directory, Instance.worktree)),
+        ...(await Filesystem.globUp(".opencode/plugin/*.{ts,js}", Instance.directory, stop)),
       ].map((x) => "file://" + x),
     )
 
@@ -355,9 +352,22 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const FindUp = z.enum(["git_submodule"]).meta({
+    ref: "ConfigFindUp",
+  })
+  export type FindUp = z.infer<typeof FindUp>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
+      config: z
+        .object({
+          find_up: FindUp.optional().describe(
+            "Control upward local discovery. 'git_submodule' continues past the current git root to the next enclosing git root.",
+          ),
+        })
+        .optional()
+        .describe("Configuration loading behavior"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       tui: TUI.optional().describe("TUI specific settings"),
@@ -537,6 +547,37 @@ export namespace Config {
 
     return result
   })
+
+  export async function searchStop() {
+    return localStop(await get())
+  }
+
+  async function loadProject(base: Info, stop: string) {
+    let result = base
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, stop)
+      for (const resolved of found.toReversed()) {
+        result = mergeDeep(result, await loadFile(resolved))
+      }
+    }
+    return result
+  }
+
+  async function localStop(config: Info) {
+    if (config.config?.find_up !== "git_submodule") return Instance.worktree
+    return nextGitRoot(path.dirname(Instance.worktree)).then((x) => x ?? Instance.worktree)
+  }
+
+  async function nextGitRoot(start: string) {
+    const matches = Filesystem.up({
+      targets: [".git"],
+      start,
+    })
+    const first = await matches.next().then((x) => x.value)
+    await matches.return()
+    if (!first) return
+    return path.dirname(first)
+  }
 
   async function loadFile(filepath: string): Promise<Info> {
     log.info("loading", { path: filepath })

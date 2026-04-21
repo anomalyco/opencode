@@ -67,10 +67,11 @@ export namespace SystemPrompt {
 
   export async function custom() {
     const config = await Config.get()
+    const stop = await Config.searchStop()
     const paths = new Set<string>()
 
     for (const localRuleFile of LOCAL_RULE_FILES) {
-      const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
+      const matches = await Filesystem.findUp(localRuleFile, Instance.directory, stop)
       if (matches.length > 0) {
         matches.forEach((path) => paths.add(path))
         break
@@ -99,7 +100,7 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+          matches = await Filesystem.globUp(instruction, Instance.directory, stop).catch(() => [])
         }
         matches.forEach((path) => paths.add(path))
       }

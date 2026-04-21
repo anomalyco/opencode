@@ -48,6 +48,19 @@ Place project specific config in the root of your project.
 
 When opencode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
 
+For nested repositories, you can opt into searching one enclosing Git root beyond the current project root.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "config": {
+    "find_up": "git_submodule"
+  }
+}
+```
+
+With `config.find_up: "git_submodule"`, opencode keeps the current repo behavior and then continues upward to exactly the next enclosing Git root. This also applies to local `.opencode/*` files, `AGENTS.md`, and relative `instructions` globs.
+
 This is also safe to be checked into Git and uses the same schema as the global one.
 
 ---
