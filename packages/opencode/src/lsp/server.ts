@@ -722,8 +722,6 @@ export const CSharp: Info = {
           "--global",
           "roslyn-language-server",
           "--prerelease",
-          "--tool-path",
-          Global.Path.bin,
         ],
         {
           stdout: "pipe",
