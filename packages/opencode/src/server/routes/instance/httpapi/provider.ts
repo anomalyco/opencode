@@ -110,6 +110,7 @@ export const providerHandlers = Layer.unwrap(
         .authorize({
           providerID: ctx.params.providerID,
           method: ctx.payload.method,
+          accountKey: ctx.payload.accountKey,
           inputs: ctx.payload.inputs,
         })
         .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
@@ -125,6 +126,7 @@ export const providerHandlers = Layer.unwrap(
         .callback({
           providerID: ctx.params.providerID,
           method: ctx.payload.method,
+          accountKey: ctx.payload.accountKey,
           code: ctx.payload.code,
         })
         .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))

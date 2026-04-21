@@ -35,7 +35,13 @@ const emptyAccount = Layer.mock(Account.Service)({
 })
 
 const emptyAuth = Layer.mock(Auth.Service)({
+  get: () => Effect.succeed(undefined),
   all: () => Effect.succeed({}),
+  accounts: () => Effect.succeed({}),
+  active: () => Effect.succeed(undefined),
+  activate: () => Effect.void,
+  set: () => Effect.void,
+  remove: () => Effect.void,
 })
 
 const testFlock = EffectFlock.defaultLayer
@@ -1716,10 +1722,21 @@ test("project config overrides remote well-known config", async () => {
   }) as unknown as typeof fetch
 
   const fakeAuth = Layer.mock(Auth.Service)({
+    get: (providerID: string) =>
+      Effect.succeed(
+        providerID === "https://example.com"
+          ? new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" })
+          : undefined,
+      ),
     all: () =>
       Effect.succeed({
         "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
       }),
+    accounts: () => Effect.succeed({}),
+    active: () => Effect.succeed(undefined),
+    activate: () => Effect.void,
+    set: () => Effect.void,
+    remove: () => Effect.void,
   })
 
   const layer = Config.layer.pipe(
@@ -1774,10 +1791,21 @@ test("wellknown URL with trailing slash is normalized", async () => {
   }) as unknown as typeof fetch
 
   const fakeAuth = Layer.mock(Auth.Service)({
+    get: (providerID: string) =>
+      Effect.succeed(
+        providerID === "https://example.com/"
+          ? new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" })
+          : undefined,
+      ),
     all: () =>
       Effect.succeed({
         "https://example.com/": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
       }),
+    accounts: () => Effect.succeed({}),
+    active: () => Effect.succeed(undefined),
+    activate: () => Effect.void,
+    set: () => Effect.void,
+    remove: () => Effect.void,
   })
 
   const layer = Config.layer.pipe(

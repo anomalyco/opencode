@@ -60,15 +60,15 @@ export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuth
 
 export const AuthorizeInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
+  accountKey: Schema.optional(Schema.String).annotate({ description: "Optional account key for multi-account auth" }),
   inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 
 export const CallbackInput = Schema.Struct({
   method: Schema.Number.annotate({ description: "Auth method index" }),
+  accountKey: Schema.optional(Schema.String).annotate({ description: "Optional account key for multi-account auth" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
-  accountKey: Schema.optional(Schema.String).annotate({ description: "Compound key for multi-account, e.g. 'openai:work'" }),
-  accountLabel: Schema.optional(Schema.String).annotate({ description: "User-friendly label for this account" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
@@ -110,7 +110,7 @@ export interface Interface {
 
 interface State {
   hooks: Record<ProviderID, Hook>
-  pending: Map<ProviderID, AuthOAuthResult>
+  pending: Map<string, AuthOAuthResult>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
@@ -131,10 +131,12 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
                 : Result.failVoid,
             ),
           ),
-          pending: new Map<ProviderID, AuthOAuthResult>(),
+          pending: new Map<string, AuthOAuthResult>(),
         }
       }),
     )
+
+    const pendingKey = (providerID: ProviderID, accountKey?: string) => Auth.accountStorageKey(providerID, accountKey)
 
     const decode = Schema.decodeUnknownSync(Methods)
     const methods = Effect.fn("ProviderAuth.methods")(function* () {
@@ -184,7 +186,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
       }
 
       const result = yield* Effect.promise(() => method.authorize(input.inputs))
-      pending.set(input.providerID, result)
+      pending.set(pendingKey(input.providerID, input.accountKey), result)
       return {
         url: result.url,
         method: result.method,
@@ -194,7 +196,8 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
 
     const callback = Effect.fn("ProviderAuth.callback")(function* (input: { providerID: ProviderID } & CallbackInput) {
       const pending = (yield* InstanceState.get(state)).pending
-      const match = pending.get(input.providerID)
+      const key = pendingKey(input.providerID, input.accountKey)
+      const match = pending.get(key)
       if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
       if (match.method === "code" && !input.code) {
         return yield* Effect.fail(new OauthCodeMissing({ providerID: input.providerID }))
@@ -205,34 +208,33 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
       )
       if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
 
-      const storeKey = input.accountKey ?? input.providerID
-      const accountMeta = {
-        ...(input.accountLabel ? { _accountLabel: input.accountLabel } : {}),
-      }
-
+      let wrote = false
       if ("key" in result) {
-        yield* auth.set(storeKey, {
+        yield* auth.set(Auth.accountStorageKey(input.providerID, input.accountKey), {
           type: "api",
           key: result.key,
-          ...accountMeta,
+          _accountId: input.accountKey,
         })
+        wrote = true
       }
 
       if ("refresh" in result) {
         const { type: _, provider: __, refresh, access, expires, ...extra } = result
-        yield* auth.set(storeKey, {
+        yield* auth.set(Auth.accountStorageKey(input.providerID, input.accountKey), {
           type: "oauth",
           access,
           refresh,
           expires,
+          _accountId: input.accountKey,
           ...extra,
-          ...accountMeta,
         })
+        wrote = true
       }
 
-      if (input.accountKey) {
-        yield* auth.activate(input.providerID, storeKey)
+      if (wrote) {
+        yield* auth.activate(input.providerID, input.accountKey ?? Auth.DEFAULT_ACCOUNT_KEY)
       }
+      pending.delete(key)
     })
 
     return Service.of({ methods, authorize, callback })
