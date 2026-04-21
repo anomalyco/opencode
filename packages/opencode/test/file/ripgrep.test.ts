@@ -1,3 +1,4 @@
+import { Buffer } from "buffer"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
@@ -174,6 +175,27 @@ describe("file.ripgrep", () => {
       rg.files({ cwd: "/tmp/nonexistent-dir-12345" }).pipe(Stream.runCollect),
     ).pipe(Effect.provide(Ripgrep.defaultLayer), Effect.runPromiseExit)
     expect(exit._tag).toBe("Failure")
+  })
+
+  test("search handles non-UTF-8 encoded files gracefully", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Write a file with non-UTF-8 bytes (GBK-encoded Chinese)
+        // This simulates the scenario where ripgrep emits lines.bytes instead of lines.text
+        const gbkBytes = Buffer.from([0xc4, 0xe3, 0xba, 0xc3]) // "你好" in GBK
+        const content = Buffer.concat([Buffer.from("needle "), gbkBytes, Buffer.from("\n")])
+        await Bun.write(path.join(dir, "gbk.txt"), content)
+        // Also add a normal UTF-8 file to verify mixed results work
+        await Bun.write(path.join(dir, "utf8.txt"), "needle hello\n")
+      },
+    })
+
+    const result = await run(Ripgrep.Service.use((rg) => rg.search({ cwd: tmp.path, pattern: "needle" })))
+    expect(result.partial).toBe(false)
+    // Should return matches from both files without throwing
+    expect(result.items.length).toBeGreaterThanOrEqual(1)
+    const texts = result.items.map((item) => item.lines.text)
+    expect(texts.some((t) => t.includes("needle"))).toBe(true)
   })
 
   test("ignores RIPGREP_CONFIG_PATH in direct mode", async () => {
