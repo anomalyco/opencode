@@ -22,13 +22,10 @@ const operations = [
 
 export const Parameters = Schema.Struct({
   operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
-  filePath: Schema.String.annotate({ description: "The absolute or relative path to the file" }),
-  line: Schema.Number.check(Schema.isInt())
-    .check(Schema.isGreaterThanOrEqualTo(1))
-    .annotate({ description: "The line number (1-based, as shown in editors)" }),
-  character: Schema.Number.check(Schema.isInt())
-    .check(Schema.isGreaterThanOrEqualTo(1))
-    .annotate({ description: "The character offset (1-based, as shown in editors)" }),
+  filePath: Schema.optional(Schema.String).annotate({ description: "The absolute or relative path to the file. Required for all operations except workspaceSymbol." }),
+  line: Schema.optional(Schema.Number).annotate({ description: "The line number (1-based, as shown in editors). Required for: goToDefinition, findReferences, hover, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls." }),
+  character: Schema.optional(Schema.Number).annotate({ description: "The character offset (1-based, as shown in editors). Required for: goToDefinition, findReferences, hover, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls." }),
+  query: Schema.optional(Schema.String).annotate({ description: "Search query. Required for workspaceSymbol operation." }),
 })
 
 export const LspTool = Tool.define(
@@ -40,35 +37,38 @@ export const LspTool = Tool.define(
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (
-        args: { operation: (typeof operations)[number]; filePath: string; line: number; character: number },
+        args: Schema.Schema.Type<typeof Parameters>,
         ctx: Tool.Context,
       ) =>
         Effect.gen(function* () {
+          if (args.operation === "workspaceSymbol") {
+            if (!args.query) {
+              throw new Error(`query is required for operation '${args.operation}'`)
+            }
+            const result: unknown[] = yield* lsp.workspaceSymbol(args.query)
+            return {
+              title: `workspaceSymbol "${args.query}"`,
+              metadata: { result },
+              output: result.length === 0 ? `No workspace symbols found matching query "${args.query}"` : JSON.stringify(result, null, 2),
+            }
+          }
+
+          if (!args.filePath) {
+            throw new Error(`filePath is required for operation '${args.operation}'`)
+          }
+
           const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
           const meta =
-            args.operation === "workspaceSymbol"
-              ? { operation: args.operation }
-              : args.operation === "documentSymbol"
-                ? { operation: args.operation, filePath: file }
-                : { operation: args.operation, filePath: file, line: args.line, character: args.character }
+            args.operation === "documentSymbol"
+              ? { operation: args.operation, filePath: file }
+              : { operation: args.operation, filePath: file, line: args.line, character: args.character }
           yield* ctx.ask({
             permission: "lsp",
             patterns: ["*"],
             always: ["*"],
             metadata: meta,
           })
-
-          const uri = pathToFileURL(file).href
-          const position = { file, line: args.line - 1, character: args.character - 1 }
-          const relPath = path.relative(Instance.worktree, file)
-          const detail =
-            args.operation === "workspaceSymbol"
-              ? ""
-              : args.operation === "documentSymbol"
-                ? relPath
-                : `${relPath}:${args.line}:${args.character}`
-          const title = detail ? `${args.operation} ${detail}` : args.operation
 
           const exists = yield* fs.existsSafe(file)
           if (!exists) throw new Error(`File not found: ${file}`)
@@ -78,6 +78,26 @@ export const LspTool = Tool.define(
 
           yield* lsp.touchFile(file, "document")
 
+          const uri = pathToFileURL(file).href
+          const relPath = path.relative(Instance.worktree, file)
+
+          if (args.operation === "documentSymbol") {
+            const result: unknown[] = yield* lsp.documentSymbol(uri)
+            return {
+              title: `documentSymbol ${relPath}`,
+              metadata: { result },
+              output: result.length === 0 ? `No document symbols found` : JSON.stringify(result, null, 2),
+            }
+          }
+
+          if (args.line === undefined || args.character === undefined) {
+            throw new Error(`line and character are required for operation '${args.operation}'`)
+          }
+
+          const position = { file, line: args.line - 1, character: args.character - 1 }
+          const detail = `${relPath}:${args.line}:${args.character}`
+          const title = `${args.operation} ${detail}`
+
           const result: unknown[] = yield* (() => {
             switch (args.operation) {
               case "goToDefinition":
@@ -86,10 +106,6 @@ export const LspTool = Tool.define(
                 return lsp.references(position)
               case "hover":
                 return lsp.hover(position)
-              case "documentSymbol":
-                return lsp.documentSymbol(uri)
-              case "workspaceSymbol":
-                return lsp.workspaceSymbol("")
               case "goToImplementation":
                 return lsp.implementation(position)
               case "prepareCallHierarchy":
@@ -98,6 +114,8 @@ export const LspTool = Tool.define(
                 return lsp.incomingCalls(position)
               case "outgoingCalls":
                 return lsp.outgoingCalls(position)
+              default:
+                throw new Error(`Unknown operation: ${args.operation}`)
             }
           })()
 
@@ -106,7 +124,7 @@ export const LspTool = Tool.define(
             metadata: { result },
             output: result.length === 0 ? `No results found for ${args.operation}` : JSON.stringify(result, null, 2),
           }
-        }).pipe(Effect.orDie),
+        }),
     }
   }),
 )
