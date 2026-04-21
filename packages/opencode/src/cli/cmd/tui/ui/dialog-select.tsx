@@ -23,6 +23,7 @@ export interface DialogSelectProps<T> {
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
+  selectedDetails?: (option: DialogSelectOption<T> | undefined) => JSX.Element | undefined
   keybind?: {
     keybind?: Keybind.Info
     title: string
@@ -141,6 +142,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const height = createMemo(() => Math.min(rows(), Math.floor(dimensions().height / 2) - 6))
 
   const selected = createMemo(() => flat()[store.selected])
+  const selectedDetails = createMemo(() => props.selectedDetails?.(selected()))
 
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
@@ -361,6 +363,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             )}
           </For>
         </scrollbox>
+      </Show>
+      <Show when={selectedDetails()}>
+        <box flexShrink={0}>{selectedDetails()}</box>
       </Show>
       <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
         <box
