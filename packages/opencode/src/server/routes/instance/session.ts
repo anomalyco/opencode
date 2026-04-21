@@ -471,7 +471,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully retrieved diff",
             content: {
               "application/json": {
-                schema: resolver(Snapshot.FileDiff.array()),
+                schema: resolver(Snapshot.FileDiff.zod.array()),
               },
             },
           },

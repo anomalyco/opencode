@@ -153,15 +153,17 @@ export const EditTool = Tool.define(
             }).pipe(Effect.orDie),
           )
 
+          let additions = 0
+          let deletions = 0
+          for (const change of diffLines(contentOld, contentNew)) {
+            if (change.added) additions += change.count || 0
+            if (change.removed) deletions += change.count || 0
+          }
           const filediff: Snapshot.FileDiff = {
             file: filePath,
             patch: diff,
-            additions: 0,
-            deletions: 0,
-          }
-          for (const change of diffLines(contentOld, contentNew)) {
-            if (change.added) filediff.additions += change.count || 0
-            if (change.removed) filediff.deletions += change.count || 0
+            additions,
+            deletions,
           }
 
           yield* ctx.metadata({
