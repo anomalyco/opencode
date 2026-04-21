@@ -18,14 +18,13 @@ const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ReturnType<typeof useLocal>["model"]
+
+type ModelCategory = "favorite" | "recent" | "provider"
 type ModelListItem = {
   model: ReturnType<ModelState["list"]>[number]
-  category: string
+  category: ModelCategory
+  label: string
   order: number
-}
-
-function key(item: { provider: { id: string }; id: string }) {
-  return `${item.provider.id}:${item.id}`
 }
 
 const ModelList: Component<{
@@ -38,33 +37,59 @@ const ModelList: Component<{
   const model = props.model ?? useLocal().model
   const language = useLanguage()
 
-  const items = createMemo<ModelListItem[]>(() => {
-    const favoritesLabel = language.t("dialog.model.group.favorites")
+  const models = createMemo<ModelListItem[]>(() => {
+    const favoriteLabel = language.t("dialog.model.group.favorites")
     const recentLabel = language.t("dialog.model.group.recent")
+
     const visible = model
       .list()
       .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true))
 
     if (props.provider) {
-      return visible.map((item, order) => ({ model: item, category: item.provider.name, order }))
+      return visible.map((item, order) => ({
+        model: item,
+        category: "provider" as const,
+        label: item.provider.name,
+        order,
+      }))
     }
 
-    const favorites = model.favorite().flatMap((item) => (item ? [item] : []))
-    const recent = model.recent().flatMap((item) => (item ? [item] : []))
+    const favorites = model.favorite()
+    const recent = model.recent()
+
+    const key = (item: { provider: { id: string }; id: string }) => {
+      return `${item.provider.id}:${item.id}`
+    }
+
     const favoriteKeys = new Set(favorites.map(key))
     const recentKeys = new Set(recent.map(key))
 
     const rest = visible
       .filter((item) => !favoriteKeys.has(key(item)))
       .filter((item) => !recentKeys.has(key(item)))
-      .map((item, order) => ({ model: item, category: item.provider.name, order }))
+      .map((item, order) => ({
+        model: item,
+        category: "provider" as const,
+        label: item.provider.name,
+        order,
+      }))
 
     return [
-      ...favorites.map((item, order) => ({ model: item, category: favoritesLabel, order })),
+      ...favorites.map((item, order) => ({
+        model: item,
+        category: "favorite" as const,
+        label: favoriteLabel,
+        order,
+      })),
       ...recent
         .filter((item) => !favoriteKeys.has(key(item)))
-        .map((item, order) => ({ model: item, category: recentLabel, order })),
+        .map((item, order) => ({
+          model: item,
+          category: "recent" as const,
+          label: recentLabel,
+          order,
+        })),
       ...rest,
     ]
   })
@@ -72,7 +97,7 @@ const ModelList: Component<{
   const current = createMemo(() => {
     const item = model.current()
     if (!item) return undefined
-    return items().find((entry) => entry.model.id === item.id && entry.model.provider.id === item.provider.id)
+    return models().find((entry) => entry.model.id === item.id && entry.model.provider.id === item.provider.id)
   })
 
   return (
@@ -81,24 +106,22 @@ const ModelList: Component<{
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.model.provider.id}:${x.model.id}`}
-      items={items}
+      items={models}
       current={current()}
-      filterKeys={["model.provider.name", "model.name", "model.id", "category"]}
+      filterKeys={["model.provider.name", "model.name", "model.id", "label"]}
       sortBy={(a, b) => {
-        const favoritesLabel = language.t("dialog.model.group.favorites")
-        const recentLabel = language.t("dialog.model.group.recent")
-        if (a.category === favoritesLabel && b.category === favoritesLabel) return a.order - b.order
-        if (a.category === recentLabel && b.category === recentLabel) return a.order - b.order
+        if (a.category === "favorite" && b.category === "favorite") return a.order - b.order
+        if (a.category === "recent" && b.category === "recent") return a.order - b.order
         return a.model.name.localeCompare(b.model.name)
       }}
-      groupBy={(x) => x.category}
+      groupBy={(x) => x.label}
       sortGroupsBy={(a, b) => {
-        const favoritesLabel = language.t("dialog.model.group.favorites")
-        const recentLabel = language.t("dialog.model.group.recent")
-        if (a.category === favoritesLabel) return -1
-        if (b.category === favoritesLabel) return 1
-        if (a.category === recentLabel) return -1
-        if (b.category === recentLabel) return 1
+        const aCategory = a.items[0].category
+        const bCategory = b.items[0].category
+        if (aCategory === "favorite") return -1
+        if (bCategory === "favorite") return 1
+        if (aCategory === "recent") return -1
+        if (bCategory === "recent") return 1
 
         const aProvider = a.items[0].model.provider.id
         const bProvider = b.items[0].model.provider.id

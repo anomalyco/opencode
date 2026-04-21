@@ -266,8 +266,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setStore("draft", state)
     }
 
-    const recent = createMemo(() => models.recent.list().map(models.find).filter(Boolean))
-    const favorite = createMemo(() => models.favorite.list().map(models.find).filter(Boolean))
+    const recent = createMemo(() =>
+      models.recent
+        .list()
+        .map(models.find)
+        .filter((item): item is NonNullable<typeof item> => item !== undefined),
+    )
+    const favorite = createMemo(() =>
+      models.favorite
+        .list()
+        .map(models.find)
+        .filter((item): item is NonNullable<typeof item> => item !== undefined),
+    )
 
     const model = {
       ready: models.ready,

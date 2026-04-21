@@ -13,9 +13,12 @@ import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
+type ModelCategory = "favorite" | "recent" | "provider"
+
 type ModelListItem = {
   model: ReturnType<ModelState["list"]>[number]
-  category: string
+  category: ModelCategory
+  label: string
   order: number
 }
 
@@ -30,7 +33,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
   const language = useLanguage()
 
   const items = createMemo<ModelListItem[]>(() => {
-    const favoritesLabel = language.t("dialog.model.group.favorites")
+    const favoriteLabel = language.t("dialog.model.group.favorites")
     const recentLabel = language.t("dialog.model.group.recent")
     const favorites = model.favorite().flatMap((item) => (item ? [item] : []))
     const recent = model.recent().flatMap((item) => (item ? [item] : []))
@@ -40,13 +43,28 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
       .list()
       .filter((item) => !favoriteKeys.has(key(item)))
       .filter((item) => !recentKeys.has(key(item)))
-      .map((item, order) => ({ model: item, category: item.provider.name, order }))
+      .map((item, order) => ({
+        model: item,
+        category: "provider" as const,
+        label: item.provider.name,
+        order,
+      }))
 
     return [
-      ...favorites.map((item, order) => ({ model: item, category: favoritesLabel, order })),
+      ...favorites.map((item, order) => ({
+        model: item,
+        category: "favorite" as const,
+        label: favoriteLabel,
+        order,
+      })),
       ...recent
         .filter((item) => !favoriteKeys.has(key(item)))
-        .map((item, order) => ({ model: item, category: recentLabel, order })),
+        .map((item, order) => ({
+          model: item,
+          category: "recent" as const,
+          label: recentLabel,
+          order,
+        })),
       ...rest,
     ]
   })
@@ -88,22 +106,20 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
           items={items}
           current={current()}
           key={(x) => `${x.model.provider.id}:${x.model.id}`}
-          filterKeys={["model.provider.name", "model.name", "model.id", "category"]}
+          filterKeys={["model.provider.name", "model.name", "model.id", "label"]}
           sortBy={(a, b) => {
-            const favoritesLabel = language.t("dialog.model.group.favorites")
-            const recentLabel = language.t("dialog.model.group.recent")
-            if (a.category === favoritesLabel && b.category === favoritesLabel) return a.order - b.order
-            if (a.category === recentLabel && b.category === recentLabel) return a.order - b.order
+            if (a.category === "favorite" && b.category === "favorite") return a.order - b.order
+            if (a.category === "recent" && b.category === "recent") return a.order - b.order
             return a.model.name.localeCompare(b.model.name)
           }}
-          groupBy={(x) => x.category}
+          groupBy={(x) => x.label}
           sortGroupsBy={(a, b) => {
-            const favoritesLabel = language.t("dialog.model.group.favorites")
-            const recentLabel = language.t("dialog.model.group.recent")
-            if (a.category === favoritesLabel) return -1
-            if (b.category === favoritesLabel) return 1
-            if (a.category === recentLabel) return -1
-            if (b.category === recentLabel) return 1
+            const aCategory = a.items[0].category
+            const bCategory = b.items[0].category
+            if (aCategory === "favorite") return -1
+            if (bCategory === "favorite") return 1
+            if (aCategory === "recent") return -1
+            if (bCategory === "recent") return 1
             return a.category.localeCompare(b.category)
           }}
           itemWrapper={(item, node) => (
@@ -156,9 +172,11 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
               >
                 <Icon
                   name="star"
-                  class={model.isFavorite({ modelID: i.model.id, providerID: i.model.provider.id })
-                    ? "text-icon-warning-base"
-                    : undefined}
+                  class={
+                    model.isFavorite({ modelID: i.model.id, providerID: i.model.provider.id })
+                      ? "text-icon-warning-base"
+                      : undefined
+                  }
                 />
               </div>
             </div>
