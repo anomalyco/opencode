@@ -714,21 +714,11 @@ export const CSharp: Info = {
 
       if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
       log.info("installing roslyn-language-server via dotnet tool")
-      const proc = Process.spawn(
-        [
-          "dotnet",
-          "tool",
-          "install",
-          "--global",
-          "roslyn-language-server",
-          "--prerelease",
-        ],
-        {
-          stdout: "pipe",
-          stderr: "pipe",
-          stdin: "pipe",
-        },
-      )
+      const proc = Process.spawn(["dotnet", "tool", "install", "--global", "roslyn-language-server", "--prerelease"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: "pipe",
+      })
       const exit = await proc.exited
       if (exit !== 0) {
         log.error("Failed to install roslyn-language-server")
