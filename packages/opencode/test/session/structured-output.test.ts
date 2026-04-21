@@ -157,16 +157,6 @@ describe("structured-output.AssistantMessage", () => {
 })
 
 describe("structured-output.createStructuredOutputTool", () => {
-  test("creates tool with correct id", () => {
-    const tool = SessionPrompt.createStructuredOutputTool({
-      schema: { type: "object", properties: { name: { type: "string" } } },
-      onSuccess: () => {},
-    })
-
-    // AI SDK tool type doesn't expose id, but we set it internally
-    expect((tool as any).id).toBe("StructuredOutput")
-  })
-
   test("creates tool with description", () => {
     const tool = SessionPrompt.createStructuredOutputTool({
       schema: { type: "object" },

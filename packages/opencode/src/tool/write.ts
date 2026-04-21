@@ -1,7 +1,7 @@
 import z from "zod"
 import * as path from "path"
 import { Effect } from "effect"
-import { Tool } from "./tool"
+import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
@@ -9,8 +9,7 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
-import { FileTime } from "../file/time"
-import { AppFileSystem } from "../filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -22,7 +21,6 @@ export const WriteTool = Tool.define(
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
     const fs = yield* AppFileSystem.Service
-    const filetime = yield* FileTime.Service
     const bus = yield* Bus.Service
     const format = yield* Format.Service
 
@@ -41,7 +39,6 @@ export const WriteTool = Tool.define(
 
           const exists = yield* fs.existsSafe(filepath)
           const contentOld = exists ? yield* fs.readFileString(filepath) : ""
-          if (exists) yield* filetime.assert(ctx.sessionID, filepath)
 
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
           yield* ctx.ask({
@@ -61,7 +58,6 @@ export const WriteTool = Tool.define(
             file: filepath,
             event: exists ? "change" : "add",
           })
-          yield* filetime.read(ctx.sessionID, filepath)
 
           let output = "Wrote file successfully."
           yield* lsp.touchFile(filepath, true)

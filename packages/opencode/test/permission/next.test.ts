@@ -6,7 +6,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
-import { provideInstance, provideTmpdirInstance, tmpdir, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
@@ -422,9 +422,9 @@ test("disabled - disables tool when denied", () => {
   expect(result.has("read")).toBe(false)
 })
 
-test("disabled - disables edit/write/apply_patch/multiedit when edit denied", () => {
+test("disabled - disables edit/write/apply_patch when edit denied", () => {
   const result = Permission.disabled(
-    ["edit", "write", "apply_patch", "multiedit", "bash"],
+    ["edit", "write", "apply_patch", "bash"],
     [
       { permission: "*", pattern: "*", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
@@ -433,7 +433,6 @@ test("disabled - disables edit/write/apply_patch/multiedit when edit denied", ()
   expect(result.has("edit")).toBe(true)
   expect(result.has("write")).toBe(true)
   expect(result.has("apply_patch")).toBe(true)
-  expect(result.has("multiedit")).toBe(true)
   expect(result.has("bash")).toBe(false)
 })
 
@@ -954,7 +953,7 @@ it.live("pending permission rejects on instance dispose", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => Instance.dispose() }))
+    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => void Instance.dispose() }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

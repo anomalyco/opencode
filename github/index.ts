@@ -281,7 +281,7 @@ async function assertOpencodeConnected() {
       })
       connected = true
       break
-    } catch (e) {}
+    } catch {}
     await sleep(300)
   } while (retry++ < 30)
 
@@ -513,7 +513,7 @@ async function subscribeSessionEvents() {
   const decoder = new TextDecoder()
 
   let text = ""
-  ;(async () => {
+  void (async () => {
     while (true) {
       try {
         const { done, value } = await reader.read()
@@ -542,7 +542,7 @@ async function subscribeSessionEvents() {
                     ? JSON.stringify(part.state.input)
                     : "Unknown"
                 console.log()
-                console.log(color + `|`, "\x1b[0m\x1b[2m" + ` ${tool.padEnd(7, " ")}`, "", "\x1b[0m" + title)
+                console.log(`${color}|`, `\x1b[0m\x1b[2m ${tool.padEnd(7, " ")}`, "", `\x1b[0m${title}`)
               }
 
               if (part.type === "text") {
@@ -561,7 +561,7 @@ async function subscribeSessionEvents() {
               if (evt.properties.info.id !== session.id) continue
               session = evt.properties.info
             }
-          } catch (e) {
+          } catch {
             // Ignore parse errors
           }
         }
@@ -576,7 +576,7 @@ async function subscribeSessionEvents() {
 async function summarize(response: string) {
   try {
     return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
-  } catch (e) {
+  } catch {
     if (isScheduleEvent()) {
       return "Scheduled task changes"
     }
@@ -776,7 +776,7 @@ async function assertPermissions() {
     console.log(`  permission: ${permission}`)
   } catch (error) {
     console.error(`Failed to check permissions: ${error}`)
-    throw new Error(`Failed to check permissions for user ${actor}: ${error}`)
+    throw new Error(`Failed to check permissions for user ${actor}: ${error}`, { cause: error })
   }
 
   if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)

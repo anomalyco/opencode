@@ -2,8 +2,8 @@ import { describe, test, expect } from "bun:test"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import z from "zod"
 import { Agent } from "../../src/agent/agent"
-import { Tool } from "../../src/tool/tool"
-import { Truncate } from "../../src/tool/truncate"
+import { Tool } from "../../src/tool"
+import { Truncate } from "../../src/tool"
 
 const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
 

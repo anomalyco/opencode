@@ -39,7 +39,11 @@ export namespace SessionEvent {
   }) {
     static create(input: FileAttachment) {
       return new FileAttachment({
-        ...input,
+        uri: input.uri,
+        mime: input.mime,
+        name: input.name,
+        description: input.description,
+        source: input.source,
       })
     }
   }
@@ -47,6 +51,15 @@ export namespace SessionEvent {
   export class AgentAttachment extends Schema.Class<AgentAttachment>("Session.Event.AgentAttachment")({
     name: Schema.String,
     source: Source.pipe(Schema.optional),
+  }) {}
+
+  export class RetryError extends Schema.Class<RetryError>("Session.Event.Retry.Error")({
+    message: Schema.String,
+    statusCode: Schema.Number.pipe(Schema.optional),
+    isRetryable: Schema.Boolean,
+    responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+    responseBody: Schema.String.pipe(Schema.optional),
+    metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   }) {}
 
   export class Prompt extends Schema.Class<Prompt>("Session.Event.Prompt")({
@@ -382,14 +395,16 @@ export namespace SessionEvent {
   export class Retried extends Schema.Class<Retried>("Session.Event.Retried")({
     ...Base,
     type: Schema.Literal("retried"),
-    error: Schema.String,
+    attempt: Schema.Number,
+    error: RetryError,
   }) {
-    static create(input: BaseInput & { error: string }) {
+    static create(input: BaseInput & { attempt: number; error: RetryError }) {
       return new Retried({
         id: input.id ?? ID.create(),
         type: "retried",
         timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
         metadata: input.metadata,
+        attempt: input.attempt,
         error: input.error,
       })
     }
@@ -437,7 +452,7 @@ export namespace SessionEvent {
     {
       mode: "oneOf",
     },
-  )
+  ).pipe(Schema.toTaggedUnion("type"))
   export type Event = Schema.Schema.Type<typeof Event>
   export type Type = Event["type"]
 }
