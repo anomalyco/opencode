@@ -142,6 +142,19 @@ function useLanguageModel(sdk: any) {
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
+    // RWTH / KI Connect NRW uses OpenAI-compatible endpoints. In practice, the
+    // safest default across the currently used RWTH-hosted models is Chat
+    // Completions (Responses is not universally supported).
+    rwth: () =>
+      Effect.succeed({
+        autoload: false,
+        async getModel(sdk: any, modelID: string) {
+          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
+          if (typeof sdk.chat === "function") return sdk.chat(modelID)
+          return sdk.languageModel(modelID)
+        },
+        options: {},
+      }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
@@ -1727,7 +1740,16 @@ export function sort<T extends { id: string }>(models: T[]) {
 }
 
 export function parseModel(model: string) {
-  const [providerID, ...rest] = model.split("/")
+  if (model === "gpt-5-mini") {
+    return {
+      providerID: ProviderID.make("rwth"),
+      modelID: ModelID.make("gpt-5.4-mini"),
+    }
+  }
+
+  const resolved = model.includes("/") ? model : `rwth/${model}`
+  const aliased = resolved === "rwth/gpt-5-mini" ? "rwth/gpt-5.4-mini" : resolved
+  const [providerID, ...rest] = aliased.split("/")
   return {
     providerID: ProviderID.make(providerID),
     modelID: ModelID.make(rest.join("/")),

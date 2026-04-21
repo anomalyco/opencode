@@ -418,6 +418,18 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
+test("parseModel assumes rwth for bare model IDs", () => {
+  const result = Provider.parseModel("gpt-5.4-mini")
+  expect(String(result.providerID)).toBe("rwth")
+  expect(String(result.modelID)).toBe("gpt-5.4-mini")
+})
+
+test("parseModel maps legacy rwth model IDs", () => {
+  const result = Provider.parseModel("gpt-5-mini")
+  expect(String(result.providerID)).toBe("rwth")
+  expect(String(result.modelID)).toBe("gpt-5.4-mini")
+})
+
 test("defaultModel returns first available model when no config set", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

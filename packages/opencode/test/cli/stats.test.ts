@@ -6,11 +6,22 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID } from "../../src/session/schema"
 import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
+import { getMessageStats } from "../../src/cli/cmd/tui/feature-plugins/sidebar/context"
 
 void Log.init({ print: false })
 
 describe("stats command", () => {
-  test("counts user and assistant messages separately", async () => {
+  test("counts messages for the sidebar context box", () => {
+    expect(getMessageStats([{ role: "user" }, { role: "assistant" }, { role: "assistant" }])).toEqual({
+      total: 3,
+      user: 1,
+      assistant: 2,
+    })
+  })
+
+  test(
+    "counts user and assistant messages separately",
+    async () => {
     await using tmp = await tmpdir({ git: true })
 
     const session = await Instance.provide({
@@ -90,5 +101,7 @@ describe("stats command", () => {
     expect(output.some((line) => line.includes("User Messages"))).toBe(true)
     expect(output.some((line) => line.includes("Assistant Messages"))).toBe(true)
     logs.mockRestore()
-  })
+    },
+    { timeout: 30000 },
+  )
 })

@@ -1,14 +1,59 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {},
+  "provider": {
+    "rwth": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "RWTH / KI Connect NRW",
+      "options": {
+        "baseURL": "https://chat.kiconnect.nrw/api/v1",
+        "apiKey": "{env:RWTH_LLM_API_KEY}"
+      },
+      "models": {
+        "fast": {
+          "id": "mistral-small-4-119b-2603",
+          "name": "Mistral Small 4 119B (Reasoning)",
+          "endpoints": ["v1/chat/completions"],
+          "vendor": "Inferenz NRW",
+          "knowledge_cutoff": "2024-06-01",
+          "max_input_tokens": 262144,
+          "max_output_tokens": 64000
+        },
+        "code": {
+          "id": "gpt-5.2",
+          "name": "OpenCode GPT 5.2 (Reasoning)",
+          "endpoints": ["v1/responses", "v1/chat/completions"],
+          "vendor": "Microsoft Azure",
+          "knowledge_cutoff": "2025-08-31",
+          "max_input_tokens": 400000,
+          "max_output_tokens": 128000
+        },
+        "reasoning": {
+          "id": "gpt-oss-120b",
+          "name": "OpenAI GPT OSS 120b",
+          "endpoints": ["v1/chat/completions"],
+          "vendor": "Inferenz NRW",
+          "knowledge_cutoff": "2024-06-01"
+        },
+        "gpt-5.4-mini": {
+          "id": "gpt-5.4-mini",
+          "name": "OpenAI GPT 5.4-mini",
+          "endpoints": ["v1/responses", "v1/chat/completions"],
+          "vendor": "Microsoft Azure",
+          "knowledge_cutoff": "2024-05-31",
+          "max_input_tokens": 400000,
+          "max_output_tokens": 128000
+        }
+      }
+    }
+  },
   "permission": {
     "edit": {
-      "packages/opencode/migration/*": "deny",
-    },
+      "packages/opencode/migration/*": "deny"
+    }
   },
   "mcp": {},
   "tools": {
     "github-triage": false,
-    "github-pr-search": false,
-  },
+    "github-pr-search": false
+  }
 }
