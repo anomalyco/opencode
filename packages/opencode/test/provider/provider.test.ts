@@ -2640,3 +2640,82 @@ test("opencode loader keeps paid models when auth exists", async () => {
     }
   }
 })
+
+test("coerceNumericToolCallIds transforms numeric IDs to strings", () => {
+  const coerce = (obj: unknown) => {
+    const clone = JSON.parse(JSON.stringify(obj))
+    const coerceRecursive = (o: unknown): void => {
+      if (!o || typeof o !== "object") return
+      if (Array.isArray(o)) {
+        for (const item of o) coerceRecursive(item)
+        return
+      }
+      const r = o as Record<string, unknown>
+      if ("tool_calls" in r && Array.isArray(r.tool_calls)) {
+        for (const tc of r.tool_calls) {
+          if (tc && typeof tc === "object" && "id" in tc && typeof tc.id === "number") {
+            tc.id = String(tc.id)
+          }
+        }
+      }
+      if ("delta" in r && r.delta && typeof r.delta === "object") {
+        const delta = r.delta as Record<string, unknown>
+        if ("tool_calls" in delta && Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            if (tc && typeof tc === "object" && "id" in tc && typeof tc.id === "number") {
+              tc.id = String(tc.id)
+            }
+          }
+        }
+      }
+      for (const value of Object.values(r)) coerceRecursive(value)
+    }
+    coerceRecursive(clone)
+    return clone
+  }
+
+  const nonStreaming = {
+    choices: [
+      {
+        message: {
+          tool_calls: [
+            { id: 123, type: "function", function: { name: "read_file", arguments: "{}" } },
+            { id: 456, type: "function", function: { name: "list_files", arguments: "{}" } },
+          ],
+        },
+      },
+    ],
+  }
+
+  const result = coerce(nonStreaming)
+  expect(result.choices[0].message.tool_calls[0].id).toBe("123")
+  expect(result.choices[0].message.tool_calls[1].id).toBe("456")
+
+  const streaming = {
+    choices: [
+      {
+        delta: {
+          tool_calls: [{ index: 0, id: 789, function: { name: "test", arguments: "" } }],
+        },
+      },
+    ],
+  }
+
+  const streamResult = coerce(streaming)
+  expect(streamResult.choices[0].delta.tool_calls[0].id).toBe("789")
+
+  const withStringIds = {
+    choices: [
+      {
+        message: {
+          tool_calls: [
+            { id: "call_abc123", type: "function", function: { name: "test", arguments: "{}" } },
+          ],
+        },
+      },
+    ],
+  }
+
+  const stringResult = coerce(withStringIds)
+  expect(stringResult.choices[0].message.tool_calls[0].id).toBe("call_abc123")
+})
