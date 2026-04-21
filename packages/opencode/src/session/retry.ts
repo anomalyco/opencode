@@ -18,9 +18,16 @@ function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
-export function delay(attempt: number, error?: MessageV2.APIError) {
+export function delay(attempt: number, error?: MessageV2.APIError | MessageV2.RateLimitError) {
+  if (error && "resetAt" in (error as any).data) {
+    const resetAt = Number((error as any).data.resetAt)
+    if (Number.isFinite(resetAt)) {
+      const wait = resetAt - Date.now()
+      if (wait > 0) return cap(wait)
+    }
+  }
   if (error) {
-    const headers = error.data.responseHeaders
+    const headers = (error as MessageV2.APIError).data.responseHeaders
     if (headers) {
       const retryAfterMs = headers["retry-after-ms"]
       if (retryAfterMs) {
@@ -54,6 +61,9 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
 export function retryable(error: Err) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
+  if (MessageV2.RateLimitError.isInstance(error)) {
+    return error.data.message
+  }
   if (MessageV2.APIError.isInstance(error)) {
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
@@ -113,7 +123,10 @@ export function policy(opts: {
       const message = retryable(error)
       if (!message) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
+        const wait = delay(
+          meta.attempt,
+          MessageV2.APIError.isInstance(error) || MessageV2.RateLimitError.isInstance(error) ? error : undefined,
+        )
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({ attempt: meta.attempt, message, next: now + wait })
         return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]

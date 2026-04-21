@@ -56,6 +56,8 @@ export const APIError = NamedError.create(
   }),
 )
 export type APIError = z.infer<typeof APIError.Schema>
+import { RateLimitError } from "@/provider/rate-limit"
+export { RateLimitError }
 export const ContextOverflowError = NamedError.create(
   "ContextOverflowError",
   z.object({ message: z.string(), responseBody: z.string().optional() }),
@@ -966,6 +968,22 @@ export function fromError(
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
+    case RateLimitError.isInstance(e):
+      return new APIError(
+        {
+          message: e.data.message,
+          statusCode: 429,
+          isRetryable: true,
+          metadata: {
+            providerID: e.data.providerID,
+            reason: e.data.reason,
+            limit: String(e.data.limit),
+            current: String(e.data.current),
+            resetAt: String(e.data.resetAt),
+          },
+        },
+        { cause: e },
+      ).toObject()
     case LoadAPIKeyError.isInstance(e):
       return new AuthError(
         {
