@@ -19,8 +19,6 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
-  ConfigYoloGetResponses,
-  ConfigYoloSetResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -1300,77 +1298,6 @@ export class Pty extends HeyApiClient {
   }
 }
 
-export class Yolo extends HeyApiClient {
-  /**
-   * Get YOLO mode status
-   *
-   * Check if YOLO mode is enabled. When enabled, all permission prompts are auto-approved (except explicit deny rules).
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ConfigYoloGetResponses, unknown, ThrowOnError>({
-      url: "/config/yolo",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Set YOLO mode
-   *
-   * Enable or disable YOLO mode. When enabled, all permission prompts are auto-approved (except explicit deny rules). Use with caution. Set persist=true to save to config file.
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      enabled?: boolean
-      persist?: boolean
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "enabled" },
-            { in: "body", key: "persist" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<ConfigYoloSetResponses, unknown, ThrowOnError>({
-      url: "/config/yolo",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
 export class Config2 extends HeyApiClient {
   /**
    * Get configuration
@@ -1467,11 +1394,6 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
-  }
-
-  private _yolo?: Yolo
-  get yolo(): Yolo {
-    return (this._yolo ??= new Yolo({ client: this.client }))
   }
 }
 
