@@ -1,3 +1,4 @@
+import { Buffer } from "buffer"
 import path from "path"
 import z from "zod"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -48,22 +49,27 @@ const Begin = z.object({
   }),
 })
 
+const TextOrBytes = z
+  .object({
+    text: z.string().optional(),
+    bytes: z.string().optional(),
+  })
+  .transform((val) => ({
+    text: val.text ?? Buffer.from(val.bytes ?? "", "base64").toString("utf-8"),
+  }))
+
 export const Match = z.object({
   type: z.literal("match"),
   data: z.object({
     path: z.object({
       text: z.string(),
     }),
-    lines: z.object({
-      text: z.string(),
-    }),
+    lines: TextOrBytes,
     line_number: z.number(),
     absolute_offset: z.number(),
     submatches: z.array(
       z.object({
-        match: z.object({
-          text: z.string(),
-        }),
+        match: TextOrBytes,
         start: z.number(),
         end: z.number(),
       }),
