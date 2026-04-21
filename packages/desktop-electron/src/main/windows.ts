@@ -1,10 +1,24 @@
 import windowState from "electron-window-state"
-import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { app, BrowserWindow, net, nativeImage, nativeTheme, protocol } from "electron"
+import { dirname, isAbsolute, join, relative, resolve } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 
 const root = dirname(fileURLToPath(import.meta.url))
+const rendererRoot = join(root, "../renderer")
+const rendererProtocol = "oc"
+const rendererHost = "renderer"
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: rendererProtocol,
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+    },
+  },
+])
 
 let backgroundColor: string | undefined
 
@@ -128,6 +142,25 @@ export function createLoadingWindow() {
   return win
 }
 
+export function registerRendererProtocol() {
+  if (protocol.isProtocolHandled(rendererProtocol)) return
+
+  protocol.handle(rendererProtocol, (request) => {
+    const url = new URL(request.url)
+    if (url.host !== rendererHost) {
+      return new Response("Not found", { status: 404 })
+    }
+
+    const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
+    const rel = relative(rendererRoot, file)
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      return new Response("Not found", { status: 404 })
+    }
+
+    return net.fetch(pathToFileURL(file).toString())
+  })
+}
+
 function loadWindow(win: BrowserWindow, html: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) {
@@ -136,7 +169,7 @@ function loadWindow(win: BrowserWindow, html: string) {
     return
   }
 
-  void win.loadFile(join(root, `../renderer/${html}`))
+  void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 function wireZoom(win: BrowserWindow) {
   win.webContents.setZoomFactor(1)
