@@ -77,6 +77,10 @@ function createMinimaxAuthPlugin(config: MinimaxRegionConfig) {
 
   return async function MinimaxPlugin(_input: PluginInput): Promise<Hooks> {
     return {
+      "chat.headers": async (input, output) => {
+        if (!input.model.providerID.startsWith("minimax")) return
+        Object.assign(output.headers, LANE_HEADERS)
+      },
       auth: {
         provider,
 
