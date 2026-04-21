@@ -147,11 +147,7 @@ export function Stats() {
   }
 
   const copySummary = async () => {
-    const text = summarizeStats({
-      range: store.range,
-      sub: store.sub,
-      records: filtered(),
-    })
+    const text = summarizeStats({ range: store.range, records: filtered() })
     try {
       await Clipboard.copy(text)
       toast.show({ variant: "info", message: "Copied stats summary to clipboard" })
@@ -163,24 +159,18 @@ export function Stats() {
   useKeyboard((evt) => {
     if (route.data.type !== "stats") return
     if (evt.defaultPrevented) return
-    // Escape / ctrl+c returns to home
     if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
       route.navigate({ type: "home" })
       evt.preventDefault()
       return
     }
-    if (evt.name === "q" && !evt.ctrl && !evt.meta) {
-      route.navigate({ type: "home" })
-      evt.preventDefault()
-      return
-    }
-    if (evt.name === "r" && !evt.ctrl && !evt.meta) {
-      cycleRange()
-      evt.preventDefault()
-      return
-    }
     if (evt.ctrl && evt.name === "s") {
       void copySummary()
+      evt.preventDefault()
+      return
+    }
+    if (!evt.ctrl && !evt.meta && evt.name === "r") {
+      cycleRange()
       evt.preventDefault()
       return
     }
@@ -200,7 +190,7 @@ export function Stats() {
     }
   })
 
-  const selectedFg = createMemo(() => selectedForeground(theme.primary))
+  const selectedFg = createMemo(() => contrastingFg(theme.primary))
 
   return (
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background}>
@@ -244,19 +234,10 @@ export function Stats() {
             fallback={<EmptyState message="No usage data yet. Start a session to see stats." />}
           >
             <Show when={store.sub === "overview"}>
-              <Overview
-                records={allRecords()}
-                filtered={filtered()}
-                stats={stats()}
-                range={store.range}
-              />
+              <Overview records={allRecords()} stats={stats()} />
             </Show>
             <Show when={store.sub === "models"}>
-              <Models
-                records={filtered()}
-                stats={stats()}
-                range={store.range}
-              />
+              <Models records={filtered()} stats={stats()} range={store.range} />
             </Show>
           </Show>
         </Show>
@@ -271,10 +252,10 @@ export function Stats() {
   )
 }
 
-function selectedForeground(bg: RGBA): RGBA {
-  const { r, g, b } = bg
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-  return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+/** Picks black or white text for good contrast against the given background. */
+function contrastingFg(bg: RGBA): RGBA {
+  const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
+  return lum > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
 }
 
 async function fetchSessionMessages(sdk: ReturnType<typeof useSDK>, sessionID: string) {
@@ -284,11 +265,7 @@ async function fetchSessionMessages(sdk: ReturnType<typeof useSDK>, sessionID: s
 
 function TopTabs(props: { active: "status" | "config" | "usage" | "stats" }) {
   const { theme } = useTheme()
-  const selectedFg = () => {
-    const { r, g, b } = theme.primary
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b
-    return lum > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
-  }
+  const selectedFg = () => contrastingFg(theme.primary)
   return (
     <box paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="row" flexShrink={0}>
       <For each={TAB_LABELS}>
@@ -392,7 +369,6 @@ function Footer(props: { loading: boolean; loaded: number; total: number }) {
 
 function Overview(props: {
   records: UsageRecord[]
-  filtered: UsageRecord[]
   stats: {
     total: number
     favorite: string | undefined
@@ -403,9 +379,7 @@ function Overview(props: {
     longestStreak: number
     currentStreak: number
     comparison: { name: string; multiplier: number } | undefined
-    perModel: { model: string; input: number; output: number; total: number; share: number }[]
   }
-  range: DateRange
 }) {
   const { theme } = useTheme()
 
@@ -414,7 +388,7 @@ function Overview(props: {
       <Heatmap records={props.records} />
 
       <box flexDirection="row" gap={6}>
-        <box flexShrink={0} flexGrow={1} minWidth={30}>
+        <box flexGrow={1} minWidth={28}>
           <KpiRow label="Favorite model" value={props.stats.favorite ? displayModel(props.stats.favorite) : "—"} />
           <KpiRow label="Sessions" value={`${props.stats.sessions}`} />
           <KpiRow label="Active days" value={`${props.stats.active}`} />
@@ -427,7 +401,7 @@ function Overview(props: {
             }
           />
         </box>
-        <box flexShrink={0} flexGrow={1} minWidth={30}>
+        <box flexGrow={1} minWidth={28}>
           <KpiRow label="Total tokens" value={formatCompact(props.stats.total)} />
           <KpiRow label="Longest session" value={formatDuration(props.stats.longest)} />
           <KpiRow label="Longest streak" value={`${props.stats.longestStreak}d`} />

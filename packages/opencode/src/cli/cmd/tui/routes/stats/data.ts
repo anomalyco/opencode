@@ -20,20 +20,14 @@ export function recordsFromMessages(
   }
   for (const msg of messages) {
     if (msg.role !== "assistant") continue
-    const assistant = msg
-    const input = assistant.tokens?.input ?? 0
-    const output = assistant.tokens?.output ?? 0
-    const reasoning = assistant.tokens?.reasoning ?? 0
-    const cacheRead = assistant.tokens?.cache?.read ?? 0
-    const cacheWrite = assistant.tokens?.cache?.write ?? 0
-    const totalInput = input + cacheRead + cacheWrite
-    const totalOutput = output + reasoning
-    if (totalInput + totalOutput <= 0) continue
+    const input = (msg.tokens?.input ?? 0) + (msg.tokens?.cache?.read ?? 0) + (msg.tokens?.cache?.write ?? 0)
+    const output = (msg.tokens?.output ?? 0) + (msg.tokens?.reasoning ?? 0)
+    if (input + output <= 0) continue
     records.push({
-      timestamp: assistant.time.created,
-      model: `${assistant.providerID}/${assistant.modelID}`,
-      input: totalInput,
-      output: totalOutput,
+      timestamp: msg.time.created,
+      model: `${msg.providerID}/${msg.modelID}`,
+      input,
+      output,
       sessionID: session.id,
       sessionStart,
       sessionEnd,

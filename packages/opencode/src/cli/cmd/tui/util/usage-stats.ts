@@ -353,9 +353,8 @@ export function compareToWork(tokens: number): { name: string; multiplier: numbe
 }
 
 export function formatMultiplier(m: number): string {
-  if (m < 2) return m.toFixed(1) + "x"
-  if (m < 10) return m.toFixed(1) + "x"
-  return Math.round(m) + "x"
+  if (m < 10) return `${m.toFixed(1)}x`
+  return `${Math.round(m)}x`
 }
 
 /* ---------- heatmap helpers ---------- */

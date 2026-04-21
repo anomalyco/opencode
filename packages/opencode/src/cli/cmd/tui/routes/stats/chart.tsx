@@ -13,6 +13,9 @@ import {
 import { modelColor } from "./palette"
 import { displayModel } from "./data"
 
+const HEIGHT = 10
+const ROW_INDICES = Array.from({ length: HEIGHT }, (_, i) => i)
+
 /** A terminal-friendly stacked vertical-bar chart.
  *
  *  Each column is a day; within a column we split the bar proportionally
@@ -20,8 +23,6 @@ import { displayModel } from "./data"
 export function Chart(props: { records: UsageRecord[]; range: DateRange }) {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
-
-  const height = 10
 
   const days = createMemo(() => buildDaySpine(props.records, props.range))
   const perModelDay = createMemo(() => tokensPerModelPerDay(props.records))
@@ -52,12 +53,11 @@ export function Chart(props: { records: UsageRecord[]; range: DateRange }) {
     return Math.max(1, Math.min(3, Math.floor(available / count)))
   })
 
-  // For every day + model, compute the row height ceiling the bar occupies.
+  // For every day + model, compute which model (if any) occupies each row
+  // of the stacked bar, from bottom up.
   const columns = createMemo(() => {
     const max = maxDay()
     return days().map((day) => {
-      // Rows: from top=0 (brightest) to bottom=height-1. For each row, we
-      // identify which model's bar occupies it, if any, for this day.
       const segments: { model: string; count: number }[] = []
       let total = 0
       for (const model of modelList()) {
@@ -68,10 +68,10 @@ export function Chart(props: { records: UsageRecord[]; range: DateRange }) {
         segments.push({ model, count: match.total })
       }
       if (max <= 0 || total <= 0) {
-        return { day, rows: Array<string | undefined>(height).fill(undefined), total: 0 }
+        return { day, rows: Array<string | undefined>(HEIGHT).fill(undefined), total: 0 }
       }
-      const totalRows = Math.max(1, Math.round((total / max) * height))
-      const rows = Array<string | undefined>(height).fill(undefined)
+      const totalRows = Math.max(1, Math.round((total / max) * HEIGHT))
+      const rows = Array<string | undefined>(HEIGHT).fill(undefined)
       let filled = 0
       // Fill from bottom up: walk segments in order, assigning rows proportionally.
       for (let i = 0; i < segments.length; i++) {
@@ -81,7 +81,7 @@ export function Chart(props: { records: UsageRecord[]; range: DateRange }) {
             ? totalRows - filled
             : Math.max(0, Math.round((seg.count / total) * totalRows))
         for (let r = 0; r < segRows; r++) {
-          const rowIndex = height - 1 - (filled + r)
+          const rowIndex = HEIGHT - 1 - (filled + r)
           if (rowIndex >= 0) rows[rowIndex] = seg.model
         }
         filled += segRows
@@ -99,13 +99,13 @@ export function Chart(props: { records: UsageRecord[]; range: DateRange }) {
         <box flexDirection="row">
           {/* Y axis */}
           <box flexShrink={0} width={8} flexDirection="column">
-            <For each={Array.from({ length: height }, (_, i) => i)}>
+            <For each={ROW_INDICES}>
               {(rowIdx) => {
                 const tick = () => {
                   const max = maxDay()
                   const isFirst = rowIdx === 0
-                  const isMid = rowIdx === Math.floor(height / 2)
-                  const isLast = rowIdx === height - 1
+                  const isMid = rowIdx === Math.floor(HEIGHT / 2)
+                  const isLast = rowIdx === HEIGHT - 1
                   if (isFirst) return formatCompact(max)
                   if (isMid) return formatCompact(Math.round(max / 2))
                   if (isLast) return "0"
@@ -124,7 +124,7 @@ export function Chart(props: { records: UsageRecord[]; range: DateRange }) {
 
           {/* Plot area: render row-by-row, each row is a sequence of cells across days */}
           <box flexDirection="column">
-            <For each={Array.from({ length: height }, (_, i) => i)}>
+            <For each={ROW_INDICES}>
               {(rowIdx) => (
                 <box flexDirection="row">
                   <For each={columns()}>

@@ -5,6 +5,8 @@ import { useTheme } from "@tui/context/theme"
 import { type UsageRecord, heatmapGrid, heatmapLevel } from "@tui/util/usage-stats"
 
 const ROW_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""]
+const ROW_INDICES = [0, 1, 2, 3, 4, 5, 6] as const
+const LEGEND_LEVELS = [0, 1, 2, 3, 4] as const
 
 /** GitHub-style contribution heatmap. Cells are rendered as single double-cells
  *  (two spaces with background color) to preserve aspect ratio in a terminal. */
@@ -53,17 +55,13 @@ export function Heatmap(props: { records: UsageRecord[] }) {
     <box flexDirection="column" flexShrink={0}>
       {/* Month labels */}
       <box flexDirection="row" paddingLeft={5}>
-        <For each={buildMonthLine(grid().weeks.length, grid().monthLabels)}>
-          {(char) => (
-            <text fg={theme.textMuted} selectable={false}>
-              {char}
-            </text>
-          )}
-        </For>
+        <text fg={theme.textMuted} selectable={false}>
+          {buildMonthLine(grid().weeks.length, grid().monthLabels)}
+        </text>
       </box>
 
       {/* Rows: Sun..Sat. Only Mon/Wed/Fri are labeled to reduce clutter. */}
-      <For each={[0, 1, 2, 3, 4, 5, 6]}>
+      <For each={ROW_INDICES}>
         {(row) => (
           <box flexDirection="row">
             <box flexShrink={0} width={4} paddingRight={1}>
@@ -90,7 +88,7 @@ export function Heatmap(props: { records: UsageRecord[] }) {
       {/* Legend */}
       <box flexDirection="row" paddingLeft={5} paddingTop={1} gap={1}>
         <text fg={theme.textMuted}>Less</text>
-        <For each={[0, 1, 2, 3, 4]}>
+        <For each={LEGEND_LEVELS}>
           {(level) => {
             if (level === 0)
               return (
@@ -114,18 +112,18 @@ export function Heatmap(props: { records: UsageRecord[] }) {
 }
 
 /**
- * Given the week count and month labels, produce a string per column so
- * that month names land at the right position in the grid. Each cell is
- * 3 columns wide (2 block chars + 1 space separator).
+ * Build a header string where month names land at the right horizontal
+ * position above the grid. Each cell is 3 columns wide (2 block chars +
+ * 1 space separator).
  */
-function buildMonthLine(weekCount: number, labels: { label: string; week: number }[]): string[] {
+function buildMonthLine(weekCount: number, labels: { label: string; week: number }[]): string {
   const width = 3 // per cell
-  const line = Array(weekCount * width).fill(" ")
+  const line = Array<string>(weekCount * width).fill(" ")
   for (const { label, week } of labels) {
     const start = week * width
     for (let i = 0; i < label.length && start + i < line.length; i++) {
       line[start + i] = label[i]
     }
   }
-  return line
+  return line.join("")
 }

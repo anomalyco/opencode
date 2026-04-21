@@ -25,8 +25,8 @@ const RANGE_LABELS: Record<DateRange, string> = {
 }
 
 /** Plain-text digest of the currently visible stats, suitable for the clipboard. */
-export function summarizeStats(input: { range: DateRange; sub: "overview" | "models"; records: UsageRecord[] }): string {
-  const { range, sub, records } = input
+export function summarizeStats(input: { range: DateRange; records: UsageRecord[] }): string {
+  const { range, records } = input
   const total = totalTokens(records)
   const s = streaks(records)
   const days = activeDays(records)
@@ -49,14 +49,18 @@ export function summarizeStats(input: { range: DateRange; sub: "overview" | "mod
   ]
   const compare = cmp ? [`~${formatMultiplier(cmp.multiplier)} more tokens than ${cmp.name}`] : []
 
-  const models = perModel.map(
-    (m) =>
-      `  ${displayModel(m.model).padEnd(28)} ${formatPct(m.share).padStart(7)}  ` +
-      `in ${formatCompact(m.input)} / out ${formatCompact(m.output)}`,
-  )
-  const modelsBlock = models.length > 0 ? ["", "Models:", ...models] : []
+  const modelsBlock: string[] =
+    perModel.length > 0
+      ? [
+          "",
+          "Models:",
+          ...perModel.map(
+            (m) =>
+              `  ${displayModel(m.model).padEnd(28)} ${formatPct(m.share).padStart(7)}  ` +
+              `in ${formatCompact(m.input)} / out ${formatCompact(m.output)}`,
+          ),
+        ]
+      : []
 
-  const lines = [header, "-".repeat(header.length), ...overview, ...compare]
-  if (sub === "models" || models.length > 0) lines.push(...modelsBlock)
-  return lines.join("\n")
+  return [header, "-".repeat(header.length), ...overview, ...compare, ...modelsBlock].join("\n")
 }
