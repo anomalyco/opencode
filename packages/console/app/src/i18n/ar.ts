@@ -261,6 +261,8 @@ export const dict = {
   "go.cta.promo": "$5 للشهر الأول",
   "go.pricing.body":
     "استخدمه مع أي وكيل. $5 للشهر الأول، ثم $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6: حد الاستخدام 3 أضعاف حتى 27 أبريل",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",

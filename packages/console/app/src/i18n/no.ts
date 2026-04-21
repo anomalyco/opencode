@@ -263,6 +263,8 @@ export const dict = {
   "go.cta.promo": "$5 første måned",
   "go.pricing.body":
     "Bruk med hvilken som helst agent. $5 første måned, deretter $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6: bruksgrensen er tredoblet til 27. april",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",

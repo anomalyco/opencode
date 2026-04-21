@@ -461,7 +461,8 @@ export async function handler(
       }
 
       if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
-        const allProviders = modelInfo.providers
+        let topPriority = Infinity
+        const providers = modelInfo.providers
           .filter((provider) => !provider.disabled)
           .filter((provider) => provider.weight !== 0)
           .filter((provider) => !retry.excludeProviders.includes(provider.id))
@@ -470,9 +471,10 @@ export async function handler(
             const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
             return usage < provider.tpmLimit * 1_000_000
           })
-
-        const topPriority = Math.min(...allProviders.map((p) => p.priority))
-        const providers = allProviders
+          .map((provider) => {
+            topPriority = Math.min(topPriority, provider.priority)
+            return provider
+          })
           .filter((p) => p.priority <= topPriority)
           .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
