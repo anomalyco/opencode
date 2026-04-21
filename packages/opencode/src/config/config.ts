@@ -91,7 +91,7 @@ const LogLevelRef = Schema.Any.annotate({ [ZodOverride]: Log.Level })
 const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))
 
-const InfoSchema = Schema.Struct({
+export const InfoSchema = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
   }),
@@ -660,7 +660,7 @@ export const layer = Layer.effect(
           const perms: Record<string, ConfigPermission.Action> = {}
           for (const [tool, enabled] of Object.entries(result.tools)) {
             const action: ConfigPermission.Action = enabled ? "allow" : "deny"
-            if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+            if (tool === "write" || tool === "edit" || tool === "patch") {
               perms.edit = action
               continue
             }
