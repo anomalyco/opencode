@@ -116,9 +116,9 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 
 const setUseBalance = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const useBalance = form.get("useBalance")?.toString() === "true"
+  const useBalance = (form.get("useBalance") as string | null) === "true"
 
   return json(
     await withActor(async () => {

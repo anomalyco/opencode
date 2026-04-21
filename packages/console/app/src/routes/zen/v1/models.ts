@@ -5,7 +5,7 @@ import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.j
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 
-export async function OPTIONS(input: APIEvent) {
+export async function OPTIONS(_input: APIEvent) {
   return new Response(null, {
     status: 200,
     headers: {

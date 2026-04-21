@@ -1,11 +1,10 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
-import { Installation } from "@/installation"
+import { InstallationVersion } from "@/installation/version"
 import { iife } from "@/util/iife"
-import { Filesystem } from "@/util/filesystem"
-import { Hash } from "@/util/hash"
-import { Log } from "../../util/log"
+import { Filesystem, Log } from "../../util"
+import { Hash } from "@opencode-ai/shared/util/hash"
 import { setTimeout as sleep } from "node:timers/promises"
 import path from "path"
 import { CopilotModels } from "./models"
@@ -80,7 +79,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         const file = cachefile(url)
         const headers = {
           Authorization: `Bearer ${ctx.auth.refresh}`,
-          "User-Agent": `opencode/${Installation.VERSION}`,
+          "User-Agent": `opencode/${InstallationVersion}`,
         }
 
         if (fresh(file)) {
@@ -89,7 +88,6 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             .catch(() => undefined)
           if (cached) return cached as Record<string, Model>
         }
-
         return CopilotModels.get(url, headers, provider.models)
           .then(async (result) => {
             await Bun.write(file, JSON.stringify(result))
@@ -113,7 +111,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const info = await getAuth()
             if (info.type !== "oauth") return fetch(request, init)
 
-            const url = request instanceof URL ? request.href : request.toString()
+            const url = request instanceof URL ? request.href : typeof request === "string" ? request : request.url
             const { isVision, isAgent } = iife(() => {
               try {
                 const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
@@ -170,7 +168,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const headers: Record<string, string> = {
               "x-initiator": isAgent ? "agent" : "user",
               ...(init?.headers as Record<string, string>),
-              "User-Agent": `opencode/${Installation.VERSION}`,
+              "User-Agent": `opencode/${InstallationVersion}`,
               Authorization: `Bearer ${info.refresh}`,
               "Openai-Intent": "conversation-edits",
             }
@@ -246,7 +244,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               headers: {
                 Accept: "application/json",
                 "Content-Type": "application/json",
-                "User-Agent": `opencode/${Installation.VERSION}`,
+                "User-Agent": `opencode/${InstallationVersion}`,
               },
               body: JSON.stringify({
                 client_id: CLIENT_ID,
@@ -276,7 +274,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     headers: {
                       Accept: "application/json",
                       "Content-Type": "application/json",
-                      "User-Agent": `opencode/${Installation.VERSION}`,
+                      "User-Agent": `opencode/${InstallationVersion}`,
                     },
                     body: JSON.stringify({
                       client_id: CLIENT_ID,
@@ -354,6 +352,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
       if (incoming.model.api.id.includes("gpt")) {
         output.maxOutputTokens = undefined
       }
+
+      // GitHub Copilot's /v1/messages shim rejects the GA `eager_input_streaming`
+      // field on tool definitions ("Extra inputs are not permitted"). Opt out of
+      // the @ai-sdk/anthropic default so it stops injecting the field.
+      if (incoming.model.api.npm === "@ai-sdk/anthropic") {
+        output.options.toolStreaming = false
+      }
     },
     "chat.headers": async (incoming, output) => {
       if (!incoming.model.providerID.includes("github-copilot")) return
@@ -375,7 +380,15 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         })
         .catch(() => undefined)
 
-      if (parts?.data.parts?.some((part) => part.type === "compaction")) {
+      if (
+        parts?.data.parts?.some(
+          (part) =>
+            part.type === "compaction" ||
+            // Auto-compaction resumes via a synthetic user text part. Treat only
+            // that marked followup as agent-initiated so manual prompts stay user-initiated.
+            (part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true),
+        )
+      ) {
         output.headers["x-initiator"] = "agent"
         return
       }

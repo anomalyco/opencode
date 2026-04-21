@@ -1,22 +1,21 @@
 import { Layer, ManagedRuntime } from "effect"
-import { memoMap } from "./run-service"
-import { Observability } from "./oltp"
+import { attach } from "./run-service"
+import * as Observability from "./observability"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
-import { Account } from "@/account"
-import { Config } from "@/config/config"
+import { Account } from "@/account/account"
+import { Config } from "@/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@/file/ripgrep"
-import { FileTime } from "@/file/time"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
-import { Storage } from "@/storage/storage"
+import { Storage } from "@/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
-import { Provider } from "@/provider/provider"
-import { ProviderAuth } from "@/provider/auth"
+import { Provider } from "@/provider"
+import { ProviderAuth } from "@/provider"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Discovery } from "@/skill/discovery"
@@ -37,19 +36,21 @@ import { LSP } from "@/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
-import { Truncate } from "@/tool/truncate"
-import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool"
+import { ToolRegistry } from "@/tool"
 import { Format } from "@/format"
-import { Project } from "@/project/project"
-import { Vcs } from "@/project/vcs"
+import { Project } from "@/project"
+import { Vcs } from "@/project"
 import { Worktree } from "@/worktree"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
-import { ShareNext } from "@/share/share-next"
-import { SessionShare } from "@/share/session"
+import { ShareNext } from "@/share"
+import { SessionShare } from "@/share"
+import { Npm } from "@/npm"
+import { memoMap } from "./memo-map"
 
 export const AppLayer = Layer.mergeAll(
-  // Observability.layer,
+  Npm.defaultLayer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
@@ -57,7 +58,6 @@ export const AppLayer = Layer.mergeAll(
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
-  FileTime.defaultLayer,
   File.defaultLayer,
   FileWatcher.defaultLayer,
   Storage.defaultLayer,
@@ -95,6 +95,27 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-).pipe(Layer.provide(Observability.layer))
+).pipe(Layer.provideMerge(Observability.layer))
 
-export const AppRuntime = ManagedRuntime.make(AppLayer, { memoMap })
+const rt = ManagedRuntime.make(AppLayer, { memoMap })
+type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
+const wrap = (effect: Parameters<typeof rt.runSync>[0]) => attach(effect as never) as never
+
+export const AppRuntime: Runtime = {
+  runSync(effect) {
+    return rt.runSync(wrap(effect))
+  },
+  runPromise(effect, options) {
+    return rt.runPromise(wrap(effect), options)
+  },
+  runPromiseExit(effect, options) {
+    return rt.runPromiseExit(wrap(effect), options)
+  },
+  runFork(effect) {
+    return rt.runFork(wrap(effect))
+  },
+  runCallback(effect) {
+    return rt.runCallback(wrap(effect))
+  },
+  dispose: () => rt.dispose(),
+}

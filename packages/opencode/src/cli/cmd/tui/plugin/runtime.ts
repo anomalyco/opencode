@@ -12,10 +12,8 @@ import {
 } from "@opencode-ai/plugin/tui"
 import path from "path"
 import { fileURLToPath } from "url"
-
-import { Config } from "@/config/config"
-import { TuiConfig } from "@/config/tui"
-import { Log } from "@/util/log"
+import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { Log } from "@/util"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
@@ -32,23 +30,24 @@ import { PluginMeta } from "@/plugin/meta"
 import { installPlugin as installModulePlugin, patchPluginConfig, readPluginManifest } from "@/plugin/install"
 import { hasTheme, upsertTheme } from "../context/theme"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
-import { Flock } from "@/util/flock"
+import { Filesystem } from "@/util"
+import { Process } from "@/util"
+import { Flock } from "@opencode-ai/shared/util/flock"
 import { Flag } from "@/flag/flag"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
+import { ConfigPlugin } from "@/config/plugin"
 
 type PluginLoad = {
-  options: Config.PluginOptions | undefined
+  options: ConfigPlugin.Options | undefined
   spec: string
   target: string
   retry: boolean
   source: PluginSource | "internal"
   id: string
   module: TuiPluginModule
-  origin: Config.PluginOrigin
+  origin: ConfigPlugin.Origin
   theme_root: string
   theme_files: string[]
 }
@@ -77,7 +76,7 @@ type RuntimeState = {
   slots: HostSlots
   plugins: PluginEntry[]
   plugins_by_id: Map<string, PluginEntry>
-  pending: Map<string, Config.PluginOrigin>
+  pending: Map<string, ConfigPlugin.Origin>
 }
 
 const log = Log.create({ service: "tui.plugin" })
@@ -147,7 +146,7 @@ function resolveRoot(root: string) {
 }
 
 function createThemeInstaller(
-  meta: Config.PluginOrigin,
+  meta: ConfigPlugin.Origin,
   root: string,
   spec: string,
   plugin: PluginEntry,
@@ -590,7 +589,7 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
   }
 }
 
-async function resolveExternalPlugins(list: Config.PluginOrigin[], wait: () => Promise<void>) {
+async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => Promise<void>) {
   return PluginLoader.loadExternal({
     items: list,
     kind: "tui",
@@ -745,7 +744,7 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
   return { plugins, ok }
 }
 
-function defaultPluginOrigin(state: RuntimeState, spec: string): Config.PluginOrigin {
+function defaultPluginOrigin(state: RuntimeState, spec: string): ConfigPlugin.Origin {
   return {
     spec,
     scope: "local",
@@ -786,12 +785,11 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   if (!spec) return false
 
   const cfg = state.pending.get(spec) ?? defaultPluginOrigin(state, spec)
-  const next = Config.pluginSpecifier(cfg.spec)
+  const next = ConfigPlugin.pluginSpecifier(cfg.spec)
   if (state.plugins.some((plugin) => plugin.load.spec === next)) {
     state.pending.delete(spec)
     return true
   }
-
   const ready = await Instance.provide({
     directory: state.directory,
     fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()),
@@ -905,7 +903,7 @@ async function installPluginBySpec(
   const tui = manifest.targets.find((item) => item.kind === "tui")
   if (tui) {
     const file = patch.items.find((item) => item.kind === "tui")?.file
-    const next = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
+    const next = tui.opts ? ([spec, tui.opts] as ConfigPlugin.Spec) : spec
     state.pending.set(spec, {
       spec: next,
       scope: global ? "global" : "local",
@@ -920,78 +918,77 @@ async function installPluginBySpec(
   }
 }
 
-export namespace TuiPluginRuntime {
-  let dir = ""
-  let loaded: Promise<void> | undefined
-  let runtime: RuntimeState | undefined
-  export const Slot = View
+let dir = ""
+let loaded: Promise<void> | undefined
+let runtime: RuntimeState | undefined
+export const Slot = View
 
-  export async function init(api: HostPluginApi) {
-    const cwd = process.cwd()
-    if (loaded) {
-      if (dir !== cwd) {
-        throw new Error(`TuiPluginRuntime.init() called with a different working directory. expected=${dir} got=${cwd}`)
-      }
-      return loaded
+export async function init(input: { api: HostPluginApi; config: TuiConfig.Info }) {
+  const cwd = process.cwd()
+  if (loaded) {
+    if (dir !== cwd) {
+      throw new Error(`TuiPluginRuntime.init() called with a different working directory. expected=${dir} got=${cwd}`)
     }
-
-    dir = cwd
-    loaded = load(api)
     return loaded
   }
 
-  export function list() {
-    if (!runtime) return []
-    return listPluginStatus(runtime)
+  dir = cwd
+  loaded = load(input)
+  return loaded
+}
+
+export function list() {
+  if (!runtime) return []
+  return listPluginStatus(runtime)
+}
+
+export async function activatePlugin(id: string) {
+  return activatePluginById(runtime, id, true)
+}
+
+export async function deactivatePlugin(id: string) {
+  return deactivatePluginById(runtime, id, true)
+}
+
+export async function addPlugin(spec: string) {
+  return addPluginBySpec(runtime, spec)
+}
+
+export async function installPlugin(spec: string, options?: { global?: boolean }) {
+  return installPluginBySpec(runtime, spec, options?.global)
+}
+
+export async function dispose() {
+  const task = loaded
+  loaded = undefined
+  dir = ""
+  if (task) await task
+  const state = runtime
+  runtime = undefined
+  if (!state) return
+  const queue = [...state.plugins].reverse()
+  for (const plugin of queue) {
+    await deactivatePluginEntry(state, plugin, false)
   }
+}
 
-  export async function activatePlugin(id: string) {
-    return activatePluginById(runtime, id, true)
+async function load(input: { api: Api; config: TuiConfig.Info }) {
+  const { api, config } = input
+  const cwd = process.cwd()
+  const slots = setupSlots(api)
+  const next: RuntimeState = {
+    directory: cwd,
+    api,
+    slots,
+    plugins: [],
+    plugins_by_id: new Map(),
+    pending: new Map(),
   }
-
-  export async function deactivatePlugin(id: string) {
-    return deactivatePluginById(runtime, id, true)
-  }
-
-  export async function addPlugin(spec: string) {
-    return addPluginBySpec(runtime, spec)
-  }
-
-  export async function installPlugin(spec: string, options?: { global?: boolean }) {
-    return installPluginBySpec(runtime, spec, options?.global)
-  }
-
-  export async function dispose() {
-    const task = loaded
-    loaded = undefined
-    dir = ""
-    if (task) await task
-    const state = runtime
-    runtime = undefined
-    if (!state) return
-    const queue = [...state.plugins].reverse()
-    for (const plugin of queue) {
-      await deactivatePluginEntry(state, plugin, false)
-    }
-  }
-
-  async function load(api: Api) {
-    const cwd = process.cwd()
-    const slots = setupSlots(api)
-    const next: RuntimeState = {
-      directory: cwd,
-      api,
-      slots,
-      plugins: [],
-      plugins_by_id: new Map(),
-      pending: new Map(),
-    }
-    runtime = next
-
+  runtime = next
+  try {
     await Instance.provide({
       directory: cwd,
       fn: async () => {
-        const config = await TuiConfig.get()
         const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
         if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
           log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
@@ -1024,8 +1021,10 @@ export namespace TuiPluginRuntime {
           await activatePluginEntry(next, plugin, false)
         }
       },
-    }).catch((error) => {
-      fail("failed to load tui plugins", { directory: cwd, error })
     })
+  } catch (error) {
+    fail("failed to load tui plugins", { directory: cwd, error })
   }
 }
+
+export * as TuiPluginRuntime from "./runtime"

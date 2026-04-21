@@ -39,28 +39,26 @@ This eliminates multiple `runPromise` round-trips and lets handlers compose natu
 
 ## Current route files
 
-Current instance route files live under `src/server/instance`, not `server/routes`.
+Current instance route files live under `src/server/routes/instance`.
 
-The main migration targets are:
+Files that are already mostly on the intended service-yielding shape:
 
-- [ ] `server/instance/session.ts` — heaviest; still has many direct facade calls for Session, SessionPrompt, SessionRevert, SessionCompaction, SessionShare, SessionSummary, Agent, Bus
-- [ ] `server/instance/global.ts` — still has direct facade calls for Config and instance lifecycle actions
-- [ ] `server/instance/provider.ts` — still has direct facade calls for Config and Provider
-- [ ] `server/instance/question.ts` — partially converted; still worth tracking here until it consistently uses the composed style
-- [ ] `server/instance/pty.ts` — still calls Pty facades directly
-- [ ] `server/instance/experimental.ts` — mixed state; some handlers are already composed, others still use facades
+- [x] `server/routes/instance/question.ts` — handlers yield `Question.Service`
+- [x] `server/routes/instance/provider.ts` — handlers yield `Provider.Service`, `ProviderAuth.Service`, and `Config.Service`
+- [x] `server/routes/instance/permission.ts` — handlers yield `Permission.Service`
+- [x] `server/routes/instance/mcp.ts` — handlers mostly yield `MCP.Service`
+- [x] `server/routes/instance/pty.ts` — handlers yield `Pty.Service`
 
-Additional route files that still participate in the migration:
+Files still worth tracking here:
 
-- [ ] `server/instance/index.ts` — Vcs, Agent, Skill, LSP, Format
-- [ ] `server/instance/file.ts` — Ripgrep, File, LSP
-- [ ] `server/instance/mcp.ts` — MCP facade-heavy
-- [ ] `server/instance/permission.ts` — Permission
-- [ ] `server/instance/workspace.ts` — Workspace
-- [ ] `server/instance/tui.ts` — Bus and Session
-- [ ] `server/instance/middleware.ts` — Session and Workspace lookups
+- [ ] `server/routes/instance/session.ts` — still the heaviest mixed file; many handlers are composed, but the file still mixes patterns and has direct `Bus.publish(...)` / `Session.list(...)` usage
+- [ ] `server/routes/instance/index.ts` — mostly converted, but still has direct `Instance.dispose()` / `Instance.*` reads for `/instance/dispose` and `/path`
+- [ ] `server/routes/instance/file.ts` — most handlers yield services, but `/find` still passes `Instance.directory` directly into ripgrep and `/find/symbol` is still stubbed
+- [ ] `server/routes/instance/experimental.ts` — mixed state; many handlers are composed, but some still rely on `runRequest(...)` or direct `Instance.project` reads
+- [ ] `server/routes/instance/middleware.ts` — still enters the instance via `Instance.provide(...)`
+- [ ] `server/routes/global.ts` — still uses `Instance.disposeAll()` and remains partly outside the fully-composed style
 
 ## Notes
 
-- Some handlers already use `AppRuntime.runPromise(Effect.gen(...))` in isolated places. Keep pushing those files toward one consistent style.
-- Route conversion is closely tied to facade removal. As services lose `makeRuntime`-backed async exports, route handlers should switch to yielding the service directly.
+- Route conversion is now less about facade removal and more about removing the remaining direct `Instance.*` reads, `Instance.provide(...)` boundaries, and small Promise-style bridges inside route files.
+- `jsonRequest(...)` / `runRequest(...)` already provide a good intermediate shape for many handlers. The remaining cleanup is mostly consistency work in the heavier files.

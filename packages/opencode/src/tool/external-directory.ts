@@ -1,10 +1,10 @@
 import path from "path"
 import { Effect } from "effect"
-import { EffectLogger } from "@/effect/logger"
-import { InstanceState } from "@/effect/instance-state"
-import type { Tool } from "./tool"
+import { EffectLogger } from "@/effect"
+import { InstanceState } from "@/effect"
+import type * as Tool from "./tool"
 import { Instance } from "../project/instance"
-import { AppFileSystem } from "../filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 type Kind = "file" | "directory"
 

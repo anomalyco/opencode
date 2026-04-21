@@ -3,8 +3,8 @@ import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "so
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { createMediaQuery } from "@solid-primitives/media"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
+import { getFilename } from "@opencode-ai/shared/util/path"
 import { Button } from "@opencode-ai/ui/button"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -14,10 +14,11 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
-import { useGlobalSync } from "@/context/global-sync"
+import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { sortedRootSessions, workspaceKey } from "./helpers"
+import { useQuery } from "@tanstack/solid-query"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -277,7 +278,7 @@ const WorkspaceSessionList = (props: {
           class="flex w-full text-left justify-start text-14-regular text-text-weak pl-2 pr-10"
           size="large"
           onClick={(e: MouseEvent) => {
-            props.loadMore()
+            void props.loadMore()
             ;(e.currentTarget as HTMLButtonElement).blur()
           }}
         >
@@ -316,12 +317,11 @@ export const SortableWorkspace = (props: {
   })
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
-  const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
+  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
-  const wasBusy = createMemo((prev) => prev || busy(), false)
-  const loading = createMemo(() => open() && !booted() && count() === 0 && !wasBusy())
+  const loading = () => query.isLoading && count() === 0
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
@@ -426,7 +426,7 @@ export const SortableWorkspace = (props: {
             mobile={props.mobile}
             ctx={props.ctx}
             showNew={showNew}
-            loading={loading}
+            loading={() => query.isLoading && count() === 0}
             sessions={sessions}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -452,10 +452,10 @@ export const LocalWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
-  const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const count = createMemo(() => sessions()?.length ?? 0)
-  const loading = createMemo(() => !booted() && count() === 0)
+  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
+  const loading = () => query.isLoading && count() === 0
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)

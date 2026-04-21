@@ -1,10 +1,11 @@
 import { GlobalBus } from "@/bus/global"
 import { disposeInstance } from "@/effect/instance-registry"
-import { Filesystem } from "@/util/filesystem"
+import { makeRuntime } from "@/effect/run-service"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { iife } from "@/util/iife"
-import { Log } from "@/util/log"
-import { LocalContext } from "../util/local-context"
-import { Project } from "./project"
+import { Log } from "@/util"
+import { LocalContext } from "../util"
+import * as Project from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 export interface InstanceContext {
@@ -15,6 +16,7 @@ export interface InstanceContext {
 
 const context = LocalContext.create<InstanceContext>("instance")
 const cache = new Map<string, Promise<InstanceContext>>()
+const project = makeRuntime(Project.Service, Project.defaultLayer)
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -29,11 +31,13 @@ function boot(input: { directory: string; init?: () => Promise<any>; worktree?: 
             worktree: input.worktree,
             project: input.project,
           }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-            directory: input.directory,
-            worktree: sandbox,
-            project,
-          }))
+        : await project
+            .runPromise((svc) => svc.fromDirectory(input.directory))
+            .then(({ project, sandbox }) => ({
+              directory: input.directory,
+              worktree: sandbox,
+              project,
+            }))
     await context.provide(ctx, async () => {
       await input.init?.()
     })
@@ -52,7 +56,7 @@ function track(directory: string, next: Promise<InstanceContext>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = AppFileSystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
@@ -89,11 +93,11 @@ export const Instance = {
    */
   containsPath(filepath: string, ctx?: InstanceContext) {
     const instance = ctx ?? Instance
-    if (Filesystem.contains(instance.directory, filepath)) return true
+    if (AppFileSystem.contains(instance.directory, filepath)) return true
     // Non-git projects set worktree to "/" which would match ANY absolute path.
     // Skip worktree check in this case to preserve external_directory permissions.
-    if (Instance.worktree === "/") return false
-    return Filesystem.contains(instance.worktree, filepath)
+    if (instance.worktree === "/") return false
+    return AppFileSystem.contains(instance.worktree, filepath)
   },
   /**
    * Captures the current instance ALS context and returns a wrapper that
@@ -113,7 +117,7 @@ export const Instance = {
     return context.provide(ctx, fn)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    const directory = Filesystem.resolve(input.directory)
+    const directory = AppFileSystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
     await disposeInstance(directory)
     cache.delete(directory)

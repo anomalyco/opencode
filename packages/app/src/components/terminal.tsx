@@ -11,9 +11,8 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
-import { monoFontFamily, useSettings } from "@/context/settings"
+import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
-import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -178,7 +177,6 @@ export const Terminal = (props: TerminalProps) => {
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
-  const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
     restore &&
@@ -193,7 +191,7 @@ export const Terminal = (props: TerminalProps) => {
   const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
-  let ghostty: Ghostty
+  let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
@@ -302,7 +300,7 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   createEffect(() => {
-    const font = monoFontFamily(settings.appearance.font())
+    const font = terminalFontFamily(settings.appearance.terminalFont())
     if (!term) return
     setOptionIfSupported(term, "fontFamily", font)
     scheduleFit()
@@ -349,9 +347,6 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
-    probe.init()
-    cleanups.push(() => probe.drop())
-
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
@@ -365,7 +360,7 @@ export const Terminal = (props: TerminalProps) => {
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: monoFontFamily(settings.appearance.font()),
+        fontFamily: terminalFontFamily(settings.appearance.terminalFont()),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
@@ -377,12 +372,10 @@ export const Terminal = (props: TerminalProps) => {
         cleanup()
         return
       }
-      ghostty = g
+      _ghostty = g
       term = t
       output = terminalWriter((data, done) =>
         t.write(data, () => {
-          probe.render(data)
-          probe.settle()
           done?.()
         }),
       )
@@ -422,7 +415,7 @@ export const Terminal = (props: TerminalProps) => {
       if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
-        document.fonts.ready.then(scheduleFit)
+        void document.fonts.ready.then(scheduleFit)
       }
 
       const onResize = t.onResize((size) => {
@@ -534,7 +527,6 @@ export const Terminal = (props: TerminalProps) => {
         const handleOpen = () => {
           if (disposed) return
           tries = 0
-          probe.connect()
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
         }
@@ -599,13 +591,6 @@ export const Terminal = (props: TerminalProps) => {
         socket.addEventListener("close", handleClose)
       }
 
-      probe.control({
-        disconnect: () => {
-          if (!ws) return
-          ws.close(4_000, "e2e")
-        },
-      })
-
       open()
     }
 
@@ -645,12 +630,11 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
-      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         "select-text": true,
         "size-full px-6 py-3 font-mono relative overflow-hidden": true,
         [local.class ?? ""]: !!local.class,
