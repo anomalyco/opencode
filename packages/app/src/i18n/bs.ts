@@ -637,7 +637,9 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "Prilagodi temu OpenCode-a.",
   "settings.general.row.font.title": "Font za kod",
-  "settings.general.row.font.description": "Prilagodi font koji se koristi u blokovima koda i terminalima",
+  "settings.general.row.font.description": "Prilagodi font koji se koristi u blokovima koda",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI font",
   "settings.general.row.uiFont.description": "Prilagodi font koji se koristi u cijelom interfejsu",
   "settings.general.row.followup.title": "Ponašanje nadovezivanja",
@@ -653,6 +655,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
+  "settings.general.row.showSessionProgressBar.title": "Prikaži traku napretka sesije",
+  "settings.general.row.showSessionProgressBar.description":
+    "Prikaži animiranu traku napretka na vrhu sesije kada agent radi",
   "settings.general.row.wayland.title": "Koristi nativni Wayland",
   "settings.general.row.wayland.description": "Onemogući X11 fallback na Waylandu. Zahtijeva restart.",
   "settings.general.row.wayland.tooltip":

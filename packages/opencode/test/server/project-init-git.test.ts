@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { Effect } from "effect"
 import path from "path"
 import { GlobalBus } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Filesystem } from "../../src/util/filesystem"
-import { Log } from "../../src/util/log"
+import { Filesystem } from "../../src/util"
+import { Log } from "../../src/util"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 afterEach(async () => {
   await resetDatabase()
@@ -19,7 +19,7 @@ afterEach(async () => {
 describe("project.initGit endpoint", () => {
   test("initializes git and reloads immediately", async () => {
     await using tmp = await tmpdir()
-    const app = Server.Default()
+    const app = Server.Default().app
     const seen: { directory?: string; payload: { type: string } }[] = []
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
       seen.push(evt)
@@ -43,7 +43,6 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
       expect(reloadSpy).toHaveBeenCalledTimes(1)
-      expect(reloadSpy.mock.calls[0]?.[0]?.init).toBe(InstanceBootstrap)
       expect(seen.some((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed")).toBe(
         true,
       )
@@ -61,12 +60,14 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          expect(await Snapshot.track()).toBeTruthy()
-        },
-      })
+      expect(
+        await Effect.runPromise(
+          Snapshot.Service.use((svc) => svc.track()).pipe(
+            provideInstance(tmp.path),
+            Effect.provide(Snapshot.defaultLayer),
+          ),
+        ),
+      ).toBeTruthy()
     } finally {
       await Instance.disposeAll()
       reloadSpy.mockRestore()
@@ -76,7 +77,7 @@ describe("project.initGit endpoint", () => {
 
   test("does not reload when the project is already git", async () => {
     await using tmp = await tmpdir({ git: true })
-    const app = Server.Default()
+    const app = Server.Default().app
     const seen: { directory?: string; payload: { type: string } }[] = []
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
       seen.push(evt)

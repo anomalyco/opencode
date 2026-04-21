@@ -1,11 +1,11 @@
 import { afterEach, expect, test } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, ServiceMap } from "effect"
-import { InstanceState } from "../../src/effect/instance-state"
+import { Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
+import { InstanceState } from "../../src/effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-async function access<A, E>(state: InstanceState<A, E>, dir: string) {
+async function access<A, E>(state: InstanceState.InstanceState<A, E>, dir: string) {
   return Instance.provide({
     directory: dir,
     fn: () => Effect.runPromise(InstanceState.get(state)),
@@ -122,7 +122,7 @@ test("InstanceState.get reads the current directory lazily", async () => {
     readonly get: () => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/InstanceStateLazy") {
+  class Test extends Context.Service<Test, Api>()("@test/InstanceStateLazy") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -166,7 +166,7 @@ test("InstanceState preserves directory across async boundaries", async () => {
     readonly get: () => Effect.Effect<{ directory: string; worktree: string; project: string }>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/InstanceStateAsync") {
+  class Test extends Context.Service<Test, Api>()("@test/InstanceStateAsync") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -234,7 +234,7 @@ test("InstanceState survives high-contention concurrent access", async () => {
     readonly get: () => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/HighContention") {
+  class Test extends Context.Service<Test, Api>()("@test/HighContention") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -284,7 +284,7 @@ test("InstanceState correct after interleaved init and dispose", async () => {
     readonly get: () => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/InterleavedDispose") {
+  class Test extends Context.Service<Test, Api>()("@test/InterleavedDispose") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -391,7 +391,7 @@ test("InstanceState survives deferred resume from the same instance context", as
     readonly get: (gate: Deferred.Deferred<void>) => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/DeferredResume") {
+  class Test extends Context.Service<Test, Api>()("@test/DeferredResume") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
@@ -438,7 +438,7 @@ test("InstanceState survives deferred resume outside ALS when InstanceRef is set
     readonly get: (gate: Deferred.Deferred<void>) => Effect.Effect<string>
   }
 
-  class Test extends ServiceMap.Service<Test, Api>()("@test/DeferredResumeOutside") {
+  class Test extends Context.Service<Test, Api>()("@test/DeferredResumeOutside") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {

@@ -490,37 +490,42 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 
 Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI, and more through a unified endpoint. With [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) you don't need separate API keys for each provider.
 
-1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **AI** > **AI Gateway**, and create a new gateway.
+1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **AI** > **AI Gateway**, and create a new gateway. Note your **Account ID** and **Gateway ID**.
 
-2. Set your Account ID and Gateway ID as environment variables.
-
-   ```bash title="~/.bash_profile"
-   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
-   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
-   ```
-
-3. Run the `/connect` command and search for **Cloudflare AI Gateway**.
+2. Run the `/connect` command and search for **Cloudflare AI Gateway**.
 
    ```txt
    /connect
    ```
 
-4. Enter your Cloudflare API token.
+3. Enter your **Account ID** when prompted.
 
    ```txt
-   ┌ API key
+   ┌ Enter your Cloudflare Account ID
    │
    │
    └ enter
    ```
 
-   Or set it as an environment variable.
+4. Enter your **Gateway ID** when prompted.
 
-   ```bash title="~/.bash_profile"
-   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```txt
+   ┌ Enter your Cloudflare AI Gateway ID
+   │
+   │
+   └ enter
    ```
 
-5. Run the `/models` command to select a model.
+5. Enter your **Cloudflare API token**.
+
+   ```txt
+   ┌ Gateway API token
+   │
+   │
+   └ enter
+   ```
+
+6. Run the `/models` command to select a model.
 
    ```txt
    /models
@@ -542,27 +547,38 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
    }
    ```
 
+   Alternatively, you can set environment variables instead of using `/connect`.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
+
 ---
 
 ### Cloudflare Workers AI
 
 Cloudflare Workers AI lets you run AI models on Cloudflare's global network directly via REST API, with no separate provider accounts needed for supported models.
 
-1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **Workers AI**, and select **Use REST API** to get your Account ID and create an API token.
+1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **Workers AI**, and select **Use REST API** to get your **Account ID** and create an API token.
 
-2. Set your Account ID as an environment variable.
-
-   ```bash title="~/.bash_profile"
-   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
-   ```
-
-3. Run the `/connect` command and search for **Cloudflare Workers AI**.
+2. Run the `/connect` command and search for **Cloudflare Workers AI**.
 
    ```txt
    /connect
    ```
 
-4. Enter your Cloudflare API token.
+3. Enter your **Account ID** when prompted.
+
+   ```txt
+   ┌ Enter your Cloudflare Account ID
+   │
+   │
+   └ enter
+   ```
+
+4. Enter your **Cloudflare API key**.
 
    ```txt
    ┌ API key
@@ -571,16 +587,17 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
    └ enter
    ```
 
-   Or set it as an environment variable.
-
-   ```bash title="~/.bash_profile"
-   export CLOUDFLARE_API_KEY=your-api-token
-   ```
-
 5. Run the `/models` command to select a model.
 
    ```txt
    /models
+   ```
+
+   Alternatively, you can set environment variables instead of using `/connect`.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_API_KEY=your-api-token
    ```
 
 ---
@@ -1299,6 +1316,60 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### NVIDIA
+
+NVIDIA provides access to Nemotron models and many other open models through [build.nvidia.com](https://build.nvidia.com) for free.
+
+1. Head over to [build.nvidia.com](https://build.nvidia.com), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **NVIDIA**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your NVIDIA API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like nemotron-3-super-120b-a12b.
+
+   ```txt
+   /models
+   ```
+
+#### On-Prem / NIM
+
+You can also use NVIDIA models locally via [NVIDIA NIM](https://docs.nvidia.com/nim/) by setting a custom base URL.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "nvidia": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1"
+      }
+    }
+  }
+}
+```
+
+#### Environment Variable
+
+Alternatively, set your API key as an environment variable.
+
+```bash frame="none"
+export NVIDIA_API_KEY=nvapi-your-key-here
+```
+
+---
+
 ### Nebius Token Factory
 
 1. Head over to the [Nebius Token Factory console](https://tokenfactory.nebius.com/), create an account, and click **Add Key**.
@@ -1524,6 +1595,74 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
                  "allow_fallbacks": false
                }
              }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### LLM Gateway
+
+1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
+
+2. Run the `/connect` command and search for LLM Gateway.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Many LLM Gateway models are preloaded by default, run the `/models` command to select the one you want.
+
+   ```txt
+   /models
+   ```
+
+   You can also add additional models through your opencode config.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. You can also customize them through your opencode config. Here's an example of specifying a provider
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "glm-4.7": {
+             "name": "GLM 4.7"
+           },
+           "gpt-5.2": {
+             "name": "GPT-5.2"
+           },
+           "gemini-2.5-pro": {
+             "name": "Gemini 2.5 Pro"
+           },
+           "claude-3-5-sonnet-20241022": {
+             "name": "Claude 3.5 Sonnet"
            }
          }
        }

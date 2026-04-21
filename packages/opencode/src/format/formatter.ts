@@ -1,16 +1,17 @@
-import { text } from "node:stream/consumers"
-import { Npm } from "@/npm"
-import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
-import { Process } from "../util/process"
+import { Npm } from "../npm"
+import type { InstanceContext } from "../project/instance"
+import { Filesystem } from "../util"
+import { Process } from "../util"
 import { which } from "../util/which"
 import { Flag } from "@/flag/flag"
+
+export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {}
 
 export interface Info {
   name: string
   environment?: Record<string, string>
   extensions: string[]
-  enabled(): Promise<string[] | false>
+  enabled(context: Context): Promise<string[] | false>
 }
 
 export const gofmt: Info = {
@@ -66,8 +67,8 @@ export const prettier: Info = {
     ".graphql",
     ".gql",
   ],
-  async enabled() {
-    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
+  async enabled(context) {
+    const items = await Filesystem.findUp("package.json", context.directory, context.worktree)
     for (const item of items) {
       const json = await Filesystem.readJson<{
         dependencies?: Record<string, string>
@@ -88,9 +89,9 @@ export const oxfmt: Info = {
     BUN_BE_BUN: "1",
   },
   extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
-  async enabled() {
+  async enabled(context) {
     if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
-    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
+    const items = await Filesystem.findUp("package.json", context.directory, context.worktree)
     for (const item of items) {
       const json = await Filesystem.readJson<{
         dependencies?: Record<string, string>
@@ -138,10 +139,10 @@ export const biome: Info = {
     ".graphql",
     ".gql",
   ],
-  async enabled() {
+  async enabled(context) {
     const configs = ["biome.json", "biome.jsonc"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      const found = await Filesystem.findUp(config, context.directory, context.worktree)
       if (found.length > 0) {
         const bin = await Npm.which("@biomejs/biome")
         if (bin) return [bin, "format", "--write", "$FILE"]
@@ -164,8 +165,8 @@ export const zig: Info = {
 export const clang: Info = {
   name: "clang-format",
   extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
-  async enabled() {
-    const items = await Filesystem.findUp(".clang-format", Instance.directory, Instance.worktree)
+  async enabled(context) {
+    const items = await Filesystem.findUp(".clang-format", context.directory, context.worktree)
     if (items.length > 0) {
       const match = which("clang-format")
       if (match) return [match, "-i", "$FILE"]
@@ -187,11 +188,11 @@ export const ktlint: Info = {
 export const ruff: Info = {
   name: "ruff",
   extensions: [".py", ".pyi"],
-  async enabled() {
+  async enabled(context) {
     if (!which("ruff")) return false
     const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      const found = await Filesystem.findUp(config, context.directory, context.worktree)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
           const content = await Filesystem.readText(found[0])
@@ -203,7 +204,7 @@ export const ruff: Info = {
     }
     const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
     for (const dep of deps) {
-      const found = await Filesystem.findUp(dep, Instance.directory, Instance.worktree)
+      const found = await Filesystem.findUp(dep, context.directory, context.worktree)
       if (found.length > 0) {
         const content = await Filesystem.readText(found[0])
         if (content.includes("ruff")) return ["ruff", "format", "$FILE"]
@@ -217,26 +218,16 @@ export const rlang: Info = {
   name: "air",
   extensions: [".R"],
   async enabled() {
-    const airPath = which("air")
-    if (airPath == null) return false
+    const air = which("air")
+    if (air == null) return false
 
-    try {
-      const proc = Process.spawn(["air", "--help"], {
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      await proc.exited
-      if (!proc.stdout) return false
-      const output = await text(proc.stdout)
+    const output = await Process.text([air, "--help"], { nothrow: true })
 
-      // Check for "Air: An R language server and formatter"
-      const firstLine = output.split("\n")[0]
-      const hasR = firstLine.includes("R language")
-      const hasFormatter = firstLine.includes("formatter")
-      if (hasR && hasFormatter) return ["air", "format", "$FILE"]
-    } catch {
-      return false
-    }
+    // Check for "Air: An R language server and formatter"
+    const firstLine = output.text.split("\n")[0]
+    const hasR = firstLine.includes("R language")
+    const hasFormatter = firstLine.includes("formatter")
+    if (output.code === 0 && hasR && hasFormatter) return [air, "format", "$FILE"]
     return false
   },
 }
@@ -244,13 +235,12 @@ export const rlang: Info = {
 export const uvformat: Info = {
   name: "uv",
   extensions: [".py", ".pyi"],
-  async enabled() {
-    if (await ruff.enabled()) return false
-    if (which("uv") !== null) {
-      const proc = Process.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
-      const code = await proc.exited
-      if (code === 0) return ["uv", "format", "--", "$FILE"]
-    }
+  async enabled(context) {
+    if (await ruff.enabled(context)) return false
+    const uv = which("uv")
+    if (uv == null) return false
+    const output = await Process.run([uv, "format", "--help"], { nothrow: true })
+    if (output.code === 0) return [uv, "format", "--", "$FILE"]
     return false
   },
 }
@@ -298,9 +288,9 @@ export const dart: Info = {
 export const ocamlformat: Info = {
   name: "ocamlformat",
   extensions: [".ml", ".mli"],
-  async enabled() {
+  async enabled(context) {
     if (!which("ocamlformat")) return false
-    const items = await Filesystem.findUp(".ocamlformat", Instance.directory, Instance.worktree)
+    const items = await Filesystem.findUp(".ocamlformat", context.directory, context.worktree)
     if (items.length > 0) return ["ocamlformat", "-i", "$FILE"]
     return false
   },
@@ -369,8 +359,8 @@ export const rustfmt: Info = {
 export const pint: Info = {
   name: "pint",
   extensions: [".php"],
-  async enabled() {
-    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+  async enabled(context) {
+    const items = await Filesystem.findUp("composer.json", context.directory, context.worktree)
     for (const item of items) {
       const json = await Filesystem.readJson<{
         require?: Record<string, string>

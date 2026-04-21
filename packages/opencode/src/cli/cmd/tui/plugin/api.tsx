@@ -1,13 +1,14 @@
 import type { ParsedKey } from "@opentui/core"
 import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@opencode-ai/plugin/tui"
 import type { useCommandDialog } from "@tui/component/dialog-command"
+import type { useEvent } from "@tui/context/event"
 import type { useKeybind } from "@tui/context/keybind"
 import type { useRoute } from "@tui/context/route"
 import type { useSDK } from "@tui/context/sdk"
 import type { useSync } from "@tui/context/sync"
 import type { useTheme } from "@tui/context/theme"
 import { Dialog as DialogUI, type useDialog } from "@tui/ui/dialog"
-import type { TuiConfig } from "@/config/tui"
+import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { createPluginKeybind } from "../context/plugin-keybinds"
 import type { useKV } from "../context/kv"
 import { DialogAlert } from "../ui/dialog-alert"
@@ -17,8 +18,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { Installation } from "@/installation"
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
+import { InstallationVersion } from "@/installation/version"
 
 type RouteEntry = {
   key: symbol
@@ -36,16 +36,12 @@ type Input = {
   route: ReturnType<typeof useRoute>
   routes: RouteMap
   bump: () => void
+  event: ReturnType<typeof useEvent>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
-}
-
-type TuiHostPluginApi = TuiPluginApi & {
-  map: Map<string | undefined, OpencodeClient>
-  dispose: () => void
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -95,7 +91,7 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       name: "session",
       params: {
         sessionID: route.data.sessionID,
-        initialPrompt: route.data.initialPrompt,
+        prompt: route.data.prompt,
       },
     }
   }
@@ -141,21 +137,13 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       return sync.data.provider
     },
     get path() {
-      return sync.data.path
+      return sync.path
     },
     get vcs() {
       if (!sync.data.vcs) return
       return {
         branch: sync.data.vcs.branch,
       }
-    },
-    workspace: {
-      list() {
-        return sync.data.workspaceList
-      },
-      get(workspaceID) {
-        return sync.workspace.get(workspaceID)
-      },
     },
     session: {
       count() {
@@ -201,34 +189,12 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
 function appApi(): TuiPluginApi["app"] {
   return {
     get version() {
-      return Installation.VERSION
+      return InstallationVersion
     },
   }
 }
 
-export function createTuiApi(input: Input): TuiHostPluginApi {
-  const map = new Map<string | undefined, OpencodeClient>()
-  const scoped: TuiPluginApi["scopedClient"] = (workspaceID) => {
-    const hit = map.get(workspaceID)
-    if (hit) return hit
-
-    const next = createOpencodeClient({
-      baseUrl: input.sdk.url,
-      fetch: input.sdk.fetch,
-      directory: input.sync.data.path.directory || input.sdk.directory,
-      experimental_workspaceID: workspaceID,
-    })
-    map.set(workspaceID, next)
-    return next
-  }
-  const workspace: TuiPluginApi["workspace"] = {
-    current() {
-      return input.sdk.workspaceID
-    },
-    set(workspaceID) {
-      input.sdk.setWorkspace(workspaceID)
-    },
-  }
+export function createTuiApi(input: Input): TuiPluginApi {
   const lifecycle: TuiPluginApi["lifecycle"] = {
     signal: new AbortController().signal,
     onDispose() {
@@ -369,9 +335,7 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
     get client() {
       return input.sdk.client
     },
-    scopedClient: scoped,
-    workspace,
-    event: input.sdk.event,
+    event: input.event,
     renderer: input.renderer,
     slots: {
       register() {
@@ -421,10 +385,6 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
       get ready() {
         return input.theme.ready
       },
-    },
-    map,
-    dispose() {
-      map.clear()
     },
   }
 }

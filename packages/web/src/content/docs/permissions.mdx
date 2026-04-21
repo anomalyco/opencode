@@ -88,7 +88,7 @@ You can use `~` or `$HOME` at the start of a pattern to reference your home dire
 
 ### External Directories
 
-Use `external_directory` to allow tool calls that touch paths outside the working directory where OpenCode was started. This applies to any tool that takes a path as input (for example `read`, `edit`, `list`, `glob`, `grep`, and many `bash` commands).
+Use `external_directory` to allow tool calls that touch paths outside the working directory where OpenCode was started. This applies to any tool that takes a path as input (for example `read`, `edit`, `glob`, `grep`, and many `bash` commands).
 
 Home expansion (like `~/...`) only affects how a pattern is written. It does not make an external path part of the current workspace, so paths outside the working directory must still be allowed via `external_directory`.
 
@@ -130,10 +130,9 @@ Keep the list focused on trusted paths, and layer extra allow or deny rules as n
 OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
 - `read` — reading a file (matches the file path)
-- `edit` — all file modifications (covers `edit`, `write`, `patch`, `multiedit`)
+- `edit` — all file modifications (covers `edit`, `write`, `patch`)
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
-- `list` — listing files in a directory (matches the directory path)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
 - `task` — launching subagents (matches the subagent type)
 - `skill` — loading a skill (matches the skill name)

@@ -60,6 +60,7 @@ export function errorData(error: unknown) {
       acc[key] = value
       return acc
     }
+    // oxlint-disable-next-line no-base-to-string -- intentional coercion of arbitrary error properties
     acc[key] = value instanceof Error ? value.message : String(value)
     return acc
   }, {})
