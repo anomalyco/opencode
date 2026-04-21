@@ -328,18 +328,21 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
       ],
     },
     "chat.params": async (incoming, output) => {
+      // Any provider using @ai-sdk/anthropic (Copilot shim, Bedrock proxies,
+      // corporate gateways, etc.) will have `eager_input_streaming: true`
+      // injected into every tool definition by @ai-sdk/anthropic >=3.0.58 when
+      // the fine-grained-tool-streaming beta header is active.  Proxies that
+      // perform strict JSON schema validation reject this extra field with a 400.
+      // Opt out globally for all @ai-sdk/anthropic-backed providers.
+      if (incoming.model.api.npm === "@ai-sdk/anthropic") {
+        output.options.toolStreaming = false
+      }
+
       if (!incoming.model.providerID.includes("github-copilot")) return
 
       // Match github copilot cli, omit maxOutputTokens for gpt models
       if (incoming.model.api.id.includes("gpt")) {
         output.maxOutputTokens = undefined
-      }
-
-      // GitHub Copilot's /v1/messages shim rejects the GA `eager_input_streaming`
-      // field on tool definitions ("Extra inputs are not permitted"). Opt out of
-      // the @ai-sdk/anthropic default so it stops injecting the field.
-      if (incoming.model.api.npm === "@ai-sdk/anthropic") {
-        output.options.toolStreaming = false
       }
     },
     "chat.headers": async (incoming, output) => {
