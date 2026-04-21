@@ -12,7 +12,7 @@ import { Format } from "../format"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
-import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertExternalDirectoryEffect, resolveWindowsPathFromDirectory } from "./external-directory"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -32,9 +32,12 @@ export const WriteTool = Tool.define(
       }),
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const filepath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(Instance.directory, params.filePath)
+          let filepath =
+            process.platform === "win32"
+              ? resolveWindowsPathFromDirectory(params.filePath, Instance.directory)
+              : params.filePath
+          if (!path.isAbsolute(filepath)) filepath = path.resolve(Instance.directory, filepath)
+          if (process.platform === "win32") filepath = AppFileSystem.normalizePath(filepath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)

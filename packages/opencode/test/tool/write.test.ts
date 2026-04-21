@@ -6,6 +6,7 @@ import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { LSP } from "../../src/lsp"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { FileTime } from "../../src/file/time"
 import { Bus } from "../../src/bus"
 import { Format } from "../../src/format"
 import { Truncate } from "../../src/tool"
@@ -13,6 +14,7 @@ import { Tool } from "../../src/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import type { Permission } from "../../src/permission"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -35,6 +37,7 @@ const it = testEffect(
   Layer.mergeAll(
     LSP.defaultLayer,
     AppFileSystem.defaultLayer,
+    FileTime.defaultLayer,
     Bus.layer,
     Format.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
@@ -55,6 +58,25 @@ const run = Effect.fn("WriteToolTest.run")(function* (
   const tool = yield* init()
   return yield* tool.execute(args, next)
 })
+
+const markRead = Effect.fn("WriteToolTest.markRead")(function* (sessionID: string, filepath: string) {
+  const ft = yield* FileTime.Service
+  yield* ft.read(sessionID as any, filepath)
+})
+
+const asks = () => {
+  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  return {
+    items,
+    next: {
+      ...ctx,
+      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => {
+          items.push(req)
+        }),
+    },
+  }
+}
 
 describe("tool.write", () => {
   describe("new file creation", () => {
@@ -95,6 +117,27 @@ describe("tool.write", () => {
         }),
       ),
     )
+
+    if (process.platform === "win32") {
+      it.live("writes a drive-less rooted Windows path inside the project", () =>
+        provideTmpdirInstance((dir) =>
+          Effect.gen(function* () {
+            const filepath = path.join(dir, "nested", "variant.txt")
+            const alt = filepath
+              .replace(/^[A-Za-z]:/, "")
+              .replaceAll("\\", "/")
+              .toLowerCase()
+            const { items, next } = asks()
+
+            yield* run({ filePath: alt, content: "variant content" }, next)
+
+            expect(items.find((item) => item.permission === "external_directory")).toBeUndefined()
+            const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+            expect(content).toBe("variant content")
+          }),
+        ),
+      )
+    }
   })
 
   describe("existing file overwrite", () => {
@@ -103,6 +146,8 @@ describe("tool.write", () => {
         Effect.gen(function* () {
           const filepath = path.join(dir, "existing.txt")
           yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
+          yield* markRead(ctx.sessionID, filepath)
+
           const result = yield* run({ filePath: filepath, content: "new content" })
 
           expect(result.output).toContain("Wrote file successfully")
@@ -119,6 +164,8 @@ describe("tool.write", () => {
         Effect.gen(function* () {
           const filepath = path.join(dir, "file.txt")
           yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
+          yield* markRead(ctx.sessionID, filepath)
+
           const result = yield* run({ filePath: filepath, content: "new" })
 
           expect(result.metadata).toHaveProperty("filepath", filepath)
@@ -220,6 +267,8 @@ describe("tool.write", () => {
           const readonlyPath = path.join(dir, "readonly.txt")
           yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
           yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
+          yield* markRead(ctx.sessionID, readonlyPath)
+
           const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
           expect(exit._tag).toBe("Failure")
         }),

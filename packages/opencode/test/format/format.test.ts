@@ -9,6 +9,21 @@ import * as Formatter from "../../src/format/formatter"
 
 const it = testEffect(Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
 
+function appendToFile(suffix: string, delay = 0) {
+  return [
+    process.execPath,
+    "--input-type=module",
+    "-e",
+    [
+      'import { readFile, writeFile } from "node:fs/promises"',
+      "const file = process.argv.at(-1)",
+      `await new Promise((resolve) => setTimeout(resolve, ${delay}))`,
+      `await writeFile(file, (await readFile(file, "utf8")) + ${JSON.stringify(suffix)})`,
+    ].join("\n"),
+    "$FILE",
+  ]
+}
+
 describe("Format", () => {
   it.live("status() returns empty list when no formatters are configured", () =>
     provideTmpdirInstance(() =>
@@ -229,11 +244,11 @@ describe("Format", () => {
         config: {
           formatter: {
             first: {
-              command: ["sh", "-c", 'sleep 0.05; v=$(cat "$1"); printf \'%sA\' "$v" > "$1"', "sh", "$FILE"],
+              command: appendToFile("A", 50),
               extensions: [".seq"],
             },
             second: {
-              command: ["sh", "-c", 'v=$(cat "$1"); printf \'%sB\' "$v" > "$1"', "sh", "$FILE"],
+              command: appendToFile("B"),
               extensions: [".seq"],
             },
           },

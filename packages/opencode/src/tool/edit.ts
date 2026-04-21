@@ -16,7 +16,7 @@ import { Bus } from "../bus"
 import { Format } from "../format"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
-import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertExternalDirectoryEffect, resolveWindowsPathFromDirectory } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 function normalizeLineEndings(text: string): string {
@@ -72,9 +72,12 @@ export const EditTool = Tool.define(
             throw new Error("No changes to apply: oldString and newString are identical.")
           }
 
-          const filePath = path.isAbsolute(params.filePath)
-            ? params.filePath
-            : path.join(Instance.directory, params.filePath)
+          let filePath =
+            process.platform === "win32"
+              ? resolveWindowsPathFromDirectory(params.filePath, Instance.directory)
+              : params.filePath
+          if (!path.isAbsolute(filePath)) filePath = path.resolve(Instance.directory, filePath)
+          if (process.platform === "win32") filePath = AppFileSystem.normalizePath(filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""

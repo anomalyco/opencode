@@ -493,22 +493,23 @@ test("nested symlinks", async () => {
   })
 })
 
-test("file permissions and ownership changes", async () => {
+test("file permission-only changes do not produce a patch", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      const file = `${tmp.path}/a.txt`
       const before = await run(tmp.path, (snapshot) => snapshot.track())
       expect(before).toBeTruthy()
 
-      // Change permissions multiple times
-      await $`chmod 600 ${tmp.path}/a.txt`.quiet()
-      await $`chmod 755 ${tmp.path}/a.txt`.quiet()
-      await $`chmod 644 ${tmp.path}/a.txt`.quiet()
+      // Toggle the writable bit in a way that works on both POSIX and Windows.
+      const initialMode = (await fs.stat(file)).mode
+      await fs.chmod(file, initialMode & ~0o222)
+      await fs.chmod(file, initialMode | 0o200)
+      await fs.chmod(file, initialMode)
 
       const patch = await run(tmp.path, (snapshot) => snapshot.patch(before!))
-      // Note: git doesn't track permission changes on existing files by default
-      // Only tracks executable bit when files are first added
+      // Git should ignore permission-only changes for this existing file.
       expect(patch.files.length).toBe(0)
     },
   })

@@ -66,6 +66,34 @@ describe("plugin.meta", () => {
     expect(saved["demo.file"]?.load_count).toBe(3)
   })
 
+  test("treats file plugins as updated when size changes at the same mtime", async () => {
+    await using tmp = await tmpdir<{ file: string }>({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        await Bun.write(file, "export default async () => ({})\n")
+        return { file }
+      },
+    })
+
+    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
+    const spec = pathToFileURL(tmp.extra.file).href
+    const stamp = new Date("2025-01-01T00:00:00.000Z")
+
+    await fs.utimes(tmp.extra.file, stamp, stamp)
+    const one = await PluginMeta.touch(spec, spec, "demo.file.same-mtime")
+    expect(one.state).toBe("first")
+    expect(one.entry.modified).toBeDefined()
+    expect(one.entry.size).toBeDefined()
+
+    await Bun.write(tmp.extra.file, 'export default async () => ({ message: "expanded payload" })\n')
+    await fs.utimes(tmp.extra.file, stamp, stamp)
+
+    const two = await PluginMeta.touch(spec, spec, "demo.file.same-mtime")
+    expect(two.state).toBe("updated")
+    expect(two.entry.modified).toBe(one.entry.modified)
+    expect(two.entry.size).toBeGreaterThan(one.entry.size ?? 0)
+  })
+
   test("tracks npm plugin versions", async () => {
     await using tmp = await tmpdir<{ mod: string; pkg: string }>({
       init: async (dir) => {

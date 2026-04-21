@@ -13,6 +13,13 @@ type Options = {
   kind?: Kind
 }
 
+export function resolveWindowsPathFromDirectory(target: string, directory: string) {
+  const next = AppFileSystem.windowsPath(target)
+  const root = path.win32.parse(next).root
+  if (root !== "/" && root !== "\\") return next
+  return path.resolve(directory, next)
+}
+
 export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
   ctx: Tool.Context,
   target?: string,
@@ -23,7 +30,10 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   if (options?.bypass) return
 
   const ins = yield* InstanceState.context
-  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+  const full =
+    process.platform === "win32"
+      ? AppFileSystem.normalizePath(resolveWindowsPathFromDirectory(target, ins.directory))
+      : target
   if (Instance.containsPath(full, ins)) return
 
   const kind = options?.kind ?? "file"

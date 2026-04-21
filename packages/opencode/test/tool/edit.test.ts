@@ -13,6 +13,7 @@ import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Truncate } from "../../src/tool"
 import { SessionID, MessageID } from "../../src/session/schema"
+import type { Permission } from "../../src/permission"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),
@@ -64,6 +65,20 @@ async function onceBus<D extends BusEvent.Definition>(def: D) {
   return {
     wait: result.promise,
     unsub,
+  }
+}
+
+const asks = () => {
+  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  return {
+    items,
+    next: {
+      ...ctx,
+      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => {
+          items.push(req)
+        }),
+    },
   }
 }
 
@@ -182,6 +197,42 @@ describe("tool.edit", () => {
         },
       })
     })
+
+    if (process.platform === "win32") {
+      test("edits a drive-less rooted Windows path inside the project", async () => {
+        await using tmp = await tmpdir()
+        const filepath = path.join(tmp.path, "existing.txt")
+        const alt = filepath
+          .replace(/^[A-Za-z]:/, "")
+          .replaceAll("\\", "/")
+          .toLowerCase()
+        await fs.writeFile(filepath, "old content here", "utf-8")
+
+        await Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            await readFileTime(ctx.sessionID, filepath)
+
+            const { items, next } = asks()
+            const edit = await resolve()
+            await Effect.runPromise(
+              edit.execute(
+                {
+                  filePath: alt,
+                  oldString: "old content",
+                  newString: "new content",
+                },
+                next,
+              ),
+            )
+
+            expect(items.find((item) => item.permission === "external_directory")).toBeUndefined()
+            const content = await fs.readFile(filepath, "utf-8")
+            expect(content).toBe("new content here")
+          },
+        })
+      })
+    }
 
     test("throws error when file does not exist", async () => {
       await using tmp = await tmpdir()

@@ -35,6 +35,12 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  if (process.platform === "win32") {
+    test("blocks cross-drive absolute paths", () => {
+      expect(Filesystem.contains("X:\\project", "Y:\\outside\\file.txt")).toBe(false)
+    })
+  }
 })
 
 /*
@@ -133,6 +139,24 @@ describe("Instance.containsPath", () => {
       },
     })
   })
+
+  if (process.platform === "win32") {
+    test("returns true for drive-less rooted paths resolved on the instance drive", async () => {
+      await using tmp = await tmpdir({ git: true })
+      const target = path.join(tmp.path, "src", "file.ts")
+      const alt = target
+        .replace(/^[A-Za-z]:/, "")
+        .replaceAll("\\", "/")
+        .toLowerCase()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(Instance.containsPath(path.resolve(Instance.directory, alt))).toBe(true)
+        },
+      })
+    })
+  }
 
   test("returns true for path inside worktree but outside directory (monorepo subdirectory scenario)", async () => {
     await using tmp = await tmpdir({ git: true })

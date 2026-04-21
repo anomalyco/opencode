@@ -6,7 +6,7 @@ import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
-import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertExternalDirectoryEffect, resolveWindowsPathFromDirectory } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
 const operations = [
@@ -40,7 +40,12 @@ export const LspTool = Tool.define(
         ctx: Tool.Context,
       ) =>
         Effect.gen(function* () {
-          const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
+          let file =
+            process.platform === "win32"
+              ? resolveWindowsPathFromDirectory(args.filePath, Instance.directory)
+              : args.filePath
+          if (!path.isAbsolute(file)) file = path.resolve(Instance.directory, file)
+          if (process.platform === "win32") file = AppFileSystem.normalizePath(file)
           yield* assertExternalDirectoryEffect(ctx, file)
           yield* ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} })
 
