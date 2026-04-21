@@ -2480,6 +2480,97 @@ test("openai-compatible normalizes numeric tool call ids in stream responses", a
   }
 })
 
+test("openai-compatible normalizes numeric tool call ids in json responses", async () => {
+  const prev = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: 123,
+                  function: {
+                    name: "read_file",
+                    arguments: '{"filePath":"/README.md"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        created: 1769917420,
+        id: "response-1",
+        model: "nvidia-nim",
+        usage: {
+          completion_tokens: 25,
+          prompt_tokens: 100,
+          total_tokens: 125,
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    )) as unknown as typeof fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "nim-test": {
+                name: "NVIDIA NIM",
+                npm: "@ai-sdk/openai-compatible",
+                api: "https://integrate.api.nvidia.com/v1",
+                env: [],
+                options: { apiKey: "test-key" },
+                models: {
+                  "moonshotai/Kimi-K2.5": {
+                    name: "Kimi K2.5",
+                    tool_call: true,
+                    reasoning: true,
+                    limit: { context: 256000, output: 8192 },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await getModel(ProviderID.make("nim-test"), ModelID.make("moonshotai/Kimi-K2.5"))
+        const language = await getLanguage(model)
+        const result = await language.doGenerate({ prompt })
+
+        expect(result.content).toContainEqual({
+          type: "tool-call",
+          toolCallId: "123",
+          toolName: "read_file",
+          input: '{"filePath":"/README.md"}',
+        })
+        expect(result.finishReason).toEqual({
+          unified: "tool-calls",
+          raw: "tool_calls",
+        })
+      },
+    })
+  } finally {
+    globalThis.fetch = prev
+  }
+})
+
 test("cloudflare-ai-gateway loads with env variables", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
