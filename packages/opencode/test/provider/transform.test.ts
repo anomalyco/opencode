@@ -855,6 +855,161 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - xAI via OpenRouter", () => {
+  const xaiModel = {
+    providerID: "openrouter",
+    api: {
+      id: "x-ai/grok-4.1-fast",
+    },
+  } as any
+
+  test("removes additionalProperties false recursively", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        command: { type: "string" },
+        metadata: {
+          type: "object",
+          properties: {
+            cwd: { type: "string" },
+          },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(xaiModel, schema) as any
+
+    expect(result.additionalProperties).toBeUndefined()
+    expect(result.properties.metadata.additionalProperties).toBeUndefined()
+  })
+
+  test("preserves object and true additionalProperties forms", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        answers: {
+          type: "object",
+          additionalProperties: { type: "string" },
+        },
+        passthrough: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(xaiModel, schema) as any
+
+    expect(result.properties.answers.additionalProperties).toEqual({ type: "string" })
+    expect(result.properties.passthrough.additionalProperties).toBe(true)
+  })
+
+  test("does not affect non-xAI OpenRouter models", () => {
+    const openrouterClaude = {
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4.5",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        command: { type: "string" },
+      },
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(openrouterClaude, schema) as any
+
+    expect(result.additionalProperties).toBe(false)
+  })
+})
+
+describe("ProviderTransform.schema - xAI native provider", () => {
+  const xaiNativeModel = {
+    providerID: "xai",
+    api: {
+      id: "grok-4.1-fast",
+    },
+  } as any
+
+  test("removes additionalProperties false recursively", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        command: { type: "string" },
+      },
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(xaiNativeModel, schema) as any
+
+    expect(result.additionalProperties).toBeUndefined()
+  })
+
+  test("preserves object and true additionalProperties forms", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "object",
+          additionalProperties: { type: "string" },
+        },
+      },
+      additionalProperties: true,
+    } as any
+
+    const result = ProviderTransform.schema(xaiNativeModel, schema) as any
+
+    expect(result.properties.data.additionalProperties).toEqual({ type: "string" })
+    expect(result.additionalProperties).toBe(true)
+  })
+})
+
+describe("ProviderTransform.schema - xAI native provider", () => {
+  const xaiNativeModel = {
+    providerID: "xai",
+    api: {
+      id: "grok-4.1-fast",
+    },
+  } as any
+
+  test("removes additionalProperties false recursively", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        command: { type: "string" },
+      },
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(xaiNativeModel, schema) as any
+
+    expect(result.additionalProperties).toBeUndefined()
+  })
+
+  test("preserves object and true additionalProperties forms", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "object",
+          additionalProperties: { type: "string" },
+        },
+      },
+      additionalProperties: true,
+    } as any
+
+    const result = ProviderTransform.schema(xaiNativeModel, schema) as any
+
+    expect(result.properties.data.additionalProperties).toEqual({ type: "string" })
+    expect(result.additionalProperties).toBe(true)
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
