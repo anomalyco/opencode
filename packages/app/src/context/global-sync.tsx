@@ -10,7 +10,7 @@ import type {
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/shared/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
-import { createStore, produce, reconcile } from "solid-js/store"
+import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
@@ -95,13 +95,8 @@ function createGlobalSync() {
     )
   }
 
-  const setProjects = (next: Project[] | ((draft: Project[]) => void)) => {
+  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
     projectWritten = true
-    if (typeof next === "function") {
-      setGlobalStore("project", produce(next))
-      cacheProjects()
-      return
-    }
     setGlobalStore("project", next)
     cacheProjects()
   }
@@ -116,7 +111,7 @@ function createGlobalSync() {
 
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => void))
+      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)

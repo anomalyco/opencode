@@ -583,6 +583,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit 도구 파트 펼치기",
   "settings.general.row.editToolPartsExpanded.description":
     "타임라인에서 기본적으로 edit, write, patch 도구 파트를 펼친 상태로 표시합니다",
+  "settings.general.row.showSessionProgressBar.title": "세션 진행 표시줄 표시",
+  "settings.general.row.showSessionProgressBar.description":
+    "에이전트가 작업 중일 때 세션 상단에 애니메이션 진행 표시줄을 표시합니다",
   "settings.general.row.wayland.title": "네이티브 Wayland 사용",
   "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
   "settings.general.row.wayland.tooltip":
