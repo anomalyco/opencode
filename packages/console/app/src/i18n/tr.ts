@@ -265,6 +265,8 @@ export const dict = {
   "go.cta.promo": "İlk ay $5",
   "go.pricing.body":
     "Herhangi bir ajanla kullanın. İlk ay $5, sonrasında ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6: kullanım limiti 27 Nisan'a kadar 3 katına çıktı",
   "go.graph.free": "Ücretsiz",
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
   "go.graph.go": "Go",
