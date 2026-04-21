@@ -132,10 +132,12 @@ const InfoSchema = Schema.Struct({
     description: "When set, ONLY these providers will be enabled. All other providers will be ignored",
   }),
   model: Schema.optional(ConfigModelID).annotate({
-    description: "Model to use in the format of provider/model, eg anthropic/claude-2",
+    description:
+      "Model to use in the format of provider/model, eg anthropic/claude-2. Can also use @small_model to reference the small model.",
   }),
   small_model: Schema.optional(ConfigModelID).annotate({
-    description: "Small model to use for tasks like title generation in the format of provider/model",
+    description:
+      "Small model to use for tasks like title generation in the format of provider/model. Can also use @model to reference the default model.",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:

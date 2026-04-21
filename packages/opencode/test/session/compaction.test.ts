@@ -1938,3 +1938,92 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 })
+
+// --- Model Ref Tests ---
+
+describe("session.compaction.modelRef", () => {
+  test("compaction with @small_model resolves to small model", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        agent: { compaction: { model: "@small_model" } },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        const msg = await user(session.id, "hello")
+        const smallModel = createModel({ context: 100_000, output: 32_000 })
+        const smallMdl = { ...smallModel, id: "small-haiku" as any, providerID: "test" as any }
+        const fakeProvider = ProviderTest.fake({
+          model: smallMdl,
+          resolveRef: Effect.fn("TestProvider.resolveRef")((ref, _providerID) => {
+            if (ref === "@small_model") return Effect.succeed({ providerID: ProviderID.make("test"), modelID: ModelID.make("small-haiku") })
+            if (ref === "@model") return Effect.succeed({ providerID: ProviderID.make("test"), modelID: ModelID.make("small-haiku") })
+            const [pid, ...rest] = ref.split("/")
+            return Effect.succeed({ providerID: ProviderID.make(pid), modelID: ModelID.make(rest.join("/")) })
+          }),
+        })
+        const configLayer = cfg({ auto: false })
+        const rt = runtime("continue", Plugin.defaultLayer, fakeProvider, configLayer)
+        try {
+          const msgs = await svc.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+          expect(result).toBe("continue")
+          // Check the summary message uses the small model
+          const all = await svc.messages({ sessionID: session.id })
+          const summaryMsg = all.find((m) => m.info.role === "assistant" && m.info.summary)
+          expect(summaryMsg).toBeDefined()
+          if (summaryMsg?.info.role === "assistant") {
+            expect(String(summaryMsg.info.modelID)).toBe("small-haiku")
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("compaction without modelRef uses user model", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        const msg = await user(session.id, "hello")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await svc.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+          expect(result).toBe("continue")
+          const all = await svc.messages({ sessionID: session.id })
+          const summaryMsg = all.find((m) => m.info.role === "assistant" && m.info.summary)
+          expect(summaryMsg).toBeDefined()
+          if (summaryMsg?.info.role === "assistant") {
+            expect(String(summaryMsg.info.modelID)).toBe("test-model")
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})

@@ -258,9 +258,12 @@ export const layer: Layer.Layer<
       }
 
       const agent = yield* agents.get("compaction")
-      const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
-        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+      const resolved = agent.modelRef
+        ? yield* provider.resolveRef(agent.modelRef, userMessage.model.providerID)
+        : agent.model
+          ? { providerID: agent.model.providerID, modelID: agent.model.modelID }
+          : { providerID: userMessage.model.providerID, modelID: userMessage.model.modelID }
+      const model = yield* provider.getModel(resolved.providerID, resolved.modelID)
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const selected = yield* select({

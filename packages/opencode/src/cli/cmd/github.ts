@@ -457,7 +457,7 @@ export const GithubRunCommand = cmd({
       const isScheduleEvent = context.eventName === "schedule"
       const isWorkflowDispatchEvent = context.eventName === "workflow_dispatch"
 
-      const { providerID, modelID } = normalizeModel()
+      const { providerID, modelID } = await normalizeModel()
       const variant = process.env["VARIANT"] || undefined
       const runId = normalizeRunId()
       const share = normalizeShare()
@@ -710,9 +710,20 @@ export const GithubRunCommand = cmd({
       }
       process.exit(exitCode)
 
-      function normalizeModel() {
+      async function normalizeModel() {
         const value = process.env["MODEL"]
         if (!value) throw new Error(`Environment variable "MODEL" is not set`)
+
+        if (Provider.isModelRef(value)) {
+          return AppRuntime.runPromise(
+            Provider.Service.use((svc) =>
+              Effect.gen(function* () {
+                const d = yield* svc.defaultModel()
+                return yield* svc.resolveRef(value, d.providerID)
+              }),
+            ),
+          )
+        }
 
         const { providerID, modelID } = Provider.parseModel(value)
 

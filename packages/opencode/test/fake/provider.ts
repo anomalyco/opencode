@@ -73,6 +73,14 @@ export namespace ProviderTest {
           defaultModel: Effect.fn("TestProvider.defaultModel")(() =>
             Effect.succeed({ providerID: row.id, modelID: mdl.id }),
           ),
+          resolveRef: Effect.fn("TestProvider.resolveRef")((ref, providerID) => {
+            if (ref === "@small_model") {
+              return Effect.succeed(providerID === row.id ? { providerID: row.id, modelID: mdl.id } : { providerID, modelID: mdl.id })
+            }
+            if (ref === "@model") return Effect.succeed({ providerID: row.id, modelID: mdl.id })
+            const [pid, ...rest] = ref.split("/")
+            return Effect.succeed({ providerID: ProviderID.make(pid), modelID: ModelID.make(rest.join("/")) })
+          }),
           ...override,
         }),
       ),

@@ -1601,7 +1601,7 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
     .get({ directory }, { throwOnError: true })
     .then((resp) => {
       const cfg = resp.data
-      if (!cfg || !cfg.model) return undefined
+      if (!cfg || !cfg.model || Provider.isModelRef(cfg.model)) return undefined
       return Provider.parseModel(cfg.model)
     })
     .catch((error) => {

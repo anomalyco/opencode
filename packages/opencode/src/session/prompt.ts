@@ -179,10 +179,14 @@ export const layer = Layer.effect(
 
       const ag = yield* agents.get("title")
       if (!ag) return
-      const mdl = ag.model
-        ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
-        : ((yield* provider.getSmallModel(input.providerID)) ??
-          (yield* provider.getModel(input.providerID, input.modelID)))
+      const mdl = ag.modelRef
+        ? yield* provider.resolveRef(ag.modelRef, input.providerID).pipe(
+            Effect.flatMap((r) => provider.getModel(r.providerID, r.modelID)),
+          )
+        : ag.model
+          ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
+          : ((yield* provider.getSmallModel(input.providerID)) ??
+            (yield* provider.getModel(input.providerID, input.modelID)))
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
@@ -929,7 +933,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* lastModel(input.sessionID))
+      const fallback = input.model ?? ag.model ?? (yield* lastModel(input.sessionID))
+      const model =
+        !input.model && !ag.model && ag.modelRef
+          ? yield* provider.resolveRef(ag.modelRef, fallback.providerID)
+          : fallback
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -1595,9 +1603,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       template = template.trim()
 
       const taskModel = yield* Effect.gen(function* () {
-        if (cmd.model) return Provider.parseModel(cmd.model)
+        if (cmd.model) {
+          if (Provider.isModelRef(cmd.model)) {
+            const dflt = yield* lastModel(input.sessionID)
+            return yield* provider.resolveRef(cmd.model, dflt.providerID)
+          }
+          return Provider.parseModel(cmd.model)
+        }
         if (cmd.agent) {
           const cmdAgent = yield* agents.get(cmd.agent)
+          if (cmdAgent?.modelRef) {
+            const dflt = yield* lastModel(input.sessionID)
+            return yield* provider.resolveRef(cmdAgent.modelRef, dflt.providerID)
+          }
           if (cmdAgent?.model) return cmdAgent.model
         }
         if (input.model) return Provider.parseModel(input.model)

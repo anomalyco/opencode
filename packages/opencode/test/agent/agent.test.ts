@@ -722,3 +722,77 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     },
   })
 })
+
+test("agent with @small_model stores modelRef not model", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: { compaction: { model: "@small_model" } },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agents = await load(tmp.path, (svc) => svc.list())
+      const compaction = agents.find((a) => a.name === "compaction")
+      expect(compaction).toBeDefined()
+      expect(compaction!.modelRef).toBe("@small_model")
+      expect(compaction!.model).toBeUndefined()
+    },
+  })
+})
+
+test("agent with @model stores modelRef", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: { title: { model: "@model" } },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agents = await load(tmp.path, (svc) => svc.list())
+      const title = agents.find((a) => a.name === "title")
+      expect(title).toBeDefined()
+      expect(title!.modelRef).toBe("@model")
+      expect(title!.model).toBeUndefined()
+    },
+  })
+})
+
+test("agent with regular model parses normally", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: { compaction: { model: "anthropic/claude-haiku-4-5-20250514" } },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agents = await load(tmp.path, (svc) => svc.list())
+      const compaction = agents.find((a) => a.name === "compaction")
+      expect(compaction).toBeDefined()
+      expect(compaction!.model).toBeDefined()
+      expect(String(compaction!.model!.providerID)).toBe("anthropic")
+      expect(String(compaction!.model!.modelID)).toBe("claude-haiku-4-5-20250514")
+      expect(compaction!.modelRef).toBeUndefined()
+    },
+  })
+})
+
+test("modelRef clears previous model", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: { compaction: { model: "@small_model" } },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agents = await load(tmp.path, (svc) => svc.list())
+      const compaction = agents.find((a) => a.name === "compaction")
+      expect(compaction).toBeDefined()
+      expect(compaction!.modelRef).toBe("@small_model")
+      expect(compaction!.model).toBeUndefined()
+    },
+  })
+})

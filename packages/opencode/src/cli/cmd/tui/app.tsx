@@ -51,6 +51,8 @@ import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
+import { Effect } from "effect"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Provider } from "@/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -327,14 +329,28 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
-        if (!providerID || !modelID)
-          return toast.show({
-            variant: "warning",
-            message: `Invalid model format: ${args.model}`,
-            duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
+        if (Provider.isModelRef(args.model)) {
+          Provider.Service.use((svc) =>
+            Effect.gen(function* () {
+              const d = yield* svc.defaultModel()
+              return yield* svc.resolveRef(args.model!, d.providerID)
+            }),
+          ).pipe(
+            Effect.tap((resolved) =>
+              Effect.sync(() => local.model.set({ providerID: resolved.providerID, modelID: resolved.modelID }, { recent: true })),
+            ),
+            AppRuntime.runPromise,
+          )
+        } else {
+          const { providerID, modelID } = Provider.parseModel(args.model)
+          if (!providerID || !modelID)
+            return toast.show({
+              variant: "warning",
+              message: `Invalid model format: ${args.model}`,
+              duration: 3000,
+            })
+          local.model.set({ providerID, modelID }, { recent: true })
+        }
       }
       if (args.sessionID && !args.fork) {
         route.navigate({

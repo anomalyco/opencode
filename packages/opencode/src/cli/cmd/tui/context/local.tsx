@@ -159,7 +159,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const args = useArgs()
       const fallbackModel = createMemo(() => {
-        if (args.model) {
+        if (args.model && !args.model.startsWith("@")) {
           const { providerID, modelID } = parseModel(args.model)
           if (isModelValid({ providerID, modelID })) {
             return {
@@ -169,7 +169,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        if (sync.data.config.model) {
+        if (sync.data.config.model && !sync.data.config.model.startsWith("@")) {
           const { providerID, modelID } = parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
             return {

@@ -933,6 +933,10 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
+  readonly resolveRef: (
+    ref: string,
+    providerID: ProviderID,
+  ) => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
 }
 
 interface State {
@@ -1590,7 +1594,7 @@ const layer: Layer.Layer<
     const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderID) {
       const cfg = yield* config.get()
 
-      if (cfg.small_model) {
+      if (cfg.small_model && !isModelRef(cfg.small_model)) {
         const parsed = parseModel(cfg.small_model)
         return yield* getModel(parsed.providerID, parsed.modelID)
       }
@@ -1645,7 +1649,7 @@ const layer: Layer.Layer<
 
     const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
       const cfg = yield* config.get()
-      if (cfg.model) return parseModel(cfg.model)
+      if (cfg.model && !isModelRef(cfg.model)) return parseModel(cfg.model)
 
       const s = yield* InstanceState.get(state)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
@@ -1677,7 +1681,17 @@ const layer: Layer.Layer<
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const resolveRef = Effect.fn("Provider.resolveRef")(function* (ref: string, providerID: ProviderID) {
+      if (ref === "@small_model") {
+        const small = yield* getSmallModel(providerID)
+        if (small) return { providerID: small.providerID, modelID: small.id }
+        return yield* defaultModel()
+      }
+      if (ref === "@model") return yield* defaultModel()
+      return parseModel(ref)
+    })
+
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, resolveRef })
   }),
 )
 
@@ -1707,6 +1721,13 @@ export function parseModel(model: string) {
     providerID: ProviderID.make(providerID),
     modelID: ModelID.make(rest.join("/")),
   }
+}
+
+export const MODEL_REFS = ["@model", "@small_model"] as const
+export type ModelRef = (typeof MODEL_REFS)[number]
+
+export function isModelRef(value: string): value is ModelRef {
+  return MODEL_REFS.includes(value as ModelRef)
 }
 
 export const ModelNotFoundError = NamedError.create(

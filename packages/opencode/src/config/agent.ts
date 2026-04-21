@@ -30,7 +30,10 @@ const PermissionRef = Schema.Any.annotate({ [ZodOverride]: ConfigPermission.Info
 
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
-    model: Schema.optional(ConfigModelID),
+    model: Schema.optional(ConfigModelID).annotate({
+      description:
+        "Model to use for this agent in the format provider/model. Use @model to reference the default model or @small_model for the small model.",
+    }),
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),

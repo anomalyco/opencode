@@ -9,6 +9,7 @@ import { EOL } from "os"
 import { Filesystem } from "../../util"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
+import { Effect } from "effect"
 import { Provider } from "../../provider"
 import { Agent } from "../../agent/agent"
 import { Permission } from "../../permission"
@@ -646,7 +647,18 @@ export const RunCommand = cmd({
           variant: args.variant,
         })
       } else {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const model = args.model
+          ? Provider.isModelRef(args.model)
+            ? await AppRuntime.runPromise(
+                Provider.Service.use((svc) =>
+                  Effect.gen(function* () {
+                    const d = yield* svc.defaultModel()
+                    return yield* svc.resolveRef(args.model!, d.providerID)
+                  }),
+                ),
+              )
+            : Provider.parseModel(args.model)
+          : undefined
         await sdk.session.prompt({
           sessionID,
           agent,

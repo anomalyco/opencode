@@ -2640,3 +2640,70 @@ test("opencode loader keeps paid models when auth exists", async () => {
     }
   }
 })
+
+// --- Model Ref Tests ---
+
+test("isModelRef identifies @model and @small_model as refs", () => {
+  expect(Provider.isModelRef("@model")).toBe(true)
+  expect(Provider.isModelRef("@small_model")).toBe(true)
+  expect(Provider.isModelRef("anthropic/claude-sonnet-4-5")).toBe(false)
+  expect(Provider.isModelRef("@other")).toBe(false)
+  expect(Provider.isModelRef("model")).toBe(false)
+})
+
+test("parseModel works for non-ref strings", () => {
+  const result = Provider.parseModel("anthropic/claude-sonnet-4-5")
+  expect(String(result.providerID)).toBe("anthropic")
+  expect(String(result.modelID)).toBe("claude-sonnet-4-5")
+})
+
+test("resolveRef with @small_model returns a model", async () => {
+  await using tmp = await tmpdir({ config: {} })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await run((p) => p.resolveRef("@small_model", ProviderID.make("anthropic")))
+      expect(result).toBeDefined()
+      expect(result.providerID).toBeTruthy()
+      expect(result.modelID).toBeTruthy()
+    },
+  })
+})
+
+test("resolveRef with @model returns default model", async () => {
+  await using tmp = await tmpdir({ config: { model: "anthropic/claude-sonnet-4-20250514" } })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await run((p) => p.resolveRef("@model", ProviderID.make("anthropic")))
+      expect(String(result.providerID)).toBe("anthropic")
+      expect(String(result.modelID)).toBe("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("resolveRef with regular string returns parsed model", async () => {
+  await using tmp = await tmpdir({ config: {} })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await run((p) => p.resolveRef("openai/gpt-5", ProviderID.make("anthropic")))
+      expect(String(result.providerID)).toBe("openai")
+      expect(String(result.modelID)).toBe("gpt-5")
+    },
+  })
+})
+
+test("getSmallModel skips @small_model in config to prevent circular ref", async () => {
+  await using tmp = await tmpdir({ config: { small_model: "@small_model" } })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await run((p) => p.getSmallModel(ProviderID.make("anthropic")))
+      // Should NOT throw, should fall through to auto-detect
+      if (result) {
+        expect(result.id).toMatch(/haiku/)
+      }
+    },
+  })
+})

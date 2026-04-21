@@ -41,6 +41,7 @@ export const Info = z
         providerID: ProviderID.zod,
       })
       .optional(),
+    modelRef: z.string().optional(),
     variant: z.string().optional(),
     prompt: z.string().optional(),
     options: z.record(z.string(), z.any()),
@@ -247,7 +248,15 @@ export const layer = Layer.effect(
               options: {},
               native: false,
             }
-          if (value.model) item.model = Provider.parseModel(value.model)
+          if (value.model) {
+            if (Provider.isModelRef(value.model)) {
+              item.modelRef = value.model
+              item.model = undefined
+            } else {
+              item.model = Provider.parseModel(value.model)
+              item.modelRef = undefined
+            }
+          }
           item.variant = value.variant ?? item.variant
           item.prompt = value.prompt ?? item.prompt
           item.description = value.description ?? item.description

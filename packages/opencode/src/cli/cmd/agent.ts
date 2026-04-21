@@ -4,6 +4,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
+import { Effect } from "effect"
 import { Provider } from "../../provider"
 import path from "path"
 import fs from "fs/promises"
@@ -110,7 +111,18 @@ const AgentCreateCommand = cmd({
         // Generate agent
         const spinner = prompts.spinner()
         spinner.start("Generating agent configuration...")
-        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const model = args.model
+          ? Provider.isModelRef(args.model)
+            ? await AppRuntime.runPromise(
+                Provider.Service.use((svc) =>
+                  Effect.gen(function* () {
+                    const d = yield* svc.defaultModel()
+                    return yield* svc.resolveRef(args.model!, d.providerID)
+                  }),
+                ),
+              )
+            : Provider.parseModel(args.model)
+          : undefined
         const generated = await AppRuntime.runPromise(
           Agent.Service.use((svc) => svc.generate({ description, model })),
         ).catch((error) => {
