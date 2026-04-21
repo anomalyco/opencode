@@ -96,4 +96,15 @@ describe("shell", () => {
       })
     })
   }
+
+  test("rejects csh and tcsh as non-acceptable shells", async () => {
+    for (const shell of ["/bin/csh", "/bin/tcsh", "/usr/bin/tcsh"]) {
+      await withShell(shell, async () => {
+        const selected = Shell.acceptable()
+        const selectedName = Shell.name(selected)
+        expect(selectedName).not.toBe("csh")
+        expect(selectedName).not.toBe("tcsh")
+      })
+    }
+  })
 })
