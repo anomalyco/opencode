@@ -130,7 +130,7 @@ Keep the list focused on trusted paths, and layer extra allow or deny rules as n
 OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
 - `read` — reading a file (matches the file path)
-- `edit` — all file modifications (covers `edit`, `write`, `patch`, `multiedit`)
+- `edit` — all file modifications (covers `edit`, `write`, `patch`)
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)

@@ -1716,7 +1716,7 @@ export const PromptInput = z.object({
     .record(z.string(), z.boolean())
     .optional()
     .describe("@deprecated tools and permissions have been merged, you can set permissions on the session itself now"),
-  format: MessageV2.Format.optional(),
+  format: MessageV2.Format.zod.optional(),
   system: z.string().optional(),
   variant: z.string().optional(),
   parts: z.array(

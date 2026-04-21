@@ -224,7 +224,6 @@ These tools mostly use direct getters for path resolution and repo-relative disp
 - `src/tool/bash.ts`
 - `src/tool/edit.ts`
 - `src/tool/lsp.ts`
-- `src/tool/multiedit.ts`
 - `src/tool/plan.ts`
 - `src/tool/read.ts`
 - `src/tool/write.ts`

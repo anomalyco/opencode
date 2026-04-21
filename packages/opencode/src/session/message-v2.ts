@@ -15,7 +15,9 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect } from "effect"
+import { Effect, Schema, Types } from "effect"
+import { zod, ZodOverride } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 import { EffectLogger } from "@/effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
@@ -61,28 +63,28 @@ export const ContextOverflowError = NamedError.create(
   z.object({ message: z.string(), responseBody: z.string().optional() }),
 )
 
-export const OutputFormatText = z
-  .object({
-    type: z.literal("text"),
-  })
-  .meta({
-    ref: "OutputFormatText",
-  })
+export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
+  type: Schema.Literal("text"),
+}) {
+  static readonly zod = zod(this)
+}
 
-export const OutputFormatJsonSchema = z
-  .object({
-    type: z.literal("json_schema"),
-    schema: z.record(z.string(), z.any()).meta({ ref: "JSONSchema" }),
-    retryCount: z.number().int().min(0).default(2),
-  })
-  .meta({
-    ref: "OutputFormatJsonSchema",
-  })
+export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
+  type: Schema.Literal("json_schema"),
+  schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
+  retryCount: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(0))
+    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
+}) {
+  static readonly zod = zod(this)
+}
 
-export const Format = z.discriminatedUnion("type", [OutputFormatText, OutputFormatJsonSchema]).meta({
-  ref: "OutputFormat",
+const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
+  discriminator: "type",
+  identifier: "OutputFormat",
 })
-export type OutputFormat = z.infer<typeof Format>
+export const Format = Object.assign(_Format, { zod: zod(_Format) })
+export type OutputFormat = Schema.Schema.Type<typeof _Format>
 
 const PartBase = z.object({
   id: PartID.zod,
@@ -159,7 +161,7 @@ export const FileSource = FilePartSourceBase.extend({
 export const SymbolSource = FilePartSourceBase.extend({
   type: z.literal("symbol"),
   path: z.string(),
-  range: LSP.Range,
+  range: LSP.Range.zod,
   name: z.string(),
   kind: z.number().int(),
 }).meta({
@@ -271,79 +273,84 @@ export const StepFinishPart = PartBase.extend({
 })
 export type StepFinishPart = z.infer<typeof StepFinishPart>
 
-export const ToolStatePending = z
-  .object({
-    status: z.literal("pending"),
-    input: z.record(z.string(), z.any()),
-    raw: z.string(),
-  })
-  .meta({
-    ref: "ToolStatePending",
-  })
+export const ToolStatePending = Schema.Struct({
+  status: Schema.Literal("pending"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  raw: Schema.String,
+})
+  .annotate({ identifier: "ToolStatePending" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStatePending = Types.DeepMutable<Schema.Schema.Type<typeof ToolStatePending>>
 
-export type ToolStatePending = z.infer<typeof ToolStatePending>
+export const ToolStateRunning = Schema.Struct({
+  status: Schema.Literal("running"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  title: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  time: Schema.Struct({
+    start: Schema.Number,
+  }),
+})
+  .annotate({ identifier: "ToolStateRunning" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStateRunning = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateRunning>>
 
-export const ToolStateRunning = z
-  .object({
-    status: z.literal("running"),
-    input: z.record(z.string(), z.any()),
-    title: z.string().optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
-    time: z.object({
-      start: z.number(),
-    }),
-  })
-  .meta({
-    ref: "ToolStateRunning",
-  })
-export type ToolStateRunning = z.infer<typeof ToolStateRunning>
+export const ToolStateCompleted = Schema.Struct({
+  status: Schema.Literal("completed"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  output: Schema.String,
+  title: Schema.String,
+  metadata: Schema.Record(Schema.String, Schema.Any),
+  time: Schema.Struct({
+    start: Schema.Number,
+    end: Schema.Number,
+    compacted: Schema.optional(Schema.Number),
+  }),
+  // FilePart is still Zod-first this slice; bridge via ZodOverride so the
+  // derived Zod + JSON Schema still emit `$ref: FilePart` array items.
+  attachments: Schema.optional(Schema.Any.annotate({ [ZodOverride]: FilePart.array() })),
+})
+  .annotate({ identifier: "ToolStateCompleted" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStateCompleted = Omit<
+  Types.DeepMutable<Schema.Schema.Type<typeof ToolStateCompleted>>,
+  "attachments"
+> & {
+  attachments?: FilePart[]
+}
 
-export const ToolStateCompleted = z
-  .object({
-    status: z.literal("completed"),
-    input: z.record(z.string(), z.any()),
-    output: z.string(),
-    title: z.string(),
-    metadata: z.record(z.string(), z.any()),
-    time: z.object({
-      start: z.number(),
-      end: z.number(),
-      compacted: z.number().optional(),
-    }),
-    attachments: FilePart.array().optional(),
-  })
-  .meta({
-    ref: "ToolStateCompleted",
-  })
-export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
+export const ToolStateError = Schema.Struct({
+  status: Schema.Literal("error"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  error: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  time: Schema.Struct({
+    start: Schema.Number,
+    end: Schema.Number,
+  }),
+})
+  .annotate({ identifier: "ToolStateError" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStateError = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateError>>
 
-export const ToolStateError = z
-  .object({
-    status: z.literal("error"),
-    input: z.record(z.string(), z.any()),
-    error: z.string(),
-    metadata: z.record(z.string(), z.any()).optional(),
-    time: z.object({
-      start: z.number(),
-      end: z.number(),
-    }),
-  })
-  .meta({
-    ref: "ToolStateError",
-  })
-export type ToolStateError = z.infer<typeof ToolStateError>
-
-export const ToolState = z
-  .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
-  .meta({
-    ref: "ToolState",
-  })
+const _ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).annotate({
+  discriminator: "status",
+  identifier: "ToolState",
+})
+// Cast the derived zod so downstream z.infer sees the same mutable shape that
+// our exported TS types expose (the pre-migration Zod inferences were mutable).
+export const ToolState = Object.assign(_ToolState, {
+  zod: zod(_ToolState) as unknown as z.ZodType<
+    ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+  >,
+})
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
 export const ToolPart = PartBase.extend({
   type: z.literal("tool"),
   callID: z.string(),
   tool: z.string(),
-  state: ToolState,
+  state: ToolState.zod,
   metadata: z.record(z.string(), z.any()).optional(),
 }).meta({
   ref: "ToolPart",
@@ -360,12 +367,12 @@ export const User = Base.extend({
   time: z.object({
     created: z.number(),
   }),
-  format: Format.optional(),
+  format: Format.zod.optional(),
   summary: z
     .object({
       title: z.string().optional(),
       body: z.string().optional(),
-      diffs: Snapshot.FileDiff.array(),
+      diffs: Snapshot.FileDiff.zod.array(),
     })
     .optional(),
   agent: z.string(),

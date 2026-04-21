@@ -705,32 +705,32 @@ export const CSharp: Info = {
   root: NearestRoot([".slnx", ".sln", ".csproj", "global.json"]),
   extensions: [".cs"],
   async spawn(root) {
-    let bin = which("csharp-ls")
+    let bin = which("roslyn-language-server")
     if (!bin) {
       if (!which("dotnet")) {
-        log.error(".NET SDK is required to install csharp-ls")
+        log.error(".NET SDK is required to install roslyn-language-server")
         return
       }
 
       if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-      log.info("installing csharp-ls via dotnet tool")
-      const proc = Process.spawn(["dotnet", "tool", "install", "csharp-ls", "--tool-path", Global.Path.bin], {
+      log.info("installing roslyn-language-server via dotnet tool")
+      const proc = Process.spawn(["dotnet", "tool", "install", "--global", "roslyn-language-server", "--prerelease"], {
         stdout: "pipe",
         stderr: "pipe",
         stdin: "pipe",
       })
       const exit = await proc.exited
       if (exit !== 0) {
-        log.error("Failed to install csharp-ls")
+        log.error("Failed to install roslyn-language-server")
         return
       }
 
-      bin = path.join(Global.Path.bin, "csharp-ls" + (process.platform === "win32" ? ".exe" : ""))
-      log.info(`installed csharp-ls`, { bin })
+      bin = path.join(Global.Path.bin, "roslyn-language-server" + (process.platform === "win32" ? ".exe" : ""))
+      log.info(`installed roslyn-language-server`, { bin })
     }
 
     return {
-      process: spawn(bin, {
+      process: spawn(bin, ["--stdio", "--autoLoadProjects"], {
         cwd: root,
       }),
     }
