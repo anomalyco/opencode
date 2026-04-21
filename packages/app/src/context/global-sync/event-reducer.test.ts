@@ -551,4 +551,67 @@ describe("applyDirectoryEvent", () => {
     expect(pushes).toEqual(["/tmp"])
     expect(lspLoads).toBe(1)
   })
+
+  test("streaming assistant text: empty part -> deltas -> final snapshot", () => {
+    const [store, setStore] = createStore(baseState())
+    const sessionID = "ses_stream"
+    const assistantID = "msg_assistant"
+    const partID = "prt_text"
+    const apply = (event: { type: string; properties?: unknown }) =>
+      applyDirectoryEvent({
+        event,
+        store,
+        setStore,
+        push() {},
+        directory: "/genericagent",
+        loadLsp() {},
+      })
+
+    apply({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: assistantID,
+          sessionID,
+          role: "assistant",
+          time: { created: 1 },
+          parentID: "msg_user",
+          agent: "genericagent",
+          model: { providerID: "genericagent", modelID: "llm_0" },
+        } as unknown as Message,
+      },
+    })
+    apply({
+      type: "message.part.updated",
+      properties: {
+        part: { id: partID, sessionID, messageID: assistantID, type: "text", text: "" } as unknown as Part,
+      },
+    })
+    apply({
+      type: "message.part.delta",
+      properties: { sessionID, messageID: assistantID, partID, field: "text", delta: "Hello " },
+    })
+    apply({
+      type: "message.part.delta",
+      properties: { sessionID, messageID: assistantID, partID, field: "text", delta: "World" },
+    })
+    apply({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: partID,
+          sessionID,
+          messageID: assistantID,
+          type: "text",
+          text: "Hello World final",
+        } as unknown as Part,
+      },
+    })
+
+    expect(store.message[sessionID]?.length).toBe(1)
+    const parts = store.part[assistantID]
+    expect(parts?.length).toBe(1)
+    const text = (parts?.[0] as unknown as { text?: string })?.text
+    expect(text).toBe("Hello World final")
+  })
 })

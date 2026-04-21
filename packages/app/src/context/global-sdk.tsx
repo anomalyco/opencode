@@ -58,21 +58,14 @@ export function GlobalSDKProvider(props: ParentProps) {
   if (!server.current) throw new Error(language.t("error.globalSDK.noServerAvailable"))
 
   const emitterByDomain = new Map<DomainId, DomainEmitter>()
-  type ListenAllEntry = { cb: DomainListener; unsubs: Map<DomainId, VoidFunction> }
+  type ListenAllEntry = { cb: DomainListener }
   const listenAllEntries = new Set<ListenAllEntry>()
-
-  const attachEntryToDomain = (entry: ListenAllEntry, domain: DomainId, emitter: DomainEmitter) => {
-    if (entry.unsubs.has(domain)) return
-    const unsub = emitter.listen((payload) => entry.cb({ ...payload, domain }))
-    entry.unsubs.set(domain, unsub)
-  }
 
   const ensureEmitter = (domain: DomainId): DomainEmitter => {
     const existing = emitterByDomain.get(domain)
     if (existing) return existing
     const created = createGlobalEmitter<EventMap>()
     emitterByDomain.set(domain, created)
-    for (const entry of listenAllEntries) attachEntryToDomain(entry, domain, created)
     return created
   }
 
@@ -133,12 +126,9 @@ export function GlobalSDKProvider(props: ParentProps) {
       return ensureEmitter(domain)
     },
     listenAll(listener) {
-      const entry: ListenAllEntry = { cb: listener, unsubs: new Map() }
+      const entry: ListenAllEntry = { cb: listener }
       listenAllEntries.add(entry)
-      for (const [domain, emitter] of emitterByDomain) attachEntryToDomain(entry, domain, emitter)
       return () => {
-        for (const unsub of entry.unsubs.values()) unsub()
-        entry.unsubs.clear()
         listenAllEntries.delete(entry)
       }
     },
@@ -224,7 +214,20 @@ export function GlobalSDKProvider(props: ParentProps) {
               continue
             }
           }
+          // The per-domain emitter's `emit` drives `.on(key)` subscribers
+          // (see `SDKProvider`, `quick-assistant.tsx`). `listenAll`
+          // subscribers are dispatched directly below because the emitter's
+          // global `.listen` callback was observed to go silent for
+          // extra-agent domains (even though `emit` ran), which would drop
+          // every message/part update for those domains.
           domainEmitter.emit(event.directory, event.payload)
+          for (const entry of listenAllEntries) {
+            try {
+              entry.cb({ name: event.directory, details: event.payload, domain })
+            } catch (err) {
+              console.error("[global-sdk] listenAll cb failed", err)
+            }
+          }
         }
         buffer.length = 0
       }
@@ -355,10 +358,6 @@ export function GlobalSDKProvider(props: ParentProps) {
   onCleanup(() => {
     for (const stream of streams.values()) stream.stop()
     streams.clear()
-    for (const entry of listenAllEntries) {
-      for (const unsub of entry.unsubs.values()) unsub()
-      entry.unsubs.clear()
-    }
     listenAllEntries.clear()
     for (const emitter of emitterByDomain.values()) emitter.clear()
     emitterByDomain.clear()

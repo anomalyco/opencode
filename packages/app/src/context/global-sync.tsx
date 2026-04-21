@@ -270,7 +270,14 @@ function createGlobalSync() {
       )
       return
     }
-    setGlobalStore("sessionTodoByDomain", domain, sessionID, reconcile(todos, { key: "id" }))
+    setGlobalStore(
+      "sessionTodoByDomain",
+      produce((draft) => {
+        const bucket = draft[domain] ?? {}
+        bucket[sessionID] = todos
+        draft[domain] = bucket
+      }),
+    )
     setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
   }
 

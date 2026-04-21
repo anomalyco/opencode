@@ -227,7 +227,7 @@ export function applyDirectoryEvent(input: {
       const result = Binary.search(parts, part.id, (p) => p.id)
       if (part.type === "text") {
         const item = result.found ? parts[result.index] : undefined
-        const prev = item?.type === "text" ? item.text ?? "" : ""
+        const prev = item?.type === "text" ? (item.text ?? "") : ""
         const next = part.text ?? ""
         console.debug(
           `[sync] part.updated msg=${part.messageID} part=${part.id} prev=${prev.length} next=${next.length} back=${next.length < prev.length ? 1 : 0} tail=${JSON.stringify(next.slice(-40))}`,
