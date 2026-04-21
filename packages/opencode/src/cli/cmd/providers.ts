@@ -3,12 +3,9 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
-import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
-import { Config } from "../../config/config"
 import { Global } from "../../global"
-import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
@@ -253,29 +250,19 @@ export const ProvidersListCommand = cmd({
 
 export const ProvidersLoginCommand = cmd({
   command: "login [url]",
-  describe: "log in to a provider",
+  describe: "log in to Mammouth AI",
   builder: (yargs) =>
-    yargs
-      .positional("url", {
-        describe: "opencode auth provider",
-        type: "string",
-      })
-      .option("provider", {
-        alias: ["p"],
-        describe: "provider id or name to log in to (skips provider selection)",
-        type: "string",
-      })
-      .option("method", {
-        alias: ["m"],
-        describe: "login method label (skips method selection)",
-        type: "string",
-      }),
+    yargs.positional("url", {
+      describe: "opencode auth provider",
+      type: "string",
+    }),
   async handler(args) {
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
-        prompts.intro("Add credential")
+        prompts.intro("Connect to Mammouth AI")
+
         if (args.url) {
           const url = args.url.replace(/\/+$/, "")
           const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
@@ -303,150 +290,21 @@ export const ProvidersLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh(true).catch(() => {})
 
-        const config = await Config.get()
-
-        const disabled = new Set(config.disabled_providers ?? [])
-        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-
-        const providers = await ModelsDev.get().then((x) => {
-          const filtered: Record<string, (typeof x)[string]> = {}
-          for (const [key, value] of Object.entries(x)) {
-            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
-              filtered[key] = value
-            }
-          }
-          return filtered
-        })
-
-        const priority: Record<string, number> = {
-          opencode: 0,
-          openai: 1,
-          "github-copilot": 2,
-          google: 3,
-          anthropic: 4,
-          openrouter: 5,
-          vercel: 6,
-        }
-        const pluginProviders = resolvePluginProviders({
-          hooks: await Plugin.list(),
-          existingProviders: providers,
-          disabled,
-          enabled,
-          providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
-        })
-        const options = [
-          ...pipe(
-            providers,
-            values(),
-            sortBy(
-              (x) => priority[x.id] ?? 99,
-              (x) => x.name ?? x.id,
-            ),
-            map((x) => ({
-              label: x.name,
-              value: x.id,
-              hint: {
-                opencode: "recommended",
-                openai: "ChatGPT Plus/Pro or API key",
-              }[x.id],
-            })),
-          ),
-          ...pluginProviders.map((x) => ({
-            label: x.name,
-            value: x.id,
-            hint: "plugin",
-          })),
-        ]
-
-        let provider: string
-        if (args.provider) {
-          const input = args.provider
-          const byID = options.find((x) => x.value === input)
-          const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
-          const match = byID ?? byName
-          if (!match) {
-            prompts.log.error(`Unknown provider "${input}"`)
-            process.exit(1)
-          }
-          provider = match.value
-        } else {
-          const selected = await prompts.autocomplete({
-            message: "Select provider",
-            maxItems: 8,
-            options: [
-              ...options,
-              {
-                value: "other",
-                label: "Other",
-              },
-            ],
-          })
-          if (prompts.isCancel(selected)) throw new UI.CancelledError()
-          provider = selected as string
-        }
-
-        const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method)
-          if (handled) return
-        }
-
-        if (provider === "other") {
-          const custom = await prompts.text({
-            message: "Enter provider id",
-            validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
-          })
-          if (prompts.isCancel(custom)) throw new UI.CancelledError()
-          provider = custom.replace(/^@ai-sdk\//, "")
-
-          const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
-            if (handled) return
-          }
-
-          prompts.log.warn(
-            `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
-          )
-        }
-
-        if (provider === "amazon-bedrock") {
-          prompts.log.info(
-            "Amazon Bedrock authentication priority:\n" +
-              "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
-              "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
-              "Configure via opencode.json options (profile, region, endpoint) or\n" +
-              "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
-          )
-        }
-
-        if (provider === "opencode") {
-          prompts.log.info("Create an api key at https://opencode.ai/auth")
-        }
-
-        if (provider === "vercel") {
-          prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
-        }
-
-        if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
-          prompts.log.info(
-            "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
-          )
-        }
+        prompts.log.info("Get your API key at https://mammouth.ai/account/api-keys")
 
         const key = await prompts.password({
-          message: "Enter your API key",
+          message: "Enter your Mammouth API key",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
+
+        await Auth.set("mammouth-ai", {
           type: "api",
           key,
         })
 
-        prompts.outro("Done")
+        prompts.outro("Done — you're connected to Mammouth AI")
       },
     })
   },
