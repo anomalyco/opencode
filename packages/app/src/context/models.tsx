@@ -6,10 +6,10 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
 
-export type ModelKey = { providerID: string; modelID: string }
+export type ModelKey = { providerID: string; modelID: string; accountKey?: string }
 
 type Visibility = "show" | "hide"
-type User = ModelKey & { visibility: Visibility; favorite?: boolean }
+type User = { providerID: string; modelID: string; visibility: Visibility; favorite?: boolean }
 type Store = {
   user: User[]
   recent: ModelKey[]
@@ -108,7 +108,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
         setStore("user", index, (current) => ({ ...current, visibility: state }))
         return
       }
-      setStore("user", store.user.length, { ...model, visibility: state })
+      setStore("user", store.user.length, { providerID: model.providerID, modelID: model.modelID, visibility: state })
     }
 
     const visible = (model: ModelKey) => {
@@ -127,7 +127,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     }
 
     const push = (model: ModelKey) => {
-      const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}`)
+      const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}:${x.accountKey ?? ""}`)
       if (uniq.length > RECENT_LIMIT) uniq.pop()
       setStore("recent", uniq)
     }

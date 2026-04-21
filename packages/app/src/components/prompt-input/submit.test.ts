@@ -20,10 +20,13 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const activatedAccounts: Array<{ directory: string; providerID: string; accountKey: string }> = []
+const providerAccountsByDirectory: Record<string, Array<{ accountKey: string; active: boolean }>> = {}
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let selectedModelAccountKey: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
@@ -51,6 +54,20 @@ const clientFor = (directory: string) => {
     },
     worktree: {
       create: async () => ({ data: { directory: `${directory}/new` } }),
+    },
+    provider: {
+      accounts: async () => ({ data: providerAccountsByDirectory[directory] ?? [] }),
+      accounts2: {
+        activate: async (input: { providerID: string; accountKey: string }) => {
+          activatedAccounts.push({ directory, providerID: input.providerID, accountKey: input.accountKey })
+          const list = providerAccountsByDirectory[directory] ?? []
+          providerAccountsByDirectory[directory] = list.map((item) => ({
+            ...item,
+            active: item.accountKey === input.accountKey,
+          }))
+          return { data: undefined }
+        },
+      },
     },
   }
 }
@@ -82,6 +99,7 @@ beforeAll(async () => {
     useLocal: () => ({
       model: {
         current: () => ({ id: "model", provider: { id: "provider" } }),
+        selected: () => ({ providerID: "provider", modelID: "model", accountKey: selectedModelAccountKey }),
         variant: { current: () => variant },
       },
       agent: {
@@ -211,9 +229,12 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
+  activatedAccounts.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  selectedModelAccountKey = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
+  for (const key of Object.keys(providerAccountsByDirectory)) delete providerAccountsByDirectory[key]
 })
 
 describe("prompt submit worktree selection", () => {
@@ -341,5 +362,34 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("activates selected provider account before submit", async () => {
+    params = { id: "session-1" }
+    selectedModelAccountKey = "work"
+    providerAccountsByDirectory["/repo/main"] = [{ accountKey: "work", active: false }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(activatedAccounts).toEqual([{ directory: "/repo/main", providerID: "provider", accountKey: "work" }])
   })
 })

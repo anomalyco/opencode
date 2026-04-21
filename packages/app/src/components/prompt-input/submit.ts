@@ -18,6 +18,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { ensureProviderAccountActive } from "@/utils/provider-account"
 
 type PendingPrompt = {
   abort: AbortController
@@ -300,9 +301,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const currentModel = local.model.current()
+    const currentModelKey = local.model.selected()
     const currentAgent = local.agent.current()
     const variant = local.model.variant.current()
-    if (!currentModel || !currentAgent) {
+    if (!currentModel || !currentModelKey || !currentAgent) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
         description: language.t("prompt.toast.modelAgentRequired.description"),
@@ -388,6 +390,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
       return
     }
+
+    const accountReady = await ensureProviderAccountActive(client, currentModelKey)
+      .then(() => true)
+      .catch((err) => {
+        showToast({
+          title: language.t("prompt.toast.promptSendFailed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+    if (!accountReady) return
 
     const model = {
       modelID: currentModel.id,

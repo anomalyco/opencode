@@ -15,6 +15,7 @@ import { ModelTooltip } from "./model-tooltip"
 import { useProviderAccounts } from "@/hooks/use-provider-accounts"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
+import { ensureProviderAccountActive } from "@/utils/provider-account"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -71,12 +72,16 @@ const ModelList: Component<{
   })
 
   const current = createMemo(() => {
-    const selected = model.current()
+    const selected = model.selected()
     if (!selected) return
     return (
       models().find(
-        (item) => item.provider.id === selected.provider.id && item.id === selected.id && (!item.accountKey || item.accountActive),
-      ) ?? models().find((item) => item.provider.id === selected.provider.id && item.id === selected.id)
+        (item) =>
+          item.provider.id === selected.providerID &&
+          item.id === selected.modelID &&
+          (selected.accountKey ? item.accountKey === selected.accountKey : !item.accountKey || item.accountActive),
+      ) ??
+      models().find((item) => item.provider.id === selected.providerID && item.id === selected.modelID)
     )
   })
 
@@ -119,8 +124,8 @@ const ModelList: Component<{
               props.onSelect()
               return
             }
-            if (x.accountKey && !x.accountActive) {
-              await globalSDK.client.provider.accounts2.activate({
+            if (x.accountKey) {
+              await ensureProviderAccountActive(globalSDK.client, {
                 providerID: x.provider.id,
                 accountKey: x.accountKey,
               })
@@ -130,6 +135,7 @@ const ModelList: Component<{
               {
                 modelID: x.id,
                 providerID: x.provider.id,
+                accountKey: x.accountKey,
               },
               { recent: true },
             )
