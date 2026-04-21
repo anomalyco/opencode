@@ -244,7 +244,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       for (const toolCall of choice.message.tool_calls) {
         content.push({
           type: "tool-call",
-          toolCallId: toolCall.id ?? generateId(),
+          toolCallId: toolCall.id == null ? generateId() : String(toolCall.id),
           toolName: toolCall.function.name,
           input: toolCall.function.arguments!,
           providerMetadata: choice.message.reasoning_opaque
@@ -329,12 +329,13 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     })
 
     const toolCalls: Array<{
-      id: string
+      id: string | undefined
       type: "function"
       function: {
-        name: string
+        name: string | undefined
         arguments: string
       }
+      hasStarted: boolean
       hasFinished: boolean
     }> = []
 
@@ -537,109 +538,83 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               for (const toolCallDelta of delta.tool_calls) {
                 const index = toolCallDelta.index
 
-                if (toolCalls[index] == null) {
-                  if (toolCallDelta.id == null) {
-                    throw new InvalidResponseDataError({
-                      data: toolCallDelta,
-                      message: `Expected 'id' to be a string.`,
-                    })
-                  }
-
-                  if (toolCallDelta.function?.name == null) {
-                    throw new InvalidResponseDataError({
-                      data: toolCallDelta,
-                      message: `Expected 'function.name' to be a string.`,
-                    })
-                  }
-
-                  controller.enqueue({
-                    type: "tool-input-start",
-                    id: toolCallDelta.id,
-                    toolName: toolCallDelta.function.name,
-                  })
-
-                  toolCalls[index] = {
-                    id: toolCallDelta.id,
+                const toolCall =
+                  toolCalls[index] ??
+                  (toolCalls[index] = {
+                    id: toolCallDelta.id == null ? undefined : String(toolCallDelta.id),
                     type: "function",
                     function: {
-                      name: toolCallDelta.function.name,
-                      arguments: toolCallDelta.function.arguments ?? "",
+                      name: toolCallDelta.function?.name,
+                      arguments: "",
                     },
+                    hasStarted: false,
                     hasFinished: false,
-                  }
-
-                  const toolCall = toolCalls[index]
-
-                  if (toolCall.function?.name != null && toolCall.function?.arguments != null) {
-                    // send delta if the argument text has already started:
-                    if (toolCall.function.arguments.length > 0) {
-                      controller.enqueue({
-                        type: "tool-input-delta",
-                        id: toolCall.id,
-                        delta: toolCall.function.arguments,
-                      })
-                    }
-
-                    // check if tool call is complete
-                    // (some providers send the full tool call in one chunk):
-                    if (isParsableJson(toolCall.function.arguments)) {
-                      controller.enqueue({
-                        type: "tool-input-end",
-                        id: toolCall.id,
-                      })
-
-                      controller.enqueue({
-                        type: "tool-call",
-                        toolCallId: toolCall.id ?? generateId(),
-                        toolName: toolCall.function.name,
-                        input: toolCall.function.arguments,
-                        providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
-                      })
-                      toolCall.hasFinished = true
-                    }
-                  }
-
-                  continue
-                }
-
-                // existing tool call, merge if not finished
-                const toolCall = toolCalls[index]
+                  })
 
                 if (toolCall.hasFinished) {
                   continue
                 }
 
-                if (toolCallDelta.function?.arguments != null) {
-                  toolCall.function!.arguments += toolCallDelta.function?.arguments ?? ""
+                if (toolCall.id == null && toolCallDelta.id != null) {
+                  toolCall.id = String(toolCallDelta.id)
                 }
 
-                // send delta
-                controller.enqueue({
-                  type: "tool-input-delta",
-                  id: toolCall.id,
-                  delta: toolCallDelta.function.arguments ?? "",
-                })
+                if (toolCall.function.name == null && toolCallDelta.function?.name != null) {
+                  toolCall.function.name = toolCallDelta.function.name
+                }
+
+                if (toolCallDelta.function?.arguments != null) {
+                  toolCall.function.arguments += toolCallDelta.function.arguments
+                }
+
+                if (!toolCall.hasStarted && toolCall.function.name != null) {
+                  toolCall.id ??= generateId()
+
+                  controller.enqueue({
+                    type: "tool-input-start",
+                    id: toolCall.id,
+                    toolName: toolCall.function.name,
+                  })
+
+                  toolCall.hasStarted = true
+
+                  if (toolCall.function.arguments.length > 0) {
+                    controller.enqueue({
+                      type: "tool-input-delta",
+                      id: toolCall.id,
+                      delta: toolCall.function.arguments,
+                    })
+                  }
+                } else if (toolCall.hasStarted && toolCallDelta.function?.arguments != null) {
+                  controller.enqueue({
+                    type: "tool-input-delta",
+                    id: toolCall.id!,
+                    delta: toolCallDelta.function.arguments,
+                  })
+                }
+
+                if (
+                  !toolCall.hasStarted ||
+                  toolCall.function.name == null ||
+                  !isParsableJson(toolCall.function.arguments)
+                ) {
+                  continue
+                }
 
                 // check if tool call is complete
-                if (
-                  toolCall.function?.name != null &&
-                  toolCall.function?.arguments != null &&
-                  isParsableJson(toolCall.function.arguments)
-                ) {
-                  controller.enqueue({
-                    type: "tool-input-end",
-                    id: toolCall.id,
-                  })
+                controller.enqueue({
+                  type: "tool-input-end",
+                  id: toolCall.id!,
+                })
 
-                  controller.enqueue({
-                    type: "tool-call",
-                    toolCallId: toolCall.id ?? generateId(),
-                    toolName: toolCall.function.name,
-                    input: toolCall.function.arguments,
-                    providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
-                  })
-                  toolCall.hasFinished = true
-                }
+                controller.enqueue({
+                  type: "tool-call",
+                  toolCallId: toolCall.id!,
+                  toolName: toolCall.function.name,
+                  input: toolCall.function.arguments,
+                  providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                })
+                toolCall.hasFinished = true
               }
             }
           },
@@ -659,16 +634,16 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
             }
 
             // go through all tool calls and send the ones that are not finished
-            for (const toolCall of toolCalls.filter((toolCall) => !toolCall.hasFinished)) {
+            for (const toolCall of toolCalls.filter((toolCall) => !toolCall.hasFinished && toolCall.hasStarted)) {
               controller.enqueue({
                 type: "tool-input-end",
-                id: toolCall.id,
+                id: toolCall.id!,
               })
 
               controller.enqueue({
                 type: "tool-call",
-                toolCallId: toolCall.id ?? generateId(),
-                toolName: toolCall.function.name,
+                toolCallId: toolCall.id!,
+                toolName: toolCall.function.name!,
                 input: toolCall.function.arguments,
               })
             }
@@ -743,6 +718,8 @@ const openaiCompatibleTokenUsageSchema = z
   })
   .nullish()
 
+const openaiCompatibleToolCallIdSchema = z.union([z.string(), z.number()]).nullish()
+
 // limited version of the schema, focussed on what is needed for the implementation
 // this approach limits breakages when the API changes and increases efficiency
 const OpenAICompatibleChatResponseSchema = z.object({
@@ -760,7 +737,7 @@ const OpenAICompatibleChatResponseSchema = z.object({
         tool_calls: z
           .array(
             z.object({
-              id: z.string().nullish(),
+              id: openaiCompatibleToolCallIdSchema,
               function: z.object({
                 name: z.string(),
                 arguments: z.string(),
@@ -796,7 +773,7 @@ const createOpenAICompatibleChatChunkSchema = <ERROR_SCHEMA extends z.core.$ZodT
                 .array(
                   z.object({
                     index: z.number(),
-                    id: z.string().nullish(),
+                    id: openaiCompatibleToolCallIdSchema,
                     function: z.object({
                       name: z.string().nullish(),
                       arguments: z.string().nullish(),

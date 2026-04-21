@@ -71,6 +71,12 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  toolCallWithoutInitialId: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/README.md\\"}","name":"read_file"},"index":0,"type":"function"}]}}],"created":1769917420,"id":"response-1","model":"nvidia-kimi"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{}}],"created":1769917421,"id":"response-1","usage":{"completion_tokens":25,"prompt_tokens":100,"total_tokens":125},"model":"nvidia-kimi"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -89,6 +95,16 @@ function createMockFetch(chunks: string[]) {
       headers: { "Content-Type": "text/event-stream" },
     })
   })
+}
+
+function createMockJsonFetch(body: unknown) {
+  return mock(
+    async () =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+  )
 }
 
 function createModel(fetchFn: ReturnType<typeof mock>) {
@@ -482,6 +498,37 @@ describe("doStream", () => {
     })
   })
 
+  test("should generate a stable tool id when the first stream chunk omits it", async () => {
+    const mockFetch = createMockFetch(FIXTURES.toolCallWithoutInitialId)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const toolStart = parts.find((p) => p.type === "tool-input-start")
+    const toolCall = parts.find((p) => p.type === "tool-call")
+
+    expect(toolStart).toBeDefined()
+    expect(toolCall).toBeDefined()
+
+    if (!toolStart || toolStart.type !== "tool-input-start") {
+      throw new Error("Missing tool-input-start")
+    }
+
+    if (!toolCall || toolCall.type !== "tool-call") {
+      throw new Error("Missing tool-call")
+    }
+
+    expect(toolStart.id).toEqual(expect.any(String))
+    expect(toolStart.toolName).toBe("read_file")
+    expect(toolCall.toolCallId).toBe(toolStart.id)
+    expect(toolCall.toolName).toBe("read_file")
+    expect(toolCall.input).toBe('{"filePath":"/README.md"}')
+  })
+
   test("should include response metadata from first chunk", async () => {
     const mockFetch = createMockFetch(FIXTURES.basicText)
     const model = createModel(mockFetch)
@@ -588,5 +635,48 @@ describe("request body", () => {
         },
       },
     ])
+  })
+})
+
+describe("doGenerate", () => {
+  test("should normalize numeric tool call ids", async () => {
+    const mockFetch = createMockJsonFetch({
+      id: "response-1",
+      created: 1769917420,
+      model: "nvidia-kimi",
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: 123,
+                function: {
+                  name: "read_file",
+                  arguments: '{"filePath":"/README.md"}',
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 25,
+        total_tokens: 125,
+      },
+    })
+
+    const model = createModel(mockFetch)
+    const result = await model.doGenerate({ prompt: TEST_PROMPT })
+
+    expect(result.content).toContainEqual({
+      type: "tool-call",
+      toolCallId: "123",
+      toolName: "read_file",
+      input: '{"filePath":"/README.md"}',
+    })
   })
 })
