@@ -46,7 +46,7 @@ export function DialogSessionList() {
     >
   >({})
 
-  const loadingRecap = new Set<string>()
+  const inflightSessionSync = new Map<string, Promise<void>>()
 
   const [searchResults, { refetch }] = createResource(search, async (query) => {
     if (!query) return undefined
@@ -68,41 +68,52 @@ export function DialogSessionList() {
     return `${updated}:${state}`
   }
 
+  function deriveRecap(sessionID: string) {
+    const messages = (sync.data.message[sessionID] ?? []).map((info) => ({
+      info,
+      parts: sync.data.part[info.id] ?? [],
+    }))
+    const todos = sync.data.todo[sessionID] ?? []
+    return deriveSessionRecap({
+      messages,
+      todos,
+      status: sessionStatus()[sessionID],
+    })
+  }
+
   async function ensureRecap(sessionID: string | undefined) {
     if (!sessionID) return
-    if (loadingRecap.has(sessionID)) return
     const version = recapVersion(sessionID)
     if (recapBySession[sessionID]?.state === "ready" && recapBySession[sessionID]?.version === version) return
+    const running = inflightSessionSync.get(sessionID)
+    if (running) return
 
-    loadingRecap.add(sessionID)
     setRecapBySession(sessionID, {
       state: "loading",
       version,
     })
 
-    try {
-      const [messagesResult, todosResult] = await Promise.all([
-        sdk.client.session.messages({ sessionID, limit: 100 }),
-        sdk.client.session.todo({ sessionID }),
-      ])
-      const recap = deriveSessionRecap({
-        messages: messagesResult.data ?? [],
-        todos: todosResult.data ?? [],
-        status: sessionStatus()[sessionID],
+    const promise = sync.session
+      .sync(sessionID)
+      .then(() => {
+        setRecapBySession(sessionID, {
+          state: "ready",
+          version,
+          recap: deriveRecap(sessionID),
+        })
       })
-      setRecapBySession(sessionID, {
-        state: "ready",
-        version,
-        recap,
+      .catch(() => {
+        setRecapBySession(sessionID, {
+          state: "error",
+          version,
+        })
       })
-    } catch {
-      setRecapBySession(sessionID, {
-        state: "error",
-        version,
+      .finally(() => {
+        inflightSessionSync.delete(sessionID)
       })
-    } finally {
-      loadingRecap.delete(sessionID)
-    }
+
+    inflightSessionSync.set(sessionID, promise)
+    await promise
   }
 
   createEffect(() => {
@@ -249,14 +260,17 @@ export function DialogSessionList() {
 
   createEffect(() => {
     if (activeSessionID()) return
-    const first = options()[0]?.value
-    if (!first) return
-    setActiveSessionID(first)
-    void ensureRecap(first)
+    const next = currentSessionID() ?? options()[0]?.value
+    if (!next) return
+    setActiveSessionID(next)
+    void ensureRecap(next)
   })
 
   onMount(() => {
     dialog.setSize("large")
+    const current = currentSessionID()
+    setActiveSessionID(current)
+    void ensureRecap(current)
   })
 
   const selectedRecap = createMemo(() => {
@@ -312,7 +326,6 @@ export function DialogSessionList() {
         )
       }}
       onSelect={(option) => {
-        setActiveSessionID(option.value)
         route.navigate({
           type: "session",
           sessionID: option.value,
