@@ -216,7 +216,6 @@ emitted JSON Schema must stay byte-identical.
 - [ ] `src/tool/grep.ts`
 - [ ] `src/tool/invalid.ts`
 - [ ] `src/tool/lsp.ts`
-- [ ] `src/tool/multiedit.ts`
 - [ ] `src/tool/plan.ts`
 - [ ] `src/tool/question.ts`
 - [ ] `src/tool/read.ts`
