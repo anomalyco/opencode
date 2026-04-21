@@ -161,7 +161,7 @@ schema module with a clear domain.
 
 - [ ] `src/control-plane/schema.ts`
 - [ ] `src/permission/schema.ts`
-- [ ] `src/project/schema.ts`
+- [x] `src/project/schema.ts`
 - [x] `src/provider/schema.ts`
 - [ ] `src/pty/schema.ts`
 - [ ] `src/question/schema.ts`
