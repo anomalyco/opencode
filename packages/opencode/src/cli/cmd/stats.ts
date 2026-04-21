@@ -14,6 +14,8 @@ import { Global } from "../../global"
 interface SessionStats {
   totalSessions: number
   totalMessages: number
+  userMessages: number
+  assistantMessages: number
   totalCost: number
   totalTokens: {
     input: number
@@ -131,6 +133,8 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   const stats: SessionStats = {
     totalSessions: filteredSessions.length,
     totalMessages: 0,
+    userMessages: 0,
+    assistantMessages: 0,
     totalCost: 0,
     totalTokens: {
       input: 0,
@@ -196,7 +200,13 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
       > = {}
 
       for (const message of messages) {
+        if (message.info.role === "user") {
+          stats.userMessages += 1
+          continue
+        }
+
         if (message.info.role === "assistant") {
+          stats.assistantMessages += 1
           sessionCost += message.info.cost || 0
 
           const modelKey = `${message.info.providerID}/${message.info.modelID}`
@@ -329,6 +339,8 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   console.log("├────────────────────────────────────────────────────────┤")
   console.log(renderRow("Sessions", stats.totalSessions.toLocaleString()))
   console.log(renderRow("Messages", stats.totalMessages.toLocaleString()))
+  console.log(renderRow("User Messages", stats.userMessages.toLocaleString()))
+  console.log(renderRow("Assistant Messages", stats.assistantMessages.toLocaleString()))
   console.log(renderRow("Days", stats.days.toString()))
   console.log("└────────────────────────────────────────────────────────┘")
   console.log()
