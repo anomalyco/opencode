@@ -17,12 +17,12 @@ function userMessage(id: string, summaryBody?: string): Message {
   }
 }
 
-function assistantMessage(id: string, input: { summary?: boolean; error?: string } = {}): Message {
+function assistantMessage(id: string, input: { summary?: boolean; error?: string; completed?: boolean } = {}): Message {
   return {
     id,
     sessionID: "ses_1",
     role: "assistant",
-    time: { created: 2, completed: 3 },
+    time: { created: 2, completed: input.completed === false ? undefined : 3 },
     parentID: "msg_u_1",
     modelID: "claude",
     providerID: "anthropic",
@@ -124,5 +124,22 @@ describe("deriveSessionRecap", () => {
 
     const recap = deriveSessionRecap({ messages, todos: [] })
     expect(recap.done).toBe("Wired the selected-session recap block into the sessions dialog.")
+  })
+
+  test("ignores errored assistant output when deriving done", () => {
+    const messages: SessionMessageWithParts[] = [
+      {
+        info: assistantMessage("msg_a_1"),
+        parts: [textPart("msg_a_1", "Completed the first pass cleanly.")],
+      },
+      {
+        info: assistantMessage("msg_a_2", { error: "request failed" }),
+        parts: [textPart("msg_a_2", "This partial output should not become done.")],
+      },
+    ]
+
+    const recap = deriveSessionRecap({ messages, todos: [] })
+    expect(recap.done).toBe("Completed the first pass cleanly.")
+    expect(recap.blocked).toContain("request failed")
   })
 })
