@@ -246,7 +246,8 @@ export const Event = {
     "session.error",
     z.object({
       sessionID: SessionID.zod.optional(),
-      error: MessageV2.Assistant.shape.error,
+      // z.lazy defers access to break circular dep: session → message-v2 → provider → plugin → session
+      error: z.lazy(() => MessageV2.Assistant.shape.error),
     }),
   ),
 }

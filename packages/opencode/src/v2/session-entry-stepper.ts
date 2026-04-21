@@ -1,4 +1,4 @@
-import { castDraft, produce, type WritableDraft } from "immer"
+import { produce, type WritableDraft } from "immer"
 import { SessionEvent } from "./session-event"
 import { SessionEntry } from "./session-entry"
 
@@ -235,7 +235,15 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    retried: () => {},
+    retried: (event) => {
+      if (currentAssistant) {
+        adapter.updateAssistant(
+          produce(currentAssistant, (draft) => {
+            draft.retries = [...(draft.retries ?? []), SessionEntry.AssistantRetry.fromEvent(event)]
+          }),
+        )
+      }
+    },
     compacted: (event) => {
       adapter.appendEntry(SessionEntry.Compaction.fromEvent(event))
     },
