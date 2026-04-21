@@ -631,7 +631,9 @@ export const dict = {
   "settings.general.row.theme.title": "ธีม",
   "settings.general.row.theme.description": "ปรับแต่งวิธีการที่ OpenCode มีธีม",
   "settings.general.row.font.title": "ฟอนต์โค้ด",
-  "settings.general.row.font.description": "ปรับแต่งฟอนต์ที่ใช้ในบล็อกโค้ดและเทอร์มินัล",
+  "settings.general.row.font.description": "ปรับแต่งฟอนต์ที่ใช้ในบล็อกโค้ด",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "ฟอนต์ UI",
   "settings.general.row.uiFont.description": "ปรับแต่งฟอนต์ที่ใช้ทั่วทั้งอินเทอร์เฟซ",
   "settings.general.row.followup.title": "พฤติกรรมการติดตามผล",
@@ -645,6 +647,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ขยายส่วนเครื่องมือ edit",
   "settings.general.row.editToolPartsExpanded.description":
     "แสดงส่วนเครื่องมือ edit, write และ patch แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
+  "settings.general.row.showSessionProgressBar.title": "แสดงแถบความคืบหน้าของเซสชัน",
+  "settings.general.row.showSessionProgressBar.description":
+    "แสดงแถบความคืบหน้าแบบเคลื่อนไหวที่ด้านบนของเซสชันเมื่อเอเจนต์กำลังทำงาน",
   "settings.general.row.wayland.title": "ใช้ Wayland แบบเนทีฟ",
   "settings.general.row.wayland.description": "ปิดใช้งาน X11 fallback บน Wayland ต้องรีสตาร์ท",
   "settings.general.row.wayland.tooltip": "บน Linux ที่มีจอภาพรีเฟรชเรตแบบผสม Wayland แบบเนทีฟอาจเสถียรกว่า",

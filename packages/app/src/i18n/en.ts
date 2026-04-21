@@ -735,7 +735,9 @@ export const dict = {
   "settings.general.row.theme.title": "Theme",
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Code Font",
-  "settings.general.row.font.description": "Customise the font used in code blocks and terminals",
+  "settings.general.row.font.description": "Customise the font used in code blocks",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI Font",
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.followup.title": "Follow-up behavior",
@@ -760,6 +762,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
+  "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
+  "settings.general.row.showSessionProgressBar.description":
+    "Display the animated progress bar at the top of the session when the agent is working",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
