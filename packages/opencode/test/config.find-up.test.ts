@@ -39,20 +39,14 @@ describe("config.find_up", () => {
     await Bun.write(path.join(root.outer, "shared", "outer.md"), "OUTER_INSTRUCTION")
     await Bun.write(
       path.join(root.outer, ".opencode", "agent", "shared.md"),
-      [
-        "---",
-        'description: "outer agent"',
-        'mode: "subagent"',
-        "---",
-        "OUTER_AGENT_PROMPT",
-      ].join("\n"),
+      ["---", 'description: "outer agent"', 'mode: "subagent"', "---", "OUTER_AGENT_PROMPT"].join("\n"),
     )
     await Bun.write(
       path.join(root.outer, ".opencode", "plugin", "outer-plugin.ts"),
       [
         "export async function OuterPlugin() {",
         "  return {",
-        "    async [\"tool.register\"](_input, { registerHTTP }) {",
+        '    async ["tool.register"](_input, { registerHTTP }) {',
         "      registerHTTP({",
         '        id: "outer-plugin-tool",',
         '        description: "outer plugin tool",',
@@ -161,7 +155,5 @@ async function gitInit(dir: string) {
   await Bun.$`git init`.cwd(dir).quiet()
   await Bun.write(path.join(dir, ".gitkeep"), "")
   await Bun.$`git add .gitkeep`.cwd(dir).quiet()
-  await Bun.$`git -c user.email=test@example.com -c user.name=opencode-test commit -m init`
-    .cwd(dir)
-    .quiet()
+  await Bun.$`git -c user.email=test@example.com -c user.name=opencode-test commit -m init`.cwd(dir).quiet()
 }
