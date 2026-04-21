@@ -1,9 +1,14 @@
 // @refresh reload
 
 import {
+  ACCEPTED_FILE_EXTENSIONS,
+  ACCEPTED_FILE_TYPES,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
+  loadLocaleDict,
+  normalizeLocale,
+  type Locale,
   type Platform,
   PlatformProvider,
   ServerConnection,
@@ -15,7 +20,6 @@ import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
-import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { useTheme } from "@opencode-ai/ui/theme"
@@ -38,8 +42,7 @@ const emitDeepLinks = (urls: string[]) => {
 }
 
 const listenForDeepLinks = () => {
-  const startUrls = window.__OPENCODE__?.deepLinks ?? []
-  if (startUrls.length) emitDeepLinks(startUrls)
+  void window.api.consumeInitialDeepLinks().then((urls) => emitDeepLinks(urls))
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
@@ -52,13 +55,21 @@ const createPlatform = (): Platform => {
     return undefined
   })()
 
+  const isWslEnabled = async () => {
+    if (os !== "windows") return false
+    return window.api
+      .getWslConfig()
+      .then((config) => config.enabled)
+      .catch(() => false)
+  }
+
   const wslHome = async () => {
-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
+    if (!(await isWslEnabled())) return undefined
     return window.api.wslPath("~", "windows").catch(() => undefined)
   }
 
   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !window.__OPENCODE__?.wsl) return result
+    if (!result || !(await isWslEnabled())) return result
     if (Array.isArray(result)) {
       return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
     }
@@ -111,6 +122,8 @@ const createPlatform = (): Platform => {
       const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
+        extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
       return handleWslPicker(result)
     },
@@ -130,7 +143,7 @@ const createPlatform = (): Platform => {
       if (os === "windows") {
         const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
         const resolvedPath = await (async () => {
-          if (window.__OPENCODE__?.wsl) {
+          if (await isWslEnabled()) {
             const converted = await window.api.wslPath(path, "windows").catch(() => null)
             if (converted) return converted
           }
@@ -152,12 +165,14 @@ const createPlatform = (): Platform => {
     storage,
 
     checkUpdate: async () => {
-      if (!UPDATER_ENABLED) return { updateAvailable: false }
+      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
+      if (!config.updaterEnabled) return { updateAvailable: false }
       return window.api.checkUpdate()
     },
 
     update: async () => {
-      if (!UPDATER_ENABLED) return
+      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
+      if (!config.updaterEnabled) return
       await window.api.installUpdate()
     },
 
@@ -187,11 +202,7 @@ const createPlatform = (): Platform => {
       return fetch(input, init)
     },
 
-    getWslEnabled: async () => {
-      const next = await window.api.getWslConfig().catch(() => null)
-      if (next) return next.enabled
-      return window.__OPENCODE__!.wsl ?? false
-    },
+    getWslEnabled: () => isWslEnabled(),
 
     setWslEnabled: async (enabled) => {
       await window.api.setWslConfig({ enabled })
@@ -242,6 +253,18 @@ listenForDeepLinks()
 
 render(() => {
   const platform = createPlatform()
+  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
+  const loadLocale = async () => {
+    const current = await platform.storage?.("opencode.global.dat").getItem("language")
+    const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
+    const raw = current ?? legacy
+    if (!raw) return
+    const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]
+    if (!locale) return
+    const next = normalizeLocale(locale)
+    if (next !== "en") await loadLocaleDict(next)
+    return next satisfies Locale
+  }
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
@@ -253,6 +276,7 @@ render(() => {
       if (url) return ServerConnection.key({ type: "http", http: { url } })
     }),
   )
+  const [locale] = createResource(loadLocale)
 
   const servers = () => {
     const data = sidecar()
@@ -305,15 +329,22 @@ render(() => {
 
   return (
     <PlatformProvider value={platform}>
-      <AppBaseProviders>
-        <Show when={!defaultServer.loading && !sidecar.loading && !windowCount.loading}>
+      <AppBaseProviders locale={locale.latest}>
+        <Show
+          when={
+            !defaultServer.loading &&
+            !sidecar.loading &&
+            !windowConfig.loading &&
+            !windowCount.loading &&
+            !locale.loading
+          }
+        >
           {(_) => {
             return (
               <AppInterface
                 defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                 servers={servers()}
                 router={MemoryRouter}
-                disableHealthCheck={(windowCount() ?? 0) > 1}
               >
                 <Inner />
               </AppInterface>
