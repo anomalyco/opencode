@@ -36,13 +36,6 @@ import { modelColor } from "./palette"
 
 type SubTab = "overview" | "models"
 
-const TAB_LABELS: { id: "status" | "config" | "usage" | "stats"; label: string }[] = [
-  { id: "status", label: "Status" },
-  { id: "config", label: "Config" },
-  { id: "usage", label: "Usage" },
-  { id: "stats", label: "Stats" },
-]
-
 export function Stats() {
   const route = useRoute()
   const { theme } = useTheme()
@@ -107,7 +100,7 @@ export function Stats() {
         )
       }
     } catch {
-      toast.show({ variant: "error", message: "Failed to load usage stats" })
+      toast.show({ variant: "error", message: "Failed to load usage" })
     } finally {
       if (!cancelled) setStore("loading", false)
     }
@@ -150,7 +143,7 @@ export function Stats() {
     const text = summarizeStats({ range: store.range, records: filtered() })
     try {
       await Clipboard.copy(text)
-      toast.show({ variant: "info", message: "Copied stats summary to clipboard" })
+      toast.show({ variant: "info", message: "Copied usage summary to clipboard" })
     } catch {
       toast.show({ variant: "error", message: "Failed to copy to clipboard" })
     }
@@ -194,7 +187,11 @@ export function Stats() {
 
   return (
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background}>
-      <TopTabs active="stats" />
+      <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0}>
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          Usage
+        </text>
+      </box>
       <SubTabs
         active={store.sub}
         onSelect={(id) => setStore("sub", id)}
@@ -231,7 +228,7 @@ export function Stats() {
         >
           <Show
             when={allRecords().length > 0}
-            fallback={<EmptyState message="No usage data yet. Start a session to see stats." />}
+            fallback={<EmptyState message="No usage data yet. Start a session to see usage." />}
           >
             <Show when={store.sub === "overview"}>
               <Overview records={allRecords()} stats={stats()} />
@@ -261,35 +258,6 @@ function contrastingFg(bg: RGBA): RGBA {
 async function fetchSessionMessages(sdk: ReturnType<typeof useSDK>, sessionID: string) {
   const result = await sdk.client.session.messages({ sessionID, limit: 1000 })
   return (result.data ?? []).map((x) => x.info)
-}
-
-function TopTabs(props: { active: "status" | "config" | "usage" | "stats" }) {
-  const { theme } = useTheme()
-  const selectedFg = () => contrastingFg(theme.primary)
-  return (
-    <box paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="row" flexShrink={0}>
-      <For each={TAB_LABELS}>
-        {(tab) => {
-          const active = tab.id === props.active
-          return (
-            <box
-              marginRight={1}
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={active ? theme.primary : undefined}
-            >
-              <text
-                fg={active ? selectedFg() : theme.textMuted}
-                attributes={active ? TextAttributes.BOLD : undefined}
-              >
-                {tab.label}
-              </text>
-            </box>
-          )
-        }}
-      </For>
-    </box>
-  )
 }
 
 function SubTabs(props: { active: SubTab; onSelect: (id: SubTab) => void }) {
@@ -328,7 +296,7 @@ function Loading(props: { loaded: number; total: number }) {
   return (
     <box alignItems="flex-start" paddingTop={1}>
       <text fg={theme.textMuted}>
-        Loading stats… {props.total > 0 ? `${props.loaded}/${props.total} sessions` : ""}
+        Loading usage… {props.total > 0 ? `${props.loaded}/${props.total} sessions` : ""}
       </text>
     </box>
   )
