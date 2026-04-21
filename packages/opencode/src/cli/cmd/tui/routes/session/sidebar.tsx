@@ -8,7 +8,7 @@ import { TuiPluginRuntime } from "../../plugin"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+export function Sidebar(props: { sessionID: string; overlay?: boolean; width?: number }) {
   const project = useProject()
   const sync = useSync()
   const { theme } = useTheme()
@@ -32,7 +32,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     <Show when={session()}>
       <box
         backgroundColor={theme.backgroundPanel}
-        width={42}
+        width={props.width ?? 42}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
