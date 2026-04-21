@@ -258,7 +258,12 @@ export const layer: Layer.Layer<
 
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
-              throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              // During summary generation tools may be emitted by the provider;
+              // silently skip executing or recording them to avoid breaking
+              // summary-only flows. Log at debug level so developers can see
+              // what's being skipped when troubleshooting.
+              console.debug(`Skipping tool call ${value.toolName} during summary generation`)
+              return
             }
             const part = yield* session.updatePart({
               id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
@@ -286,7 +291,10 @@ export const layer: Layer.Layer<
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
-              throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              // See note above: don't throw during summary generation — just
+              // log and skip the tool call so the stream can continue.
+              console.debug(`Skipping tool call ${value.toolName} during summary generation`)
+              return
             }
             yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
