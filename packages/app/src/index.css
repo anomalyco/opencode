@@ -1,5 +1,12 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+}
+
 @layer components {
   @keyframes session-progress-whip {
     0% {
@@ -64,6 +71,15 @@
 
     [data-component="getting-started-actions"] > [data-component="button"] {
       width: auto;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 }

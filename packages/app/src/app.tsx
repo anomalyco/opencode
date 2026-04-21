@@ -141,13 +141,11 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
         <LanguageProvider locale={props.locale}>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-              <QueryProvider>
-                <DialogProvider>
-                  <MarkedProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
-                </DialogProvider>
-              </QueryProvider>
+              <DialogProvider>
+                <MarkedProvider>
+                  <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                </MarkedProvider>
+              </DialogProvider>
             </ErrorBoundary>
           </UiI18nBridge>
         </LanguageProvider>
@@ -293,20 +291,22 @@ export function AppInterface(props: {
     >
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
-          <GlobalSDKProvider>
-            <GlobalSyncProvider>
-              <Dynamic
-                component={props.router ?? Router}
-                root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-              >
-                <Route path="/" component={HomeRoute} />
-                <Route path="/:dir" component={DirectoryLayout}>
-                  <Route path="/" component={SessionIndexRoute} />
-                  <Route path="/session/:id?" component={SessionRoute} />
-                </Route>
-              </Dynamic>
-            </GlobalSyncProvider>
-          </GlobalSDKProvider>
+          <QueryProvider>
+            <GlobalSDKProvider>
+              <GlobalSyncProvider>
+                <Dynamic
+                  component={props.router ?? Router}
+                  root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                >
+                  <Route path="/" component={HomeRoute} />
+                  <Route path="/:dir" component={DirectoryLayout}>
+                    <Route path="/" component={SessionIndexRoute} />
+                    <Route path="/session/:id?" component={SessionRoute} />
+                  </Route>
+                </Dynamic>
+              </GlobalSyncProvider>
+            </GlobalSDKProvider>
+          </QueryProvider>
         </ServerKey>
       </ConnectionGate>
     </ServerProvider>
