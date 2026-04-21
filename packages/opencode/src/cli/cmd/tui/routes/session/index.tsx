@@ -1199,7 +1199,7 @@ export function Session() {
                 right={0}
                 bottom={0}
                 alignItems="flex-end"
-                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                backgroundColor={RGBA.fromValues(theme.background.r, theme.background.g, theme.background.b, 70 / 255)}
               >
                 <Sidebar sessionID={route.sessionID} />
               </box>
