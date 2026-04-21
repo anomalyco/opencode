@@ -32,6 +32,74 @@ import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
 
+function coerceNumericToolCallIds(obj: unknown): void {
+  if (!obj || typeof obj !== "object") return
+  if (Array.isArray(obj)) {
+    for (const item of obj) coerceNumericToolCallIds(item)
+    return
+  }
+  const record = obj as Record<string, unknown>
+  if ("tool_calls" in record && Array.isArray(record.tool_calls)) {
+    for (const tc of record.tool_calls) {
+      if (tc && typeof tc === "object" && "id" in tc && typeof tc.id === "number") {
+        tc.id = String(tc.id)
+      }
+    }
+  }
+  if ("delta" in record && record.delta && typeof record.delta === "object") {
+    const delta = record.delta as Record<string, unknown>
+    if ("tool_calls" in delta && Array.isArray(delta.tool_calls)) {
+      for (const tc of delta.tool_calls) {
+        if (tc && typeof tc === "object" && "id" in tc && typeof tc.id === "number") {
+          tc.id = String(tc.id)
+        }
+      }
+    }
+  }
+  for (const value of Object.values(record)) {
+    coerceNumericToolCallIds(value)
+  }
+}
+
+function transformSSEStream(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ""
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read()
+      if (done) {
+        if (buffer) controller.enqueue(encoder.encode(buffer))
+        controller.close()
+        return
+      }
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const jsonStr = line.slice(6)
+          if (jsonStr === "[DONE]") {
+            controller.enqueue(encoder.encode(line + "\n"))
+            continue
+          }
+          try {
+            const json = JSON.parse(jsonStr)
+            coerceNumericToolCallIds(json)
+            controller.enqueue(encoder.encode("data: " + JSON.stringify(json) + "\n"))
+            continue
+          } catch {
+            // If parsing fails, pass through unchanged
+          }
+        }
+        controller.enqueue(encoder.encode(line + "\n"))
+      }
+    },
+  })
+}
+
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
   if (!match) return false
@@ -1477,6 +1545,38 @@ const layer: Layer.Layer<
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
           })
+
+          // Coerce numeric tool call IDs to strings for non-compliant providers
+          // Some providers (e.g., NVIDIA NIM kimik2.5) return numeric IDs instead of strings
+          if (model.api.npm === "@ai-sdk/openai-compatible" && res.body) {
+            const contentType = res.headers.get("content-type") ?? ""
+            if (contentType.includes("application/json")) {
+              const text = await res.text()
+              try {
+                const json = JSON.parse(text)
+                coerceNumericToolCallIds(json)
+                return new Response(JSON.stringify(json), {
+                  status: res.status,
+                  statusText: res.statusText,
+                  headers: res.headers,
+                })
+              } catch {
+                return new Response(text, {
+                  status: res.status,
+                  statusText: res.statusText,
+                  headers: res.headers,
+                })
+              }
+            }
+            if (contentType.includes("text/event-stream")) {
+              const transformed = transformSSEStream(res.body)
+              return new Response(transformed, {
+                status: res.status,
+                statusText: res.statusText,
+                headers: res.headers,
+              })
+            }
+          }
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
