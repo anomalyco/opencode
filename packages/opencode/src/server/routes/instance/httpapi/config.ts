@@ -10,7 +10,7 @@ export const ConfigApi = HttpApi.make("config")
     HttpApiGroup.make("config")
       .add(
         HttpApiEndpoint.get("get", root, {
-          success: Config.InfoSchema,
+          success: Config.Info,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "config.get",
