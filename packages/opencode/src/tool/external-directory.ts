@@ -2,7 +2,6 @@ import path from "path"
 import { Effect } from "effect"
 import { EffectLogger } from "@/effect"
 import { InstanceState } from "@/effect"
-import type * as Tool from "./tool"
 import { Instance } from "../project/instance"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 
@@ -13,8 +12,25 @@ type Options = {
   kind?: Kind
 }
 
+type ToolContext = {
+  ask(input: {
+    permission: string
+    patterns: string[]
+    always: string[]
+    metadata: Readonly<Record<string, unknown>>
+  }): Promise<void> | Effect.Effect<void>
+}
+
+const ask = (ctx: ToolContext, input: Parameters<ToolContext["ask"]>[0]) => {
+  const result = ctx.ask(input)
+  if (result && typeof result === "object" && "then" in result) {
+    return result as Promise<void>
+  }
+  return Effect.runPromise(result as Effect.Effect<void>)
+}
+
 export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
-  ctx: Tool.Context,
+  ctx: ToolContext,
   target?: string,
   options?: Options,
 ) {
@@ -33,17 +49,19 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
       ? AppFileSystem.normalizePathPattern(path.join(dir, "*"))
       : path.join(dir, "*").replaceAll("\\", "/")
 
-  yield* ctx.ask({
-    permission: "external_directory",
-    patterns: [glob],
-    always: [glob],
-    metadata: {
-      filepath: full,
-      parentDir: dir,
-    },
-  })
+  yield* Effect.promise(() =>
+    ask(ctx, {
+      permission: "external_directory",
+      patterns: [glob],
+      always: [glob],
+      metadata: {
+        filepath: full,
+        parentDir: dir,
+      },
+    }),
+  )
 })
 
-export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {
+export async function assertExternalDirectory(ctx: ToolContext, target?: string, options?: Options) {
   return Effect.runPromise(assertExternalDirectoryEffect(ctx, target, options).pipe(Effect.provide(EffectLogger.layer)))
 }

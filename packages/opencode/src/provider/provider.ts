@@ -26,6 +26,7 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
+import { makeRuntime } from "@/effect/run-service"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -1728,3 +1729,65 @@ export const InitError = NamedError.create(
     providerID: ProviderID.zod,
   }),
 )
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export async function list() {
+  return runtime.runPromise((svc) => svc.list())
+}
+
+export async function getProvider(providerID: ProviderID) {
+  return runtime.runPromise((svc) => svc.getProvider(providerID))
+}
+
+export async function getModel(providerID: ProviderID, modelID: ModelID) {
+  return runtime.runPromise((svc) => svc.getModel(providerID, modelID))
+}
+
+export async function getLanguage(model: Model) {
+  return runtime.runPromise((svc) => svc.getLanguage(model))
+}
+
+export async function closest(providerID: ProviderID, query: string[]) {
+  return runtime.runPromise((svc) => svc.closest(providerID, query))
+}
+
+export async function getSmallModel(providerID: ProviderID) {
+  return runtime.runPromise((svc) => svc.getSmallModel(providerID))
+}
+
+export async function defaultModel() {
+  return runtime.runPromise((svc) => svc.defaultModel())
+}
+
+const providerRefs = {
+  Service,
+  defaultLayer,
+  parseModel,
+  defaultModelIDs,
+  list,
+  getProvider,
+  getModel,
+  getLanguage,
+  closest,
+  getSmallModel,
+  defaultModel,
+}
+
+export namespace Provider {
+  export type Info = import("./provider").Info
+  export type Model = import("./provider").Model
+  export const Service = providerRefs.Service
+  export const defaultLayer = providerRefs.defaultLayer
+  export const parseModel = (...args: Parameters<typeof import("./provider").parseModel>) => providerRefs.parseModel(...args)
+  export const defaultModelIDs = <T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) =>
+    providerRefs.defaultModelIDs(providers)
+  export const list = () => providerRefs.list()
+  export const getProvider = (...args: Parameters<typeof import("./provider").getProvider>) => providerRefs.getProvider(...args)
+  export const getModel = (...args: Parameters<typeof import("./provider").getModel>) => providerRefs.getModel(...args)
+  export const getLanguage = (...args: Parameters<typeof import("./provider").getLanguage>) => providerRefs.getLanguage(...args)
+  export const closest = (...args: Parameters<typeof import("./provider").closest>) => providerRefs.closest(...args)
+  export const getSmallModel = (...args: Parameters<typeof import("./provider").getSmallModel>) =>
+    providerRefs.getSmallModel(...args)
+  export const defaultModel = () => providerRefs.defaultModel()
+}

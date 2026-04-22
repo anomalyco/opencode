@@ -487,12 +487,14 @@ async function applyEditDetailed(
   const filediff: Snapshot.FileDiff = {
     file: filePath,
     patch: applied.diff,
-    additions: 0,
-    deletions: 0,
-  }
-  for (const change of diffLines(applied.contentOld, applied.contentNew)) {
-    if (change.added) filediff.additions += change.count || 0
-    if (change.removed) filediff.deletions += change.count || 0
+    additions: diffLines(applied.contentOld, applied.contentNew).reduce(
+      (total, change) => total + (change.added ? change.count || 0 : 0),
+      0,
+    ),
+    deletions: diffLines(applied.contentOld, applied.contentNew).reduce(
+      (total, change) => total + (change.removed ? change.count || 0 : 0),
+      0,
+    ),
   }
 
   let output = "Edit applied successfully."
@@ -621,17 +623,18 @@ function prepareEditFromContent(
 }
 
 function buildFileDiff(filePath: string, contentOld: string, contentNew: string, diff: string): Snapshot.FileDiff {
-  const filediff: Snapshot.FileDiff = {
+  return {
     file: filePath,
     patch: diff,
-    additions: 0,
-    deletions: 0,
+    additions: diffLines(contentOld, contentNew).reduce(
+      (total, change) => total + (change.added ? change.count || 0 : 0),
+      0,
+    ),
+    deletions: diffLines(contentOld, contentNew).reduce(
+      (total, change) => total + (change.removed ? change.count || 0 : 0),
+      0,
+    ),
   }
-  for (const change of diffLines(contentOld, contentNew)) {
-    if (change.added) filediff.additions += change.count || 0
-    if (change.removed) filediff.deletions += change.count || 0
-  }
-  return filediff
 }
 
 export type Replacer = (content: string, find: string) => Generator<string, void, unknown>

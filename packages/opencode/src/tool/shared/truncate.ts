@@ -1,5 +1,5 @@
 import { NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
+import { Cause, Context, Duration, Effect, Layer, Schedule } from "effect"
 import path from "path"
 import type { Agent } from "../../agent/agent"
 import { makeRuntime } from "@/effect/run-service"
@@ -41,7 +41,7 @@ export namespace Truncate {
     readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Truncate") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Truncate") {}
 
   export const layer = Layer.effect(
     Service,
@@ -49,7 +49,9 @@ export namespace Truncate {
       const fs = yield* AppFileSystem.Service
 
       const cleanup = Effect.fn("Truncate.cleanup")(function* () {
-        const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - Duration.toMillis(RETENTION)))
+        const cutoff = Identifier.timestamp(
+          Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)),
+        )
         const entries = yield* fs.readDirectory(TRUNCATION_DIR).pipe(
           Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
           Effect.catch(() => Effect.succeed([])),

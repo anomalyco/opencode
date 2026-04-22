@@ -462,4 +462,32 @@ export function hasToolCalls(messages: ModelMessage[]): boolean {
   return false
 }
 
+export function applyBoundary(input: {
+  system: string[]
+  messages: ModelMessage[]
+  options: Record<string, unknown>
+  oauth?: boolean
+}) {
+  if (input.oauth) {
+    return {
+      messages: input.messages,
+      options: input.options,
+    }
+  }
+  return {
+    messages: [
+      ...input.system
+        .filter(Boolean)
+        .map(
+          (content): ModelMessage => ({
+            role: "system",
+            content,
+          }),
+        ),
+      ...input.messages,
+    ],
+    options: input.options,
+  }
+}
+
 export * as LLM from "./llm"

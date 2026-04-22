@@ -486,3 +486,27 @@ export function setInitialized(id: ProjectID) {
     db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
   )
 }
+
+const ProjectInfoRef = Info
+const ProjectUpdateInputRef = UpdateInput
+const ProjectEventRef = Event
+const ProjectServiceRef = Service
+const ProjectLayerRef = layer
+const ProjectDefaultLayerRef = defaultLayer
+const projectRefs = { fromRow, list, get, setInitialized }
+
+export namespace Project {
+  export type Info = import("./project").Info
+  export type UpdateInput = import("./project").UpdateInput
+  export const Info = ProjectInfoRef
+  export const UpdateInput = ProjectUpdateInputRef
+  export const Event = ProjectEventRef
+  export const Service = ProjectServiceRef
+  export const layer = ProjectLayerRef
+  export const defaultLayer = ProjectDefaultLayerRef
+  export const fromRow = (...args: Parameters<typeof import("./project").fromRow>) => projectRefs.fromRow(...args)
+  export const list = () => Promise.resolve(projectRefs.list())
+  export const get = (...args: Parameters<typeof import("./project").get>) => projectRefs.get(...args)
+  export const setInitialized = (...args: Parameters<typeof import("./project").setInitialized>) =>
+    projectRefs.setInitialized(...args)
+}

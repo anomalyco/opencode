@@ -81,6 +81,7 @@ export interface Interface {
     providerID: ProviderID
     modelID: ModelID
     agent: Agent.Info
+    allowTask?: boolean
     includeDisabled?: boolean
   }) => Effect.Effect<Tool.Def[]>
 }
@@ -143,6 +144,13 @@ const hiddenLegacyToolIDs = new Set([
   "grep",
 ])
 
+// AI AGENT POLICY: `task` is internal infrastructure with broad project coupling.
+// Do not delete it, move it, or try to remove its internal runtime uses.
+// It must stay out of the normal public tool surface unless a caller explicitly enables the internal bridge path.
+const internalOnlyToolIDs = new Set([
+  "task",
+])
+
 // These source-native IDs are reserved for the ported tool surface.
 // Custom/plugin tools and legacy re-registrations must not shadow them.
 const reservedCanonicalToolIDs = new Set([
@@ -194,7 +202,7 @@ const reservedCanonicalToolIDs = new Set([
 ])
 
 function isVisibleToolID(id: string) {
-  return !hiddenLegacyToolIDs.has(id)
+  return !hiddenLegacyToolIDs.has(id) && !internalOnlyToolIDs.has(id)
 }
 
 function filterCustomTools(custom: Tool.Def[], builtin: Tool.Def[]) {
@@ -433,9 +441,12 @@ export const layer: Layer.Layer<
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-      const list = (yield* all()).filter((tool) => {
+      const s = yield* InstanceState.get(state)
+      const list = [...s.builtin, ...s.custom].filter((tool) => {
+        if (tool.id === TaskTool.id && !input.allowTask) return false
+        if (tool.id !== TaskTool.id && !isVisibleToolID(tool.id)) return false
         if (!teamToolVisible({ id: tool.id, agent: input.agent })) return false
-        if ([CodeSearchTool.id, WebSearchTool.id].includes(tool.id)) {
+        if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
           return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
         }
         return true

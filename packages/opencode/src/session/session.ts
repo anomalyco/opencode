@@ -711,7 +711,11 @@ export const setArchived = (input: z.infer<typeof SetArchivedInput>) =>
   runtime.runPromise((svc) => svc.setArchived(input))
 export const setPermission = (input: z.infer<typeof SetPermissionInput>) =>
   runtime.runPromise((svc) => svc.setPermission(input))
-export const setRevert = (input: z.infer<typeof SetRevertInput>) => runtime.runPromise((svc) => svc.setRevert(input))
+export const setRevert = (input: {
+  sessionID: SessionID
+  revert: Info["revert"]
+  summary: Info["summary"]
+}) => runtime.runPromise((svc) => svc.setRevert(input))
 export const clearRevert = (sessionID: SessionID) => runtime.runPromise((svc) => svc.clearRevert(sessionID))
 export const setSummary = (input: { sessionID: SessionID; summary: Info["summary"] }) =>
   runtime.runPromise((svc) => svc.setSummary(input))

@@ -9,7 +9,7 @@ import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Skill } from "@/skill"
 import { Log } from "@/util/log"
-import { Cause, Deferred, Effect, Exit, Layer, Option, Queue, Scope, ServiceMap, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Queue, Scope, Stream } from "effect"
 import { TeamMainPlan } from "./main-plan"
 import { plan, translateBlocks } from "./translate-blocks"
 
@@ -141,7 +141,7 @@ export namespace MainPlanTranslate {
     readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean }) => Effect.Effect<number, Error>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/MainPlanTranslate") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/MainPlanTranslate") {}
 
   export const layer = Layer.effect(
     Service,

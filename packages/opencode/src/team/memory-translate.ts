@@ -436,3 +436,11 @@ export async function init() {
 export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean }) {
   return runtime.runPromise((svc) => svc.translate(input))
 }
+
+const memoryTranslateRuntime = { init, translate }
+
+export namespace MemoryTranslate {
+  export const init = () => memoryTranslateRuntime.init()
+  export const translate = (...args: Parameters<typeof import("./memory-translate").translate>) =>
+    memoryTranslateRuntime.translate(...args)
+}

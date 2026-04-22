@@ -2,6 +2,7 @@ import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect"
+import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { zod } from "@/util/effect-zod"
 import { Log } from "@/util"
@@ -225,5 +226,26 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+const runtime = makeRuntime(Service, defaultLayer)
+
+export async function ask(input: {
+  sessionID: SessionID
+  questions: ReadonlyArray<Info>
+  tool?: Tool
+}) {
+  return runtime.runPromise((svc) => svc.ask(input))
+}
+
+export async function reply(input: { requestID: QuestionID; answers: ReadonlyArray<Answer> }) {
+  return runtime.runPromise((svc) => svc.reply(input))
+}
+
+export async function reject(requestID: QuestionID) {
+  return runtime.runPromise((svc) => svc.reject(requestID))
+}
+
+export async function list() {
+  return runtime.runPromise((svc) => svc.list())
+}
 
 export * as Question from "."

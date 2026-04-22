@@ -30,7 +30,6 @@ export const FileTool = Tool.defineEffect(
     const fs = yield* AppFileSystem.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
-    const time = yield* FileTime.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("FileTool.miss")(function* (filepath: string) {
@@ -76,7 +75,7 @@ export const FileTool = Tool.defineEffect(
 
     const warm = Effect.fn("FileTool.warm")(function* (filepath: string, sessionID: Tool.Context["sessionID"]) {
       yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
-      yield* time.read(sessionID, filepath)
+      yield* Effect.promise(() => FileTime.read(sessionID, filepath))
     })
 
     const run = Effect.fn("FileTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {

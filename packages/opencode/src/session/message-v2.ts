@@ -1072,6 +1072,13 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
   return filterCompacted(stream(sessionID))
 })
 
+export function isCompressedResult(part: ToolPart) {
+  if (part.state.status !== "completed") return false
+  if (!part.state.metadata || typeof part.state.metadata !== "object") return false
+  const meta = part.state.metadata as { compress?: { role?: unknown } }
+  return meta.compress?.role === "source" || meta.compress?.role === "summary"
+}
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderID; aborted?: boolean },

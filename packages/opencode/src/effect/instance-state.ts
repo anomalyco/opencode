@@ -79,3 +79,37 @@ export const invalidate = <A, E, R>(self: InstanceState<A, E, R>) =>
   Effect.gen(function* () {
     return yield* ScopedCache.invalidate(self.cache, yield* directory)
   })
+
+const instanceStateRefs = {
+  bind,
+  context,
+  workspaceID,
+  directory,
+  make,
+  get,
+  use,
+  useEffect,
+  has,
+  invalidate,
+}
+
+export namespace InstanceState {
+  export type InstanceState<A, E = never, R = never> = import("./instance-state").InstanceState<A, E, R>
+  export const bind = (...args: Parameters<typeof import("./instance-state").bind>) => instanceStateRefs.bind(...args)
+  export const context = instanceStateRefs.context
+  export const workspaceID = instanceStateRefs.workspaceID
+  export const directory = instanceStateRefs.directory
+  export const make = <A, E = never, R = never>(...args: Parameters<typeof import("./instance-state").make<A, E, R>>) =>
+    instanceStateRefs.make<A, E, R>(...args)
+  export const get = <A, E, R>(...args: Parameters<typeof import("./instance-state").get<A, E, R>>) =>
+    instanceStateRefs.get(...args)
+  export const use = <A, E, R, B>(...args: Parameters<typeof import("./instance-state").use<A, E, R, B>>) =>
+    instanceStateRefs.use(...args)
+  export const useEffect = <A, E, R, B, E2, R2>(
+    ...args: Parameters<typeof import("./instance-state").useEffect<A, E, R, B, E2, R2>>
+  ) => instanceStateRefs.useEffect(...args)
+  export const has = <A, E, R>(...args: Parameters<typeof import("./instance-state").has<A, E, R>>) =>
+    instanceStateRefs.has(...args)
+  export const invalidate = <A, E, R>(...args: Parameters<typeof import("./instance-state").invalidate<A, E, R>>) =>
+    instanceStateRefs.invalidate(...args)
+}

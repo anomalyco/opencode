@@ -172,3 +172,20 @@ export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextRe
 export async function lines(cmd: string[], opts: RunOptions = {}): Promise<string[]> {
   return (await text(cmd, opts)).text.split(/\r?\n/).filter(Boolean)
 }
+
+const RunFailedErrorRef = RunFailedError
+const processRefs = { spawn, run, stop, text, lines }
+
+export namespace Process {
+  export type Options = import("./process").Options
+  export type RunOptions = import("./process").RunOptions
+  export type Result = import("./process").Result
+  export type TextResult = import("./process").TextResult
+  export type Child = import("./process").Child
+  export const RunFailedError = RunFailedErrorRef
+  export const spawn = (...args: Parameters<typeof import("./process").spawn>) => processRefs.spawn(...args)
+  export const run = (...args: Parameters<typeof import("./process").run>) => processRefs.run(...args)
+  export const stop = (...args: Parameters<typeof import("./process").stop>) => processRefs.stop(...args)
+  export const text = (...args: Parameters<typeof import("./process").text>) => processRefs.text(...args)
+  export const lines = (...args: Parameters<typeof import("./process").lines>) => processRefs.lines(...args)
+}

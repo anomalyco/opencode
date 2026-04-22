@@ -23,7 +23,10 @@ async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionPrompt.Service | Session.Service>) {
   return Effect.runPromise(
-    fx.pipe(Effect.scoped, Effect.provide(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer))),
+    fx.pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer) as never),
+    ) as Effect.Effect<A, E, never>,
   )
 }
 

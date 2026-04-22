@@ -7,12 +7,14 @@ const prefixes = {
   message: "msg",
   permission: "per",
   question: "que",
+  plan: "pln",
   user: "usr",
   part: "prt",
   pty: "pty",
   tool: "tool",
   workspace: "wrk",
   entry: "ent",
+  memory: "mem",
 } as const
 
 export function schema(prefix: keyof typeof prefixes) {

@@ -43,6 +43,7 @@ import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@/npm"
+import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "config" })
 
@@ -802,3 +803,49 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
 )
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export async function get() {
+  return runtime.runPromise((svc) => svc.get())
+}
+
+export async function directories() {
+  return runtime.runPromise((svc) => svc.directories())
+}
+
+export async function getGlobal() {
+  return runtime.runPromise((svc) => svc.getGlobal())
+}
+
+export async function getConsoleState() {
+  return runtime.runPromise((svc) => svc.getConsoleState())
+}
+
+export async function waitForDependencies() {
+  return runtime.runPromise((svc) => svc.waitForDependencies())
+}
+
+const configRefs = {
+  Info,
+  Service,
+  defaultLayer,
+  get,
+  directories,
+  getGlobal,
+  getConsoleState,
+  waitForDependencies,
+}
+
+export namespace Config {
+  export type Info = import("./config").Info
+  export type Permission = ConfigPermission.Info
+  export const Info = configRefs.Info
+  export const Service = configRefs.Service
+  export const defaultLayer = configRefs.defaultLayer
+  export const get = () => configRefs.get()
+  export const directories = () => configRefs.directories()
+  export const getGlobal = () => configRefs.getGlobal()
+  export const getConsoleState = () => configRefs.getConsoleState()
+  export const waitForDependencies = () => configRefs.waitForDependencies()
+}

@@ -35,9 +35,13 @@ export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A
   return effect
 }
 
-export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
+export function makeRuntime<I, S, E, R>(service: Context.Service<I, S>, layer: Layer.Layer<I, E, R>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
-  const getRuntime = () => (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }))
+  const getRuntime = () =>
+    (rt ??=
+      ManagedRuntime.make(Layer.provideMerge(layer as Layer.Layer<I, E>, Observability.layer), {
+        memoMap,
+      }))
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(attach(service.use(fn))),

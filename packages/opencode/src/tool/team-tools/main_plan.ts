@@ -61,7 +61,7 @@ Usage guidance:
 
 const id = "main-plan"
 const Action = z.enum(["create", "list", "get", "set", "archive", "draft_question", "update_task"])
-const draft_question = Question.Info.omit({ custom: true })
+const draft_question = Question.Prompt.zod
 
 const parameters = z
   .object({
@@ -217,7 +217,7 @@ function info(plan: TeamMainPlan.Plan, file: string) {
   ].join("\n")
 }
 
-function answers(list: z.infer<typeof Question.Answer>[], items: z.infer<typeof draft_question>[]) {
+function answers(list: ReadonlyArray<ReadonlyArray<string>>, items: z.infer<typeof draft_question>[]) {
   return items
     .map((item, i) => `"${item.question}"="${list[i]?.length ? list[i].join(", ") : "Unanswered"}"`)
     .join(", ")
@@ -462,7 +462,7 @@ export const MainPlanTool = Tool.define<typeof parameters, Metadata>(id, {
           plan_id: plan.id,
           item_id: id,
           status: "answered",
-          answers: reply,
+          answers: reply.map((answer) => [...answer]),
           answered: Date.now(),
         })
         await Bus.publish(TeamMainPlan.Event.Updated, { change: "draft_answered", ...next })

@@ -247,3 +247,15 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
 
   return result
 }
+
+const LSPClientEventRef = Event
+const LSPClientInitializeErrorRef = InitializeError
+const lspClientCreateRef = create
+
+export namespace LSPClient {
+  export type Info = import("./client").Info
+  export type Diagnostic = import("./client").Diagnostic
+  export const Event = LSPClientEventRef
+  export const InitializeError = LSPClientInitializeErrorRef
+  export const create = (...args: Parameters<typeof import("./client").create>) => lspClientCreateRef(...args)
+}

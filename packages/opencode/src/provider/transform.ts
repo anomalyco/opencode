@@ -1118,3 +1118,33 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
 
   return schema as JSONSchema7
 }
+
+const providerTransformRefs = {
+  message,
+  temperature,
+  topP,
+  topK,
+  variants,
+  options,
+  smallOptions,
+  providerOptions,
+  maxOutputTokens,
+  schema,
+}
+
+export namespace ProviderTransform {
+  export const message = (...args: Parameters<typeof import("./transform").message>) => providerTransformRefs.message(...args)
+  export const temperature = (...args: Parameters<typeof import("./transform").temperature>) =>
+    providerTransformRefs.temperature(...args)
+  export const topP = (...args: Parameters<typeof import("./transform").topP>) => providerTransformRefs.topP(...args)
+  export const topK = (...args: Parameters<typeof import("./transform").topK>) => providerTransformRefs.topK(...args)
+  export const variants = (...args: Parameters<typeof import("./transform").variants>) => providerTransformRefs.variants(...args)
+  export const options = (...args: Parameters<typeof import("./transform").options>) => providerTransformRefs.options(...args)
+  export const smallOptions = (...args: Parameters<typeof import("./transform").smallOptions>) =>
+    providerTransformRefs.smallOptions(...args)
+  export const providerOptions = (...args: Parameters<typeof import("./transform").providerOptions>) =>
+    providerTransformRefs.providerOptions(...args)
+  export const maxOutputTokens = (...args: Parameters<typeof import("./transform").maxOutputTokens>) =>
+    providerTransformRefs.maxOutputTokens(...args)
+  export const schema = (...args: Parameters<typeof import("./transform").schema>) => providerTransformRefs.schema(...args)
+}

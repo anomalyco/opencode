@@ -115,7 +115,7 @@ describe("tool.task", () => {
           const build = yield* agent.get("build")
           const registry = yield* ToolRegistry.Service
           const get = Effect.fnUntraced(function* () {
-            const tools = yield* registry.tools({ ...ref, agent: build })
+            const tools = yield* registry.tools({ ...ref, agent: build, allowTask: true })
             return tools.find((tool) => tool.id === TaskTool.id)?.description ?? ""
           })
           const first = yield* get()
@@ -123,10 +123,10 @@ describe("tool.task", () => {
 
           expect(first).toBe(second)
 
-          const alpha = first.indexOf("- alpha: Alpha agent")
-          const explore = first.indexOf("- explore:")
-          const general = first.indexOf("- general:")
-          const zebra = first.indexOf("- zebra: Zebra agent")
+          const alpha = first.indexOf("- `alpha`: Alpha agent")
+          const explore = first.indexOf("- `explore`:")
+          const general = first.indexOf("- `general`:")
+          const zebra = first.indexOf("- `zebra`: Zebra agent")
 
           expect(alpha).toBeGreaterThan(-1)
           expect(explore).toBeGreaterThan(alpha)
@@ -158,10 +158,11 @@ describe("tool.task", () => {
           const build = yield* agent.get("build")
           const registry = yield* ToolRegistry.Service
           const description =
-            (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
+            (yield* registry.tools({ ...ref, agent: build, allowTask: true })).find((tool) => tool.id === TaskTool.id)
+              ?.description ?? ""
 
-          expect(description).toContain("- alpha: Alpha agent")
-          expect(description).not.toContain("- zebra: Zebra agent")
+          expect(description).toContain("- `alpha`: Alpha agent")
+          expect(description).not.toContain("- `zebra`: Zebra agent")
         }),
       {
         config: {
@@ -183,6 +184,22 @@ describe("tool.task", () => {
           },
         },
       },
+    ),
+  )
+
+  it.live("is hidden from the normal public tool surface", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const ayaz = yield* agent.get("ayaz")
+        const registry = yield* ToolRegistry.Service
+
+        expect((yield* registry.ids())).not.toContain(TaskTool.id)
+        expect((yield* registry.all()).some((tool) => tool.id === TaskTool.id)).toBe(false)
+        expect((yield* registry.tools({ ...ref, agent: ayaz })).some((tool) => tool.id === TaskTool.id)).toBe(
+          false,
+        )
+      }),
     ),
   )
 

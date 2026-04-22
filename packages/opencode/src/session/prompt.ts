@@ -404,6 +404,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         modelID: ModelID.make(input.model.api.id),
         providerID: input.model.providerID,
         agent: input.agent,
+        allowTask:
+          input.messages.some((msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "agent")) ||
+          (input.session.permission ?? []).some(
+            (rule) =>
+              (rule.permission === "*" && rule.action === "allow") ||
+              (rule.permission === "task" && rule.action !== "deny"),
+          ),
       })) {
         const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
         tools[item.id] = tool({

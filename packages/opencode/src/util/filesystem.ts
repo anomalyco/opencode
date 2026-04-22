@@ -241,3 +241,57 @@ export async function globUp(pattern: string, start: string, stop?: string) {
   }
   return result
 }
+
+const filesystemRefs = {
+  exists,
+  isDir,
+  stat,
+  statAsync,
+  size,
+  readText,
+  readJson,
+  readBytes,
+  readArrayBuffer,
+  write,
+  writeJson,
+  writeStream,
+  mimeType,
+  normalizePath,
+  normalizePathPattern,
+  resolve,
+  windowsPath,
+  overlaps,
+  contains,
+  findUp,
+  up,
+  globUp,
+}
+
+export namespace Filesystem {
+  export const exists = (...args: Parameters<typeof import("./filesystem").exists>) => filesystemRefs.exists(...args)
+  export const isDir = (...args: Parameters<typeof import("./filesystem").isDir>) => filesystemRefs.isDir(...args)
+  export const stat = (...args: Parameters<typeof import("./filesystem").stat>) => filesystemRefs.stat(...args)
+  export const statAsync = (...args: Parameters<typeof import("./filesystem").statAsync>) => filesystemRefs.statAsync(...args)
+  export const size = (...args: Parameters<typeof import("./filesystem").size>) => filesystemRefs.size(...args)
+  export const readText = (...args: Parameters<typeof import("./filesystem").readText>) => filesystemRefs.readText(...args)
+  export const readJson = <T = unknown>(...args: Parameters<typeof import("./filesystem").readJson<T>>) =>
+    filesystemRefs.readJson<T>(...args)
+  export const readBytes = (...args: Parameters<typeof import("./filesystem").readBytes>) => filesystemRefs.readBytes(...args)
+  export const readArrayBuffer = (...args: Parameters<typeof import("./filesystem").readArrayBuffer>) =>
+    filesystemRefs.readArrayBuffer(...args)
+  export const write = (...args: Parameters<typeof import("./filesystem").write>) => filesystemRefs.write(...args)
+  export const writeJson = (...args: Parameters<typeof import("./filesystem").writeJson>) => filesystemRefs.writeJson(...args)
+  export const writeStream = (...args: Parameters<typeof import("./filesystem").writeStream>) => filesystemRefs.writeStream(...args)
+  export const mimeType = (...args: Parameters<typeof import("./filesystem").mimeType>) => filesystemRefs.mimeType(...args)
+  export const normalizePath = (...args: Parameters<typeof import("./filesystem").normalizePath>) =>
+    filesystemRefs.normalizePath(...args)
+  export const normalizePathPattern = (...args: Parameters<typeof import("./filesystem").normalizePathPattern>) =>
+    filesystemRefs.normalizePathPattern(...args)
+  export const resolve = (...args: Parameters<typeof import("./filesystem").resolve>) => filesystemRefs.resolve(...args)
+  export const windowsPath = (...args: Parameters<typeof import("./filesystem").windowsPath>) => filesystemRefs.windowsPath(...args)
+  export const overlaps = (...args: Parameters<typeof import("./filesystem").overlaps>) => filesystemRefs.overlaps(...args)
+  export const contains = (...args: Parameters<typeof import("./filesystem").contains>) => filesystemRefs.contains(...args)
+  export const findUp = (...args: Parameters<typeof import("./filesystem").findUp>) => filesystemRefs.findUp(...args)
+  export const up = (...args: Parameters<typeof import("./filesystem").up>) => filesystemRefs.up(...args)
+  export const globUp = (...args: Parameters<typeof import("./filesystem").globUp>) => filesystemRefs.globUp(...args)
+}

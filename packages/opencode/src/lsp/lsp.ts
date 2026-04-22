@@ -15,6 +15,7 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { withStatics } from "@/util/schema"
 import { zod, ZodOverride } from "@/util/effect-zod"
+import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "lsp" })
 
@@ -510,5 +511,150 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export type TouchStatus = {
+  file: string
+  opened: boolean
+  ready: boolean
+  warnings: string[]
+}
+
+export async function init() {
+  return runtime.runPromise((svc) => svc.init())
+}
+
+export async function status() {
+  return runtime.runPromise((svc) => svc.status())
+}
+
+export async function hasClients(file: string) {
+  return runtime.runPromise((svc) => svc.hasClients(file))
+}
+
+export async function touchFile(file: string, waitForDiagnostics = false): Promise<TouchStatus> {
+  const available = await hasClients(file)
+  if (!available) {
+    return {
+      file,
+      opened: false,
+      ready: false,
+      warnings: ["No LSP server is available for this file/workspace path."],
+    }
+  }
+  await runtime.runPromise((svc) => svc.touchFile(file, waitForDiagnostics))
+  return {
+    file,
+    opened: true,
+    ready: true,
+    warnings: [],
+  }
+}
+
+export async function closeFile(_file: string) {}
+
+export function touchWarnings(input: TouchStatus) {
+  return input.warnings
+}
+
+export async function diagnostics() {
+  return runtime.runPromise((svc) => svc.diagnostics())
+}
+
+export async function hover(input: LocInput) {
+  return runtime.runPromise((svc) => svc.hover(input))
+}
+
+export async function definition(input: LocInput) {
+  return runtime.runPromise((svc) => svc.definition(input))
+}
+
+export async function references(input: LocInput) {
+  return runtime.runPromise((svc) => svc.references(input))
+}
+
+export async function implementation(input: LocInput) {
+  return runtime.runPromise((svc) => svc.implementation(input))
+}
+
+export async function documentSymbol(uri: string) {
+  return runtime.runPromise((svc) => svc.documentSymbol(uri))
+}
+
+export async function workspaceSymbol(query: string) {
+  return runtime.runPromise((svc) => svc.workspaceSymbol(query))
+}
+
+export async function prepareCallHierarchy(input: LocInput) {
+  return runtime.runPromise((svc) => svc.prepareCallHierarchy(input))
+}
+
+export async function incomingCalls(input: LocInput) {
+  return runtime.runPromise((svc) => svc.incomingCalls(input))
+}
+
+export async function outgoingCalls(input: LocInput) {
+  return runtime.runPromise((svc) => svc.outgoingCalls(input))
+}
+
+export async function query(
+  input:
+    | { operation: "goToDefinition" | "findReferences" | "hover" | "goToImplementation" | "prepareCallHierarchy" | "incomingCalls" | "outgoingCalls"; file: string; line: number; character: number }
+    | { operation: "documentSymbol"; uri: string }
+    | { operation: "workspaceSymbol"; query: string },
+) {
+  if (input.operation === "goToDefinition") {
+    return { result: await definition({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "findReferences") {
+    return { result: await references({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "hover") {
+    return { result: await hover({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "goToImplementation") {
+    return { result: await implementation({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "prepareCallHierarchy") {
+    return { result: await prepareCallHierarchy({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "incomingCalls") {
+    return { result: await incomingCalls({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "outgoingCalls") {
+    return { result: await outgoingCalls({ file: input.file, line: input.line, character: input.character }), issues: [] as string[] }
+  }
+  if (input.operation === "documentSymbol") {
+    return { result: await documentSymbol(input.uri), issues: [] as string[] }
+  }
+  if (input.operation === "workspaceSymbol") {
+    return { result: await workspaceSymbol(input.query), issues: [] as string[] }
+  }
+  throw new Error(`Unsupported LSP query operation: ${String((input as { operation?: unknown }).operation)}`)
+}
+
+export function queryWarnings(input: { issues: string[] }) {
+  return input.issues
+}
+
+export async function codeAction(_input: {
+  file: string
+  line: number
+  character: number
+  endLine: number
+  endCharacter: number
+  only?: string[]
+}) {
+  return [] as unknown[]
+}
+
+export async function prepareRename(_input: { file: string; line: number; character: number }) {
+  return [] as unknown[]
+}
+
+export async function rename(_input: { file: string; line: number; character: number; newName: string }) {
+  return [] as unknown[]
+}
 
 export * as Diagnostic from "./diagnostic"

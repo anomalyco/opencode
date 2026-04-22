@@ -117,8 +117,8 @@ export namespace TeamMainPlan {
       status: draft_status,
       question_session_id: SessionID.zod,
       manager_session_id: SessionID.zod,
-      questions: z.array(Question.Info.omit({ custom: true })),
-      answers: z.array(Question.Answer).default([]),
+      questions: z.array(Question.Prompt.zod),
+      answers: z.array(Question.Answer.zod).default([]),
       time: z.object({
         asked: z.number(),
         answered: z.number().optional(),
@@ -796,7 +796,7 @@ export namespace TeamMainPlan {
     plan_id: PlanID | string
     item_id: string
     status: DraftStatus
-    answers?: z.infer<typeof Question.Answer>[]
+    answers?: ReadonlyArray<z.infer<typeof Question.Answer.zod>>
     answered?: number
   }) {
     return update(input.plan_id, (plan) => {
@@ -811,7 +811,7 @@ export namespace TeamMainPlan {
             return {
               ...item,
               status: input.status,
-              answers: input.answers ?? item.answers,
+              answers: input.answers ? input.answers.map((answer) => [...answer]) : item.answers,
               time: {
                 ...item.time,
                 answered: input.answered ?? item.time.answered,

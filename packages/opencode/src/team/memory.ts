@@ -1003,7 +1003,16 @@ export namespace TeamMemory {
           status: Status.enum.active,
           limit: 20,
         })
-        const out = [fmt("Project memory rules:", rules)]
+        const out = [
+          fmt(
+            [
+              "DİKKAT PROJE KURALLARI",
+              "The following active project rules are mandatory constraints.",
+              "Follow them when they apply. Do not bypass, ignore, weaken, or override them.",
+            ].join("\n"),
+            rules,
+          ),
+        ]
         if (agent === "atlas") {
           const [notes, lessons] = yield* Effect.all([
             list({
@@ -1151,4 +1160,29 @@ export async function bulkRemove(input: {
 
 export async function system(agent: string) {
   return runtime.runPromise((svc) => svc.system(agent))
+}
+
+const teamMemoryRuntime = {
+  list,
+  get,
+  search,
+  write,
+  promote,
+  archive,
+  remove,
+  bulkRemove,
+  system,
+}
+
+export namespace TeamMemory {
+  export const list = (...args: Parameters<typeof import("./memory").list>) => teamMemoryRuntime.list(...args)
+  export const get = (...args: Parameters<typeof import("./memory").get>) => teamMemoryRuntime.get(...args)
+  export const search = (...args: Parameters<typeof import("./memory").search>) => teamMemoryRuntime.search(...args)
+  export const write = (...args: Parameters<typeof import("./memory").write>) => teamMemoryRuntime.write(...args)
+  export const promote = (...args: Parameters<typeof import("./memory").promote>) => teamMemoryRuntime.promote(...args)
+  export const archive = (...args: Parameters<typeof import("./memory").archive>) => teamMemoryRuntime.archive(...args)
+  export const remove = (...args: Parameters<typeof import("./memory").remove>) => teamMemoryRuntime.remove(...args)
+  export const bulkRemove = (...args: Parameters<typeof import("./memory").bulkRemove>) =>
+    teamMemoryRuntime.bulkRemove(...args)
+  export const system = (...args: Parameters<typeof import("./memory").system>) => teamMemoryRuntime.system(...args)
 }

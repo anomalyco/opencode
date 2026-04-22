@@ -95,3 +95,19 @@ export const FrontmatterError = NamedError.create(
     message: z.string(),
   }),
 )
+
+const MarkdownFileRegexRef = FILE_REGEX
+const MarkdownShellRegexRef = SHELL_REGEX
+const FrontmatterErrorRef = FrontmatterError
+const markdownRefs = { files, shell, fallbackSanitization, parse }
+
+export namespace ConfigMarkdown {
+  export const FILE_REGEX = MarkdownFileRegexRef
+  export const SHELL_REGEX = MarkdownShellRegexRef
+  export const FrontmatterError = FrontmatterErrorRef
+  export const files = (...args: Parameters<typeof import("./markdown").files>) => markdownRefs.files(...args)
+  export const shell = (...args: Parameters<typeof import("./markdown").shell>) => markdownRefs.shell(...args)
+  export const fallbackSanitization = (...args: Parameters<typeof import("./markdown").fallbackSanitization>) =>
+    markdownRefs.fallbackSanitization(...args)
+  export const parse = (...args: Parameters<typeof import("./markdown").parse>) => markdownRefs.parse(...args)
+}

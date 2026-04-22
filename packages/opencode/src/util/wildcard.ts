@@ -55,3 +55,12 @@ function matchSequence(items: string[], patterns: string[]): boolean {
   }
   return false
 }
+
+const wildcardRefs = { match, all, allStructured }
+
+export namespace Wildcard {
+  export const match = (...args: Parameters<typeof import("./wildcard").match>) => wildcardRefs.match(...args)
+  export const all = (...args: Parameters<typeof import("./wildcard").all>) => wildcardRefs.all(...args)
+  export const allStructured = (...args: Parameters<typeof import("./wildcard").allStructured>) =>
+    wildcardRefs.allStructured(...args)
+}

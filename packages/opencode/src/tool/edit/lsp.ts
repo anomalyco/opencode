@@ -412,15 +412,10 @@ function trim(file: string, old: string, next: string) {
 }
 
 function filediff(file: string, old: string, next: string, patch: string): Snapshot.FileDiff {
-  const item: Snapshot.FileDiff = {
+  return {
     file,
     patch,
-    additions: 0,
-    deletions: 0,
+    additions: diffLines(old, next).reduce((total, change) => total + (change.added ? change.count || 0 : 0), 0),
+    deletions: diffLines(old, next).reduce((total, change) => total + (change.removed ? change.count || 0 : 0), 0),
   }
-  for (const change of diffLines(old, next)) {
-    if (change.added) item.additions += change.count || 0
-    if (change.removed) item.deletions += change.count || 0
-  }
-  return item
 }

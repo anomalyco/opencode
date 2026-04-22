@@ -8,6 +8,7 @@ import z from "zod"
 import { Config } from "../config"
 import { Log } from "../util"
 import * as Formatter from "./formatter"
+import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "format" })
 
@@ -204,5 +205,19 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export async function init() {
+  return runtime.runPromise((svc) => svc.init())
+}
+
+export async function status() {
+  return runtime.runPromise((svc) => svc.status())
+}
+
+export async function file(filepath: string) {
+  return runtime.runPromise((svc) => svc.file(filepath))
+}
 
 export * as Format from "."

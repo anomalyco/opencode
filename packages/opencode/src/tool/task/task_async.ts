@@ -10,7 +10,7 @@ import { Config } from "../../config/config"
 import { ConfigMarkdown } from "../../config/markdown"
 import { Permission } from "@/permission"
 import { Bus } from "@/bus"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { Log } from "@/util/log"
 import { Effect } from "effect"
 import { blank, seen, zero } from "../shared/shape"
@@ -1359,7 +1359,7 @@ export const TaskAsyncDescription: Tool.DynamicDescription = (agent) =>
     }
     if (agent.name === "ayaz") {
       notes.push(
-        "For `ayaz`, use `task_async` only when an async helper lane gives better leverage than direct execution.",
+        "For `ayaz`, stay in direct execution by default. Use `task_async` only when a helper lane clearly reduces uncertainty, supports non-overlapping parallel work, or owns the dominant frontend, browser-proof, or independent-review slice; prefer `wait` over repeated `status`, use `message` for follow-up, and `resume` only for unfinished idle tasks.",
       )
     }
     if (agent.name === "niggli") {

@@ -1887,7 +1887,7 @@ function Inspect(props: ToolProps<typeof InspectTool>) {
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
     if (props.part.state.time.compacted) return []
-    const value = props.metadata.loaded
+    const value = (props.metadata as { loaded?: unknown }).loaded
     if (!value || !Array.isArray(value)) return []
     return value.filter((p): p is string => typeof p === "string")
   })
@@ -1931,12 +1931,16 @@ function Inspect(props: ToolProps<typeof InspectTool>) {
 }
 
 function Search(props: ToolProps<typeof SearchTool>) {
+  const count = createMemo(() => {
+    const value = (props.metadata as { count?: unknown }).count
+    return typeof value === "number" ? value : undefined
+  })
   return (
     <InlineTool icon="✱" pending="Searching..." complete={props.input.pattern} part={props.part}>
       {props.input.action === "path" ? "Search paths" : "Search content"} "{props.input.pattern}"{" "}
       <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={typeof props.metadata.count === "number"}>
-        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+      <Show when={count() !== undefined}>
+        ({count()} {count() === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
   )
@@ -2131,9 +2135,14 @@ function Edit(props: ToolProps<typeof EditTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
+        {(() => {
+          const replaceAll = "replaceAll" in props.input ? props.input.replaceAll : undefined
+          return (
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll })}
         </InlineTool>
+          )
+        })()}
       </Match>
     </Switch>
   )

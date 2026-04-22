@@ -12,6 +12,7 @@ import { Global } from "@/global"
 import { Log } from "@/util"
 import { sanitizedProcessEnv } from "@/util/opencode-process"
 import { which } from "@/util/which"
+import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
@@ -135,6 +136,7 @@ export interface TreeInput {
 }
 
 export interface Interface {
+  readonly filepath: () => Effect.Effect<string, PlatformError | Error>
   readonly files: (input: FilesInput) => Stream.Stream<string, PlatformError | Error>
   readonly tree: (input: TreeInput) => Effect.Effect<string, PlatformError | Error>
   readonly search: (input: SearchInput) => Effect.Effect<SearchResult, PlatformError | Error>
@@ -472,7 +474,8 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
         return lines.join("\n")
       })
 
-      return Service.of({ files, tree, search })
+      const filepathEffect = Effect.fn("Ripgrep.filepath")(() => filepath)
+      return Service.of({ filepath: filepathEffect, files, tree, search })
     }),
   )
 
@@ -481,5 +484,29 @@ export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export async function filepath() {
+  return runtime.runPromise((svc) => svc.filepath())
+}
+
+export async function* files(input: FilesInput) {
+  const list = await runtime.runPromise((svc) =>
+    svc.files(input).pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => [...chunk]),
+    ),
+  )
+  for (const item of list) yield item
+}
+
+export async function search(input: SearchInput) {
+  return runtime.runPromise((svc) => svc.search(input))
+}
+
+export async function tree(input: TreeInput) {
+  return runtime.runPromise((svc) => svc.tree(input))
+}
 
 export * as Ripgrep from "./ripgrep"

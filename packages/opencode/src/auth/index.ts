@@ -3,6 +3,7 @@ import { Effect, Layer, Record, Result, Schema, Context } from "effect"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { makeRuntime } from "@/effect/run-service"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -93,5 +94,23 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export function get(providerID: string) {
+  return runtime.runPromise((svc) => svc.get(providerID))
+}
+
+export function all() {
+  return runtime.runPromise((svc) => svc.all())
+}
+
+export function set(key: string, info: Info) {
+  return runtime.runPromise((svc) => svc.set(key, info))
+}
+
+export function remove(key: string) {
+  return runtime.runPromise((svc) => svc.remove(key))
+}
 
 export * as Auth from "."

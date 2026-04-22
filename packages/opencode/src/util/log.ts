@@ -183,3 +183,17 @@ export function create(tags?: Record<string, any>) {
 
   return result
 }
+
+const LevelRef = Level
+const DefaultRef = Default
+const logRefs = { create, init, file }
+
+export namespace Log {
+  export type Level = import("./log").Level
+  export type Logger = import("./log").Logger
+  export const Level = LevelRef
+  export const Default = DefaultRef
+  export const create = (...args: Parameters<typeof import("./log").create>) => logRefs.create(...args)
+  export const init = (...args: Parameters<typeof import("./log").init>) => logRefs.init(...args)
+  export const file = () => logRefs.file()
+}
