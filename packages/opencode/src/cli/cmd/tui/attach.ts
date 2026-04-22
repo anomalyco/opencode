@@ -6,29 +6,7 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
 
-const ATTACH_HEALTH_TIMEOUT_MS = 3000
-
-async function verifyAttachTarget(url: string, headers: RequestInit["headers"]): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), ATTACH_HEALTH_TIMEOUT_MS)
-
-  try {
-    const health = new URL("/global/health", url)
-    const response = await fetch(health, {
-      headers,
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`)
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Unable to connect to opencode server at ${url}: ${message}`)
-  } finally {
-    clearTimeout(timer)
-  }
-}
+const DEFAULT_ATTACH_HEALTH_TIMEOUT_MS = 3000
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -91,12 +69,36 @@ export const AttachCommand = cmd({
         return { Authorization: auth }
       })()
 
+      const attachHealthTimeoutMs = Math.max(1, Number(process.env.OPENCODE_ATTACH_HEALTH_TIMEOUT_MS) || DEFAULT_ATTACH_HEALTH_TIMEOUT_MS)
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), attachHealthTimeoutMs)
+      const displayUrl = (() => {
+        try {
+          const parsed = new URL(args.url)
+          parsed.username = ""
+          parsed.password = ""
+          parsed.search = ""
+          return parsed.toString()
+        } catch {
+          return args.url.replace(/\/\/[^/@]*@/, "//[redacted]@").replace(/\?.*$/, "")
+        }
+      })()
+
       try {
-        await verifyAttachTarget(args.url, headers)
+        const response = await fetch(new URL("/global/health", args.url), {
+          headers,
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`)
       } catch (error) {
-        UI.error(error instanceof Error ? error.message : String(error))
+        const message = error instanceof Error && error.name === "AbortError"
+          ? `timed out after ${attachHealthTimeoutMs}ms`
+          : error instanceof Error ? error.message : String(error)
+        UI.error(`Unable to connect to opencode server at ${displayUrl}: ${message}`)
         process.exitCode = 1
         return
+      } finally {
+        clearTimeout(timer)
       }
 
       const config = await TuiConfig.get()
