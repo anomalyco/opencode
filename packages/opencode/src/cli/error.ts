@@ -13,7 +13,7 @@ export function FormatError(input: unknown) {
       `Model not found: ${providerID}/${modelID}`,
       ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       "Try: `securecode models` to list available models",
-      `Or check your config (opencode.json) provider/model names`,
+      `Or check your config (securecode.json / opencode.json) provider/model names`,
     ].join("\n")
   }
   if (Provider.InitError.isInstance(input)) {
