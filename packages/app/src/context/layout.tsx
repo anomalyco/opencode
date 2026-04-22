@@ -516,7 +516,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
 
       for (const project of projects) {
-        if (project.icon?.color) continue
+        if (project.icon?.color || project.icon.url) continue
         const worktree = project.worktree
         const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)
