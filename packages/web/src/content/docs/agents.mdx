@@ -148,6 +148,7 @@ Configure agents in your `opencode.json` config file:
     "build": {
       "mode": "primary",
       "model": "anthropic/claude-sonnet-4-20250514",
+      "variant": "high",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -192,6 +193,7 @@ You can also define agents using markdown files. Place them in:
 description: Reviews code for quality and best practices
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
+variant: high
 temperature: 0.1
 tools:
   write: false
@@ -363,6 +365,33 @@ If you don’t specify a model, primary agents use the [model globally configure
 ```
 
 The model ID in your OpenCode config uses the format `provider/model-id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
+
+---
+
+### Variant
+
+Use the `variant` config to set the default model variant for an agent.
+
+This is useful when the same model supports multiple built-in variants, such as OpenAI reasoning effort levels or Anthropic thinking budgets.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "build": {
+      "model": "openai/gpt-5",
+      "variant": "high"
+    },
+    "plan": {
+      "model": "openai/gpt-5",
+      "variant": "low"
+    }
+  }
+}
+```
+
+The variant applies when the agent is using its configured `model`. If you change models in the UI, the available variants and active selection may change too.
+
+For built-in variants and custom variant definitions, see [Models](/docs/models#variants).
 
 ---
 

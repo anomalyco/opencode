@@ -133,11 +133,31 @@ You can also define custom variants that extend built-in ones. Variants let you 
 }
 ```
 
+You can use variants globally, switch them at runtime from the UI, or pin one on a specific agent with the agent `variant` option:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "model": "openai/gpt-5",
+      "variant": "high"
+    },
+    "plan": {
+      "model": "openai/gpt-5",
+      "variant": "low"
+    }
+  }
+}
+```
+
 ---
 
 ## Variants
 
 Many models support multiple variants with different configurations. OpenCode ships with built-in default variants for popular providers.
+
+Variants are named presets. In practice, they usually map to provider-specific model options like reasoning effort, thinking budgets, or verbosity settings.
 
 ### Built-in variants
 
@@ -197,7 +217,7 @@ You can override existing variants or add your own:
 
 ### Cycle variants
 
-Use the keybind `variant_cycle` to quickly switch between variants. [Learn more](/docs/keybinds).
+Use the keybind `variant_cycle` to quickly switch between variants, or `variant_list` to open the variant picker. [Learn more](/docs/keybinds).
 
 ---
 
