@@ -6,6 +6,30 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
 
+const ATTACH_HEALTH_TIMEOUT_MS = 3000
+
+async function verifyAttachTarget(url: string, headers: RequestInit["headers"]): Promise<void> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ATTACH_HEALTH_TIMEOUT_MS)
+
+  try {
+    const health = new URL("/global/health", url)
+    const response = await fetch(health, {
+      headers,
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Unable to connect to opencode server at ${url}: ${message}`)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export const AttachCommand = cmd({
   command: "attach <url>",
   describe: "attach to a running opencode server",
@@ -66,6 +90,15 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
+
+      try {
+        await verifyAttachTarget(args.url, headers)
+      } catch (error) {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+        return
+      }
+
       const config = await TuiConfig.get()
 
       try {
