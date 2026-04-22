@@ -867,4 +867,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Échec de la création de l'icône de projet persistante",
   "error.childStore.storeCreateFailed": "Échec de la création du stockage",
   "terminal.connectionLost.abnormalClose": "WebSocket fermé anormalement : {{code}}",
+
+  "filetree.contextMenu.copyPath": "Copier le chemin",
+  "filetree.contextMenu.copyRelativePath": "Copier le chemin relatif",
 }

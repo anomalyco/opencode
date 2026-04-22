@@ -941,4 +941,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kalıcı proje simgesi oluşturulamadı",
   "error.childStore.storeCreateFailed": "Depo oluşturulamadı",
   "terminal.connectionLost.abnormalClose": "WebSocket anormal şekilde kapandı: {{code}}",
+
+  "filetree.contextMenu.copyPath": "Yolu kopyala",
+  "filetree.contextMenu.copyRelativePath": "Göreceli yolu kopyala",
 } satisfies Partial<Record<Keys, string>>

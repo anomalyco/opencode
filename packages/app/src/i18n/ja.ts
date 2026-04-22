@@ -850,4 +850,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "永続プロジェクトアイコンの作成に失敗しました",
   "error.childStore.storeCreateFailed": "ストアの作成に失敗しました",
   "terminal.connectionLost.abnormalClose": "WebSocket が異常終了しました: {{code}}",
+
+  "filetree.contextMenu.copyPath": "パスをコピー",
+  "filetree.contextMenu.copyRelativePath": "相対パスをコピー",
 }

@@ -1,6 +1,8 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { useLanguage } from "@/context/language"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import {
@@ -13,10 +15,8 @@ import {
   splitProps,
   Switch,
   untrack,
-  type ComponentProps,
   type ParentProps,
 } from "solid-js"
-import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
 const MAX_DEPTH = 128
@@ -108,9 +108,7 @@ const withFileDragImage = (event: DragEvent) => {
 }
 
 const FileTreeNode = (
-  p: ParentProps &
-    ComponentProps<"div"> &
-    ComponentProps<"button"> & {
+  p: ParentProps & {
       node: FileNode
       level: number
       active?: string
@@ -119,8 +117,13 @@ const FileTreeNode = (
       kinds?: ReadonlyMap<string, Kind>
       marks?: Set<string>
       as?: "div" | "button"
+      type?: "button"
+      onClick?: (e: MouseEvent) => void
+      class?: string
+      classList?: { [k: string]: boolean | undefined }
     },
 ) => {
+  const language = useLanguage()
   const [local, rest] = splitProps(p, [
     "node",
     "level",
@@ -142,9 +145,18 @@ const FileTreeNode = (
     return kindTextColor(value)
   }
 
+  const handleCopyAbsolutePath = () => {
+    navigator.clipboard.writeText(local.node.absolute).catch(() => {})
+  }
+
+  const handleCopyRelativePath = () => {
+    navigator.clipboard.writeText(local.node.path).catch(() => {})
+  }
+
   return (
-    <Dynamic
-      component={local.as ?? "div"}
+    <ContextMenu modal={false} preventScroll={true}>
+      <ContextMenu.Trigger
+        as={local.as ?? "div"}
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
         "bg-surface-base-active": local.node.path === local.active,
@@ -186,7 +198,18 @@ const FileTreeNode = (
         }
         return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={kindDotColor(value)} />
       })()}
-    </Dynamic>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content>
+          <ContextMenu.Item onSelect={handleCopyAbsolutePath}>
+            <ContextMenu.ItemLabel>{language.t("filetree.contextMenu.copyPath")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item onSelect={handleCopyRelativePath}>
+            <ContextMenu.ItemLabel>{language.t("filetree.contextMenu.copyRelativePath")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
   )
 }
 

@@ -935,4 +935,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Не удалось создать постоянный значок проекта",
   "error.childStore.storeCreateFailed": "Не удалось создать хранилище",
   "terminal.connectionLost.abnormalClose": "WebSocket закрыт аварийно: {{code}}",
+
+  "filetree.contextMenu.copyPath": "Копировать путь",
+  "filetree.contextMenu.copyRelativePath": "Копировать относительный путь",
 }

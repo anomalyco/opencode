@@ -926,4 +926,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke oprette vedvarende projektikon",
   "error.childStore.storeCreateFailed": "Kunne ikke oprette lager",
   "terminal.connectionLost.abnormalClose": "WebSocket lukkede unormalt: {{code}}",
+
+  "filetree.contextMenu.copyPath": "Kopier sti",
+  "filetree.contextMenu.copyRelativePath": "Kopier relativ sti",
 }

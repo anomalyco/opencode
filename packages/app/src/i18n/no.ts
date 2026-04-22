@@ -933,4 +933,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke opprette vedvarende prosjektikon",
   "error.childStore.storeCreateFailed": "Kunne ikke opprette lager",
   "terminal.connectionLost.abnormalClose": "WebSocket lukket unormalt: {{code}}",
+
+  "filetree.contextMenu.copyPath": "Kopier sti",
+  "filetree.contextMenu.copyRelativePath": "Kopier relativ sti",
 } satisfies Partial<Record<Keys, string>>

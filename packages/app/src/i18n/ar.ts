@@ -843,4 +843,7 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "فشل إنشاء أيقونة المشروع الدائمة",
   "error.childStore.storeCreateFailed": "فشل إنشاء المخزن",
   "terminal.connectionLost.abnormalClose": "تم إغلاق WebSocket بشكل غير طبيعي: {{code}}",
+
+  "filetree.contextMenu.copyPath": "نسخ المسار",
+  "filetree.contextMenu.copyRelativePath": "نسخ المسار النسبي",
 }
