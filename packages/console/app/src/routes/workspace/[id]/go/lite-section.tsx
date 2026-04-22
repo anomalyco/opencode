@@ -289,8 +289,10 @@ export function LiteSection() {
             <li>Kimi K2.6</li>
             <li>GLM-5</li>
             <li>GLM-5.1</li>
-            <li>Mimo-V2-Pro</li>
-            <li>Mimo-V2-Omni</li>
+            <li>MiMo-V2-Pro</li>
+            <li>MiMo-V2-Omni</li>
+            <li>MiMo-V2.5-Pro</li>
+            <li>MiMo-V2.5</li>
             <li>MiniMax M2.5</li>
             <li>MiniMax M2.7</li>
             <li>Qwen3.5 Plus</li>
