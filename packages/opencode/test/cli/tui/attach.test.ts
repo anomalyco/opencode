@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
 import * as App from "../../../src/cli/cmd/tui/app"
 import { UI } from "../../../src/cli/ui"
 import * as Win32 from "../../../src/cli/cmd/tui/win32"
@@ -6,6 +6,10 @@ import * as Win32 from "../../../src/cli/cmd/tui/win32"
 describe("tui attach", () => {
   const originalFetch = globalThis.fetch
   const originalAttachHealthTimeout = process.env.OPENCODE_ATTACH_HEALTH_TIMEOUT_MS
+
+  beforeEach(() => {
+    process.exitCode = 0
+  })
 
   afterEach(() => {
     globalThis.fetch = originalFetch
