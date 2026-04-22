@@ -68,6 +68,11 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
 
+function assertObjectToolSchema(id: string, schema: JSONSchema7) {
+  if (schema.type === "object") return schema
+  throw new Error(`Tool ${id} exposes a non-object public schema`)
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
@@ -412,7 +417,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               (rule.permission === "task" && rule.action !== "deny"),
           ),
       })) {
-        const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+        const schema = assertObjectToolSchema(
+          item.id,
+          ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters)),
+        )
         tools[item.id] = tool({
           description: item.description,
           inputSchema: jsonSchema(schema),

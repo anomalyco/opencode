@@ -7,7 +7,7 @@ import { assertExternalDirectory } from "../external-directory"
 import { Ripgrep } from "../../file/ripgrep"
 import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
-import { blank, sanitizeDiscriminatedInput, zero } from "../shared/shape"
+import { blank, zero } from "../shared/shape"
 import { defaultIgnoreGlobs } from "./shared"
 
 const MAX_LINE_LENGTH = 2000
@@ -15,11 +15,6 @@ const searchAllowed = {
   path: ["pattern", "path", "head_limit"],
   content: ["pattern", "path", "include", "context", "from_line", "to_line", "output_mode", "head_limit"],
 } as const
-const searchInjectedDefaults = {
-  from_line: (value: unknown) => value === 1,
-  to_line: (value: unknown) => value === 1,
-  output_mode: (value: unknown) => value === "files_with_matches",
-} satisfies Partial<Record<string, (value: unknown) => boolean>>
 const ENTRY = [
   /^package\.json$/,
   /^tsconfig(\..+)?\.json$/,
@@ -158,19 +153,73 @@ export const ContentSearchParametersSchema = z
     }
   })
 
-export const SearchParametersSchema = z.preprocess(
-  (input) =>
-    sanitizeDiscriminatedInput(input, {
-      discriminant: "action",
-      allowed: searchAllowed,
-      strip: searchInjectedDefaults,
-    }),
-  z.discriminatedUnion("action", [PathSearchParametersSchema, ContentSearchParametersSchema]),
-)
+function pickPresent(input: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
+}
+
+function addIssues(ctx: z.RefinementCtx, error: z.ZodError) {
+  for (const issue of error.issues) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: issue.path,
+      message: issue.message,
+    })
+  }
+}
+
+export const SearchParametersSchema = z
+  .object({
+    action: z.enum(["path", "content"]).describe("Search action to run."),
+    pattern: z.string().describe("Path glob or content regex, depending on action."),
+    path: z.preprocess(blank, z.string().optional()).describe("Optional search root. Defaults to the current working directory."),
+    include: z.preprocess(blank, z.string().optional()).describe("Optional include glob for content searches."),
+    context: z
+      .preprocess(zero, z.coerce.number().int().min(0).max(10).optional())
+      .describe("Optional surrounding context lines for content output mode."),
+    from_line: z
+      .preprocess(zero, z.coerce.number().int().min(1).optional())
+      .describe("Optional starting line filter for content searches."),
+    to_line: z
+      .preprocess(zero, z.coerce.number().int().min(1).optional())
+      .describe("Optional ending line filter for content searches."),
+    output_mode: z
+      .enum(["files_with_matches", "content", "count"])
+      .optional()
+      .describe("Optional content search output mode."),
+    head_limit: z
+      .preprocess(zero, z.coerce.number().int().min(1).max(1000).optional())
+      .describe("Optional maximum number of returned entries."),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    const allowed = new Set<string>(["action", ...searchAllowed[input.action]])
+    for (const [key, value] of Object.entries(input)) {
+      if (value === undefined || allowed.has(key)) continue
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `${key} is not allowed when action=${input.action}`,
+      })
+    }
+
+    const next = pickPresent(input)
+    const parsed =
+      input.action === "path"
+        ? PathSearchParametersSchema.safeParse(next)
+        : ContentSearchParametersSchema.safeParse(next)
+    if (!parsed.success) addIssues(ctx, parsed.error)
+  })
 
 type SearchParameters = z.infer<typeof SearchParametersSchema>
+type SearchInput = z.infer<typeof PathSearchParametersSchema> | z.infer<typeof ContentSearchParametersSchema>
 
-function root(input: SearchParameters) {
+function parseSearchInput(input: SearchParameters): SearchInput {
+  const next = pickPresent(input)
+  if (input.action === "path") return PathSearchParametersSchema.parse(next)
+  return ContentSearchParametersSchema.parse(next)
+}
+
+function root(input: SearchInput) {
   const out = input.path ?? Instance.directory
   return path.isAbsolute(out) ? out : path.resolve(Instance.directory, out)
 }
@@ -180,25 +229,26 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
     "Unified local search tool. Choose exactly one mode shape: action=path finds candidate filesystem paths with relevance ranking, and action=content runs regex search over file contents with file, content, or count output modes. Mixed path-only and content-only fields are rejected so the caller can retry with a precise request. By default, common dependency/build noise is ignored for denser discovery results.",
   parameters: SearchParametersSchema,
   async execute(input, ctx) {
-    const search = root(input)
+    const nextInput = parseSearchInput(input)
+    const search = root(nextInput)
     await assertExternalDirectory(ctx, search, { kind: "directory" })
     await ctx.ask({
       permission: "search",
       patterns: [search],
       always: ["*"],
       metadata: {
-        action: input.action,
-        pattern: input.pattern,
-        path: input.path,
-        include: "include" in input ? input.include : undefined,
-        output_mode: "output_mode" in input ? input.output_mode : undefined,
+        action: nextInput.action,
+        pattern: nextInput.pattern,
+        path: nextInput.path,
+        include: "include" in nextInput ? nextInput.include : undefined,
+        output_mode: "output_mode" in nextInput ? nextInput.output_mode : undefined,
       },
     })
 
-    const limit = input.head_limit ?? 100
+    const limit = nextInput.head_limit ?? 100
 
-    if (input.action === "path") {
-      const glob = [input.pattern, ...defaultIgnoreGlobs()]
+    if (nextInput.action === "path") {
+      const glob = [nextInput.pattern, ...defaultIgnoreGlobs()]
       const files = [] as Array<{ path: string; mtime: number }>
       for await (const file of Ripgrep.files({ cwd: search, glob, signal: ctx.abort })) {
         const full = path.resolve(search, file)
@@ -207,7 +257,7 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
           mtime: Filesystem.stat(full)?.mtime.getTime() ?? 0,
         })
       }
-      files.sort((a, b) => rank(b.path, input.pattern) - rank(a.path, input.pattern) || b.mtime - a.mtime)
+      files.sort((a, b) => rank(b.path, nextInput.pattern) - rank(a.path, nextInput.pattern) || b.mtime - a.mtime)
       const truncated = files.length > limit
       const list = truncated ? files.slice(0, limit) : files
       const summary = structure(
@@ -235,7 +285,7 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
       return {
         title: path.relative(Instance.worktree, search),
         metadata: {
-          action: input.action as string,
+          action: nextInput.action as string,
           ranking: "relevance_then_mtime",
           groups: summary.groups,
           entrypoints: summary.entrypoints,
@@ -248,8 +298,8 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
     }
 
     const rg = await Ripgrep.filepath()
-    const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", input.pattern]
-    if (input.include) args.push("--glob", input.include)
+    const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", nextInput.pattern]
+    if (nextInput.include) args.push("--glob", nextInput.include)
     for (const glob of defaultIgnoreGlobs()) args.push("--glob", glob)
     args.push(".")
 
@@ -266,10 +316,10 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
     const code = await proc.exited
     if (code === 1 || (code === 2 && !raw.trim())) {
       return {
-        title: input.pattern,
+        title: nextInput.pattern,
         metadata: {
-          action: input.action as string,
-          output_mode: input.output_mode ?? "files_with_matches",
+          action: nextInput.action as string,
+          output_mode: nextInput.output_mode ?? "files_with_matches",
           count: 0,
           shown: 0,
           truncated: false,
@@ -298,25 +348,25 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
           },
         ]
       })
-      .filter((item) => (input.from_line ? item.line >= input.from_line : true))
-      .filter((item) => (input.to_line ? item.line <= input.to_line : true))
+      .filter((item) => (nextInput.from_line ? item.line >= nextInput.from_line : true))
+      .filter((item) => (nextInput.to_line ? item.line <= nextInput.to_line : true))
 
     rows.sort(
       (a, b) =>
-        rank(b.path, input.pattern, b.text) - rank(a.path, input.pattern, a.text) ||
+        rank(b.path, nextInput.pattern, b.text) - rank(a.path, nextInput.pattern, a.text) ||
         b.mtime - a.mtime ||
         a.line - b.line,
     )
-    const mode = input.output_mode ?? "files_with_matches"
+    const mode = nextInput.output_mode ?? "files_with_matches"
 
     if (mode === "files_with_matches") {
       const files = [...new Set(rows.map((item) => item.path))]
       const truncated = files.length > limit
       const list = truncated ? files.slice(0, limit) : files
       return {
-        title: input.pattern,
+        title: nextInput.pattern,
         metadata: {
-          action: input.action as string,
+          action: nextInput.action as string,
           output_mode: mode,
           ranking: "relevance_then_mtime",
           count: files.length,
@@ -347,9 +397,9 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
       const truncated = files.length > limit
       const list = truncated ? files.slice(0, limit) : files
       return {
-        title: input.pattern,
+        title: nextInput.pattern,
         metadata: {
-          action: input.action as string,
+          action: nextInput.action as string,
           output_mode: mode,
           ranking: "relevance_then_mtime",
           count: files.length,
@@ -364,7 +414,7 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
 
     const truncated = rows.length > limit
     const list = truncated ? rows.slice(0, limit) : rows
-    const context = input.context ?? 0
+    const context = nextInput.context ?? 0
     const cache = new Map<string, string[]>()
     const output = list.length
       ? context === 0
@@ -390,9 +440,9 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
           ).join("\n\n")
       : "No files found"
     return {
-      title: input.pattern,
+      title: nextInput.pattern,
       metadata: {
-        action: input.action as string,
+        action: nextInput.action as string,
         output_mode: mode,
         ranking: "relevance_then_mtime",
         context,

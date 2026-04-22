@@ -76,24 +76,23 @@ type EditResultMetadata = {
   filepath?: string
 }
 
+const batchItemParameters = z
+  .object({
+    filePath: z
+      .string()
+      .optional()
+      .describe("Optional compat file path; when present it must match the outer filePath"),
+    oldString: z.string().describe("The text to replace"),
+    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+    replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+  })
+  .strict()
+
 const batchEditParameters = z
   .object({
     filePath: z.string().describe("The absolute path to the file to modify"),
     replaceAll: z.boolean().optional().describe("Default replaceAll behavior for nested edits"),
-    edits: z
-      .array(
-        z.object({
-          filePath: z
-            .string()
-            .optional()
-            .describe("Optional compat file path; when present it must match the outer filePath"),
-          oldString: z.string().describe("The text to replace"),
-          newString: z.string().describe("The text to replace it with (must be different from oldString)"),
-          replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
-        }),
-      )
-      .min(1)
-      .describe("Sequential edit operations to perform on the same file"),
+    edits: z.array(batchItemParameters).min(1).describe("Sequential edit operations to perform on the same file"),
   })
   .superRefine((params, ctx) => {
     for (const [index, edit] of params.edits.entries()) {
@@ -224,21 +223,85 @@ function canon(input: unknown) {
   return pick(out, ["filePath", "oldString", "newString", "replaceAll"])
 }
 
-const parameters = z.preprocess(canon, z.union([
-  singleEditParameters,
-  batchEditParameters,
-  dataModeParameters,
-  frontmatterModeParameters,
-  markdownModeParameters,
-]))
+function addIssues(ctx: z.RefinementCtx, error: z.ZodError) {
+  for (const issue of error.issues) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: issue.path,
+      message: issue.message,
+    })
+  }
+}
+
+function parseEditBranch(input: unknown) {
+  const normalized = canon(input)
+  const next = obj(normalized)
+  if (!next) return singleEditParameters.safeParse(normalized)
+  if (next.mode === "data") return dataModeParameters.safeParse(normalized)
+  if (next.mode === "frontmatter") return frontmatterModeParameters.safeParse(normalized)
+  if (next.mode === "markdown") return markdownModeParameters.safeParse(normalized)
+  if (Array.isArray(next.edits)) return batchEditParameters.safeParse(normalized)
+  return singleEditParameters.safeParse(normalized)
+}
+
+const parameters = z
+  .object({
+    mode: z.enum(["data", "frontmatter", "markdown"]).optional().describe("Optional structured edit mode."),
+    filePath: z.string().optional().describe("Target file path for all edit modes."),
+    oldString: z.string().optional().describe("Text to replace in normal single-edit mode."),
+    newString: z.string().optional().describe("Replacement text in normal single-edit mode."),
+    replaceAll: z.boolean().optional().describe("Replace all occurrences in normal or batch text edit mode."),
+    edits: z.array(batchItemParameters).min(1).optional().describe("Sequential single-file edits for batch mode."),
+    pointer: z.string().optional().describe("Structured pointer for data or frontmatter edit modes."),
+    action: z
+      .enum(["set", "delete", "merge", "append", "prepend", "insert", "replace", "create"])
+      .optional()
+      .describe("Structured edit action when mode is data, frontmatter, or markdown."),
+    value: z.unknown().optional().describe("Structured value payload for data or frontmatter edit modes."),
+    index: z.coerce.number().int().min(0).optional().describe("Structured insertion index where supported."),
+    create: z.boolean().optional().describe("Optional structured create flag where supported."),
+    heading: z.string().optional().describe("Markdown heading target for markdown mode."),
+    content: z.string().optional().describe("Markdown content payload for markdown mode."),
+    position: z.enum(["end", "start", "before", "after"]).optional().describe("Markdown insertion position."),
+    anchor: z.string().optional().describe("Markdown anchor heading when position needs one."),
+    level: z.coerce.number().int().min(1).max(6).optional().describe("Markdown heading level for create mode."),
+    occurrence: z.coerce.number().int().min(1).optional().describe("Markdown heading occurrence selector."),
+    anchor_occurrence: z.coerce.number().int().min(1).optional().describe("Markdown anchor occurrence selector."),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    const parsed = parseEditBranch(input)
+    if (!parsed.success) addIssues(ctx, parsed.error)
+  })
+
+type EditParameters = z.infer<typeof parameters>
+type ParsedEditParameters =
+  | z.infer<typeof singleEditParameters>
+  | z.infer<typeof batchEditParameters>
+  | z.infer<typeof dataModeParameters>
+  | z.infer<typeof frontmatterModeParameters>
+  | z.infer<typeof markdownModeParameters>
+
+function parseEditInput(input: EditParameters): ParsedEditParameters {
+  const normalized = canon(input)
+  const next = obj(normalized)
+  if (!next) return singleEditParameters.parse(normalized)
+  if (next.mode === "data") return dataModeParameters.parse(normalized)
+  if (next.mode === "frontmatter") return frontmatterModeParameters.parse(normalized)
+  if (next.mode === "markdown") return markdownModeParameters.parse(normalized)
+  if (Array.isArray(next.edits)) return batchEditParameters.parse(normalized)
+  return singleEditParameters.parse(normalized)
+}
 
 export const EditTool = Tool.define<typeof parameters, EditResultMetadata>("edit", {
   description: DESCRIPTION,
   parameters,
   async execute(params, ctx) {
-    if ("mode" in params) {
-      if (params.mode === "data") {
-        const result = await executeDataEdit(dataEditParameters.parse(params), ctx)
+    const input = parseEditInput(params)
+
+    if ("mode" in input) {
+      if (input.mode === "data") {
+        const result = await executeDataEdit(input, ctx)
         return {
           ...result,
           metadata: {
@@ -247,8 +310,8 @@ export const EditTool = Tool.define<typeof parameters, EditResultMetadata>("edit
           },
         }
       }
-      if (params.mode === "frontmatter") {
-        const result = await executeFrontmatterEdit(frontmatterEditParameters.parse(params), ctx)
+      if (input.mode === "frontmatter") {
+        const result = await executeFrontmatterEdit(input, ctx)
         return {
           ...result,
           metadata: {
@@ -257,7 +320,7 @@ export const EditTool = Tool.define<typeof parameters, EditResultMetadata>("edit
           },
         }
       }
-      const result = await executeMarkdownEdit(markdownEditParameters.parse(params), ctx)
+      const result = await executeMarkdownEdit(markdownEditParameters.parse(input), ctx)
       return {
         ...result,
         metadata: {
@@ -267,10 +330,10 @@ export const EditTool = Tool.define<typeof parameters, EditResultMetadata>("edit
       }
     }
 
-    if ("edits" in params) {
-      const filePath = path.isAbsolute(params.filePath)
-        ? params.filePath
-        : path.join(Instance.directory, params.filePath)
+    if ("edits" in input) {
+      const filePath = path.isAbsolute(input.filePath)
+        ? input.filePath
+        : path.join(Instance.directory, input.filePath)
       await assertExternalDirectory(ctx, filePath)
 
       let rolledBack = false
@@ -284,13 +347,13 @@ export const EditTool = Tool.define<typeof parameters, EditResultMetadata>("edit
         let output: Awaited<ReturnType<typeof applyEditDetailed>>["output"] | undefined
         const results: Array<Awaited<ReturnType<typeof applyEditDetailed>>["output"]["metadata"]> = []
 
-        for (const edit of params.edits) {
+        for (const edit of input.edits) {
           const result = await applyEditDetailed(
             {
-              filePath: params.filePath,
+              filePath: input.filePath,
               oldString: edit.oldString,
               newString: edit.newString,
-              replaceAll: edit.replaceAll ?? params.replaceAll,
+              replaceAll: edit.replaceAll ?? input.replaceAll,
             },
             ctx,
           )
@@ -382,10 +445,10 @@ export const EditTool = Tool.define<typeof parameters, EditResultMetadata>("edit
 
     const result = await applyEditDetailed(
       {
-        filePath: params.filePath,
-        oldString: params.oldString,
-        newString: params.newString,
-        replaceAll: params.replaceAll,
+        filePath: input.filePath,
+        oldString: input.oldString,
+        newString: input.newString,
+        replaceAll: input.replaceAll,
       },
       ctx,
     )

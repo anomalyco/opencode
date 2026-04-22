@@ -1,12 +1,12 @@
 import { Agent } from "@/agent/agent"
 import { runHiddenJSON, type HiddenJSONModel } from "@/agent/hidden-json"
 import { Auth } from "@/auth"
-import { Provider } from "@/provider/provider"
-import { ProviderTransform } from "@/provider/transform"
+import { Provider, ProviderTransform } from "@/provider"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Tool } from "@/tool/shared/tool"
 import { Token } from "@/util/token"
+import { Effect } from "effect"
 import z from "zod"
 
 const DESCRIPTION = `Summarize the latest contiguous read-only exploration tail in the current assistant turn so future agent context can carry a compact summary instead of all raw discovery output.
@@ -222,37 +222,6 @@ function ready(input: unknown): input is Provider.Model {
   return !!input && typeof input === "object" && "id" in input && "providerID" in input
 }
 
-async function models(agent: Agent.Info, hint?: unknown) {
-  const base = agent.model
-    ? agent.model
-    : ready(hint)
-      ? { providerID: hint.providerID, modelID: hint.id }
-      : await Provider.defaultModel()
-  const full = await Provider.getModel(base.providerID, base.modelID)
-  const token = await Auth.get(full.providerID).catch(() => undefined)
-  const picks = agent.model ? [full] : [await Provider.getSmallModel(full.providerID), full].filter(Boolean)
-  const seen = new Set<string>()
-  const out: HiddenJSONModel[] = []
-  for (const mdl of picks) {
-    if (!mdl) continue
-    const key = `${mdl.providerID}/${mdl.id}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({
-      model: mdl,
-      language: await Provider.getLanguage(mdl),
-      options: {
-        ...(!agent.model && mdl.id !== full.id ? ProviderTransform.smallOptions(mdl) : {}),
-        ...(mdl.providerID === "openai" && token?.type === "oauth" ? { store: false } : {}),
-      },
-      prompt: agent.prompt ?? "",
-      oauth: mdl.providerID === "openai" && token?.type === "oauth",
-      ...(mdl.capabilities.temperature ? { temperature: agent.temperature ?? 0 } : {}),
-    })
-  }
-  return out
-}
-
 function pack(input: {
   goal: string
   kept: Array<ReturnType<typeof row> & { why: string }>
@@ -404,257 +373,297 @@ async function pickEarlier(sessionID: MessageV2.Part["sessionID"], messageID: Me
   return out.reverse().flat()
 }
 
-export const CompressTool = Tool.define(id, {
-  description: DESCRIPTION,
-  parameters: input,
-  async execute(args, ctx) {
-    await ctx.ask({
-      permission: id,
-      patterns: [args.scope],
-      always: ["*"],
-      metadata: { goal: args.goal, mode: args.mode, scope: args.scope },
-    })
-    ctx.metadata({
-      title: args.mode === "preview" ? "Previewing context compression" : "Compressing context",
-      metadata: {
-        action: args.mode,
-        status: "running",
-        phase: "selecting",
-        scope: args.scope,
-      },
-    })
+export const CompressTool = Tool.defineEffect(
+  id,
+  Effect.gen(function* () {
+    const provider = yield* Provider.Service
 
-    const msg = MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
-    if (msg.info.role !== "assistant") throw new Error("compress can only run from an assistant message")
-    const rows = pickRecent(msg.parts)
-    const recent = rows.length > 0 ? rows : await pickEarlier(ctx.sessionID, ctx.messageID)
-    if (recent.length === 0) {
-      return {
-        title: "compress",
-        metadata: {
-          action: args.mode,
-          sessionId: ctx.sessionID,
-          status: "skipped",
-          scope: args.scope,
-          count: { total: 0, selected: 0, kept: 0, protected: 0 },
-          items: { selected: [], kept: [], protected: [] },
-        },
-        output: text({
-          goal: args.goal,
-          kept: [],
-          safe: [],
-          selected: [],
-          skipped: "no recent read-only tail found",
-        }),
-      }
-    }
-
-    const raw = recent.filter((part) => !part.why)
-    const tail = new Set((args.keep_last > 0 ? raw.slice(-args.keep_last) : []).map((part) => part.part.id))
-    const held = raw.filter((part) => tail.has(part.part.id) || (args.keep ?? []).some((rule) => keep(rule, part)))
-    const kept = new Map(held.map((part) => [part.part.id, part]))
-    const safe = recent.filter((part): part is typeof part & { why: string } => !!part.why)
-    const selected = recent.filter((part) => !part.why && !kept.has(part.part.id))
-    const data = {
-      action: args.mode,
-      scope: args.scope,
-      count: {
-        total: recent.length,
-        selected: selected.length,
-        kept: held.length,
-        protected: safe.length,
-      },
-      items: {
-        selected: selected.map((part) => item(part)),
-        kept: held.map((part) => item(part, tail.has(part.part.id) ? "keep_last" : "keep")),
-        protected: safe.map((part) => item(part, part.why)),
-      },
-    }
-
-    if (selected.length === 0) {
-      return {
-        title: "compress",
-        metadata: {
-          ...data,
-          sessionId: ctx.sessionID,
-          status: "skipped",
-        },
-        output: text({
-          goal: args.goal,
-          kept: data.items.kept,
-          safe: data.items.protected,
-          selected: data.items.selected,
-          skipped: "nothing remained after keep rules and protections",
-        }),
-      }
-    }
-
-    if (args.mode === "preview") {
-      return {
-        title: "compress",
-        metadata: {
-          ...data,
-          sessionId: ctx.sessionID,
-          status: "preview",
-        },
-        output: text({
-          goal: args.goal,
-          kept: data.items.kept,
-          safe: data.items.protected,
-          selected: data.items.selected,
-        }),
-      }
-    }
-
-    ctx.metadata({
-      title: "Compressing context",
-      metadata: {
-        ...data,
-        status: "running",
-        phase: "summarizing",
-      },
-    })
-    const next = await Agent.get(name)
-    if (!next) throw new Error("compress-agent is not configured")
-
-    let result: z.infer<typeof shape>
-    let model: { providerID: string; modelID: string } | undefined
-    let reason: string | undefined
-    let fallback_used: string | undefined
-    try {
-      const out = await runHiddenJSON({
-        model: await models(next, ctx.extra?.model),
-        messages: [
-          {
-            role: "user",
-            content: pack({
-              goal: args.goal,
-              kept: held.map((part) => ({ ...part, why: tail.has(part.part.id) ? "keep_last" : "keep" })),
-              safe,
-              selected,
-            }),
+    async function models(agent: Agent.Info, hint?: unknown) {
+      const base = agent.model
+        ? agent.model
+        : ready(hint)
+          ? { providerID: hint.providerID, modelID: hint.id }
+          : await Effect.runPromise(provider.defaultModel())
+      const full = await Effect.runPromise(provider.getModel(base.providerID, base.modelID))
+      const token = await Auth.get(full.providerID).catch(() => undefined)
+      const picks = agent.model
+        ? [full]
+        : [await Effect.runPromise(provider.getSmallModel(full.providerID)), full].filter(Boolean)
+      const seen = new Set<string>()
+      const out: HiddenJSONModel[] = []
+      for (const mdl of picks) {
+        if (!mdl) continue
+        const key = `${mdl.providerID}/${mdl.id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({
+          model: mdl,
+          language: await Effect.runPromise(provider.getLanguage(mdl)),
+          options: {
+            ...(!agent.model && mdl.id !== full.id ? ProviderTransform.smallOptions(mdl) : {}),
+            ...(mdl.providerID === "openai" && token?.type === "oauth" ? { store: false } : {}),
           },
-        ],
-        schema: shape,
-        toolDescription: "Return the compression summary in the required schema.",
-      })
-      result = out.output
-      model = {
-        providerID: out.model.providerID,
-        modelID: out.model.id,
-      }
-    } catch (error) {
-      reason = normalize(error instanceof Error ? error.message : String(error))
-      fallback_used = reason
-      result = fallback({
-        goal: args.goal,
-        selected,
-        kept: data.items.kept,
-        safe: data.items.protected,
-        reason,
-      })
-    }
-
-    const gid = crypto.randomUUID()
-    const now = Date.now()
-    const source_tokens = selected.reduce((sum, part) => sum + estimate(part), 0)
-    const summary_tokens = Token.estimate(
-      [
-        result.summary,
-        result.current_focus,
-        ...result.findings,
-        ...result.decisions,
-        ...result.files,
-        ...result.open_questions,
-        result.next_step,
-        ...result.risks,
-      ]
-        .flatMap(txt)
-        .join("\n"),
-    )
-    const manifest = {
-      version: 1,
-      group_id: gid,
-      goal: args.goal,
-      scope: args.scope,
-      keep_last: args.keep_last,
-      time: now,
-      source_count: selected.length,
-      kept_count: held.length,
-      protected_count: safe.length,
-      source_part_ids: selected.map((part) => part.part.id),
-      source_labels: selected.map((part) => part.label),
-      estimated: {
-        source_tokens,
-        summary_tokens,
-        saved_tokens: Math.max(0, source_tokens - summary_tokens),
-      },
-    }
-
-    ctx.metadata({
-      title: "Applying context compression",
-      metadata: {
-        ...data,
-        sessionId: ctx.sessionID,
-        status: "running",
-        phase: "marking",
-        group_id: gid,
-        model: next.model,
-        result,
-        manifest,
-        ...(fallback_used ? { fallback: fallback_used } : {}),
-      },
-    })
-
-    await Promise.all(
-      selected.map(async (part) => {
-        const state = part.part.state
-        if (state.status !== "completed") return
-        await Session.updatePart({
-          ...part.part,
-          state: {
-            ...state,
-            metadata: {
-              ...(state.metadata ?? {}),
-              compress: {
-                group_id: gid,
-                role: "source",
-                hidden_from_agent: true,
-                time: now,
-              },
-            },
-          },
+          prompt: agent.prompt ?? "",
+          oauth: mdl.providerID === "openai" && token?.type === "oauth",
+          ...(mdl.capabilities.temperature ? { temperature: agent.temperature ?? 0 } : {}),
         })
-      }),
-    )
+      }
+      return out
+    }
 
     return {
-      title: "compress",
-      metadata: {
-        ...data,
-        sessionId: ctx.sessionID,
-        status: "completed",
-        phase: "done",
-        group_id: gid,
-        model,
-        result,
-        manifest,
-        ...(fallback_used ? { fallback: fallback_used } : {}),
-        compress: {
+      description: DESCRIPTION,
+      parameters: input,
+      async execute(args: z.infer<typeof input>, ctx: Tool.Context<Record<string, unknown>>) {
+        await ctx.ask({
+          permission: id,
+          patterns: [args.scope],
+          always: ["*"],
+          metadata: { goal: args.goal, mode: args.mode, scope: args.scope },
+        })
+        ctx.metadata({
+          title: args.mode === "preview" ? "Previewing context compression" : "Compressing context",
+          metadata: {
+            action: args.mode,
+            status: "running",
+            phase: "selecting",
+            scope: args.scope,
+          },
+        })
+
+        const msg = MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+        if (msg.info.role !== "assistant") throw new Error("compress can only run from an assistant message")
+        const rows = pickRecent(msg.parts)
+        const recent = rows.length > 0 ? rows : await pickEarlier(ctx.sessionID, ctx.messageID)
+        if (recent.length === 0) {
+          return {
+            title: "compress",
+            metadata: {
+              action: args.mode,
+              sessionId: ctx.sessionID,
+              status: "skipped",
+              scope: args.scope,
+              count: { total: 0, selected: 0, kept: 0, protected: 0 },
+              items: { selected: [], kept: [], protected: [] },
+            },
+            output: text({
+              goal: args.goal,
+              kept: [],
+              safe: [],
+              selected: [],
+              skipped: "no recent read-only tail found",
+            }),
+          }
+        }
+
+        const raw = recent.filter((part) => !part.why)
+        const tail = new Set((args.keep_last > 0 ? raw.slice(-args.keep_last) : []).map((part) => part.part.id))
+        const held = raw.filter((part) => tail.has(part.part.id) || (args.keep ?? []).some((rule) => keep(rule, part)))
+        const kept = new Map(held.map((part) => [part.part.id, part]))
+        const safe = recent.filter((part): part is typeof part & { why: string } => !!part.why)
+        const selected = recent.filter((part) => !part.why && !kept.has(part.part.id))
+        const data = {
+          action: args.mode,
+          scope: args.scope,
+          count: {
+            total: recent.length,
+            selected: selected.length,
+            kept: held.length,
+            protected: safe.length,
+          },
+          items: {
+            selected: selected.map((part) => item(part)),
+            kept: held.map((part) => item(part, tail.has(part.part.id) ? "keep_last" : "keep")),
+            protected: safe.map((part) => item(part, part.why)),
+          },
+        }
+
+        if (selected.length === 0) {
+          return {
+            title: "compress",
+            metadata: {
+              ...data,
+              sessionId: ctx.sessionID,
+              status: "skipped",
+            },
+            output: text({
+              goal: args.goal,
+              kept: data.items.kept,
+              safe: data.items.protected,
+              selected: data.items.selected,
+              skipped: "nothing remained after keep rules and protections",
+            }),
+          }
+        }
+
+        if (args.mode === "preview") {
+          return {
+            title: "compress",
+            metadata: {
+              ...data,
+              sessionId: ctx.sessionID,
+              status: "preview",
+            },
+            output: text({
+              goal: args.goal,
+              kept: data.items.kept,
+              safe: data.items.protected,
+              selected: data.items.selected,
+            }),
+          }
+        }
+
+        ctx.metadata({
+          title: "Compressing context",
+          metadata: {
+            ...data,
+            status: "running",
+            phase: "summarizing",
+          },
+        })
+        const next = await Agent.get(name)
+        if (!next) throw new Error("compress-agent is not configured")
+
+        let result: z.infer<typeof shape>
+        let model: { providerID: string; modelID: string } | undefined
+        let reason: string | undefined
+        let fallback_used: string | undefined
+        try {
+          const out = await runHiddenJSON({
+            model: await models(next, ctx.extra?.model),
+            messages: [
+              {
+                role: "user",
+                content: pack({
+                  goal: args.goal,
+                  kept: held.map((part) => ({ ...part, why: tail.has(part.part.id) ? "keep_last" : "keep" })),
+                  safe,
+                  selected,
+                }),
+              },
+            ],
+            schema: shape,
+            toolDescription: "Return the compression summary in the required schema.",
+          })
+          result = out.output
+          model = {
+            providerID: out.model.providerID,
+            modelID: out.model.id,
+          }
+        } catch (error) {
+          reason = normalize(error instanceof Error ? error.message : String(error))
+          fallback_used = reason
+          result = fallback({
+            goal: args.goal,
+            selected,
+            kept: data.items.kept,
+            safe: data.items.protected,
+            reason,
+          })
+        }
+
+        const gid = crypto.randomUUID()
+        const now = Date.now()
+        const source_tokens = selected.reduce((sum, part) => sum + estimate(part), 0)
+        const summary_tokens = Token.estimate(
+          [
+            result.summary,
+            result.current_focus,
+            ...result.findings,
+            ...result.decisions,
+            ...result.files,
+            ...result.open_questions,
+            result.next_step,
+            ...result.risks,
+          ]
+            .flatMap(txt)
+            .join("\n"),
+        )
+        const manifest = {
+          version: 1,
           group_id: gid,
-          role: "summary",
-          source_count: selected.length,
-          hidden_from_agent: false,
+          goal: args.goal,
+          scope: args.scope,
+          keep_last: args.keep_last,
           time: now,
-        },
+          source_count: selected.length,
+          kept_count: held.length,
+          protected_count: safe.length,
+          source_part_ids: selected.map((part) => part.part.id),
+          source_labels: selected.map((part) => part.label),
+          estimated: {
+            source_tokens,
+            summary_tokens,
+            saved_tokens: Math.max(0, source_tokens - summary_tokens),
+          },
+        }
+
+        ctx.metadata({
+          title: "Applying context compression",
+          metadata: {
+            ...data,
+            sessionId: ctx.sessionID,
+            status: "running",
+            phase: "marking",
+            group_id: gid,
+            model: next.model,
+            result,
+            manifest,
+            ...(fallback_used ? { fallback: fallback_used } : {}),
+          },
+        })
+
+        await Promise.all(
+          selected.map(async (part) => {
+            const state = part.part.state
+            if (state.status !== "completed") return
+            await Session.updatePart({
+              ...part.part,
+              state: {
+                ...state,
+                metadata: {
+                  ...(state.metadata ?? {}),
+                  compress: {
+                    group_id: gid,
+                    role: "source",
+                    hidden_from_agent: true,
+                    time: now,
+                  },
+                },
+              },
+            })
+          }),
+        )
+
+        return {
+          title: "compress",
+          metadata: {
+            ...data,
+            sessionId: ctx.sessionID,
+            status: "completed",
+            phase: "done",
+            group_id: gid,
+            model,
+            result,
+            manifest,
+            ...(fallback_used ? { fallback: fallback_used } : {}),
+            compress: {
+              group_id: gid,
+              role: "summary",
+              source_count: selected.length,
+              hidden_from_agent: false,
+              time: now,
+            },
+          },
+          output: text({
+            goal: args.goal,
+            kept: data.items.kept,
+            safe: data.items.protected,
+            selected: data.items.selected,
+            result,
+          }),
+        }
       },
-      output: text({
-        goal: args.goal,
-        kept: data.items.kept,
-        safe: data.items.protected,
-        selected: data.items.selected,
-        result,
-      }),
-    }
-  },
-})
+    } satisfies Tool.DefWithoutID<typeof input, Record<string, unknown>>
+  }),
+)

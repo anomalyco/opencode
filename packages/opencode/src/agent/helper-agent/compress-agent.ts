@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 const PROMPT = `You are \`compress-agent\`, a hidden read-only context compression specialist.
 
 Your only job:

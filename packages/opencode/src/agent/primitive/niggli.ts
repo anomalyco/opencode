@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 const PROMPT = `You are Niggli, the strategic planning specialist for ATLAS and direct user planning sessions.
 
 Your role:

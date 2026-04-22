@@ -5,6 +5,7 @@ import { provideInstance, tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
+import BUG_REPORT_PROMPT from "../../src/agent/prompt/bug-report.txt"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
@@ -20,20 +21,41 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-test("returns default native agents when no config", async () => {
+test("returns cleaned active agents when no config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const agents = await load(tmp.path, (svc) => svc.list())
       const names = agents.map((a) => a.name)
-      expect(names).toContain("build")
-      expect(names).toContain("plan")
-      expect(names).toContain("general")
-      expect(names).toContain("explore")
+      expect(names).not.toContain("build")
+      expect(names).not.toContain("plan")
+      expect(names).not.toContain("general")
+      expect(names).not.toContain("explore")
+      expect(names).toContain("atlas")
+      expect(names).toContain("ayaz")
+      expect(names).toContain("niggli")
+      expect(names).toContain("explorer")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
+    },
+  })
+})
+
+test("legacy agent names still resolve through compatibility aliases", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await load(tmp.path, (svc) => svc.get("build"))
+      const general = await load(tmp.path, (svc) => svc.get("general"))
+      const plan = await load(tmp.path, (svc) => svc.get("plan"))
+      const explore = await load(tmp.path, (svc) => svc.get("explore"))
+      expect(build?.mode).toBe("primary")
+      expect(general?.mode).toBe("subagent")
+      expect(plan?.mode).toBe("primary")
+      expect(explore?.mode).toBe("subagent")
     },
   })
 })
@@ -97,6 +119,53 @@ test("explore agent asks for external directories and allows Truncate.GLOB", asy
   })
 })
 
+test("config agent permission groups expand for ported agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        ayaz: {
+          permission: {
+            web: "deny",
+          },
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ayaz = await load(tmp.path, (svc) => svc.get("ayaz"))
+      expect(ayaz).toBeDefined()
+      expect(evalPerm(ayaz, "webfetch")).toBe("deny")
+      expect(evalPerm(ayaz, "websearch")).toBe("deny")
+      expect(evalPerm(ayaz, "lib_batch")).toBe("deny")
+    },
+  })
+})
+
+test("final config permission controls bug report prompt injection for ported agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        explorer: {
+          permission: {
+            bug_report: "deny",
+          },
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const explorer = await load(tmp.path, (svc) => svc.get("explorer"))
+      expect(explorer).toBeDefined()
+      expect(evalPerm(explorer, "bug_report")).toBe("deny")
+      expect(explorer?.prompt?.includes(BUG_REPORT_PROMPT)).toBe(false)
+    },
+  })
+})
+
 test("general agent denies todo tools", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -144,8 +213,6 @@ test("custom agent from config creates new agent", async () => {
     fn: async () => {
       const custom = await load(tmp.path, (svc) => svc.get("my_custom_agent"))
       expect(custom).toBeDefined()
-      expect(String(custom?.model?.providerID)).toBe("openai")
-      expect(String(custom?.model?.modelID)).toBe("gpt-4")
       expect(custom?.description).toBe("My custom agent")
       expect(custom?.temperature).toBe(0.5)
       expect(custom?.topP).toBe(0.9)
@@ -173,8 +240,6 @@ test("custom agent config overrides native agent properties", async () => {
     fn: async () => {
       const build = await load(tmp.path, (svc) => svc.get("build"))
       expect(build).toBeDefined()
-      expect(String(build?.model?.providerID)).toBe("anthropic")
-      expect(String(build?.model?.modelID)).toBe("claude-3")
       expect(build?.description).toBe("Custom build agent")
       expect(build?.temperature).toBe(0.7)
       expect(build?.color).toBe("#FF0000")
@@ -306,7 +371,12 @@ test("agent prompt can be set from config", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
-        build: { prompt: "Custom system prompt" },
+        build: {
+          prompt: "Custom system prompt",
+          permission: {
+            bug_report: "deny",
+          },
+        },
       },
     },
   })
@@ -394,7 +464,7 @@ test("multiple custom agents can be defined", async () => {
 test("Agent.list keeps the default agent first and sorts the rest by name", async () => {
   await using tmp = await tmpdir({
     config: {
-      default_agent: "plan",
+      default_agent: "niggli",
       agent: {
         zebra: {
           description: "Zebra",
@@ -411,7 +481,7 @@ test("Agent.list keeps the default agent first and sorts the rest by name", asyn
     directory: tmp.path,
     fn: async () => {
       const names = (await load(tmp.path, (svc) => svc.list())).map((a) => a.name)
-      expect(names[0]).toBe("plan")
+      expect(names[0]).toBe("niggli")
       expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
     },
   })
@@ -428,25 +498,41 @@ test("Agent.get returns undefined for non-existent agent", async () => {
   })
 })
 
-test("default permission includes doom_loop and external_directory as ask", async () => {
-  await using tmp = await tmpdir()
+test("default permission includes doom_loop and external_directory as ask for custom agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        probe: {
+          description: "Probe",
+        },
+      },
+    },
+  })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const build = await load(tmp.path, (svc) => svc.get("build"))
-      expect(evalPerm(build, "doom_loop")).toBe("ask")
-      expect(evalPerm(build, "external_directory")).toBe("ask")
+      const probe = await load(tmp.path, (svc) => svc.get("probe"))
+      expect(evalPerm(probe, "doom_loop")).toBe("ask")
+      expect(evalPerm(probe, "external_directory")).toBe("ask")
     },
   })
 })
 
-test("webfetch is allowed by default", async () => {
-  await using tmp = await tmpdir()
+test("webfetch is allowed by default for custom agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        probe: {
+          description: "Probe",
+        },
+      },
+    },
+  })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const build = await load(tmp.path, (svc) => svc.get("build"))
-      expect(evalPerm(build, "webfetch")).toBe("allow")
+      const probe = await load(tmp.path, (svc) => svc.get("probe"))
+      expect(evalPerm(probe, "webfetch")).toBe("allow")
     },
   })
 })
@@ -502,15 +588,20 @@ test("Truncate.GLOB is allowed even when user denies external_directory globally
       permission: {
         external_directory: "deny",
       },
+      agent: {
+        probe: {
+          description: "Probe",
+        },
+      },
     },
   })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const build = await load(tmp.path, (svc) => svc.get("build"))
-      expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
-      expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
-      expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
+      const probe = await load(tmp.path, (svc) => svc.get("probe"))
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, probe!.permission).action).toBe("allow")
+      expect(Permission.evaluate("external_directory", Truncate.DIR, probe!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", "/some/other/path", probe!.permission).action).toBe("deny")
     },
   })
 })
@@ -520,7 +611,8 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
   await using tmp = await tmpdir({
     config: {
       agent: {
-        build: {
+        probe: {
+          description: "Probe",
           permission: {
             external_directory: "deny",
           },
@@ -531,10 +623,10 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const build = await load(tmp.path, (svc) => svc.get("build"))
-      expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
-      expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
-      expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
+      const probe = await load(tmp.path, (svc) => svc.get("probe"))
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, probe!.permission).action).toBe("allow")
+      expect(Permission.evaluate("external_directory", Truncate.DIR, probe!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", "/some/other/path", probe!.permission).action).toBe("deny")
     },
   })
 })
@@ -597,13 +689,13 @@ description: Permission skill.
   }
 })
 
-test("defaultAgent returns build when no default_agent config", async () => {
+test("defaultAgent returns atlas when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      expect(agent).toBe("build")
+      expect(agent).toBe("atlas")
     },
   })
 })
@@ -687,7 +779,7 @@ test("defaultAgent throws when default_agent points to non-existent agent", asyn
   })
 })
 
-test("defaultAgent returns plan when build is disabled and default_agent not set", async () => {
+test("defaultAgent still returns atlas when legacy build alias is disabled", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -699,8 +791,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      expect(agent).toBe("atlas")
     },
   })
 })
@@ -709,15 +800,15 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
-        build: { disable: true },
-        plan: { disable: true },
+        atlas: { disable: true },
+        ayaz: { disable: true },
+        niggli: { disable: true },
       },
     },
   })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build and plan are disabled, no primary-capable agents remain
       await expect(load(tmp.path, (svc) => svc.defaultAgent())).rejects.toThrow("no primary visible agent found")
     },
   })

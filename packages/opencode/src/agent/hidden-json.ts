@@ -1,6 +1,6 @@
 import { jsonSchema, streamText, tool, type ModelMessage, wrapLanguageModel } from "ai"
-import { ProviderTransform } from "@/provider/transform"
-import type { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider"
+import type { Provider } from "@/provider"
 import { LLM } from "@/session/llm"
 import z from "zod"
 

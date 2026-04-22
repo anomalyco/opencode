@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "url"
 import { assertExternalDirectory } from "../external-directory"
 import { Filesystem } from "../../util/filesystem"
 import { normalizeEditFollowupResult } from "../edit/runtime"
-import { sanitizeDiscriminatedInput } from "../shared/shape"
+import { blank } from "../shared/shape"
 
 const NonEmptyString = z.string().trim().min(1)
 
@@ -60,10 +60,6 @@ const lspAllowed = {
   incomingCalls: ["filePath", "line", "character"],
   outgoingCalls: ["filePath", "line", "character"],
 } as const
-const lspInjectedDefaults = {
-  line: (value: unknown) => value === 1,
-  character: (value: unknown) => value === 1,
-} satisfies Partial<Record<string, (value: unknown) => boolean>>
 
 const kinds: Record<number, string> = {
   1: "file",
@@ -253,52 +249,79 @@ export const LspPositionalParametersSchema = z
   })
   .strict()
 
-const variants = positionalOperations.map((operation) =>
-  z
-    .object({
-      operation: z.literal(operation).describe("The LSP operation to perform"),
-      filePath: NonEmptyString.describe(
-        "The absolute or relative path to the file when the operation targets a specific position.",
-      ),
-      line: z
-        .number()
-        .int()
-        .min(1)
-        .describe("The line number (1-based, as shown in editors) when the operation targets a specific position."),
-      character: z
-        .number()
-        .int()
-        .min(1)
-        .describe(
-          "The character offset (1-based, as shown in editors) when the operation targets a specific position.",
-        ),
-      query: z.never().optional(),
-    })
-    .strict(),
-)
+function pickPresent(input: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
+}
 
-export const LspParametersSchema = z.preprocess(
-  (input) =>
-    sanitizeDiscriminatedInput(input, {
-      discriminant: "operation",
-      allowed: lspAllowed,
-      strip: lspInjectedDefaults,
-    }),
-  z.discriminatedUnion("operation", [
-    LspWorkspaceSymbolParametersSchema,
-    LspDocumentSymbolParametersSchema,
-    ...variants,
-  ]),
-)
+function addIssues(ctx: z.RefinementCtx, error: z.ZodError) {
+  for (const issue of error.issues) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: issue.path,
+      message: issue.message,
+    })
+  }
+}
+
+export const LspParametersSchema = z
+  .object({
+    operation: z.enum(lspOperations).describe("The LSP operation to perform"),
+    filePath: z
+      .preprocess(blank, NonEmptyString.optional())
+      .describe("Optional absolute or relative file path for file-based LSP operations."),
+    line: z.number().int().min(1).optional().describe("Optional 1-based line number for positional LSP operations."),
+    character: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Optional 1-based character offset for positional LSP operations."),
+    query: NonEmptyString.optional().describe("Optional workspace symbol query for workspaceSymbol operations."),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    const allowed = new Set<string>(["operation", ...lspAllowed[input.operation]])
+    for (const [key, value] of Object.entries(input)) {
+      if (value === undefined || allowed.has(key)) continue
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `${key} is not allowed when operation=${input.operation}`,
+      })
+    }
+
+    const next = pickPresent(input)
+    const parsed =
+      input.operation === "workspaceSymbol"
+        ? LspWorkspaceSymbolParametersSchema.safeParse(next)
+        : input.operation === "documentSymbol"
+          ? LspDocumentSymbolParametersSchema.safeParse(next)
+          : LspPositionalParametersSchema.safeParse(next)
+    if (!parsed.success) addIssues(ctx, parsed.error)
+  })
+
+type LspParameters = z.infer<typeof LspParametersSchema>
+type LspInput =
+  | z.infer<typeof LspWorkspaceSymbolParametersSchema>
+  | z.infer<typeof LspDocumentSymbolParametersSchema>
+  | z.infer<typeof LspPositionalParametersSchema>
+
+function parseLspInput(input: LspParameters): LspInput {
+  const next = pickPresent(input)
+  if (input.operation === "workspaceSymbol") return LspWorkspaceSymbolParametersSchema.parse(next)
+  if (input.operation === "documentSymbol") return LspDocumentSymbolParametersSchema.parse(next)
+  return LspPositionalParametersSchema.parse(next)
+}
 
 export const LspTool = Tool.define("lsp", {
   description: DESCRIPTION,
   parameters: LspParametersSchema,
   execute: async (args, ctx) => {
-    const file = args.filePath
-      ? path.isAbsolute(args.filePath)
-        ? args.filePath
-        : path.join(Instance.directory, args.filePath)
+    const input = parseLspInput(args)
+    const file = input.filePath
+      ? path.isAbsolute(input.filePath)
+        ? input.filePath
+        : path.join(Instance.directory, input.filePath)
       : undefined
     if (file) await assertExternalDirectory(ctx, file)
 
@@ -311,17 +334,17 @@ export const LspTool = Tool.define("lsp", {
     const uri = file ? pathToFileURL(file).href : undefined
     const position = {
       file,
-      line: (args.line ?? 1) - 1,
-      character: (args.character ?? 1) - 1,
+      line: (input.line ?? 1) - 1,
+      character: (input.character ?? 1) - 1,
     }
 
     const relPath = file ? path.relative(Instance.worktree, file) : undefined
     const title =
-      args.operation === "workspaceSymbol"
-        ? `${args.operation} ${args.query}`
-        : args.operation === "documentSymbol"
-          ? `${args.operation} ${relPath}`
-          : `${args.operation} ${relPath}:${args.line}:${args.character}`
+      input.operation === "workspaceSymbol"
+        ? `${input.operation} ${input.query}`
+        : input.operation === "documentSymbol"
+          ? `${input.operation} ${relPath}`
+          : `${input.operation} ${relPath}:${input.line}:${input.character}`
 
     if (file) {
       const exists = await Filesystem.exists(file)
@@ -347,7 +370,7 @@ export const LspTool = Tool.define("lsp", {
     const touch = file ? await LSP.touchFile(file, true) : undefined
     const query = await (async () => {
       try {
-        switch (args.operation) {
+        switch (input.operation) {
           case "goToDefinition":
           case "findReferences":
           case "hover":
@@ -356,23 +379,23 @@ export const LspTool = Tool.define("lsp", {
           case "incomingCalls":
           case "outgoingCalls":
             return await LSP.query({
-              operation: args.operation,
+              operation: input.operation,
               file: file!,
               line: position.line,
               character: position.character,
             })
           case "documentSymbol":
             return await LSP.query({
-              operation: args.operation,
+              operation: input.operation,
               uri: uri!,
             })
           case "workspaceSymbol":
-            if (!args.query?.trim()) {
+            if (!input.query?.trim()) {
               throw new Error("workspaceSymbol requires a non-empty query")
             }
             return await LSP.query({
-              operation: args.operation,
-              query: args.query,
+              operation: input.operation,
+              query: input.query,
             })
         }
       } finally {
@@ -388,16 +411,16 @@ export const LspTool = Tool.define("lsp", {
       metadata: {
         result,
         summary: {
-          operation: args.operation,
+          operation: input.operation,
           count: result.length,
-          query: args.query,
+          query: input.query,
         },
         lsp: {
           touch,
           issues: query.issues,
         },
       },
-      output: [notes, format(args.operation, file, result)].filter(Boolean).join("\n\n"),
+      output: [notes, format(input.operation, file, result)].filter(Boolean).join("\n\n"),
     }
   },
 })

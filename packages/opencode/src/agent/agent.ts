@@ -10,9 +10,9 @@ import { ProviderTransform } from "../provider"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import BUG_REPORT_PROMPT from "./prompt/bug-report.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -25,6 +25,7 @@ import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { loadAgents, agentPermissionDefaults } from "./load"
+import { from } from "./permission"
 
 export const Info = z
   .object({
@@ -68,8 +69,47 @@ export interface Interface {
 }
 
 type State = Omit<Interface, "generate">
+type AgentOverride = NonNullable<Config.Info["agent"]>[string]
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
+
+function withBugReportPrompt(agent: Info) {
+  const bugReportAllowed = Permission.evaluate("bug_report", "*", agent.permission).action === "allow"
+  if (!agent.prompt || !bugReportAllowed || agent.prompt.includes(BUG_REPORT_PROMPT)) return agent
+  return {
+    ...agent,
+    prompt: `${agent.prompt}\n\n${BUG_REPORT_PROMPT}`,
+  }
+}
+
+const legacyAgentTargets = {
+  build: "ayaz",
+  general: "quick-high",
+  plan: "niggli",
+  explore: "explorer",
+} as const satisfies Record<string, string>
+
+function applyAgentOverride(item: Info, value: AgentOverride) {
+  const next = {
+    ...item,
+    model: value.model ? Provider.parseModel(value.model) : item.model,
+    variant: value.variant ?? item.variant,
+    prompt: value.prompt ?? item.prompt,
+    description: value.description ?? item.description,
+    temperature: value.temperature ?? item.temperature,
+    topP: value.top_p ?? item.topP,
+    mode: value.mode ?? item.mode,
+    color: value.color ?? item.color,
+    hidden: value.hidden ?? item.hidden,
+    name: value.name ?? item.name,
+    steps: value.steps ?? item.steps,
+    options: mergeDeep(item.options, value.options ?? {}),
+  }
+  return {
+    ...next,
+    permission: Permission.merge(next.permission, from(value.permission ?? {})),
+  }
+}
 
 export const layer = Layer.effect(
   Service,
@@ -108,92 +148,9 @@ export const layer = Layer.effect(
           discover_batch: "allow",
         })
 
-        const user = Permission.fromConfig(cfg.permission ?? {})
+        const user = from(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
-          build: {
-            name: "build",
-            description: "The default agent. Executes tools based on configured permissions.",
-            options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_enter: "allow",
-              }),
-              user,
-            ),
-            mode: "primary",
-            native: true,
-          },
-          plan: {
-            name: "plan",
-            description: "Plan mode. Disallows all edit tools.",
-            options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_exit: "allow",
-                external_directory: {
-                  [path.join(Global.Path.data, "plans", "*")]: "allow",
-                },
-                edit: {
-                  "*": "deny",
-                  [path.join(".opencode", "plans", "*.md")]: "allow",
-                  [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
-                },
-              }),
-              user,
-            ),
-            mode: "primary",
-            native: true,
-          },
-          general: {
-            name: "general",
-            description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                todowrite: "deny",
-              }),
-              user,
-            ),
-            options: {},
-            mode: "subagent",
-            native: true,
-          },
-          explore: {
-            name: "explore",
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-                inspect: {
-                  "*": "allow",
-                  "*.env": "ask",
-                  "*.env.*": "ask",
-                  "*.env.example": "allow",
-                },
-                search: "allow",
-                discover_batch: "allow",
-                bash: "allow",
-                webfetch: "allow",
-                websearch: "allow",
-                codesearch: "allow",
-                external_directory: {
-                  "*": "ask",
-                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-                },
-              }),
-              user,
-            ),
-            description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
-            prompt: PROMPT_EXPLORE,
-            options: {},
-            mode: "subagent",
-            native: true,
-          },
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -243,8 +200,13 @@ export const layer = Layer.effect(
         }
 
         Object.assign(agents, loadAgents({ defaults, user }))
+        const legacyOverrides: Partial<Record<keyof typeof legacyAgentTargets, AgentOverride>> = {}
 
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+          if (key in legacyAgentTargets) {
+            legacyOverrides[key as keyof typeof legacyAgentTargets] = value
+            continue
+          }
           if (value.disable) {
             delete agents[key]
             continue
@@ -258,19 +220,7 @@ export const layer = Layer.effect(
               options: {},
               native: false,
             }
-          if (value.model) item.model = Provider.parseModel(value.model)
-          item.variant = value.variant ?? item.variant
-          item.prompt = value.prompt ?? item.prompt
-          item.description = value.description ?? item.description
-          item.temperature = value.temperature ?? item.temperature
-          item.topP = value.top_p ?? item.topP
-          item.mode = value.mode ?? item.mode
-          item.color = value.color ?? item.color
-          item.hidden = value.hidden ?? item.hidden
-          item.name = value.name ?? item.name
-          item.steps = value.steps ?? item.steps
-          item.options = mergeDeep(item.options, value.options ?? {})
-          item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+          agents[key] = applyAgentOverride(item, value)
         }
 
         // Ensure common external directories stay available unless explicitly denied.
@@ -299,10 +249,53 @@ export const layer = Layer.effect(
               Permission.fromConfig({ external_directory: { [base]: "allow" } }),
             )
           }
+
+          agents[name] = withBugReportPrompt(agents[name])
         }
 
+        const legacy = Object.fromEntries(
+          Object.entries(legacyAgentTargets).flatMap(([name, target]) => {
+            const baseAgent = agents[target]
+            if (!baseAgent) return []
+            const override = legacyOverrides[name as keyof typeof legacyAgentTargets]
+            if (override?.disable) return []
+            const permission =
+              name === "plan"
+                ? Permission.merge(
+                    baseAgent.permission,
+                    Permission.fromConfig({
+                      question: "allow",
+                      plan_exit: "allow",
+                      external_directory: {
+                        [path.join(Global.Path.data, "plans", "*")]: "allow",
+                      },
+                      edit: {
+                        "*": "deny",
+                        [path.join(".opencode", "plans", "*.md")]: "allow",
+                        [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                      },
+                    }),
+                  )
+                : baseAgent.permission
+            const alias = withBugReportPrompt(
+              applyAgentOverride(
+                {
+                  ...baseAgent,
+                  name,
+                  mode: name === "plan" ? "primary" : baseAgent.mode,
+                  native: true,
+                  options: mergeDeep({}, baseAgent.options),
+                  permission: permission.map((rule) => ({ ...rule })),
+                },
+                override ?? {},
+              ),
+            )
+            return [[name, alias] as const]
+          }),
+        ) satisfies Record<string, Info>
+
         const get = Effect.fnUntraced(function* (agent: string) {
-          return agents[agent]
+          return agents[agent] ?? legacy[agent]
         })
 
         const list = Effect.fnUntraced(function* () {
@@ -320,7 +313,7 @@ export const layer = Layer.effect(
         const defaultAgent = Effect.fnUntraced(function* () {
           const c = yield* config.get()
           if (c.default_agent) {
-            const agent = agents[c.default_agent]
+            const agent = agents[c.default_agent] ?? legacy[c.default_agent]
             if (!agent) throw new Error(`default agent "${c.default_agent}" not found`)
             if (agent.mode === "subagent") throw new Error(`default agent "${c.default_agent}" is a subagent`)
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)

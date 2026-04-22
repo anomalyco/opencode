@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 const PROMPT = `You are \`translate-agent\`, a hidden literal translation specialist for user-facing record UI text.
 
 Your only job:

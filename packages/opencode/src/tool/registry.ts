@@ -250,12 +250,13 @@ export const layer: Layer.Layer<
     const bash = yield* BashTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+    const compressInfo = yield* CompressTool
     const inspectInfo = yield* InspectTool
     const discoverBatchInfo = yield* DiscoverBatchTool
     const taskAsyncInfo = yield* TaskAsyncTool
 
     const source = yield* Effect.all({
-      compress: adaptSource(CompressTool),
+      compress: adaptSource(compressInfo),
       inspect: adaptSource(inspectInfo),
       search: adaptSource(SearchTool),
       discover_batch: adaptSource(discoverBatchInfo),
