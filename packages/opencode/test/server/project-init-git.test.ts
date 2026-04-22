@@ -9,6 +9,7 @@ import { Filesystem } from "../../src/util"
 import { Log } from "../../src/util"
 import { resetDatabase } from "../fixture/db"
 import { provideInstance, tmpdir } from "../fixture/fixture"
+import { ProjectID } from "../../src/project/schema"
 
 void Log.init({ print: false })
 
@@ -38,7 +39,7 @@ describe("project.initGit endpoint", () => {
       const body = await init.json()
       expect(init.status).toBe(200)
       expect(body).toMatchObject({
-        id: "global",
+        id: ProjectID.fromDirectory(tmp.path),
         vcs: "git",
         worktree: tmp.path,
       })
@@ -55,7 +56,7 @@ describe("project.initGit endpoint", () => {
       })
       expect(current.status).toBe(200)
       expect(await current.json()).toMatchObject({
-        id: "global",
+        id: ProjectID.fromDirectory(tmp.path),
         vcs: "git",
         worktree: tmp.path,
       })

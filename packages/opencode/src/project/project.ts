@@ -158,12 +158,18 @@ export const layer: Layer.Layer<
 
     const scope = yield* Scope.Scope
 
-    const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
-      return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
-        Effect.map((x) => x.trim()),
-        Effect.map(ProjectID.make),
-        Effect.catch(() => Effect.void),
-      )
+    const canonicalDirectory = Effect.fnUntraced(function* (directory: string) {
+      const normalized = pathSvc.normalize(directory)
+      return yield* fs
+        .realPath(normalized)
+        .pipe(
+          Effect.catch(() => Effect.succeed(normalized)),
+          Effect.map((resolved) => pathSvc.normalize(resolved)),
+        )
+    })
+
+    const projectIDFromDirectory = Effect.fnUntraced(function* (directory: string) {
+      return ProjectID.fromDirectory(yield* canonicalDirectory(directory))
     })
 
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
@@ -187,11 +193,11 @@ export const layer: Layer.Layer<
 
         let sandbox = pathSvc.dirname(dotgit)
         const gitBinary = yield* Effect.sync(() => which("git"))
-        let id = yield* readCachedProjectId(dotgit)
 
         if (!gitBinary) {
+          sandbox = yield* canonicalDirectory(sandbox)
           return {
-            id: id ?? ProjectID.global,
+            id: yield* projectIDFromDirectory(sandbox),
             worktree: sandbox,
             sandbox,
             vcs: fakeVcs,
@@ -200,50 +206,33 @@ export const layer: Layer.Layer<
 
         const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
         if (commonDir.code !== 0) {
+          sandbox = yield* canonicalDirectory(sandbox)
           return {
-            id: id ?? ProjectID.global,
+            id: yield* projectIDFromDirectory(sandbox),
             worktree: sandbox,
             sandbox,
             vcs: fakeVcs,
           }
         }
-        const worktree = (() => {
-          const common = resolveGitPath(sandbox, commonDir.text.trim())
-          return common === sandbox ? sandbox : pathSvc.dirname(common)
-        })()
-
-        if (id == null) {
-          id = yield* readCachedProjectId(pathSvc.join(worktree, ".git"))
-        }
-
-        if (!id) {
-          const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
-          const roots = revList.text
-            .split("\n")
-            .filter(Boolean)
-            .map((x) => x.trim())
-            .toSorted()
-
-          id = roots[0] ? ProjectID.make(roots[0]) : undefined
-          if (id) {
-            yield* fs.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
-          }
-        }
-
-        if (!id) {
-          return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
-        }
+        const worktree = yield* canonicalDirectory(
+          (() => {
+            const common = resolveGitPath(sandbox, commonDir.text.trim())
+            return common === sandbox ? sandbox : pathSvc.dirname(common)
+          })(),
+        )
+        const id = yield* projectIDFromDirectory(worktree)
 
         const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
         if (topLevel.code !== 0) {
+          sandbox = yield* canonicalDirectory(sandbox)
           return {
             id,
-            worktree: sandbox,
+            worktree,
             sandbox,
             vcs: fakeVcs,
           }
         }
-        sandbox = resolveGitPath(sandbox, topLevel.text.trim())
+        sandbox = yield* canonicalDirectory(resolveGitPath(sandbox, topLevel.text.trim()))
 
         return { id, sandbox, worktree, vcs: "git" as const }
       })

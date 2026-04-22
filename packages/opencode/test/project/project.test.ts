@@ -76,7 +76,7 @@ describe("Project.fromDirectory", () => {
     const { project } = await run((svc) => svc.fromDirectory(tmp.path))
 
     expect(project).toBeDefined()
-    expect(project.id).toBe(ProjectID.global)
+    expect(project.id).toBe(ProjectID.fromDirectory(tmp.path))
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
 
@@ -93,9 +93,10 @@ describe("Project.fromDirectory", () => {
     expect(project.id).not.toBe(ProjectID.global)
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
+    expect(project.id).toBe(ProjectID.fromDirectory(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
-    expect(await Bun.file(opencodeFile).exists()).toBe(true)
+    expect(await Bun.file(opencodeFile).exists()).toBe(false)
   })
 
   test("returns global for non-git directory", async () => {
@@ -104,23 +105,23 @@ describe("Project.fromDirectory", () => {
     expect(project.id).toBe(ProjectID.global)
   })
 
-  test("derives stable project ID from root commit", async () => {
+  test("derives stable project ID from the canonical worktree path", async () => {
     await using tmp = await tmpdir({ git: true })
     const { project: a } = await run((svc) => svc.fromDirectory(tmp.path))
     const { project: b } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(b.id).toBe(a.id)
+    expect(a.id).toBe(ProjectID.fromDirectory(tmp.path))
   })
 })
 
 describe("Project.fromDirectory git failure paths", () => {
-  test("keeps vcs when rev-list exits non-zero (no commits)", async () => {
+  test("assigns a directory-based project ID without commits", async () => {
     await using tmp = await tmpdir()
     await $`git init`.cwd(tmp.path).quiet()
 
-    // rev-list fails because HEAD doesn't exist yet — this is the natural scenario
     const { project } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(project.vcs).toBe("git")
-    expect(project.id).toBe(ProjectID.global)
+    expect(project.id).toBe(ProjectID.fromDirectory(tmp.path))
     expect(project.worktree).toBe(tmp.path)
   })
 
@@ -188,10 +189,9 @@ describe("Project.fromDirectory with worktrees", () => {
 
       expect(wt.id).toBe(main.id)
 
-      // Cache should live in the common .git dir, not the worktree's .git file
       const cache = path.join(tmp.path, ".git", "opencode")
       const exists = await Bun.file(cache).exists()
-      expect(exists).toBe(true)
+      expect(exists).toBe(false)
     } finally {
       await $`git worktree remove ${worktreePath}`
         .cwd(tmp.path)
@@ -200,7 +200,7 @@ describe("Project.fromDirectory with worktrees", () => {
     }
   })
 
-  test("separate clones of the same repo should share project ID", async () => {
+  test("separate clones of the same repo should get different project IDs", async () => {
     await using tmp = await tmpdir({ git: true })
 
     // Create a bare remote, push, then clone into a second directory
@@ -213,7 +213,9 @@ describe("Project.fromDirectory with worktrees", () => {
       const { project: a } = await run((svc) => svc.fromDirectory(tmp.path))
       const { project: b } = await run((svc) => svc.fromDirectory(clone))
 
-      expect(b.id).toBe(a.id)
+      expect(a.id).toBe(ProjectID.fromDirectory(tmp.path))
+      expect(b.id).toBe(ProjectID.fromDirectory(clone))
+      expect(b.id).not.toBe(a.id)
     } finally {
       await $`rm -rf ${bare} ${clone}`.quiet().nothrow()
     }

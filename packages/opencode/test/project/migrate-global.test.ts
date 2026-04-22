@@ -62,26 +62,21 @@ function ensureGlobal() {
 
 describe("migrateFromGlobal", () => {
   test("migrates global sessions on first project creation", async () => {
-    // 1. Start with git init but no commits — creates "global" project row
     await using tmp = await tmpdir()
+    const { project: pre } = await run((svc) => svc.fromDirectory(tmp.path))
+    expect(pre.id).toBe(ProjectID.global)
+
+    const id = uid()
+    seed({ id, dir: tmp.path, project: ProjectID.global })
+
     await $`git init`.cwd(tmp.path).quiet()
     await $`git config user.name "Test"`.cwd(tmp.path).quiet()
     await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
     await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
-    const { project: pre } = await run((svc) => svc.fromDirectory(tmp.path))
-    expect(pre.id).toBe(ProjectID.global)
-
-    // 2. Seed a session under "global" with matching directory
-    const id = uid()
-    seed({ id, dir: tmp.path, project: ProjectID.global })
-
-    // 3. Make a commit so the project gets a real ID
-    await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
 
     const { project: real } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(real.id).not.toBe(ProjectID.global)
 
-    // 4. The session should have been migrated to the real project ID
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
     expect(row!.project_id).toBe(real.id)

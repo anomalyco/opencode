@@ -10,6 +10,7 @@ export type ProjectID = typeof projectIdSchema.Type
 export const ProjectID = projectIdSchema.pipe(
   withStatics((schema: typeof projectIdSchema) => ({
     global: schema.make("global"),
+    fromDirectory: (directory: string) => schema.make(`dir_${Buffer.from(directory).toString("base64url")}`),
     zod: zod(schema),
   })),
 )
