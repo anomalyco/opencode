@@ -127,7 +127,7 @@ export const Info = z
         additions: z.number(),
         deletions: z.number(),
         files: z.number(),
-        diffs: Snapshot.FileDiff.array().optional(),
+        diffs: Snapshot.FileDiff.zod.array().optional(),
       })
       .optional(),
     share: z
@@ -239,14 +239,15 @@ export const Event = {
     "session.diff",
     z.object({
       sessionID: SessionID.zod,
-      diff: Snapshot.FileDiff.array(),
+      diff: Snapshot.FileDiff.zod.array(),
     }),
   ),
   Error: BusEvent.define(
     "session.error",
     z.object({
       sessionID: SessionID.zod.optional(),
-      error: MessageV2.Assistant.shape.error,
+      // z.lazy defers access to break circular dep: session → message-v2 → provider → plugin → session
+      error: z.lazy(() => (MessageV2.Assistant.zod as unknown as z.ZodObject<any>).shape.error),
     }),
   ),
 }

@@ -13,6 +13,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -38,9 +39,13 @@ export const WriteTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
-          const contentOld = exists ? yield* fs.readFileString(filepath) : ""
+          const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
+          const next = Bom.split(params.content)
+          const desiredBom = source.bom || next.bom
+          const contentOld = source.text
+          const contentNew = next.text
 
-          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
           yield* ctx.ask({
             permission: "edit",
             patterns: [path.relative(Instance.worktree, filepath)],
@@ -51,8 +56,10 @@ export const WriteTool = Tool.define(
             },
           })
 
-          yield* fs.writeWithDirs(filepath, params.content)
-          yield* format.file(filepath)
+          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          if (yield* format.file(filepath)) {
+            yield* Bom.syncFile(fs, filepath, desiredBom)
+          }
           yield* bus.publish(File.Event.Edited, { file: filepath })
           yield* bus.publish(FileWatcher.Event.Updated, {
             file: filepath,

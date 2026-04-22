@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
-export class Local extends Schema.Class<Local>("McpLocalConfig")({
+export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
   command: Schema.mutable(Schema.Array(Schema.String)).annotate({
     description: "Command and arguments to run the MCP server",
@@ -16,11 +16,12 @@ export class Local extends Schema.Class<Local>("McpLocalConfig")({
   timeout: Schema.optional(Schema.Number).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "McpLocalConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Local = Schema.Schema.Type<typeof Local>
 
-export class OAuth extends Schema.Class<OAuth>("McpOAuthConfig")({
+export const OAuth = Schema.Struct({
   clientId: Schema.optional(Schema.String).annotate({
     description: "OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted.",
   }),
@@ -31,11 +32,12 @@ export class OAuth extends Schema.Class<OAuth>("McpOAuthConfig")({
   redirectUri: Schema.optional(Schema.String).annotate({
     description: "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "McpOAuthConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type OAuth = Schema.Schema.Type<typeof OAuth>
 
-export class Remote extends Schema.Class<Remote>("McpRemoteConfig")({
+export const Remote = Schema.Struct({
   type: Schema.Literal("remote").annotate({ description: "Type of MCP server connection" }),
   url: Schema.String.annotate({ description: "URL of the remote MCP server" }),
   enabled: Schema.optional(Schema.Boolean).annotate({
@@ -50,9 +52,10 @@ export class Remote extends Schema.Class<Remote>("McpRemoteConfig")({
   timeout: Schema.optional(Schema.Number).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "McpRemoteConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Remote = Schema.Schema.Type<typeof Remote>
 
 export const Info = Schema.Union([Local, Remote])
   .annotate({ discriminator: "type" })

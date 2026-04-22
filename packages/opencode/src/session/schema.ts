@@ -1,15 +1,14 @@
 import { Schema } from "effect"
-import z from "zod"
 
 import { Identifier } from "@/id/id"
-import { ZodOverride } from "@/util/effect-zod"
+import { zod, ZodOverride } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
 export const SessionID = Schema.String.annotate({ [ZodOverride]: Identifier.schema("session") }).pipe(
   Schema.brand("SessionID"),
   withStatics((s) => ({
     descending: (id?: string) => s.make(Identifier.descending("session", id)),
-    zod: Identifier.schema("session").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+    zod: zod(s),
   })),
 )
 
@@ -19,7 +18,7 @@ export const MessageID = Schema.String.annotate({ [ZodOverride]: Identifier.sche
   Schema.brand("MessageID"),
   withStatics((s) => ({
     ascending: (id?: string) => s.make(Identifier.ascending("message", id)),
-    zod: Identifier.schema("message").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+    zod: zod(s),
   })),
 )
 
@@ -29,7 +28,7 @@ export const PartID = Schema.String.annotate({ [ZodOverride]: Identifier.schema(
   Schema.brand("PartID"),
   withStatics((s) => ({
     ascending: (id?: string) => s.make(Identifier.ascending("part", id)),
-    zod: Identifier.schema("part").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+    zod: zod(s),
   })),
 )
 
