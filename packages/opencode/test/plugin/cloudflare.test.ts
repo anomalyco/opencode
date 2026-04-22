@@ -19,6 +19,7 @@ function makeHookInput(overrides: { providerID?: string; apiId?: string; reasoni
     agent: "a",
     provider: {} as never,
     message: {} as never,
+    assistantMessageID: "msg_test",
     model: {
       providerID: overrides.providerID ?? "cloudflare-ai-gateway",
       api: { id: overrides.apiId ?? "openai/gpt-5.2-codex", url: "", npm: "ai-gateway-provider" },

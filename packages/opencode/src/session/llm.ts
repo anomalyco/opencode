@@ -33,6 +33,7 @@ export type StreamInput = {
   user: MessageV2.User
   sessionID: string
   parentSessionID?: string
+  assistantMessageID?: string
   model: Provider.Model
   agent: Agent.Info
   permission?: Permission.Ruleset
@@ -167,6 +168,8 @@ const live: Layer.Layer<
           model: input.model,
           provider: item,
           message: input.user,
+          assistantMessageID: input.assistantMessageID ?? "",
+          parentSessionID: input.parentSessionID,
         },
         {
           temperature: input.model.capabilities.temperature
@@ -187,6 +190,8 @@ const live: Layer.Layer<
           model: input.model,
           provider: item,
           message: input.user,
+          assistantMessageID: input.assistantMessageID ?? "",
+          parentSessionID: input.parentSessionID,
         },
         {
           headers: {},

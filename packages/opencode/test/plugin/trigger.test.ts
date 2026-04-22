@@ -113,4 +113,44 @@ describe("plugin.trigger", () => {
 
     expect(out.system).toEqual(["async"])
   })
+
+  test("chat.headers receives assistantMessageID and parentSessionID", async () => {
+    await using tmp = await project(
+      [
+        "export default async () => ({",
+        '  "chat.headers": async (input, output) => {',
+        '    output.headers["x-assistant-message-id"] = input.assistantMessageID',
+        '    if (input.parentSessionID) output.headers["x-parent-session-id"] = input.parentSessionID',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+    )
+
+    const out = await Instance.provide({
+      directory: tmp.path,
+      fn: async () =>
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          const out = { headers: {} as Record<string, string> }
+          yield* plugin.trigger(
+            "chat.headers",
+            {
+              sessionID: "ses_test",
+              agent: "build",
+              model: { providerID: "test", modelID: "test-model" } as any,
+              provider: {} as any,
+              message: {} as any,
+              assistantMessageID: "msg_abc123",
+              parentSessionID: "ses_parent456",
+            },
+            out,
+          )
+          return out
+        }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
+    })
+
+    expect(out.headers["x-assistant-message-id"]).toBe("msg_abc123")
+    expect(out.headers["x-parent-session-id"]).toBe("ses_parent456")
+  })
 })
