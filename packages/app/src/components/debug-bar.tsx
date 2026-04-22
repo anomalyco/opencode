@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/context/language"
+import { Persist, persisted } from "@/utils/persist"
 
 type Mem = Performance & {
   memory?: {
@@ -26,7 +27,12 @@ type Obs = PerformanceObserverInit & {
   durationThreshold?: number
 }
 
+type HorizontalEdge = "left" | "right"
+type VerticalEdge = "top" | "bottom"
+
 const span = 5000
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
 const ms = (n?: number, d = 0) => {
   if (n === undefined || Number.isNaN(n)) return
@@ -79,6 +85,13 @@ export function DebugBar() {
   const language = useLanguage()
   const location = useLocation()
   const routing = useIsRouting()
+  const [prefs, setPrefs] = persisted(
+    Persist.global("debug-bar.v1"),
+    createStore({
+      horizontal: "right" as HorizontalEdge,
+      vertical: "bottom" as VerticalEdge,
+    }),
+  )
   const [state, setState] = createStore({
     cls: undefined as number | undefined,
     delay: undefined as number | undefined,
@@ -100,6 +113,12 @@ export function DebugBar() {
       pending: false,
     },
   })
+  const [drag, setDrag] = createStore({
+    active: false,
+    ready: false,
+    x: 0,
+    y: 0,
+  })
 
   const na = () => language.t("debugBar.na")
   const heap = () => (state.heap.limit ? (state.heap.used ?? 0) / state.heap.limit : undefined)
@@ -116,6 +135,90 @@ export function DebugBar() {
   let init = false
   let one = 0
   let two = 0
+  let ref: HTMLElement | undefined
+  let pointer: number | undefined
+  let originX = 0
+  let originY = 0
+  let dragX = 0
+  let dragY = 0
+
+  const inset = () => (window.innerWidth >= 640 ? 16 : 12)
+  const bounds = () => {
+    if (!ref) return
+    const rect = ref.getBoundingClientRect()
+    const padding = inset()
+    return {
+      minX: padding,
+      minY: padding,
+      maxX: Math.max(padding, window.innerWidth - rect.width - padding),
+      maxY: Math.max(padding, window.innerHeight - rect.height - padding),
+      width: rect.width,
+      height: rect.height,
+    }
+  }
+  const corner = () => {
+    const next = bounds()
+    if (!next) return
+    return {
+      x: prefs.horizontal === "left" ? next.minX : next.maxX,
+      y: prefs.vertical === "top" ? next.minY : next.maxY,
+    }
+  }
+  const sync = () => {
+    const next = corner()
+    if (!next) return
+    batch(() => {
+      setDrag("ready", true)
+      setDrag("x", next.x)
+      setDrag("y", next.y)
+    })
+  }
+  const move = (clientX: number, clientY: number) => {
+    const next = bounds()
+    if (!next) return
+    batch(() => {
+      setDrag("ready", true)
+      setDrag("x", clamp(dragX + clientX - originX, next.minX, next.maxX))
+      setDrag("y", clamp(dragY + clientY - originY, next.minY, next.maxY))
+    })
+  }
+  const stop = (event?: PointerEvent) => {
+    if (!drag.active) return
+    if (event && event.pointerId !== pointer) return
+    const next = bounds()
+    if (!next) return
+    const horizontal = drag.x + next.width / 2 <= window.innerWidth / 2 ? "left" : "right"
+    const vertical = drag.y + next.height / 2 <= window.innerHeight / 2 ? "top" : "bottom"
+    if (pointer !== undefined && ref?.hasPointerCapture(pointer)) ref.releasePointerCapture(pointer)
+    pointer = undefined
+    batch(() => {
+      setPrefs("horizontal", horizontal)
+      setPrefs("vertical", vertical)
+      setDrag("active", false)
+      setDrag("ready", true)
+      setDrag("x", horizontal === "left" ? next.minX : next.maxX)
+      setDrag("y", vertical === "top" ? next.minY : next.maxY)
+    })
+  }
+  const startDrag = (event: PointerEvent) => {
+    if (!event.isPrimary) return
+    if (event.button !== 0) return
+    const next = bounds()
+    if (!next) return
+    pointer = event.pointerId
+    originX = event.clientX
+    originY = event.clientY
+    dragX = drag.ready ? drag.x : (prefs.horizontal === "left" ? next.minX : next.maxX)
+    dragY = drag.ready ? drag.y : (prefs.vertical === "top" ? next.minY : next.maxY)
+    ref?.setPointerCapture(event.pointerId)
+    batch(() => {
+      setDrag("active", true)
+      setDrag("ready", true)
+      setDrag("x", dragX)
+      setDrag("y", dragY)
+    })
+    event.preventDefault()
+  }
 
   createEffect(() => {
     const busy = routing()
@@ -159,6 +262,13 @@ export function DebugBar() {
         setState("nav", { dur: performance.now() - at, pending: false })
       })
     })
+  })
+
+  createEffect(() => {
+    prefs.horizontal
+    prefs.vertical
+    if (drag.active) return
+    queueMicrotask(sync)
   })
 
   onMount(() => {
@@ -350,11 +460,17 @@ export function DebugBar() {
 
     syncHeap()
     start()
+    sync()
     makeEventListener(document, "visibilitychange", vis)
+    makeEventListener(window, "resize", () => {
+      if (drag.active) return
+      sync()
+    })
 
     onCleanup(() => {
       if (one !== 0) cancelAnimationFrame(one)
       if (two !== 0) cancelAnimationFrame(two)
+      if (pointer !== undefined && ref?.hasPointerCapture(pointer)) ref.releasePointerCapture(pointer)
       stop()
       for (const ob of obs) ob.disconnect()
     })
@@ -362,8 +478,27 @@ export function DebugBar() {
 
   return (
     <aside
+      ref={(element) => (ref = element)}
       aria-label={language.t("debugBar.ariaLabel")}
-      class="pointer-events-auto fixed bottom-3 right-3 z-50 w-[308px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border-base bg-surface-raised-stronger-non-alpha p-0.5 text-text-strong shadow-[var(--shadow-lg-border-base)] sm:bottom-4 sm:right-4 sm:w-[324px]"
+      class="pointer-events-auto fixed left-0 top-0 z-50 w-[308px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-border-base bg-surface-raised-stronger-non-alpha p-0.5 text-text-strong shadow-[var(--shadow-lg-border-base)] select-none sm:w-[324px]"
+      classList={{
+        "cursor-grab transition-transform duration-150 ease-out motion-reduce:transition-none": !drag.active,
+        "cursor-grabbing": drag.active,
+      }}
+      style={{
+        transform: drag.ready ? `translate3d(${drag.x}px, ${drag.y}px, 0)` : undefined,
+        visibility: drag.ready ? "visible" : "hidden",
+        "touch-action": "none",
+        "will-change": "transform",
+      }}
+      onPointerDown={startDrag}
+      onPointerMove={(event) => {
+        if (!drag.active || event.pointerId !== pointer) return
+        move(event.clientX, event.clientY)
+        event.preventDefault()
+      }}
+      onPointerUp={stop}
+      onPointerCancel={stop}
     >
       <div class="grid grid-cols-5 gap-px font-mono">
         <Cell
