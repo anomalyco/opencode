@@ -17,6 +17,7 @@ import { Effect, Layer, Path, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Shell } from "@/shell/shell"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect"
@@ -432,7 +433,15 @@ export const layer: Layer.Layer<
 
     const runStartCommand = Effect.fnUntraced(
       function* (directory: string, cmd: string) {
-        const [shell, args] = process.platform === "win32" ? ["cmd", ["/c", cmd]] : ["bash", ["-lc", cmd]]
+        const shellPath = process.platform === "win32" ? Shell.preferred() : "bash"
+        const shellName = Shell.name(shellPath)
+        const args =
+          process.platform === "win32"
+            ? shellName === "powershell" || shellName === "pwsh"
+              ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", cmd]
+              : ["/c", cmd]
+            : ["-lc", cmd]
+        const shell = shellPath
         const handle = yield* spawner.spawn(
           ChildProcess.make(shell, args, { cwd: directory, extendEnv: true, stdin: "ignore" }),
         )

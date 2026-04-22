@@ -37,10 +37,14 @@ const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes"
 
 const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
 
+// Linux sensitive directories that should never be written to or scanned
+const LINUX_HOME = [".ssh", ".gnupg", ".aws", ".config/gcloud", ".kube", ".docker", ".netrc"]
+
 /** Directory basenames to skip when scanning the home directory. */
 export function names(): ReadonlySet<string> {
   if (process.platform === "darwin") return new Set(DARWIN_HOME)
   if (process.platform === "win32") return new Set(WIN32_HOME)
+  if (process.platform === "linux") return new Set([".ssh", ".gnupg", ".aws", ".kube", ".docker"])
   return new Set()
 }
 
@@ -53,6 +57,7 @@ export function paths(): string[] {
       ...DARWIN_ROOT,
     ]
   if (process.platform === "win32") return WIN32_HOME.map((n) => path.join(home, n))
+  if (process.platform === "linux") return LINUX_HOME.map((n) => path.join(home, n))
   return []
 }
 

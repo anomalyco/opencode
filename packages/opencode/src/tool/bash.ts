@@ -22,6 +22,45 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 
 const MAX_METADATA_LENGTH = 30_000
+
+// Dangerous command patterns that require extra scrutiny.
+// These are matched against the full command string (case-insensitive).
+// Each entry: [pattern, humanReadableReason]
+const DANGEROUS_PATTERNS: [RegExp, string][] = [
+  // Recursive delete of broad paths
+  [/\brm\s+.*-[a-z]*r[a-z]*f[a-z]*\s+(\/|~|\$HOME|\$\{HOME\})\b/i, "recursive force delete of root/home"],
+  [/\brm\s+.*-[a-z]*f[a-z]*r[a-z]*\s+(\/|~|\$HOME|\$\{HOME\})\b/i, "recursive force delete of root/home"],
+  [/\brm\s+-rf\s*[./~*]/i, "recursive force delete"],
+  [/\brm\s+-fr\s*[./~*]/i, "recursive force delete"],
+  // Remove-Item recursive (PowerShell)
+  [/\bremove-item\b.*-recurse\b.*-force\b/i, "PowerShell recursive force delete"],
+  [/\bremove-item\b.*-force\b.*-recurse\b/i, "PowerShell recursive force delete"],
+  // Overwrite disk / devices
+  [/\bdd\b.*\bof=\/dev\//i, "writing directly to block device"],
+  [/\bdd\b.*\bof=\/dev\/sd[a-z]/i, "overwriting disk device"],
+  // Fork bomb patterns
+  [/:\(\)\s*\{.*:\|:.*\}.*:/i, "fork bomb"],
+  // git force push to protected branches
+  [/\bgit\s+push\b.*--force(?:-with-lease)?\s+.*\b(main|master|prod|production|release)\b/i, "force push to protected branch"],
+  [/\bgit\s+push\b.*\b(main|master|prod|production|release)\b.*--force(?:-with-lease)?/i, "force push to protected branch"],
+  // git hard reset
+  [/\bgit\s+reset\s+--hard\b/i, "destructive git hard reset"],
+  // git clean -fd (removes untracked files)
+  [/\bgit\s+clean\s+.*-[a-z]*f[a-z]*/i, "git clean with force (deletes untracked files)"],
+  // chmod 777 on broad paths
+  [/\bchmod\s+(?:a\+rwx|777)\s+(\/|~|\.)\b/i, "chmod 777 on root/home/current dir"],
+  // curl/wget piped to shell (remote code execution risk)
+  [/\b(?:curl|wget)\b.*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|fish|ksh|tcsh)\b/i, "piping remote content directly to shell"],
+  [/\b(?:curl|wget)\b.*-[a-z]*s[a-z]*[Ll][a-z]*.*\|\s*(?:sudo\s+)?(?:bash|sh)\b/i, "silent remote exec via pipe"],
+  // sudo with broad commands
+  [/\bsudo\s+rm\s+.*-[a-z]*r[a-z]*/i, "sudo recursive delete"],
+  [/\bsudo\s+chmod\s+(?:777|a\+rwx)\s+\//i, "sudo chmod 777 on root"],
+  // Truncate/overwrite important files
+  [/>\s*\/etc\/(passwd|shadow|sudoers|hosts)\b/i, "overwriting critical system files"],
+  // history clearing
+  [/\bhistory\s+-c\b/i, "clearing shell history"],
+  [/>\s*~\/\.(?:bash_history|zsh_history|sh_history)\b/i, "overwriting shell history file"],
+]
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const PS = new Set(["powershell", "pwsh"])
 const CWD = new Set(["cd", "push-location", "set-location"])
@@ -396,6 +435,20 @@ export const BashTool = Tool.define(
       return scan
     })
 
+    const checkDangerous = Effect.fn("BashTool.checkDangerous")(function* (command: string, ctx: Tool.Context) {
+      for (const [pattern, reason] of DANGEROUS_PATTERNS) {
+        if (!pattern.test(command)) continue
+        log.warn("dangerous command pattern detected", { reason, command })
+        yield* ctx.ask({
+          permission: "bash",
+          patterns: [command],
+          always: [],
+          metadata: { dangerous: true, reason },
+        })
+        return
+      }
+    })
+
     const shellEnv = Effect.fn("BashTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
       const extra = yield* plugin.trigger(
         "shell.env",
@@ -600,6 +653,7 @@ export const BashTool = Tool.define(
               const root = yield* parse(params.command, ps)
               const scan = yield* collect(root, cwd, ps, shell)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
+              yield* checkDangerous(params.command, ctx)
               yield* ask(ctx, scan)
 
               return yield* run(
