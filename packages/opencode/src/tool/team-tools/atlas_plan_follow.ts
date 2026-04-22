@@ -17,7 +17,7 @@ Actions:
 const id = "atlas-plan-follow"
 const Action = z.enum(["list", "get", "update_task"])
 
-const parameters = z
+export const AtlasPlanFollowParametersSchema = z
   .object({
     action: Action.default("list"),
     plan_id: z.preprocess(blank, TeamMainPlan.PlanID.optional()).describe("The plan id for get and update_task actions."),
@@ -41,46 +41,10 @@ const parameters = z
         ctx.addIssue({ code: "custom", path: [key], message: `${key} is required when action=${input.action}` })
       }
     }
-    const drop = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(input[key as keyof typeof input])) continue
-        ctx.addIssue({ code: "custom", path: [key], message: `${key} is not allowed when action=${input.action}` })
-      }
-    }
-
-    if (input.action === "list") {
-      drop([
-        "plan_id",
-        "phase_id",
-        "task_id",
-        "status",
-        "done",
-        "objective",
-        "tests",
-        "summary",
-        "risks",
-        "blockers",
-        "evidence",
-        "affected_files",
-      ])
-      return
-    }
+    if (input.action === "list") return
 
     if (input.action === "get") {
       need(["plan_id"])
-      drop([
-        "phase_id",
-        "task_id",
-        "status",
-        "done",
-        "objective",
-        "tests",
-        "summary",
-        "risks",
-        "blockers",
-        "evidence",
-        "affected_files",
-      ])
       return
     }
 
@@ -181,9 +145,9 @@ function info(plan: TeamMainPlan.Plan, file: string) {
   ].join("\n")
 }
 
-export const AtlasPlanFollowTool = Tool.define<typeof parameters, Metadata>(id, {
+export const AtlasPlanFollowTool = Tool.define<typeof AtlasPlanFollowParametersSchema, Metadata>(id, {
   description: DESCRIPTION,
-  parameters,
+  parameters: AtlasPlanFollowParametersSchema,
   async execute(input, ctx) {
     await ctx.ask({
       permission: id,

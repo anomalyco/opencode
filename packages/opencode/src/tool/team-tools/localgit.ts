@@ -51,20 +51,7 @@ const state_input = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    const forbid = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not valid when mode=${value.mode}`,
-        })
-      }
-    }
-    if ((value.mode ?? "status") === "status") {
-      forbid(["staged", "base", "head", "stat", "name_only"])
-      return
-    }
+    if ((value.mode ?? "status") === "status") return
     if (value.head && !value.base) {
       ctx.addIssue({
         code: "custom",
@@ -72,7 +59,6 @@ const state_input = z
         message: "head requires base when mode=diff",
       })
     }
-    forbid(["porcelain"])
   })
 
 const log_input = z
@@ -101,31 +87,13 @@ const log_input = z
         })
       }
     }
-    const forbid = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not valid when mode=${value.mode}`,
-        })
-      }
-    }
-    if ((value.mode ?? "log") === "log") {
-      forbid(["name_only", "base", "head"])
-      return
-    }
+    if ((value.mode ?? "log") === "log") return
     if (value.mode === "show") {
       need(["ref"])
-      forbid(["path", "base", "head"])
       return
     }
-    if (value.mode === "refs") {
-      forbid(["path", "ref", "stat", "name_only", "base", "head"])
-      return
-    }
+    if (value.mode === "refs") return
     need(["base"])
-    forbid(["path", "ref", "stat", "name_only"])
   })
 
 const show_input = z.object({
@@ -161,17 +129,7 @@ const annotate_input = z
         })
       }
     }
-    const forbid = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not valid when mode=${value.mode}`,
-        })
-      }
-    }
-    if (value.end && (!value.line || value.end < value.line)) {
+    if (value.mode === "blame" && value.end && (!value.line || value.end < value.line)) {
       ctx.addIssue({
         code: "custom",
         path: ["end"],
@@ -180,14 +138,14 @@ const annotate_input = z
     }
     if (value.mode === "blame") {
       need(["filePath", "line"])
-      forbid(["path", "pattern", "ref", "case_sensitive", "since", "until", "all"])
       return
     }
     need(["pattern"])
-    forbid(["filePath", "line", "end"])
-    if (value.mode === "grep") forbid(["since", "until", "all"])
-    if (value.mode !== "grep") forbid(["case_sensitive"])
   })
+
+export const GitStateParametersSchema = state_input
+export const GitLogParametersSchema = log_input
+export const GitAnnotateParametersSchema = annotate_input
 
 export const LocalGitStateParametersSchema = z
   .object({
@@ -202,24 +160,7 @@ export const LocalGitStateParametersSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    const forbid = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not valid when action=${value.action}`,
-        })
-      }
-    }
-    if (value.action === "repo") {
-      forbid(["path", "staged", "base", "head", "stat", "name_only"])
-      return
-    }
-    if (value.action === "status") {
-      forbid(["staged", "base", "head", "stat", "name_only"])
-      return
-    }
+    if (value.action === "repo" || value.action === "status") return
     if (value.head && !value.base) {
       ctx.addIssue({
         code: "custom",
@@ -227,7 +168,6 @@ export const LocalGitStateParametersSchema = z
         message: "head requires base when action=diff",
       })
     }
-    forbid(["porcelain"])
   })
 
 export const LocalGitLogParametersSchema = z
@@ -259,36 +199,17 @@ export const LocalGitLogParametersSchema = z
         })
       }
     }
-    const forbid = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not valid when action=${value.action}`,
-        })
-      }
-    }
-    if (value.action === "history") {
-      forbid(["name_only", "base", "head"])
-      return
-    }
+    if (value.action === "history") return
     if (value.action === "file_history") {
       need(["path"])
-      forbid(["name_only", "base", "head"])
       return
     }
     if (value.action === "show") {
       need(["ref"])
-      forbid(["path", "base", "head"])
       return
     }
-    if (value.action === "refs") {
-      forbid(["path", "ref", "stat", "name_only", "base", "head"])
-      return
-    }
+    if (value.action === "refs") return
     need(["base"])
-    forbid(["path", "ref", "stat", "name_only"])
   })
 
 export const LocalGitAnnotateParametersSchema = z
@@ -326,17 +247,7 @@ export const LocalGitAnnotateParametersSchema = z
         })
       }
     }
-    const forbid = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not valid when action=${value.action}`,
-        })
-      }
-    }
-    if (value.end && (!value.line || value.end < value.line)) {
+    if (["line", "range"].includes(value.action) && value.end && (!value.line || value.end < value.line)) {
       ctx.addIssue({
         code: "custom",
         path: ["end"],
@@ -345,23 +256,17 @@ export const LocalGitAnnotateParametersSchema = z
     }
     if (value.action === "blame") {
       need(["filePath"])
-      forbid(["path", "pattern", "case_sensitive", "since", "until", "all"])
       return
     }
     if (value.action === "line") {
       need(["filePath", "line"])
-      forbid(["path", "pattern", "ref", "case_sensitive", "since", "until", "all"])
       return
     }
     if (value.action === "range") {
       need(["filePath", "line"])
-      forbid(["path", "pattern", "ref", "case_sensitive", "since", "until", "all"])
       return
     }
     need(["pattern"])
-    forbid(["filePath", "line", "end"])
-    if (value.action === "grep") forbid(["since", "until", "all"])
-    if (value.action !== "grep") forbid(["case_sensitive"])
   })
 
 const commit_input = z.object({
@@ -1003,7 +908,7 @@ const stateDescription =
 
 export const GitStateTool = Tool.define("git_state", {
   description: stateDescription,
-  parameters: state_input,
+  parameters: GitStateParametersSchema,
   async execute(input, ctx) {
     return run(state(input), ctx, input)
   },
@@ -1025,7 +930,7 @@ const logDescription =
 
 export const GitLogTool = Tool.define("git_log", {
   description: logDescription,
-  parameters: log_input,
+  parameters: GitLogParametersSchema,
   async execute(input, ctx) {
     return run(history(input), ctx, input)
   },
@@ -1058,7 +963,7 @@ const annotateDescription =
 
 export const GitAnnotateTool = Tool.define("git_annotate", {
   description: annotateDescription,
-  parameters: annotate_input,
+  parameters: GitAnnotateParametersSchema,
   async execute(input, ctx) {
     return run(annotate(input), ctx, input)
   },

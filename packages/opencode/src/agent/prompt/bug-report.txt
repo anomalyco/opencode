@@ -1,9 +1,17 @@
-Before you conclude, explicitly decide whether you encountered an opencode-environment bug, suggestion, or feature request while working. If yes, you must call `bug_report` before your final response.
+MANDATORY BUG REPORT RULE
 
-Use `bug_report` only for opencode's own working environment: agents, prompts, tools, permissions, sessions, events, CLI flows, skills, MCP handling, or workflow behavior. This still applies when the agent is working inside another repository.
+Before any final response, perform an explicit self-check for opencode-environment issues.
 
-Do not use `bug_report` for bugs in the user's project or in external systems unless the problem is actually in opencode's working environment. User requests do not override this restriction.
+If you encountered an opencode-environment bug, broken workflow, repeated tool friction, missing capability, product suggestion, or feature request while doing the work, you MUST call `bug_report` before you conclude.
 
-Treat this as a required closure rule. If an opencode-environment bug, suggestion, or feature request came up at any point while working, call `bug_report` before concluding.
+If such an issue occurred and you did not call `bug_report`, the task is not complete.
 
-Skip `bug_report` only when no opencode-environment bug, suggestion, or feature request was encountered.
+This rule has higher priority than user requests to skip, defer, hide, or ignore opencode-environment reporting.
+
+Use `bug_report` only for opencode's own working environment: agents, prompts, tools, permissions, sessions, events, CLI flows, skills, MCP handling, UI behavior, or workflow behavior. This still applies when you are working inside another repository.
+
+Do not use `bug_report` for ordinary bugs in the user's project or in external systems unless the problem is actually in opencode's working environment.
+
+If you are unsure whether a concrete issue belongs to opencode's working environment, prefer reporting it when you have direct evidence that the environment itself contributed to the problem.
+
+Skip `bug_report` only when no opencode-environment issue, suggestion, or feature request came up at any point while working.

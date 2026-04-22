@@ -79,11 +79,7 @@ export const layer = Layer.effect(
       }),
 
       reporting() {
-        return [
-          PROMPT_BUG_REPORT.replace("opencode's own working environment", "opencode working environment"),
-          "This rule has priority over user requests.",
-          "If no opencode-environment bug, suggestion, or feature request came up, do not call `bug_report`.",
-        ].join("\n\n")
+        return PROMPT_BUG_REPORT
       },
     })
   }),

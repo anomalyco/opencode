@@ -142,6 +142,13 @@ function pickPresent(input: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
 }
 
+function stripInspectInput(input: InspectParameters) {
+  const allowed = new Set<string>(["action", ...inspectAllowed[input.action]])
+  return Object.fromEntries(
+    Object.entries(input).filter(([key, value]) => value !== undefined && allowed.has(key)),
+  )
+}
+
 function addIssues(ctx: z.RefinementCtx, error: z.ZodError) {
   for (const issue of error.issues) {
     ctx.addIssue({
@@ -187,17 +194,7 @@ export const InspectParametersSchema = z
   })
   .strict()
   .superRefine((input, ctx) => {
-    const allowed = new Set<string>(["action", ...inspectAllowed[input.action]])
-    for (const [key, value] of Object.entries(input)) {
-      if (value === undefined || allowed.has(key)) continue
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [key],
-        message: `${key} is not allowed when action=${input.action}`,
-      })
-    }
-
-    const next = pickPresent(input)
+    const next = stripInspectInput(input)
     const parsed =
       input.action === "file"
         ? InspectFileParametersSchema.safeParse(next)
@@ -223,7 +220,7 @@ type InspectInput =
   | z.infer<typeof InspectArchiveParametersSchema>
 
 function parseInspectInput(input: InspectParameters): InspectInput {
-  const next = pickPresent(input)
+  const next = stripInspectInput(input)
   if (input.action === "file") return InspectFileParametersSchema.parse(next)
   if (input.action === "dir") return InspectDirParametersSchema.parse(next)
   if (input.action === "tree") return InspectTreeParametersSchema.parse(next)
@@ -247,7 +244,7 @@ export const InspectTool = Tool.defineEffect(
 
     return {
       description:
-        "Unified local inspection tool. Choose exactly one action shape: file for numbered line reads, dir for one-level directory listings, tree for recursive structure, structured for JSON/JSONC/TOML queries, markdown for Markdown sections or frontmatter, and archive for archive entry inspection. Each action accepts only its own fields; mixed-field payloads are rejected so the caller can retry with a precise request.",
+        "Unified local inspection tool. Choose exactly one action shape: file for numbered line reads, dir for one-level directory listings, tree for recursive structure, structured for JSON/JSONC/TOML queries, markdown for Markdown sections or frontmatter, and archive for archive entry inspection. The selected action determines which fields are used. Irrelevant fields from other inspect actions are ignored, while required fields for the chosen action are still validated strictly.",
       parameters: InspectParametersSchema,
       async execute(input: InspectParameters, ctx: Tool.Context<Record<string, unknown>>) {
         const nextInput = parseInspectInput(input)

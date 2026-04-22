@@ -157,6 +157,13 @@ function pickPresent(input: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
 }
 
+function stripSearchInput(input: SearchParameters) {
+  const allowed = new Set<string>(["action", ...searchAllowed[input.action]])
+  return Object.fromEntries(
+    Object.entries(input).filter(([key, value]) => value !== undefined && allowed.has(key)),
+  )
+}
+
 function addIssues(ctx: z.RefinementCtx, error: z.ZodError) {
   for (const issue of error.issues) {
     ctx.addIssue({
@@ -192,17 +199,7 @@ export const SearchParametersSchema = z
   })
   .strict()
   .superRefine((input, ctx) => {
-    const allowed = new Set<string>(["action", ...searchAllowed[input.action]])
-    for (const [key, value] of Object.entries(input)) {
-      if (value === undefined || allowed.has(key)) continue
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [key],
-        message: `${key} is not allowed when action=${input.action}`,
-      })
-    }
-
-    const next = pickPresent(input)
+    const next = stripSearchInput(input)
     const parsed =
       input.action === "path"
         ? PathSearchParametersSchema.safeParse(next)
@@ -214,7 +211,7 @@ type SearchParameters = z.infer<typeof SearchParametersSchema>
 type SearchInput = z.infer<typeof PathSearchParametersSchema> | z.infer<typeof ContentSearchParametersSchema>
 
 function parseSearchInput(input: SearchParameters): SearchInput {
-  const next = pickPresent(input)
+  const next = stripSearchInput(input)
   if (input.action === "path") return PathSearchParametersSchema.parse(next)
   return ContentSearchParametersSchema.parse(next)
 }
@@ -226,7 +223,7 @@ function root(input: SearchInput) {
 
 export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<string, unknown>>("search", {
   description:
-    "Unified local search tool. Choose exactly one mode shape: action=path finds candidate filesystem paths with relevance ranking, and action=content runs regex search over file contents with file, content, or count output modes. Mixed path-only and content-only fields are rejected so the caller can retry with a precise request. By default, common dependency/build noise is ignored for denser discovery results.",
+    "Unified local search tool. Choose exactly one mode shape: action=path finds candidate filesystem paths with relevance ranking, and action=content runs regex search over file contents with file, content, or count output modes. The selected action determines which fields are used. Irrelevant fields from the other search action are ignored, while required fields for the chosen action are still validated strictly. By default, common dependency/build noise is ignored for denser discovery results.",
   parameters: SearchParametersSchema,
   async execute(input, ctx) {
     const nextInput = parseSearchInput(input)

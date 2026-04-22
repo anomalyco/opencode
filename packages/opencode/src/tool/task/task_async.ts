@@ -53,16 +53,14 @@ const waitWatchPrefix = ["task_async_wait"] as const
 const DESCRIPTION = `Use this tool to start and manage asynchronous subagent work. It supports six actions: \`start\`, \`message\`, \`resume\`, \`wait\`, \`status\`, and \`abort\`. This tool is truly asynchronous: \`start\`, \`message\`, \`resume\`, and active \`wait\` registrations can return before background work is finished. Completion shows up as a UI notification instead of being delivered back into the caller session, task output remains retrievable later with \`task_async status\` by \`task_id\`, and active \`wait\` registrations are persisted and recovered across process restarts. Prefer \`task_async wait\` over repeated status polling when you need background completion watching for one or more running tasks. Only the actions and subagents allowed by the caller's current permissions are available; the dynamic section below shows that per-agent permission view.
 
 Actions, field rules, and usage:
-- \`start\`: create a new async subagent task and return immediately with a \`task_id\`. It accepts only \`action\` (optional and defaults to \`start\`), \`description\`, \`prompt\`, \`subagent_type\`, optional \`timeout_ms\`, and optional \`command\`; do not send \`task_id\`, \`task_ids\`, or \`message\` with \`start\`. This creates a child session owned by the current session and launches the selected subagent in the background. When \`timeout_ms\` is set, expiry shows a UI timeout warning without aborting the task. Use \`start\` only for a brand new task.
-- \`message\`: send a follow-up instruction to an existing async task. It accepts only \`action\`, \`task_id\`, \`message\`, optional \`timeout_ms\`, and optional \`command\`. It does not create a new task; it reuses the task's current agent and model context, then continues asynchronously. When a task is stuck in \`retry\` or visibly \`stalled\` with no assistant output, the follow-up restarts that task so the new instruction can take effect promptly. \`timeout_ms\` can renew the timeout watch without aborting the task on expiry. Use \`wait\` to watch the task later, and use \`status\` when you need the stored output by \`task_id\`.
-- \`resume\`: continue an existing async task without sending a new message. It accepts only \`action\`, \`task_id\`, optional \`timeout_ms\`, and optional \`command\`. Use this when the same task should continue with no new caller instruction, then let it finish asynchronously. If the task is still running, \`timeout_ms\` renews the timeout watch without aborting the task.
-- \`wait\`: arm background completion watching for one or more owned async tasks. It accepts only \`action\`, either \`task_id\` or \`task_ids\`, and optional \`command\`. If every requested task is already idle, it returns a completed summary immediately. Otherwise it returns immediately after registering the watch, persists that watch for restart recovery, and a UI notification appears when all requested tasks are idle. It does not inline the child-session result text, so inspect any finished task later with \`task_async status\` using its \`task_id\`.
-- \`status\`: inspect the current state of an existing async task. It accepts only \`action\`, \`task_id\`, and optional \`command\`. It reports task status, title, agent, model, timestamps, retry details when relevant, task-output visibility (\`checkpoint\`, \`pending\`, \`retry\`, \`stalled\`, or \`missing\`), warning versus error context when the latest chunk failed after visible output, the latest visible user and assistant excerpts, and a larger latest assistant result block when available. \`task_id\` must belong to a task_async-owned task. Use it for later result retrieval or explicit point inspection; prefer \`wait\` over repeated polling.
-- \`abort\`: stop the task tree rooted at the provided \`task_id\`. It accepts only \`action\`, \`task_id\`, and optional \`command\`. It stops the target task session and its descendant async/task sessions.
+- \`start\`: create a new async subagent task and return immediately with a \`task_id\`. Required fields: \`description\`, \`prompt\`, and \`subagent_type\`. Optional fields used by this action: \`timeout_ms\` and \`command\`. This creates a child session owned by the current session and launches the selected subagent in the background. When \`timeout_ms\` is set, expiry shows a UI timeout warning without aborting the task. Use \`start\` only for a brand new task.
+- \`message\`: send a follow-up instruction to an existing async task. Required fields: \`task_id\` and \`message\`. Optional fields used by this action: \`timeout_ms\` and \`command\`. It does not create a new task; it reuses the task's current agent and model context, then continues asynchronously. When a task is stuck in \`retry\` or visibly \`stalled\` with no assistant output, the follow-up restarts that task so the new instruction can take effect promptly. \`timeout_ms\` can renew the timeout watch without aborting the task on expiry. Use \`wait\` to watch the task later, and use \`status\` when you need the stored output by \`task_id\`.
+- \`resume\`: continue an existing async task without sending a new message. Required fields: \`task_id\`. Optional fields used by this action: \`timeout_ms\` and \`command\`. Use this when the same task should continue with no new caller instruction, then let it finish asynchronously. If the task is still running, \`timeout_ms\` renews the timeout watch without aborting the task.
+- \`wait\`: arm background completion watching for one or more owned async tasks. Required fields: either \`task_id\` or \`task_ids\`. Optional fields used by this action: \`command\`. If every requested task is already idle, it returns a completed summary immediately. Otherwise it returns immediately after registering the watch, persists that watch for restart recovery, and a UI notification appears when all requested tasks are idle. It does not inline the child-session result text, so inspect any finished task later with \`task_async status\` using its \`task_id\`.
+- \`status\`: inspect the current state of an existing async task. Required fields: \`task_id\`. Optional fields used by this action: \`command\`. It reports task status, title, agent, model, timestamps, retry details when relevant, task-output visibility (\`checkpoint\`, \`pending\`, \`retry\`, \`stalled\`, or \`missing\`), warning versus error context when the latest chunk failed after visible output, the latest visible user and assistant excerpts, and a larger latest assistant result block when available. \`task_id\` must belong to a task_async-owned task. Use it for later result retrieval or explicit point inspection; prefer \`wait\` over repeated polling.
+- \`abort\`: stop the task tree rooted at the provided \`task_id\`. Required fields: \`task_id\`. Optional fields used by this action: \`command\`. It stops the target task session and its descendant async/task sessions.
 
-- \`resume\`, \`wait\`, \`status\`, \`abort\`, and \`message\` must not include \`description\`, \`prompt\`, or \`subagent_type\`.
-- Existing-task actions other than \`message\` must not include \`message\`.
-- \`timeout_ms\` is allowed only for \`start\`, \`message\`, and \`resume\`.
+- The selected action determines which fields are used. Irrelevant fields from other actions are ignored, while required fields for the chosen action are still validated strictly.
 - Some callers have additional routing restrictions or companion tools; rely on the dynamic permission view below for caller-specific guidance.`
 
 const desc = z
@@ -87,7 +85,7 @@ const timeout = z
     "Optional timeout in milliseconds for action=start, action=resume, or action=message. Expiry shows a UI timeout warning without aborting the task.",
   )
 
-const parameters = z
+export const TaskAsyncParametersSchema = z
   .object({
     action: Action.default("start").describe("Async task action to perform."),
     description: desc,
@@ -111,20 +109,8 @@ const parameters = z
         })
       }
     }
-    const drop = (keys: string[]) => {
-      for (const key of keys) {
-        if (!seen(value[key as keyof typeof value])) continue
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is not allowed when action=${value.action}`,
-        })
-      }
-    }
-
     if (value.action === "start") {
       need(["description", "prompt", "subagent_type"])
-      drop(["task_id", "task_ids", "message"])
       const txt = value.subagent_type ? block.get(value.subagent_type) : undefined
       if (txt) {
         ctx.addIssue({
@@ -138,7 +124,6 @@ const parameters = z
 
     if (value.action === "message") {
       need(["task_id", "message"])
-      drop(["description", "prompt", "subagent_type", "task_ids"])
       return
     }
 
@@ -150,20 +135,10 @@ const parameters = z
           message: "task_id or task_ids is required when action=wait",
         })
       }
-      drop(["description", "prompt", "subagent_type", "message"])
-      if (seen(value.timeout_ms)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["timeout_ms"],
-          message: "timeout_ms is not allowed when action=wait",
-        })
-      }
       return
     }
 
     need(["task_id"])
-    drop(["description", "prompt", "subagent_type", "message", "task_ids"])
-    if (["status", "abort"].includes(value.action)) drop(["timeout_ms"])
   })
 
 function clip(text?: string, max = 500) {
@@ -868,7 +843,10 @@ export const TaskAsyncTool = Tool.defineEffect(
       return true
     })
 
-    const run = Effect.fn("TaskAsyncTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
+    const run = Effect.fn("TaskAsyncTool.execute")(function* (
+      params: z.infer<typeof TaskAsyncParametersSchema>,
+      ctx: Tool.Context,
+    ) {
       const cfg = yield* config.get()
       const action = params.action
 
@@ -1329,11 +1307,11 @@ export const TaskAsyncTool = Tool.defineEffect(
       }
     })
 
-    return async (): Promise<Tool.DefWithoutID<typeof parameters>> => {
+    return async (): Promise<Tool.DefWithoutID<typeof TaskAsyncParametersSchema>> => {
       await boot()
       return {
         description: DESCRIPTION,
-        parameters,
+        parameters: TaskAsyncParametersSchema,
         async execute(params, ctx) {
           return Effect.runPromise(run(params, ctx))
         },

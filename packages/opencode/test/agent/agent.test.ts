@@ -166,6 +166,19 @@ test("final config permission controls bug report prompt injection for ported ag
   })
 })
 
+test("bug report prompt is injected into active and legacy agent prompts when allowed", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const atlas = await load(tmp.path, (svc) => svc.get("atlas"))
+      const build = await load(tmp.path, (svc) => svc.get("build"))
+      expect(atlas?.prompt?.includes(BUG_REPORT_PROMPT)).toBe(true)
+      expect(build?.prompt?.includes(BUG_REPORT_PROMPT)).toBe(true)
+    },
+  })
+})
+
 test("general agent denies todo tools", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

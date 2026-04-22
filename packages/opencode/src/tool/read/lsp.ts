@@ -253,6 +253,13 @@ function pickPresent(input: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
 }
 
+function stripLspInput(input: LspParameters) {
+  const allowed = new Set<string>(["operation", ...lspAllowed[input.operation]])
+  return Object.fromEntries(
+    Object.entries(input).filter(([key, value]) => value !== undefined && allowed.has(key)),
+  )
+}
+
 function addIssues(ctx: z.RefinementCtx, error: z.ZodError) {
   for (const issue of error.issues) {
     ctx.addIssue({
@@ -280,17 +287,7 @@ export const LspParametersSchema = z
   })
   .strict()
   .superRefine((input, ctx) => {
-    const allowed = new Set<string>(["operation", ...lspAllowed[input.operation]])
-    for (const [key, value] of Object.entries(input)) {
-      if (value === undefined || allowed.has(key)) continue
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [key],
-        message: `${key} is not allowed when operation=${input.operation}`,
-      })
-    }
-
-    const next = pickPresent(input)
+    const next = stripLspInput(input)
     const parsed =
       input.operation === "workspaceSymbol"
         ? LspWorkspaceSymbolParametersSchema.safeParse(next)
@@ -307,7 +304,7 @@ type LspInput =
   | z.infer<typeof LspPositionalParametersSchema>
 
 function parseLspInput(input: LspParameters): LspInput {
-  const next = pickPresent(input)
+  const next = stripLspInput(input)
   if (input.operation === "workspaceSymbol") return LspWorkspaceSymbolParametersSchema.parse(next)
   if (input.operation === "documentSymbol") return LspDocumentSymbolParametersSchema.parse(next)
   return LspPositionalParametersSchema.parse(next)
