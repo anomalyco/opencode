@@ -6,6 +6,14 @@ export const waitUntil = async (promise: Promise<any>) => {
   await promise
 }
 
+type KvBulkGetResult = {
+  values?: Record<string, string>
+}
+
+type KvListResult = {
+  result: KVNamespaceListResult<unknown, string>["keys"]
+}
+
 export const Resource = new Proxy(
   {},
   {
@@ -34,7 +42,9 @@ export const Resource = new Proxy(
                   keys: Array.isArray(k) ? k : [k],
                   account_id: accountId,
                 })
-                .then((result) => (isMulti ? new Map(Object.entries(result?.values ?? {})) : result?.values?.[k]))
+                .then((result: KvBulkGetResult) =>
+                  isMulti ? new Map(Object.entries(result.values ?? {})) : result.values?.[k],
+                )
             },
             put: (k: string, v: string, opts?: KVNamespacePutOptions) =>
               client.kv.namespaces.values.update(namespaceId, k, {
@@ -54,7 +64,7 @@ export const Resource = new Proxy(
                   account_id: accountId,
                   prefix: opts?.prefix ?? undefined,
                 })
-                .then((result) => {
+                .then((result: KvListResult) => {
                   return {
                     keys: result.result,
                     list_complete: true,
