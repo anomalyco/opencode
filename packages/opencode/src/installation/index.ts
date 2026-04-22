@@ -4,6 +4,7 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
+import { homedir } from "os"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "../flag/flag"
@@ -132,6 +133,32 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
         Effect.catch(() => Effect.succeed({ code: ChildProcessSpawner.ExitCode(1), stdout: "", stderr: "" })),
       )
 
+      const packageVersion = Effect.fnUntraced(function* (cmd: string[]) {
+        const result = yield* run([...cmd, "view", `opencode-ai@${InstallationChannel}`, "version", "--json"], {
+          // Avoid repo-local packageManager settings influencing npm-like metadata lookups.
+          cwd: homedir(),
+        })
+        const name = cmd.join(" ")
+        if (result.code !== 0) {
+          return yield* Effect.fail(new Error(result.stderr || `Failed to query opencode version via ${name}`))
+        }
+
+        const raw = result.stdout.trim()
+        if (!raw) {
+          return yield* Effect.fail(new Error(`Empty version response from ${name}`))
+        }
+
+        return yield* Effect.try({
+          try: () => {
+            const parsed = JSON.parse(raw)
+            return typeof parsed === "string" ? parsed : raw.replace(/^"|"$/g, "")
+          },
+          catch: () => raw.replace(/^"|"$/g, ""),
+        }).pipe(
+          Effect.flatMap((value) => (value ? Effect.succeed(value) : Effect.fail(new Error(`Invalid version response from ${name}`)))),
+        )
+      })
+
       const getBrewFormula = Effect.fnUntraced(function* () {
         const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
         if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
@@ -216,16 +243,16 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           return data.versions.stable
         }
 
-        if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
-          const r = (yield* text(["npm", "config", "get", "registry"])).trim()
-          const reg = r || "https://registry.npmjs.org"
-          const registry = reg.endsWith("/") ? reg.slice(0, -1) : reg
-          const channel = InstallationChannel
-          const response = yield* httpOk.execute(
-            HttpClientRequest.get(`${registry}/opencode-ai/${channel}`).pipe(HttpClientRequest.acceptJson),
-          )
-          const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
-          return data.version
+        if (detectedMethod === "npm") {
+          return yield* packageVersion(["npm"])
+        }
+
+        if (detectedMethod === "pnpm") {
+          return yield* packageVersion(["pnpm"])
+        }
+
+        if (detectedMethod === "bun") {
+          return yield* packageVersion(["bun", "pm"])
         }
 
         if (detectedMethod === "choco") {
