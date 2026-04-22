@@ -48,6 +48,8 @@ export interface BugReportPanelProps {
   count: number
   translating?: boolean
   onTranslate?: () => void
+  onForceTranslate?: () => void
+  onStopTranslate?: () => void
   onRemove?: (id: string) => void
   translateError?: {
     message: string
@@ -266,6 +268,26 @@ export function BugReportPanel(props: BugReportPanelProps) {
                 <Spinner class="size-3" />
               </Show>
               {props.translating ? i18n.t("ui.bugReport.translating") : i18n.t("ui.bugReport.translate")}
+            </Button>
+          </Show>
+          <Show when={props.onForceTranslate}>
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={props.translating || reports().length === 0}
+              onClick={() => props.onForceTranslate?.()}
+            >
+              {i18n.t("ui.translation.force")}
+            </Button>
+          </Show>
+          <Show when={props.onStopTranslate}>
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={!props.translating}
+              onClick={() => props.onStopTranslate?.()}
+            >
+              {i18n.t("ui.translation.stop")}
             </Button>
           </Show>
           <Show when={count() > 0}>

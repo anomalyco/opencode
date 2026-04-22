@@ -5,6 +5,10 @@ import { Hono } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
 import z from "zod"
 
+const TranslateRequest = z.object({
+  force: z.boolean().optional(),
+})
+
 export function applyProjectTeamRoutes(app: Hono) {
   return app
     .get(
@@ -80,8 +84,34 @@ export function applyProjectTeamRoutes(app: Hono) {
         },
       }),
       async (c) => {
-        const count = await MemoryTranslate.translate({ all: true })
+        const body = TranslateRequest.parse(await c.req.json().catch(() => ({})))
+        const count = await MemoryTranslate.translate({ all: true, ...(body.force ? { force: true } : {}) })
         return c.json({ count })
+      },
+    )
+    .post(
+      "/current/memory/translate/stop",
+      describeRoute({
+        summary: "Stop memory translations",
+        description: "Stop active memory translations for the current project and ignore any in-flight results.",
+        operationId: "project.stopMemoryTranslation",
+        responses: {
+          200: {
+            description: "Stopped memory translation result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    count: z.number().int().min(0),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json({ count: await MemoryTranslate.stop() })
       },
     )
 }

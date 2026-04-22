@@ -63,6 +63,8 @@ export type MemoryPanelProps = {
   activity?: MemoryStripActivity[]
   translating?: boolean
   onTranslate?: () => void
+  onForceTranslate?: () => void
+  onStopTranslate?: () => void
   onRemove?: (id: string) => void
   translateError?: {
     message: string
@@ -329,6 +331,26 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 <Spinner class="size-3" />
               </Show>
               {props.translating ? i18n.t("ui.memory.panel.translating") : i18n.t("ui.memory.panel.translate")}
+            </Button>
+          </Show>
+          <Show when={props.onForceTranslate}>
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={props.translating || entries().length === 0}
+              onClick={() => props.onForceTranslate?.()}
+            >
+              {i18n.t("ui.translation.force")}
+            </Button>
+          </Show>
+          <Show when={props.onStopTranslate}>
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={!props.translating}
+              onClick={() => props.onStopTranslate?.()}
+            >
+              {i18n.t("ui.translation.stop")}
             </Button>
           </Show>
           <div data-slot="memory-panel-total" aria-live="polite">

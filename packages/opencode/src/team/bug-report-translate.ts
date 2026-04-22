@@ -22,6 +22,7 @@ type Signal = {
 type State = {
   q: Queue.Queue<Signal>
   scope: Scope.Closeable
+  stopped: Set<string>
 }
 
 function uniq(list?: string[]) {
@@ -70,7 +71,14 @@ function localeForProvider(code: string) {
   return code
 }
 
-function needs(item: TeamBugReport.Entry, locale: string) {
+function needs(item: TeamBugReport.Entry, locale: string, force = false) {
+  if (
+    item.translate_status === TeamBugReport.TranslateStatus.enum.waiting ||
+    item.translate_status === TeamBugReport.TranslateStatus.enum.started
+  ) {
+    return false
+  }
+  if (force) return true
   if (
     item.is_translate &&
     item.translate_status === TeamBugReport.TranslateStatus.enum.finished &&
@@ -85,13 +93,20 @@ function needs(item: TeamBugReport.Entry, locale: string) {
   ) {
     return false
   }
-  if (
-    item.translate_status === TeamBugReport.TranslateStatus.enum.waiting ||
-    item.translate_status === TeamBugReport.TranslateStatus.enum.started
-  ) {
-    return false
-  }
   return true
+}
+
+function translated(item: TeamBugReport.Entry, locale: string) {
+  return (
+    item.ui_locale === locale &&
+    !!item.title_ui &&
+    !!item.summary_ui &&
+    (!item.impact || !!item.impact_ui) &&
+    (!item.repro || !!item.repro_ui) &&
+    (!item.expected || !!item.expected_ui) &&
+    (!item.actual || !!item.actual_ui) &&
+    (!item.suggestion || !!item.suggestion_ui)
+  )
 }
 
 function pick(item: TeamBugReport.Entry, locale: string) {
@@ -114,7 +129,8 @@ function pick(item: TeamBugReport.Entry, locale: string) {
 export namespace BugReportTranslate {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
-    readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean }) => Effect.Effect<number, Error>
+    readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean; force?: boolean }) => Effect.Effect<number, Error>
+    readonly stop: () => Effect.Effect<number, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/BugReportTranslate") {}
@@ -138,6 +154,7 @@ export namespace BugReportTranslate {
 
       const mark = Effect.fn("BugReportTranslate.mark")(function* (input: {
         id: string
+        guard?: number
         patch: TeamBugReport.Patch & {
           is_translate?: boolean
           translate_status?: TeamBugReport.TranslateStatus
@@ -147,9 +164,14 @@ export namespace BugReportTranslate {
         }
       }) {
         const fresh = yield* Effect.promise(() =>
-          TeamBugReport.update({
+          TeamBugReport.update_if({
             root: Instance.worktree,
             id: input.id,
+            when: (item) =>
+              input.guard === undefined ||
+              (item.translate_updated === input.guard &&
+                (item.translate_status === TeamBugReport.TranslateStatus.enum.waiting ||
+                  item.translate_status === TeamBugReport.TranslateStatus.enum.started)),
             patch: input.patch,
           }),
         )
@@ -162,12 +184,16 @@ export namespace BugReportTranslate {
         return fresh
       })
 
-      const claim = Effect.fn("BugReportTranslate.claim")(function* (input?: { all?: boolean; ids?: string[] }) {
+      const claim = Effect.fn("BugReportTranslate.claim")(function* (input?: {
+        all?: boolean
+        ids?: string[]
+        force?: boolean
+      }) {
         const ready = yield* active()
         if (!ready) return []
         const list = yield* Effect.promise(() => TeamBugReport.list(Instance.worktree))
         const rows = (input?.all ? list : list.filter((item) => uniq(input?.ids).includes(item.id))).filter((item) =>
-          needs(item, ready.code),
+          needs(item, ready.code, !!input?.force),
         )
         yield* Effect.forEach(
           rows,
@@ -230,6 +256,7 @@ export namespace BugReportTranslate {
         let count = 0
 
         for (const item of rows) {
+          const waiting = item.translate_updated
           const work = plan([
             {
               id: item.id,
@@ -245,17 +272,20 @@ export namespace BugReportTranslate {
             },
           ])
           const total = work.total.get(item.id) ?? 0
-          yield* mark({
+          const token = Date.now()
+          const started = yield* mark({
             id: item.id,
+            guard: waiting,
             patch: {
               ui_locale: ready.code,
               is_translate: true,
               translate_status: TeamBugReport.TranslateStatus.enum.started,
               translate_done: 0,
               translate_total: total,
-              translate_updated: Date.now(),
+              translate_updated: token,
             },
           })
+          if (!started) continue
           const exit = yield* Effect.promise(() =>
             translateBlocks({
               locale: localeForProvider(ready.code),
@@ -266,13 +296,14 @@ export namespace BugReportTranslate {
                 await Effect.runPromise(
                   mark({
                     id: item.id,
+                    guard: token,
                     patch: {
                       ui_locale: ready.code,
                       is_translate: true,
                       translate_status: TeamBugReport.TranslateStatus.enum.started,
                       translate_done: done,
                       translate_total: total,
-                      translate_updated: Date.now(),
+                      translate_updated: token,
                     },
                   }),
                 )
@@ -282,13 +313,14 @@ export namespace BugReportTranslate {
           if (Exit.isFailure(exit)) {
             yield* mark({
               id: item.id,
+              guard: token,
               patch: {
                 ui_locale: item.ui_locale,
                 is_translate: false,
                 translate_status: TeamBugReport.TranslateStatus.enum.idle,
                 translate_done: 0,
                 translate_total: 0,
-                translate_updated: Date.now(),
+                translate_updated: token,
               },
             })
             const err = Cause.squash(exit.cause)
@@ -298,6 +330,7 @@ export namespace BugReportTranslate {
           if (!next) continue
           yield* mark({
             id: item.id,
+            guard: token,
             patch: {
               title_ui: next.title,
               summary_ui: next.summary,
@@ -311,7 +344,7 @@ export namespace BugReportTranslate {
               translate_status: TeamBugReport.TranslateStatus.enum.finished,
               translate_done: total,
               translate_total: total,
-              translate_updated: Date.now(),
+              translate_updated: token,
             },
           })
           count += 1
@@ -324,6 +357,7 @@ export namespace BugReportTranslate {
         Effect.fn("BugReportTranslate.state")(function* () {
           const q = yield* Queue.unbounded<Signal>()
           const scope = yield* Scope.make()
+          const stopped = new Set<string>()
 
           const loop = Effect.forever(
             Effect.gen(function* () {
@@ -364,9 +398,14 @@ export namespace BugReportTranslate {
             Scope.provide(scope)(
               bus.subscribe(event).pipe(
                 Stream.runForEach((evt) =>
-                  claim({ ids: [evt.properties.entry.id] }).pipe(
-                    Effect.flatMap((ids) => (ids.length > 0 ? Queue.offer(q, { ids }) : Effect.void)),
-                  ),
+                  Effect.gen(function* () {
+                    const id = evt.properties.entry.id
+                    const blocked = yield* Effect.sync(() => stopped.has(id))
+                    if (blocked) return
+                    const ids = yield* claim({ ids: [id] })
+                    if (ids.length === 0) return
+                    yield* Queue.offer(q, { ids })
+                  }),
                 ),
                 Effect.forkScoped,
               ),
@@ -377,7 +416,7 @@ export namespace BugReportTranslate {
           yield* Scope.provide(scope)(loop)
 
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-          return { q, scope }
+          return { q, scope, stopped }
         }),
       )
 
@@ -389,17 +428,53 @@ export namespace BugReportTranslate {
         all?: boolean
         ids?: string[]
         wait?: boolean
+        force?: boolean
       }) {
+        const next = yield* InstanceState.get(state)
+        yield* Effect.sync(() => {
+          if (input?.all) next.stopped.clear()
+          else for (const id of uniq(input?.ids)) next.stopped.delete(id)
+        })
         const ids = yield* claim(input)
         if (ids.length === 0) return 0
-        const next = yield* InstanceState.get(state)
         const done = input?.wait ? yield* Deferred.make<number, Error>() : undefined
         yield* Queue.offer(next.q, { ids, done })
         if (!done) return ids.length
         return yield* Deferred.await(done)
       })
 
-      return Service.of({ init, translate })
+      const stop = Effect.fn("BugReportTranslate.stop")(function* () {
+        const ready = yield* active()
+        if (!ready) return 0
+        const next = yield* InstanceState.get(state)
+        const list = yield* Effect.promise(() => TeamBugReport.list(Instance.worktree))
+        const rows = list.filter((item) => item.ui_locale === ready.code && (item.translate_status === "waiting" || item.translate_status === "started"))
+        if (rows.length === 0) return 0
+        yield* Effect.sync(() => {
+          for (const item of rows) next.stopped.add(item.id)
+        })
+        yield* Effect.forEach(
+          rows,
+          (item) => {
+            const complete = translated(item, ready.code)
+            return mark({
+              id: item.id,
+              patch: {
+                ui_locale: item.ui_locale,
+                is_translate: complete,
+                translate_status: complete ? TeamBugReport.TranslateStatus.enum.finished : TeamBugReport.TranslateStatus.enum.idle,
+                translate_done: 0,
+                translate_total: 0,
+                translate_updated: Date.now(),
+              },
+            })
+          },
+          { concurrency: 1, discard: true },
+        )
+        return rows.length
+      })
+
+      return Service.of({ init, translate, stop })
     }),
   )
 
@@ -422,7 +497,11 @@ export namespace BugReportTranslate {
     return runPromise((svc) => svc.init())
   }
 
-  export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean }) {
+  export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean; force?: boolean }) {
     return runPromise((svc) => svc.translate(input))
+  }
+
+  export async function stop() {
+    return runPromise((svc) => svc.stop())
   }
 }

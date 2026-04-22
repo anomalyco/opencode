@@ -23,6 +23,7 @@ type State = {
   q: Queue.Queue<Signal>
   scope: Scope.Closeable
   tracked: Set<string>
+  stopped: Set<string>
 }
 
 type SourceSnapshot = Pick<TeamMainPlan.Plan, "title" | "goal" | "scope" | "target">
@@ -73,7 +74,11 @@ function localeForProvider(code: string) {
   return code
 }
 
-function needs(item: TeamMainPlan.Plan, locale: string) {
+function needs(item: TeamMainPlan.Plan, locale: string, force = false) {
+  if (item.translate_status === "waiting" || item.translate_status === "started") {
+    return false
+  }
+  if (force) return true
   if (
     item.is_translate &&
     item.translate_status === "finished" &&
@@ -85,10 +90,11 @@ function needs(item: TeamMainPlan.Plan, locale: string) {
   ) {
     return false
   }
-  if (item.translate_status === "waiting" || item.translate_status === "started") {
-    return false
-  }
   return true
+}
+
+function translated(item: TeamMainPlan.Plan, locale: string) {
+  return item.ui_locale === locale && !!item.title_ui && !!item.goal_ui && !!item.scope_ui && !!item.target_ui
 }
 
 function pick(item: TeamMainPlan.Plan, locale: string) {
@@ -137,7 +143,8 @@ function same_source(plan: SourceSnapshot, expected: SourceSnapshot) {
 export namespace MainPlanTranslate {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
-    readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean }) => Effect.Effect<number, Error>
+    readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean; force?: boolean }) => Effect.Effect<number, Error>
+    readonly stop: () => Effect.Effect<number, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/MainPlanTranslate") {}
@@ -162,6 +169,7 @@ export namespace MainPlanTranslate {
       const mark = Effect.fn("MainPlanTranslate.mark")(function* (input: {
         id: string
         source?: SourceSnapshot
+        guard?: number
         patch: Partial<TeamMainPlan.Plan> & {
           is_translate?: boolean
           translate_status?: "idle" | "waiting" | "started" | "finished"
@@ -173,7 +181,11 @@ export namespace MainPlanTranslate {
         const fresh = yield* Effect.promise(() =>
           TeamMainPlan.update_if(
             input.id,
-            (plan) => !input.source || same_source(plan, input.source),
+            (plan) =>
+              (!input.source || same_source(plan, input.source)) &&
+              (input.guard === undefined ||
+                (plan.translate_updated === input.guard &&
+                  (plan.translate_status === "waiting" || plan.translate_status === "started"))),
             (plan) => ({
               ...plan,
               ...input.patch,
@@ -190,12 +202,16 @@ export namespace MainPlanTranslate {
         return fresh
       })
 
-      const claim = Effect.fn("MainPlanTranslate.claim")(function* (input?: { all?: boolean; ids?: string[] }) {
+      const claim = Effect.fn("MainPlanTranslate.claim")(function* (input?: {
+        all?: boolean
+        ids?: string[]
+        force?: boolean
+      }) {
         const ready = yield* active()
         if (!ready) return []
         const list = yield* Effect.promise(() => TeamMainPlan.list())
         const rows = (input?.all ? list : list.filter((item) => uniq(input?.ids).includes(item.id))).filter((item) =>
-          needs(item, ready.code),
+          needs(item, ready.code, !!input?.force),
         )
         const claimed = yield* Effect.forEach(
           rows,
@@ -261,6 +277,7 @@ export namespace MainPlanTranslate {
 
         for (const item of rows) {
           const expected = source(item)
+          const waiting = item.translate_updated
           const work = plan([
             {
               id: item.id,
@@ -273,16 +290,18 @@ export namespace MainPlanTranslate {
             },
           ])
           const total = work.total.get(item.id) ?? 0
+          const token = Date.now()
           const started = yield* mark({
             id: item.id,
             source: expected,
+            guard: waiting,
             patch: {
               ui_locale: ready.code,
               is_translate: true,
               translate_status: "started",
               translate_done: 0,
               translate_total: total,
-              translate_updated: Date.now(),
+              translate_updated: token,
             },
           })
           if (!started) continue
@@ -297,13 +316,14 @@ export namespace MainPlanTranslate {
                   mark({
                     id: item.id,
                     source: expected,
+                    guard: token,
                     patch: {
                       ui_locale: ready.code,
                       is_translate: true,
                       translate_status: "started",
                       translate_done: done,
                       translate_total: total,
-                      translate_updated: Date.now(),
+                      translate_updated: token,
                     },
                   }),
                 )
@@ -314,13 +334,14 @@ export namespace MainPlanTranslate {
             yield* mark({
               id: item.id,
               source: expected,
+              guard: token,
               patch: {
                 ui_locale: item.ui_locale,
                 is_translate: false,
                 translate_status: "idle",
                 translate_done: 0,
                 translate_total: 0,
-                translate_updated: Date.now(),
+                translate_updated: token,
               },
             })
             const err = Cause.squash(exit.cause)
@@ -331,6 +352,7 @@ export namespace MainPlanTranslate {
           const finished = yield* mark({
             id: item.id,
             source: expected,
+            guard: token,
             patch: {
               title_ui: next.title,
               goal_ui: next.goal,
@@ -341,7 +363,7 @@ export namespace MainPlanTranslate {
               translate_status: "finished",
               translate_done: total,
               translate_total: total,
-              translate_updated: Date.now(),
+              translate_updated: token,
             },
           })
           if (finished) count += 1
@@ -355,6 +377,7 @@ export namespace MainPlanTranslate {
           const q = yield* Queue.unbounded<Signal>()
           const scope = yield* Scope.make()
           const tracked = new Set<string>()
+          const stopped = new Set<string>()
 
           const settle = Effect.fn("MainPlanTranslate.settle")(function* (ids?: string[]) {
             const list = uniq(ids)
@@ -420,6 +443,8 @@ export namespace MainPlanTranslate {
                   const id = evt.properties.plan.id
                   const watched = yield* Effect.sync(() => tracked.has(id))
                   if (!watched) return
+                  const blocked = yield* Effect.sync(() => stopped.has(id))
+                  if (blocked) return
                   const ids = yield* claim({ ids: [id] })
                   if (ids.length === 0) return
                   yield* Queue.offer(q, { ids })
@@ -431,7 +456,7 @@ export namespace MainPlanTranslate {
           yield* Scope.provide(scope)(loop)
 
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-          return { q, scope, tracked }
+          return { q, scope, tracked, stopped }
         }),
       )
 
@@ -443,8 +468,13 @@ export namespace MainPlanTranslate {
         all?: boolean
         ids?: string[]
         wait?: boolean
+        force?: boolean
       }) {
         const next = yield* InstanceState.get(state)
+        yield* Effect.sync(() => {
+          if (input?.all) next.stopped.clear()
+          else for (const id of uniq(input?.ids)) next.stopped.delete(id)
+        })
         const ids = yield* claim(input)
         if (ids.length === 0) return 0
         yield* Effect.sync(() => {
@@ -456,7 +486,48 @@ export namespace MainPlanTranslate {
         return yield* Deferred.await(done)
       })
 
-      return Service.of({ init, translate })
+      const stop = Effect.fn("MainPlanTranslate.stop")(function* () {
+        const ready = yield* active()
+        if (!ready) return 0
+        const next = yield* InstanceState.get(state)
+        const list = yield* Effect.promise(() => TeamMainPlan.list())
+        const rows = list.filter(
+          (item) => item.ui_locale === ready.code && (item.translate_status === "waiting" || item.translate_status === "started"),
+        )
+        if (rows.length === 0) return 0
+        yield* Effect.sync(() => {
+          for (const item of rows) {
+            next.stopped.add(item.id)
+            next.tracked.delete(item.id)
+          }
+        })
+        yield* Effect.forEach(
+          rows,
+          (item) => {
+            const complete = translated(item, ready.code)
+            return mark({
+              id: item.id,
+              source: source(item),
+              patch: {
+                title_ui: item.title_ui,
+                goal_ui: item.goal_ui,
+                scope_ui: item.scope_ui,
+                target_ui: item.target_ui,
+                ui_locale: item.ui_locale,
+                is_translate: complete,
+                translate_status: complete ? "finished" : "idle",
+                translate_done: 0,
+                translate_total: 0,
+                translate_updated: Date.now(),
+              },
+            })
+          },
+          { concurrency: 1, discard: true },
+        )
+        return rows.length
+      })
+
+      return Service.of({ init, translate, stop })
     }),
   )
 
@@ -479,7 +550,11 @@ export namespace MainPlanTranslate {
     return runPromise((svc) => svc.init())
   }
 
-  export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean }) {
+  export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean; force?: boolean }) {
     return runPromise((svc) => svc.translate(input))
+  }
+
+  export async function stop() {
+    return runPromise((svc) => svc.stop())
   }
 }

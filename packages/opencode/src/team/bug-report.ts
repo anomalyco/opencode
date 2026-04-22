@@ -321,6 +321,40 @@ export namespace TeamBugReport {
     })
   }
 
+  export async function update_if(input: {
+    root?: string
+    id: string
+    when: (item: Entry) => boolean
+    patch: Partial<Entry>
+  }) {
+    return Flock.withLock("team-bug-report", async () => {
+      await syncer(input.root)
+      const list = await Promise.all(
+        (await files(input.root)).map(async (name) => {
+          const rows = await read(name)
+          const row = rows.find((item) => item.id === input.id)
+          if (!row) return { name, next: rows, item: undefined, changed: false }
+          if (!input.when(row)) return { name, next: rows, item: undefined, changed: false }
+          const item = full(
+            Entry.parse({
+              ...row,
+              ...(stale(input.patch as Patch) ? reset() : {}),
+              ...input.patch,
+            }),
+          )
+          return {
+            name,
+            next: rows.map((entry) => (entry.id === input.id ? item : entry)),
+            item,
+            changed: true,
+          }
+        }),
+      )
+      await Promise.all(list.filter((item) => item.changed).map((item) => write(item.name, item.next)))
+      return list.flatMap((item) => (item.item ? [item.item] : [])).at(0)
+    })
+  }
+
   export async function remove(input: { root?: string; ids: string[] }) {
     const ids = new Set(input.ids)
     return Flock.withLock("team-bug-report", async () => {

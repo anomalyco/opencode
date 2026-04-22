@@ -40,8 +40,18 @@ export function SessionBugReportTab(props: { class?: string } = {}) {
     })
   }
 
-  const translate = async () => {
-    await bugReport.translate().catch((err) => {
+  const translate = async (force = false) => {
+    await bugReport.translate(force).catch((err) => {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: formatServerError(err, language.t, language.t("common.requestFailed")),
+      })
+    })
+  }
+
+  const stop = async () => {
+    await bugReport.stop().catch((err) => {
       showToast({
         variant: "error",
         title: language.t("common.requestFailed"),
@@ -97,6 +107,8 @@ export function SessionBugReportTab(props: { class?: string } = {}) {
           count={bugReport.count}
           translating={bugReport.translating}
           onTranslate={() => void translate()}
+          onForceTranslate={() => void translate(true)}
+          onStopTranslate={() => void stop()}
           onRemove={(id: string) => void bugReport.remove(id)}
           translateError={bugReport.error}
           onClearTranslateError={() => bugReport.clearError()}

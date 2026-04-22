@@ -9,6 +9,10 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { errors } from "../error"
 
+const TranslateRequest = z.object({
+  force: z.boolean().optional(),
+})
+
 async function root(sessionID: z.infer<typeof SessionID.zod>) {
   let id = sessionID
   const seen = new Set<string>()
@@ -151,9 +155,35 @@ export const MainPlanRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        const body = TranslateRequest.parse(await c.req.json().catch(() => ({})))
         return c.json({
-          count: await MainPlanTranslate.translate({ all: true }),
+          count: await MainPlanTranslate.translate({ all: true, ...(body.force ? { force: true } : {}) }),
         })
+      },
+    )
+    .post(
+      "/translate/stop",
+      describeRoute({
+        summary: "Stop main plan translations",
+        description: "Stop active main plan translations and ignore any in-flight results.",
+        operationId: "mainPlan.stopTranslation",
+        responses: {
+          200: {
+            description: "Main plan stop result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    count: z.number().int().min(0),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json({ count: await MainPlanTranslate.stop() })
       },
     ),
 )

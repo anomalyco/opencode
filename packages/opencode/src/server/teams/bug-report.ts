@@ -6,6 +6,10 @@ import { TeamBugReport } from "../../team/bug-report"
 import { Bus } from "../../bus"
 import z from "zod"
 
+const TranslateRequest = z.object({
+  force: z.boolean().optional(),
+})
+
 export const BugReportRoutes = () =>
   new Hono()
     .get(
@@ -81,8 +85,34 @@ export const BugReportRoutes = () =>
         },
       }),
       async (c) => {
+        const body = TranslateRequest.parse(await c.req.json().catch(() => ({})))
         return c.json({
-          count: await BugReportTranslate.translate({ all: true }),
+          count: await BugReportTranslate.translate({ all: true, ...(body.force ? { force: true } : {}) }),
         })
+      },
+    )
+    .post(
+      "/translate/stop",
+      describeRoute({
+        summary: "Stop bug report translations",
+        description: "Stop active bug report translations and ignore any in-flight results.",
+        operationId: "bugReport.stopTranslation",
+        responses: {
+          200: {
+            description: "Bug report stop result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    count: z.number().int().min(0),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json({ count: await BugReportTranslate.stop() })
       },
     )

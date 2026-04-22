@@ -22,6 +22,7 @@ type Signal = {
 type State = {
   q: Queue.Queue<Signal>
   scope: Scope.Closeable
+  stopped: Set<string>
 }
 
 function uniq(list?: string[]) {
@@ -69,13 +70,15 @@ function localeForProvider(code: string) {
   return code
 }
 
+function translated(item: TeamMemory.Entry, code: string) {
+  return item.ui_locale === code && !!item.title_ui && !!item.content_ui
+}
+
 function done(item: TeamMemory.Entry, code: string) {
   return (
     item.is_translate &&
     item.translate_status === TeamMemory.TranslateStatus.enum.finished &&
-    item.ui_locale === code &&
-    !!item.title_ui &&
-    !!item.content_ui
+    translated(item, code)
   )
 }
 
@@ -86,8 +89,9 @@ function busy(item: TeamMemory.Entry) {
   )
 }
 
-function need(item: TeamMemory.Entry, code: string) {
+function need(item: TeamMemory.Entry, code: string, force = false) {
   if (busy(item)) return false
+  if (force) return true
   return !done(item, code)
 }
 
@@ -98,7 +102,8 @@ function pick(item: TeamMemory.Entry, code: string) {
 export namespace MemoryTranslate {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
-    readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean }) => Effect.Effect<number, Error>
+    readonly translate: (input?: { all?: boolean; ids?: string[]; wait?: boolean; force?: boolean }) => Effect.Effect<number, Error>
+    readonly stop: () => Effect.Effect<number, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/MemoryTranslate") {}
@@ -123,6 +128,7 @@ export namespace MemoryTranslate {
 
       const mark = Effect.fn("MemoryTranslate.mark")(function* (input: {
         id: string
+        guard?: number
         ui: {
           title_ui?: string
           content_ui?: string
@@ -136,22 +142,10 @@ export namespace MemoryTranslate {
           translate_updated?: number
         }
       }) {
-        const item = yield* memory.get({ id: input.id })
-        if (!item) return
-        return yield* memory.write({
-          id: item.id,
-          area: item.area,
-          class: item.class,
-          kind: item.kind,
-          domain: item.domain,
-          title: item.title,
-          content: item.content,
-          scope: item.scope,
-          tags: item.tags,
-          status: item.status,
-          source_id: item.source_id,
-          payload: item.payload,
-          meta: item.meta,
+        return yield* memory.updateIf({
+          id: input.id,
+          when: (item) => input.guard === undefined || (item.translate_updated === input.guard && busy(item)),
+          patch: {
           title_ui: input.ui.title_ui,
           content_ui: input.ui.content_ui,
           ui_locale: input.ui.ui_locale,
@@ -160,18 +154,19 @@ export namespace MemoryTranslate {
           translate_done: input.translate.translate_done,
           translate_total: input.translate.translate_total,
           translate_updated: input.translate.translate_updated,
-          sessionID: item.session_id,
-          actor: item.updated_by,
+          },
         })
       })
 
-      const claim = Effect.fn("MemoryTranslate.claim")(function* (input?: { all?: boolean; ids?: string[] }) {
+      const claim = Effect.fn("MemoryTranslate.claim")(function* (input?: { all?: boolean; ids?: string[]; force?: boolean }) {
         const ready = yield* active()
         if (!ready) return []
         const list = input?.all
           ? yield* memory.list({ limit: 1000 })
           : yield* Effect.forEach(uniq(input?.ids), (id) => memory.get({ id }), { concurrency: 8 })
-        const rows = list.filter((item): item is TeamMemory.Entry => !!item).filter((item) => need(item, ready.code))
+        const rows = list
+          .filter((item): item is TeamMemory.Entry => !!item)
+          .filter((item) => need(item, ready.code, !!input?.force))
         yield* Effect.forEach(
           rows,
           (item) =>
@@ -237,6 +232,7 @@ export namespace MemoryTranslate {
         let count = 0
 
         for (const item of rows) {
+          const waiting = item.translate_updated
           const work = plan([
             {
               id: item.id,
@@ -247,8 +243,10 @@ export namespace MemoryTranslate {
             },
           ])
           const total = work.total.get(item.id) ?? 0
-          yield* mark({
+          const token = Date.now()
+          const started = yield* mark({
             id: item.id,
+            guard: waiting,
             ui: {
               title_ui: item.title_ui,
               content_ui: item.content_ui,
@@ -259,9 +257,10 @@ export namespace MemoryTranslate {
               translate_status: TeamMemory.TranslateStatus.enum.started,
               translate_done: 0,
               translate_total: total,
-              translate_updated: Date.now(),
+              translate_updated: token,
             },
           })
+          if (!started) continue
           const exit = yield* Effect.promise(() =>
             translateBlocks({
               locale: localeForProvider(ready.code),
@@ -272,6 +271,7 @@ export namespace MemoryTranslate {
                 await Effect.runPromise(
                   mark({
                     id: item.id,
+                    guard: token,
                     ui: {
                       title_ui: item.title_ui,
                       content_ui: item.content_ui,
@@ -282,7 +282,7 @@ export namespace MemoryTranslate {
                       translate_status: TeamMemory.TranslateStatus.enum.started,
                       translate_done: done,
                       translate_total: total,
-                      translate_updated: Date.now(),
+                      translate_updated: token,
                     },
                   }),
                 )
@@ -292,6 +292,7 @@ export namespace MemoryTranslate {
           if (Exit.isFailure(exit)) {
             yield* mark({
               id: item.id,
+              guard: token,
               ui: {
                 title_ui: item.title_ui,
                 content_ui: item.content_ui,
@@ -302,7 +303,7 @@ export namespace MemoryTranslate {
                 translate_status: TeamMemory.TranslateStatus.enum.idle,
                 translate_done: 0,
                 translate_total: 0,
-                translate_updated: Date.now(),
+                translate_updated: token,
               },
             })
             const err = Cause.squash(exit.cause)
@@ -312,6 +313,7 @@ export namespace MemoryTranslate {
           if (!next) continue
           yield* mark({
             id: item.id,
+            guard: token,
             ui: {
               title_ui: next.title,
               content_ui: next.content,
@@ -322,7 +324,7 @@ export namespace MemoryTranslate {
               translate_status: TeamMemory.TranslateStatus.enum.finished,
               translate_done: total,
               translate_total: total,
-              translate_updated: Date.now(),
+              translate_updated: token,
             },
           })
           count += 1
@@ -335,6 +337,7 @@ export namespace MemoryTranslate {
         Effect.fn("MemoryTranslate.state")(function* () {
           const q = yield* Queue.unbounded<Signal>()
           const scope = yield* Scope.make()
+          const stopped = new Set<string>()
 
           const loop = Effect.forever(
             Effect.gen(function* () {
@@ -374,9 +377,14 @@ export namespace MemoryTranslate {
           yield* Scope.provide(scope)(
             bus.subscribe(TeamMemory.Event.Updated).pipe(
               Stream.runForEach((evt) =>
-                claim({ ids: [evt.properties.entry.id] }).pipe(
-                  Effect.flatMap((ids) => (ids.length > 0 ? Queue.offer(q, { ids }) : Effect.void)),
-                ),
+                Effect.gen(function* () {
+                  const id = evt.properties.entry.id
+                  const blocked = yield* Effect.sync(() => stopped.has(id))
+                  if (blocked) return
+                  const ids = yield* claim({ ids: [id] })
+                  if (ids.length === 0) return
+                  yield* Queue.offer(q, { ids })
+                }),
               ),
               Effect.forkScoped,
             ),
@@ -384,7 +392,7 @@ export namespace MemoryTranslate {
 
           yield* Scope.provide(scope)(loop)
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-          return { q, scope }
+          return { q, scope, stopped }
         }),
       )
 
@@ -396,17 +404,57 @@ export namespace MemoryTranslate {
         all?: boolean
         ids?: string[]
         wait?: boolean
+        force?: boolean
       }) {
+        const next = yield* InstanceState.get(state)
+        yield* Effect.sync(() => {
+          if (input?.all) next.stopped.clear()
+          else for (const id of uniq(input?.ids)) next.stopped.delete(id)
+        })
         const ids = yield* claim(input)
         if (ids.length === 0) return 0
-        const next = yield* InstanceState.get(state)
         const done = input?.wait ? yield* Deferred.make<number, Error>() : undefined
         yield* Queue.offer(next.q, { ids, done })
         if (!done) return ids.length
         return yield* Deferred.await(done)
       })
 
-      return Service.of({ init, translate })
+      const stop = Effect.fn("MemoryTranslate.stop")(function* () {
+        const ready = yield* active()
+        if (!ready) return 0
+        const next = yield* InstanceState.get(state)
+        const list = yield* memory.list({ limit: 1000 })
+        const rows = list.filter((item) => item.ui_locale === ready.code && busy(item))
+        if (rows.length === 0) return 0
+        yield* Effect.sync(() => {
+          for (const item of rows) next.stopped.add(item.id)
+        })
+        yield* Effect.forEach(
+          rows,
+          (item) => {
+            const complete = translated(item, ready.code)
+            return mark({
+              id: item.id,
+              ui: {
+                title_ui: item.title_ui,
+                content_ui: item.content_ui,
+                ui_locale: item.ui_locale,
+              },
+              translate: {
+                is_translate: complete,
+                translate_status: complete ? TeamMemory.TranslateStatus.enum.finished : TeamMemory.TranslateStatus.enum.idle,
+                translate_done: 0,
+                translate_total: 0,
+                translate_updated: Date.now(),
+              },
+            })
+          },
+          { concurrency: 1, discard: true },
+        )
+        return rows.length
+      })
+
+      return Service.of({ init, translate, stop })
     }),
   )
 
@@ -432,14 +480,19 @@ export async function init() {
   return runtime.runPromise((svc) => svc.init())
 }
 
-export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean }) {
+export async function translate(input?: { all?: boolean; ids?: string[]; wait?: boolean; force?: boolean }) {
   return runtime.runPromise((svc) => svc.translate(input))
 }
 
-const memoryTranslateRuntime = { init, translate }
+export async function stop() {
+  return runtime.runPromise((svc) => svc.stop())
+}
+
+const memoryTranslateRuntime = { init, translate, stop }
 
 export namespace MemoryTranslate {
   export const init = () => memoryTranslateRuntime.init()
   export const translate = (...args: Parameters<typeof import("./memory-translate").translate>) =>
     memoryTranslateRuntime.translate(...args)
+  export const stop = () => memoryTranslateRuntime.stop()
 }

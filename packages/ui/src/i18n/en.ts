@@ -193,6 +193,8 @@ export const dict: Record<string, string> = {
   "ui.translation.waiting": "Waiting for translation",
   "ui.translation.started": "Translating",
   "ui.translation.completed": "Translation ready",
+  "ui.translation.force": "Force translate",
+  "ui.translation.stop": "Stop",
   "ui.bugReport.action.delete": "Delete",
   "ui.bugReport.title": "Agent Reports",
   "ui.bugReport.description": "Opencode environment issues, suggestions, and feature requests filed by agents.",

@@ -180,6 +180,8 @@ export const dict = {
   "ui.translation.waiting": "Çeviri bekleniyor",
   "ui.translation.started": "Çevriliyor",
   "ui.translation.completed": "Çeviri hazır",
+  "ui.translation.force": "Zorla çevir",
+  "ui.translation.stop": "Durdur",
   "ui.bugReport.action.delete": "Sil",
   "ui.bugReport.title": "Ajan Raporları",
   "ui.bugReport.description": "Ajanların oluşturduğu Opencode ortam sorunları, öneriler ve özellik talepleri.",

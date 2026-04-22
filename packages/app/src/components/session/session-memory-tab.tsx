@@ -66,7 +66,7 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
     cancelAnimationFrame(frame)
   })
 
-  const translate = async () => {
+  const translate = async (force = false) => {
     if (translating()) return
     if (sync.data.memory_entry.length === 0) return
     setState("translating", true)
@@ -84,6 +84,7 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
           path: "/project/current/memory/translate",
           directory: sdk.directory,
           method: "POST",
+          body: force ? { force: true } : undefined,
         }),
       )
       .then(() => {
@@ -92,6 +93,29 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
           description: language.t("ui.memory.panel.translating"),
         })
       })
+      .catch((err: unknown) => {
+        const next = issue({ err, t: language.t, tag: "memory", locale: language.locale() })
+        setState("error", next)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: next.message,
+        })
+      })
+      .finally(() => {
+        setState("translating", false)
+      })
+  }
+
+  const stop = async () => {
+    if (!translating()) return
+    setState("translating", true)
+    setState("error", undefined)
+    await sdkJson<{ count: number }>(sdk.client, {
+      path: "/project/current/memory/translate/stop",
+      directory: sdk.directory,
+      method: "POST",
+    })
       .catch((err: unknown) => {
         const next = issue({ err, t: language.t, tag: "memory", locale: language.locale() })
         setState("error", next)
@@ -135,6 +159,8 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
           activity={sync.data.memory_activity}
           translating={translating()}
           onTranslate={translate}
+          onForceTranslate={() => void translate(true)}
+          onStopTranslate={() => void stop()}
           onRemove={remove}
           translateError={state.error}
           onClearTranslateError={() => setState("error", undefined)}

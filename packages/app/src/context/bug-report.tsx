@@ -108,8 +108,8 @@ export const { use: useBugReport, provider: BugReportProvider } = createSimpleCo
       upsert(entry)
     })
 
-    const translate = async () => {
-      if (store.translating) return 0
+    const translate = async (force = false) => {
+      if (store.translating || hasActiveTranslations(store.reports)) return 0
       setStore("translating", true)
       setStore("error", undefined)
       try {
@@ -120,6 +120,27 @@ export const { use: useBugReport, provider: BugReportProvider } = createSimpleCo
         })
         const res = await sdkJson<{ count: number }>(sdk.client, {
           path: "/bug-report/translate",
+          directory: sdk.directory,
+          method: "POST",
+          body: force ? { force: true } : undefined,
+        })
+        await load()
+        return res.count ?? 0
+      } catch (err) {
+        setStore("error", issue({ err, t: language.t, tag: "bug-report", locale: language.locale() }))
+        throw err
+      } finally {
+        setStore("translating", false)
+      }
+    }
+
+    const stop = async () => {
+      if (!store.translating && !hasActiveTranslations(store.reports)) return 0
+      setStore("translating", true)
+      setStore("error", undefined)
+      try {
+        const res = await sdkJson<{ count: number }>(sdk.client, {
+          path: "/bug-report/translate/stop",
           directory: sdk.directory,
           method: "POST",
         })
@@ -157,6 +178,7 @@ export const { use: useBugReport, provider: BugReportProvider } = createSimpleCo
       },
       refresh: load,
       translate,
+      stop,
       remove,
       clearError() {
         setStore("error", undefined)

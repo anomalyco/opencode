@@ -509,6 +509,11 @@ export namespace TeamMemory {
       sessionID: SessionID
       actor: string
     }) => Effect.Effect<Entry>
+    readonly updateIf: (input: {
+      id: string
+      when: (item: Entry) => boolean
+      patch: Partial<Entry>
+    }) => Effect.Effect<Entry | undefined>
     readonly promote: (input: {
       id: string
       title?: string
@@ -876,6 +881,36 @@ export namespace TeamMemory {
         )
       })
 
+      const updateIf = Effect.fn("TeamMemory.updateIf")(function* (input: {
+        id: string
+        when: (item: Entry) => boolean
+        patch: Partial<Entry>
+      }) {
+        const project = yield* projectID()
+        const saved = yield* Effect.promise(() =>
+          Flock.withLock(lock(project, input.id), async () => {
+            const current = await readEntry(project, input.id)
+            if (!current) return
+            if (!input.when(current)) return
+            const next = Entry.parse({
+              ...current,
+              ...input.patch,
+              time: {
+                ...current.time,
+                updated: Date.now(),
+              },
+            })
+            return writeEntry(project, next)
+          }),
+        )
+        if (!saved) return
+        yield* bus.publish(Event.Updated, {
+          projectID: project,
+          entry: saved,
+        })
+        return saved
+      })
+
       const promote = Effect.fn("TeamMemory.promote")(function* (input: {
         id: string
         title?: string
@@ -1033,7 +1068,7 @@ export namespace TeamMemory {
         return out.filter((item): item is string => !!item)
       })
 
-      return Service.of({ list, get, search, write, promote, archive, remove, bulkRemove, system })
+      return Service.of({ list, get, search, write, updateIf, promote, archive, remove, bulkRemove, system })
     }),
   )
 
