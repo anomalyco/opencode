@@ -162,14 +162,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
-  const sdk = useSDK()
-
-  const [load, setLoad] = createStore({
-    lspDone: false,
-    lspLoading: false,
-    mcpDone: false,
-    mcpLoading: false,
-  })
 
   const fail = (err: unknown) => {
     showToast({
@@ -181,40 +173,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
   createEffect(() => {
     if (!props.shown()) return
-
-    if (!sync.data.mcp_ready && !load.mcpDone && !load.mcpLoading) {
-      setLoad("mcpLoading", true)
-      void sdk.client.mcp
-        .status()
-        .then((result) => {
-          sync.set("mcp", result.data ?? {})
-          sync.set("mcp_ready", true)
-        })
-        .catch((err) => {
-          setLoad("mcpDone", true)
-          fail(err)
-        })
-        .finally(() => {
-          setLoad("mcpLoading", false)
-        })
-    }
-
-    if (!sync.data.lsp_ready && !load.lspDone && !load.lspLoading) {
-      setLoad("lspLoading", true)
-      void sdk.client.lsp
-        .status()
-        .then((result) => {
-          sync.set("lsp", result.data ?? [])
-          sync.set("lsp_ready", true)
-        })
-        .catch((err) => {
-          setLoad("lspDone", true)
-          fail(err)
-        })
-        .finally(() => {
-          setLoad("lspLoading", false)
-        })
-    }
   })
 
   let dialogRun = 0

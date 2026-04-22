@@ -47,7 +47,7 @@ export const DialogSelectMcp: Component = () => {
       .status()
       .then((result) => {
         sync.set("mcp", result.data ?? {})
-        sync.set("mcp_ready", true)
+        // sync.set("mcp_ready", true)
         setState("done", true)
       })
       .catch((err) => {

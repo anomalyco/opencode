@@ -14,8 +14,9 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
-import { useQuery } from "@tanstack/solid-query"
-import { loadPathQuery } from "./bootstrap"
+import { useQueries } from "@tanstack/solid-query"
+import { loadPathQuery, loadProvidersQuery } from "./bootstrap"
+import { loadLspQuery, loadMcpQuery } from "../global-sync"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -158,12 +159,22 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialIcon = icon[0].value
 
-          const pathQuery = useQuery(() => loadPathQuery(directory))
+          const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
+            queries: [
+              loadPathQuery(directory),
+              loadMcpQuery(directory),
+              loadLspQuery(directory),
+              loadProvidersQuery(directory),
+            ],
+          }))
+
           const child = createStore<State>({
             project: "",
             projectMeta: undefined,
             icon: initialIcon,
-            provider_ready: false,
+            get provider_ready() {
+              return providerQuery.isLoading
+            },
             provider: { all: [], connected: [], default: {} },
             config: {},
             get path() {
@@ -181,9 +192,13 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
-            mcp_ready: false,
+            get mcp_ready() {
+              return mcpQuery.isLoading
+            },
             mcp: {},
-            lsp_ready: false,
+            get lsp_ready() {
+              return lspQuery.isLoading
+            },
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
