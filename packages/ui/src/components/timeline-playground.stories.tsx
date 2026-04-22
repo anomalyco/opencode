@@ -318,7 +318,7 @@ const TOOL_SAMPLES = {
     tool: "bash",
     input: { command: "bun test --filter session", description: "Run session tests" },
     output:
-      "bun test v1.3.11\n\n✓ session-turn.test.tsx (3 tests) 45ms\n✓ message-part.test.tsx (7 tests) 120ms\n\nTest Suites: 2 passed, 2 total\nTests:       10 passed, 10 total\nTime:        0.89s",
+      "bun test v1.3.13\n\n✓ session-turn.test.tsx (3 tests) 45ms\n✓ message-part.test.tsx (7 tests) 120ms\n\nTest Suites: 2 passed, 2 total\nTests:       10 passed, 10 total\nTime:        0.89s",
     title: "Run session tests",
     metadata: { command: "bun test --filter session" },
   },
