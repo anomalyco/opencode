@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "child_process"
 import { ulid } from "ulid"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect"
 import { Log } from "@/util"
-import { Shell, killTree } from "./shell"
+import { killTree } from "./shell"
 
 const log = Log.create({ service: "shell.background" })
 
@@ -15,7 +15,6 @@ type Handle = {
   id: string
   command: string
   description?: string
-  cwd: string
   startedAt: number
   proc: ChildProcess
   buffer: string[]
@@ -45,15 +44,6 @@ export type OutputResult = {
   startedAt: number
   output: string
   truncated: boolean
-}
-
-export type ListResult = {
-  shellID: string
-  command: string
-  description?: string
-  status: Status
-  exitCode: number | null
-  startedAt: number
 }
 
 const PS_NAMES = new Set(["powershell", "pwsh"])
@@ -107,7 +97,6 @@ function startHandle(input: StartInput): Handle {
     id,
     command: input.command,
     description: input.description,
-    cwd: input.cwd,
     startedAt: Date.now(),
     proc,
     buffer: [],
@@ -155,16 +144,30 @@ function snapshot(handle: Handle): OutputResult {
   }
 }
 
+async function killAll(shells: Map<string, Handle>) {
+  for (const handle of shells.values()) {
+    if (handle.exited) continue
+    try {
+      await killTree(handle.proc, { exited: () => handle.exited })
+    } catch (err) {
+      log.error("kill on shutdown failed", { id: handle.id, error: String(err) })
+    }
+  }
+  shells.clear()
+}
+
 type State = {
   shells: Map<string, Handle>
 }
 
+export class ShellNotFound extends Schema.TaggedErrorClass<ShellNotFound>()("ShellNotFound", {
+  shellID: Schema.String,
+}) {}
+
 export interface Interface {
   readonly start: (input: StartInput) => Effect.Effect<{ shellID: string }>
-  readonly output: (input: { shellID: string }) => Effect.Effect<OutputResult>
-  readonly kill: (input: { shellID: string }) => Effect.Effect<OutputResult>
-  readonly list: () => Effect.Effect<ListResult[]>
-  readonly cleanup: () => Effect.Effect<void>
+  readonly output: (input: { shellID: string }) => Effect.Effect<OutputResult, ShellNotFound>
+  readonly kill: (input: { shellID: string }) => Effect.Effect<OutputResult, ShellNotFound>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BackgroundShell") {}
@@ -174,7 +177,9 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const state = yield* InstanceState.make<State>(
       Effect.fn("BackgroundShell.state")(function* (_ctx) {
-        return { shells: new Map<string, Handle>() }
+        const shells = new Map<string, Handle>()
+        yield* Effect.addFinalizer(() => Effect.promise(() => killAll(shells)))
+        return { shells }
       }),
     )
 
@@ -190,9 +195,9 @@ export const layer = Layer.effect(
       }),
       output: Effect.fn("BackgroundShell.output")(function* (input: { shellID: string }) {
         return yield* InstanceState.useEffect(state, (s) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             const handle = s.shells.get(input.shellID)
-            if (!handle) throw new Error(`No background shell with id ${input.shellID}`)
+            if (!handle) return yield* Effect.fail(new ShellNotFound({ shellID: input.shellID }))
             return snapshot(handle)
           }),
         )
@@ -201,7 +206,7 @@ export const layer = Layer.effect(
         return yield* InstanceState.useEffect(state, (s) =>
           Effect.gen(function* () {
             const handle = s.shells.get(input.shellID)
-            if (!handle) throw new Error(`No background shell with id ${input.shellID}`)
+            if (!handle) return yield* Effect.fail(new ShellNotFound({ shellID: input.shellID }))
             if (!handle.exited) {
               yield* Effect.promise(() => killTree(handle.proc, { exited: () => handle.exited }))
               if (handle.status === "running") handle.status = "killed"
@@ -212,38 +217,10 @@ export const layer = Layer.effect(
           }),
         )
       }),
-      list: Effect.fn("BackgroundShell.list")(function* () {
-        return yield* InstanceState.useEffect(state, (s) =>
-          Effect.sync(() =>
-            Array.from(s.shells.values()).map((h) => ({
-              shellID: h.id,
-              command: h.command,
-              description: h.description,
-              status: h.status,
-              exitCode: h.exitCode,
-              startedAt: h.startedAt,
-            })),
-          ),
-        )
-      }),
-      cleanup: Effect.fn("BackgroundShell.cleanup")(function* () {
-        return yield* InstanceState.useEffect(state, (s) =>
-          Effect.gen(function* () {
-            for (const handle of s.shells.values()) {
-              if (handle.exited) continue
-              yield* Effect.promise(() => killTree(handle.proc, { exited: () => handle.exited })).pipe(Effect.ignore)
-            }
-            s.shells.clear()
-          }),
-        )
-      }),
     })
   }),
 )
 
 export const defaultLayer = layer
-
-// Re-export Shell helpers for convenience so call sites only import this module.
-export { Shell }
 
 export * as BackgroundShell from "./background"

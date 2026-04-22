@@ -1,7 +1,7 @@
 import z from "zod"
 import { Effect } from "effect"
 import * as Tool from "./tool"
-import { BackgroundShell } from "../shell/background"
+import { BackgroundShell, ShellNotFound } from "../shell/background"
 
 const parameters = z.object({
   shell_id: z.string().describe("The id of the background shell to terminate"),
@@ -19,27 +19,38 @@ export const KillShellTool = Tool.define(
       description: DESCRIPTION,
       parameters,
       execute: (params: z.infer<typeof parameters>, _ctx: Tool.Context) =>
-        Effect.gen(function* () {
-          const result = yield* bg.kill({ shellID: params.shell_id })
-          const output = result.output || "(no remaining output)"
-          const lines: string[] = [
-            `shell_id: ${result.shellID}`,
-            `status: ${result.status}`,
-            `exit_code: ${result.exitCode ?? "n/a"}`,
-          ]
-          if (result.error) lines.push(`error: ${result.error}`)
-          lines.push("")
-          lines.push(output)
-          return {
-            title: `Killed ${result.shellID}`,
-            output: lines.join("\n"),
-            metadata: {
-              shellID: result.shellID,
-              status: result.status,
-              exitCode: result.exitCode,
-            },
-          }
-        }).pipe(Effect.orDie),
+        bg
+          .kill({ shellID: params.shell_id })
+          .pipe(
+            Effect.map((result) => {
+              const body = result.output || "(no remaining output)"
+              const lines: string[] = [
+                `shell_id: ${result.shellID}`,
+                `status: ${result.status}`,
+                `exit_code: ${result.exitCode ?? "n/a"}`,
+              ]
+              if (result.error) lines.push(`error: ${result.error}`)
+              lines.push("")
+              lines.push(body)
+              return {
+                title: `Killed ${result.shellID}`,
+                output: lines.join("\n"),
+                metadata: {
+                  shellID: result.shellID,
+                  status: result.status,
+                  exitCode: result.exitCode,
+                },
+              }
+            }),
+            Effect.catchTag("ShellNotFound", (err: ShellNotFound) =>
+              Effect.succeed({
+                title: `Shell ${err.shellID} not found`,
+                output: `No background shell with id ${err.shellID}. It may have already been killed or never existed.`,
+                metadata: { shellID: err.shellID, status: "errored" as const, exitCode: null },
+              }),
+            ),
+            Effect.orDie,
+          ),
     }
   }),
 )
