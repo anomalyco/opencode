@@ -17,9 +17,9 @@ function parse(color: string): RGBA | null {
   return null
 }
 
-function mode(bg: RGBA | null): "dark" | "light" {
-  if (!bg) return "dark"
-  const luminance = (0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b) / 255
+function mode(background: RGBA | null): "dark" | "light" {
+  if (!background) return "dark"
+  const luminance = (0.299 * background.r + 0.587 * background.g + 0.114 * background.b) / 255
   return luminance > 0.5 ? "light" : "dark"
 }
 
