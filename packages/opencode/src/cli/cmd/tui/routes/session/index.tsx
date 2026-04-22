@@ -193,6 +193,7 @@ export function Session() {
             ? `Session not found: ${sessionID}`
             : errorMessage(result.error ?? `Failed to load session: ${sessionID}`),
         variant: "error",
+        duration: 5000,
       })
       navigate({ type: "home" })
       return
