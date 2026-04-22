@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, join, relative, resolve as pathResolve } from "path"
-import { realpathSync } from "fs"
+import { accessSync, constants, realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
 import { Effect, FileSystem, Layer, Schema, Context } from "effect"
@@ -23,6 +23,7 @@ export namespace AppFileSystem {
   export interface Interface extends FileSystem.FileSystem {
     readonly isDir: (path: string) => Effect.Effect<boolean>
     readonly isFile: (path: string) => Effect.Effect<boolean>
+    readonly isWritable: (path: string) => Effect.Effect<boolean>
     readonly existsSafe: (path: string) => Effect.Effect<boolean>
     readonly readJson: (path: string) => Effect.Effect<unknown, Error>
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
@@ -55,6 +56,17 @@ export namespace AppFileSystem {
       const isFile = Effect.fn("FileSystem.isFile")(function* (path: string) {
         const info = yield* fs.stat(path).pipe(Effect.catch(() => Effect.void))
         return info?.type === "File"
+      })
+
+      const isWritable = Effect.fn("FileSystem.isWritable")(function* (path: string) {
+        return yield* Effect.sync(() => {
+          try {
+            accessSync(path, constants.W_OK)
+            return true
+          } catch {
+            return false
+          }
+        })
       })
 
       const readDirectoryEntries = Effect.fn("FileSystem.readDirectoryEntries")(function* (dirPath: string) {
@@ -165,6 +177,7 @@ export namespace AppFileSystem {
         existsSafe,
         isDir,
         isFile,
+        isWritable,
         readDirectoryEntries,
         readJson,
         writeJson,

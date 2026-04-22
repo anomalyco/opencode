@@ -2337,3 +2337,70 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+describe("ensureGitignore", () => {
+  test("skips .gitignore creation for non-existent config dir", async () => {
+    await using tmp = await tmpdir<string>({
+      init: async (dir) => {
+        // Return a path that does NOT exist on disk
+        return path.join(dir, "does-not-exist")
+      },
+    })
+
+    const prev = process.env.OPENCODE_CONFIG_DIR
+    process.env.OPENCODE_CONFIG_DIR = tmp.extra
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // Should not throw even though the dir doesn't exist
+          await load()
+        },
+      })
+
+      // Dir was never created, so no .gitignore should exist
+      expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(false)
+    } finally {
+      if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
+      else process.env.OPENCODE_CONFIG_DIR = prev
+    }
+  })
+
+  test("skips .gitignore creation for read-only config dir", async () => {
+    if (process.platform === "win32") return
+
+    await using tmp = await tmpdir<string>({
+      init: async (dir) => {
+        const ro = path.join(dir, "readonly")
+        await fs.mkdir(ro, { recursive: true })
+        await fs.chmod(ro, 0o555)
+        return ro
+      },
+      dispose: async (dir) => {
+        const ro = path.join(dir, "readonly")
+        await fs.chmod(ro, 0o755).catch(() => {})
+        return ro
+      },
+    })
+
+    const prev = process.env.OPENCODE_CONFIG_DIR
+    process.env.OPENCODE_CONFIG_DIR = tmp.extra
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // Should not throw even though the dir is read-only
+          await load()
+        },
+      })
+
+      // .gitignore should NOT have been created
+      expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(false)
+    } finally {
+      if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
+      else process.env.OPENCODE_CONFIG_DIR = prev
+    }
+  })
+})

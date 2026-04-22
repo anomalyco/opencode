@@ -65,6 +65,38 @@ describe("AppFileSystem", () => {
     )
   })
 
+  describe("isWritable", () => {
+    it(
+      "returns true for a writable file",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "writable.txt")
+        yield* filesys.writeFileString(file, "hello")
+
+        expect(yield* fs.isWritable(file)).toBe(true)
+      }),
+    )
+
+    it(
+      "returns false for a read-only file",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "readonly.txt")
+        yield* filesys.writeFileString(file, "hello")
+        yield* filesys.chmod(file, 0o444)
+
+        expect(yield* fs.isWritable(file)).toBe(false)
+
+        // restore permissions so temp cleanup can succeed
+        yield* filesys.chmod(file, 0o644)
+      }),
+    )
+  })
+
   describe("readJson / writeJson", () => {
     it(
       "round-trips JSON data",
