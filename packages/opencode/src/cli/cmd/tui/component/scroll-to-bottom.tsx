@@ -4,45 +4,48 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 
 export function ScrollNavigationButtons(props: {
-  isScrolledToBottom: boolean | (() => boolean)
-  onClickUp: () => void
-  onClickDown: () => void
+  isAtBottom: () => boolean
+  onPreviousUserMessage: () => void
+  onScrollToBottom: () => void
 }) {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
 
   const topPosition = () => Math.floor(dimensions().height / 2) - 3
-  const isAtBottom = () =>
-    typeof props.isScrolledToBottom === "function" ? props.isScrolledToBottom() : props.isScrolledToBottom
-
   const buttonBg = () => tint(theme.backgroundPanel, theme.primary, 0.15)
 
   return (
     <box position="absolute" top={topPosition()} right={1} zIndex={100} flexDirection="column" gap={0.5}>
       <box
+        backgroundColor={buttonBg()}
+        paddingLeft={1}
+        paddingRight={1}
+        paddingTop={0}
+        paddingBottom={0}
         onMouseDown={(e) => {
           e.stopPropagation()
-          props.onClickUp()
+          props.onPreviousUserMessage()
         }}
       >
-        <box backgroundColor={buttonBg()} paddingLeft={1} paddingRight={1} paddingTop={0} paddingBottom={0}>
-          <text fg={theme.primary} attributes={TextAttributes.BOLD}>
-            ▲
-          </text>
-        </box>
+        <text fg={theme.primary} attributes={TextAttributes.BOLD}>
+          ▲
+        </text>
       </box>
-      <Show when={!isAtBottom()}>
+      <Show when={!props.isAtBottom()}>
         <box
+          backgroundColor={buttonBg()}
+          paddingLeft={1}
+          paddingRight={1}
+          paddingTop={0}
+          paddingBottom={0}
           onMouseDown={(e) => {
             e.stopPropagation()
-            props.onClickDown()
+            props.onScrollToBottom()
           }}
         >
-          <box backgroundColor={buttonBg()} paddingLeft={1} paddingRight={1} paddingTop={0} paddingBottom={0}>
-            <text fg={theme.primary} attributes={TextAttributes.BOLD}>
-              ▼
-            </text>
-          </box>
+          <text fg={theme.primary} attributes={TextAttributes.BOLD}>
+            ▼
+          </text>
         </box>
       </Show>
     </box>

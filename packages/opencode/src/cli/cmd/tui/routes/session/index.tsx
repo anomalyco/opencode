@@ -135,6 +135,7 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const userMessages = createMemo(() => messages().filter((msg) => msg.role === "user"))
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
@@ -251,6 +252,8 @@ export function Session() {
     onCleanup(() => clearInterval(interval))
   })
 
+  createEffect(on(() => messages().length, () => setUserMessageIndex(-1)))
+
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
     if (evt.properties.status.type !== "retry") return
@@ -353,35 +356,35 @@ export function Session() {
 
   function toPreviousUserMessage() {
     if (!scroll || scroll.isDestroyed) return
-    const messages = sync.data.message[route.sessionID]
-    if (!messages || !messages.length) return
+    const msgs = userMessages()
+    if (msgs.length === 0) return
 
-    const userMessages = messages.filter((msg) => msg.role === "user")
-    if (userMessages.length === 0) return
+    const children = scroll.getChildren()
+    const childById = new Map(children.map((c) => [c.id, c]))
+    const currentScrollTop = scroll.scrollTop
 
-    if (userMessageIndex() === -1) {
-      const currentScrollTop = scroll.scrollTop
-      let index = userMessages.length - 1
-      for (let i = userMessages.length - 1; i >= 0; i--) {
-        const msg = userMessages[i]
-        const child = scroll.getChildren().find((c) => c.id === msg.id)
-        if (child && child.y < currentScrollTop) {
-          index = i
-          break
-        }
-        if (i === 0) index = -1
+    const indicesAbove: number[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const child = childById.get(msgs[i]!.id)
+      if (child && child.y < currentScrollTop) {
+        indicesAbove.push(i)
       }
-      setUserMessageIndex(index > 0 ? index - 1 : index)
-    } else {
-      setUserMessageIndex((prev) => Math.max(0, prev - 1))
     }
 
-    const targetIndex = userMessageIndex()
-    if (targetIndex >= 0 && targetIndex < userMessages.length) {
-      const msg = userMessages[targetIndex]
-      const child = scroll.getChildren().find((c) => c.id === msg.id)
-      if (child) scroll.scrollBy(child.y - scroll.y - 1)
-    }
+    if (indicesAbove.length === 0) return
+
+    const currentIndex = userMessageIndex()
+    const targetIndex =
+      currentIndex === -1
+        ? Math.max(0, indicesAbove[indicesAbove.length - 1]! - 1)
+        : Math.max(0, currentIndex - 1)
+
+    setUserMessageIndex(targetIndex)
+
+    const msg = msgs[targetIndex]
+    if (!msg) return
+    const child = childById.get(msg.id)
+    if (child) scroll.scrollBy(child.y - scroll.y - 1)
   }
 
   const local = useLocal()
@@ -1205,9 +1208,9 @@ export function Session() {
               </For>
             </scrollbox>
             <ScrollNavigationButtons
-              isScrolledToBottom={isScrolledToBottom}
-              onClickUp={toPreviousUserMessage}
-              onClickDown={toBottom}
+              isAtBottom={isScrolledToBottom}
+              onPreviousUserMessage={toPreviousUserMessage}
+              onScrollToBottom={toBottom}
             />
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
