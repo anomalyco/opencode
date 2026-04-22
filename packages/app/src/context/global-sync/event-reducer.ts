@@ -11,7 +11,7 @@ import type {
   SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
-import type { State, VcsCache } from "./types"
+import type { MemoryActivity, MemoryEntry, State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
@@ -358,6 +358,45 @@ export function applyDirectoryEvent(input: {
     }
     case "lsp.updated": {
       input.loadLsp()
+      break
+    }
+    case "memory.updated": {
+      const props = event.properties as { projectID: string; entry: MemoryEntry }
+      const idx = input.store.memory_entry.findIndex((item) => item.id === props.entry.id)
+      if (idx === -1) {
+        input.setStore(
+          "memory_entry",
+          produce((draft) => {
+            draft.unshift(props.entry)
+          }),
+        )
+        break
+      }
+      input.setStore("memory_entry", idx, reconcile(props.entry))
+      break
+    }
+    case "memory.removed": {
+      const props = event.properties as { projectID: string; memory_id: string }
+      input.setStore(
+        "memory_entry",
+        produce((draft) => {
+          const idx = draft.findIndex((item) => item.id === props.memory_id)
+          if (idx >= 0) draft.splice(idx, 1)
+        }),
+      )
+      break
+    }
+    case "memory.activity": {
+      const props = event.properties as { projectID: string; activity: MemoryActivity }
+      input.setStore(
+        "memory_activity",
+        produce((draft) => {
+          const idx = draft.findIndex((item) => item.id === props.activity.id)
+          if (idx >= 0) draft.splice(idx, 1)
+          draft.unshift(props.activity)
+          if (draft.length > 20) draft.splice(20)
+        }),
+      )
       break
     }
   }

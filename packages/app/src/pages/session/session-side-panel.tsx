@@ -2,6 +2,7 @@ import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -21,7 +22,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -34,8 +34,15 @@ export function SessionSidePanel(props: {
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean
+  hasMemory: () => boolean
+  hasBugReport: () => boolean
   reviewCount: () => number
+  memoryCount: () => number
+  bugReportCount: () => number
   reviewPanel: () => JSX.Element
+  memoryPanel: () => JSX.Element
+  bugReportPanel: () => JSX.Element
+  detailPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
@@ -44,7 +51,6 @@ export function SessionSidePanel(props: {
   const layout = useLayout()
   const platform = usePlatform()
   const settings = useSettings()
-  const sync = useSync()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
@@ -136,8 +142,13 @@ export function SessionSidePanel(props: {
     normalizeTab,
     review: reviewTab,
     hasReview: props.canReview,
+    hasMemory: props.hasMemory,
+    hasBugReport: props.hasBugReport,
   })
   const contextOpen = tabState.contextOpen
+  const detailOpen = tabState.detailOpen
+  const memoryOpen = tabState.memoryOpen
+  const bugReportOpen = tabState.bugReportOpen
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
@@ -278,6 +289,56 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Show when={memoryOpen() || props.hasMemory()}>
+                        <Tabs.Trigger value="memory">
+                          <div class="flex items-center gap-2">
+                            <Icon size="small" name="brain" />
+                            <div>{language.t("session.tab.memory")}</div>
+                            <Show when={props.memoryCount() > 0}>
+                              <div>{props.memoryCount()}</div>
+                            </Show>
+                          </div>
+                        </Tabs.Trigger>
+                      </Show>
+                      <Show when={bugReportOpen() || props.hasBugReport()}>
+                        <Tabs.Trigger value="bug-report">
+                          <div class="flex items-center gap-2">
+                            <Icon size="small" name="warning" />
+                            <div>{language.t("session.tab.bugReport")}</div>
+                            <Show when={props.bugReportCount() > 0}>
+                              <div>{props.bugReportCount()}</div>
+                            </Show>
+                          </div>
+                        </Tabs.Trigger>
+                      </Show>
+                      <Show when={detailOpen()}>
+                        <Tabs.Trigger
+                          value="detail"
+                          closeButton={
+                            <TooltipKeybind
+                              title={language.t("common.closeTab")}
+                              keybind={command.keybind("tab.close")}
+                              placement="bottom"
+                              gutter={10}
+                            >
+                              <IconButton
+                                icon="close-small"
+                                variant="ghost"
+                                class="h-5 w-5"
+                                onClick={() => tabs().close("detail")}
+                                aria-label={language.t("common.closeTab")}
+                              />
+                            </TooltipKeybind>
+                          }
+                          hideCloseButton
+                          onMiddleClick={() => tabs().close("detail")}
+                        >
+                          <div class="flex items-center gap-2">
+                            <Icon size="small" name="sidebar" />
+                            <div>{language.t("session.tab.detail")}</div>
+                          </div>
+                        </Tabs.Trigger>
+                      </Show>
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
@@ -328,6 +389,32 @@ export function SessionSidePanel(props: {
                       <Show when={activeTab() === "context"}>
                         <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                           <SessionContextTab />
+                        </div>
+                      </Show>
+                    </Tabs.Content>
+                  </Show>
+
+                  <Show when={memoryOpen() || props.hasMemory()}>
+                    <Tabs.Content value="memory" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "memory"}>
+                        <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">{props.memoryPanel()}</div>
+                      </Show>
+                    </Tabs.Content>
+                  </Show>
+
+                  <Show when={bugReportOpen() || props.hasBugReport()}>
+                    <Tabs.Content value="bug-report" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "bug-report"}>
+                        <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">{props.bugReportPanel()}</div>
+                      </Show>
+                    </Tabs.Content>
+                  </Show>
+
+                  <Show when={detailOpen()}>
+                    <Tabs.Content value="detail" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "detail"}>
+                        <div class="relative pt-2 flex-1 min-h-0 overflow-hidden bg-background-stronger">
+                          {props.detailPanel()}
                         </div>
                       </Show>
                     </Tabs.Content>

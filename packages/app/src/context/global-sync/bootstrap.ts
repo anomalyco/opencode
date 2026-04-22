@@ -19,6 +19,7 @@ import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions, skipToken } from "@tanstack/solid-query"
+import { sdkJson } from "@/utils/sdk-team"
 
 type GlobalStore = {
   ready: boolean
@@ -311,6 +312,16 @@ export async function bootstrapDirectory(input: {
                 }
               }),
             )
+          }),
+        ),
+      () =>
+        retry(() =>
+          sdkJson<{ memory?: State["memory_entry"] }>(input.sdk, {
+            path: "/project/current/orchestration",
+            directory: input.directory,
+          }).then((data) => {
+            if (!data) return
+            input.setStore("memory_entry", reconcile(data.memory ?? [], { key: "id" }))
           }),
         ),
       () =>

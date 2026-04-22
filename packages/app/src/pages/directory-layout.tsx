@@ -4,6 +4,7 @@ import { base64Encode } from "@opencode-ai/shared/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
+import { BugReportProvider, useBugReport } from "@/context/bug-report"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
@@ -13,8 +14,13 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
+  const bugReport = useBugReport()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
+  const data = createMemo(() => ({
+    ...sync.data,
+    bug_report: bugReport.reports,
+  }))
 
   createEffect(() => {
     const next = sync.data.path.directory
@@ -30,7 +36,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
   return (
     <DataProvider
-      data={sync.data}
+      data={data()}
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
@@ -72,9 +78,11 @@ export default function Layout(props: ParentProps) {
     <Show when={resolved()} keyed>
       {(resolved) => (
         <SDKProvider directory={() => resolved}>
-          <SyncProvider>
-            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-          </SyncProvider>
+          <BugReportProvider>
+            <SyncProvider>
+              <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            </SyncProvider>
+          </BugReportProvider>
         </SDKProvider>
       )}
     </Show>

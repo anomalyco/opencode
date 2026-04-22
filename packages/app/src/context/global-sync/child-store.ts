@@ -188,6 +188,8 @@ export function createChildStoreManager(input: {
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
+            memory_entry: [],
+            memory_activity: [],
             message: {},
             part: {},
           })

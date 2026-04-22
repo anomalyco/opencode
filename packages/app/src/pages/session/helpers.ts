@@ -16,6 +16,8 @@ type TabsInput = {
   normalizeTab: (tab: string) => string
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
+  hasMemory?: Accessor<boolean>
+  hasBugReport?: Accessor<boolean>
 }
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
@@ -23,7 +25,14 @@ export const getSessionKey = (dir: string | undefined, id: string | undefined) =
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
+  const hasMemory = input.hasMemory ?? (() => false)
+  const hasBugReport = input.hasBugReport ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
+  const detailOpen = createMemo(() => input.tabs().active() === "detail" || input.tabs().all().includes("detail"))
+  const memoryOpen = createMemo(() => input.tabs().active() === "memory" || input.tabs().all().includes("memory"))
+  const bugReportOpen = createMemo(
+    () => input.tabs().active() === "bug-report" || input.tabs().all().includes("bug-report"),
+  )
   const openedTabs = createMemo(
     () => {
       const seen = new Set<string>()
@@ -31,7 +40,8 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review") return []
+          if (tab === "context" || tab === "review" || tab === "detail" || tab === "memory" || tab === "bug-report")
+            return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
           seen.add(value)
@@ -44,13 +54,19 @@ export const createSessionTabs = (input: TabsInput) => {
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
+    if (active === "detail") return active
+    if (active === "memory" && hasMemory()) return active
+    if (active === "bug-report" && hasBugReport()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (detailOpen()) return "detail"
     if (review() && hasReview()) return "review"
+    if (hasMemory()) return "memory"
+    if (hasBugReport()) return "bug-report"
     return "empty"
   })
   const activeFileTab = createMemo(() => {
@@ -61,12 +77,18 @@ export const createSessionTabs = (input: TabsInput) => {
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
+    if (active === "detail") return active
+    if (active === "memory") return active
+    if (active === "bug-report") return active
     if (!openedTabs().includes(active)) return
     return active
   })
 
   return {
     contextOpen,
+    detailOpen,
+    memoryOpen,
+    bugReportOpen,
     openedTabs,
     activeTab,
     activeFileTab,

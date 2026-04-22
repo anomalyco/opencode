@@ -8,10 +8,11 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/shared/util/path"
-import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
+import { useBugReport } from "@/context/bug-report"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -19,6 +20,7 @@ import { useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { SessionMemoryUsage } from "@/components/session-memory-usage"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -127,6 +129,74 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
     title: language.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
+}
+
+function BugReportIcon() {
+  const language = useLanguage()
+  const bugReport = useBugReport()
+  const layout = useLayout()
+  const { tabs, view } = useSessionLayout()
+
+  const bugCount = createMemo(() => bugReport.count)
+  const openBugReportTab = () => {
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    if (layout.fileTree.opened() && layout.fileTree.tab() !== "all") layout.fileTree.setTab("all")
+    tabs().open("bug-report")
+    tabs().setActive("bug-report")
+  }
+
+  const [fx, setFx] = createSignal(false)
+  let fxTimer: ReturnType<typeof setTimeout> | undefined
+  const prevLen = createMemo((prev: number) => bugReport.reports.length ?? prev, 0)
+
+  createEffect(() => {
+    const len = bugReport.reports.length
+    if (!len || len <= prevLen()) return
+    if (fxTimer) clearTimeout(fxTimer)
+    setFx(true)
+    fxTimer = setTimeout(() => {
+      fxTimer = undefined
+      setFx(false)
+    }, 2400)
+  })
+
+  const [pulse, setPulse] = createSignal(false)
+  let pulseTimer: ReturnType<typeof setTimeout> | undefined
+
+  createEffect(() => {
+    const count = bugReport.count
+    if (!count) return
+    if (pulseTimer) clearTimeout(pulseTimer)
+    setPulse(true)
+    pulseTimer = setTimeout(() => {
+      pulseTimer = undefined
+      setPulse(false)
+    }, 2000)
+  })
+
+  onCleanup(() => {
+    if (fxTimer) clearTimeout(fxTimer)
+    if (pulseTimer) clearTimeout(pulseTimer)
+  })
+
+  return (
+    <button
+      type="button"
+      data-component="bug-report-icon"
+      data-effect={fx() ? "added" : undefined}
+      data-pulse={pulse() ? "true" : undefined}
+      onClick={openBugReportTab}
+      aria-label={language.t("bugReport.trigger")}
+    >
+      <span data-slot="bug-report-icon-bug">
+        <Icon name="warning" size="small" />
+      </span>
+      <span data-slot="bug-report-icon-sep" aria-hidden="true" />
+      <span data-slot="bug-report-icon-count" data-kind="bug">
+        {bugCount()}
+      </span>
+    </button>
+  )
 }
 
 export function SessionHeader() {
@@ -281,30 +351,40 @@ export function SessionHeader() {
       <Show when={search() && centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="small"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
-              onClick={() => command.trigger("file.open")}
-              aria-label={language.t("session.header.searchFiles")}
-            >
-              <div class="flex min-w-0 flex-1 items-center overflow-visible">
-                <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
-                  {language.t("session.header.search.placeholder", {
-                    project: name(),
-                  })}
-                </span>
-              </div>
+            <div class="hidden md:flex items-center gap-2 max-w-full min-w-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="small"
+                class="w-[240px] max-w-full min-w-0 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
+                onClick={() => command.trigger("file.open")}
+                aria-label={language.t("session.header.searchFiles")}
+              >
+                <div class="flex min-w-0 flex-1 items-center overflow-visible">
+                  <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
+                    {language.t("session.header.search.placeholder", {
+                      project: name(),
+                    })}
+                  </span>
+                </div>
 
-              <Show when={hotkey()}>
-                {(keybind) => (
-                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0 text-text-weaker">
-                    {keybind()}
-                  </Keybind>
-                )}
+                <Show when={hotkey()}>
+                  {(keybind) => (
+                    <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0 text-text-weaker">
+                      {keybind()}
+                    </Keybind>
+                  )}
+                </Show>
+              </Button>
+              <Show when={params.id}>
+                <SessionMemoryUsage variant="icon" />
               </Show>
-            </Button>
+              <Show when={params.id}>
+                <Tooltip placement="bottom" value={language.t("bugReport.tooltip")}>
+                  <BugReportIcon />
+                </Tooltip>
+              </Show>
+            </div>
           </Portal>
         )}
       </Show>
@@ -426,6 +506,16 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <div class="flex md:hidden items-center gap-1">
+                  <Show when={params.id}>
+                    <SessionMemoryUsage variant="icon" />
+                  </Show>
+                  <Show when={params.id}>
+                    <Tooltip placement="bottom" value={language.t("bugReport.tooltip")}>
+                      <BugReportIcon />
+                    </Tooltip>
+                  </Show>
+                </div>
                 <Show when={status()}>
                   <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                     <StatusPopover />

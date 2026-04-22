@@ -19,6 +19,55 @@ import type {
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
+export type MemoryEntry = {
+  id: string
+  project_id: string
+  session_id: string
+  area: "project_rules" | "atlas_private" | "lessons" | "feature_memory"
+  class: "rule" | "knowledge" | "evidence" | "artifact"
+  kind: string
+  domain: string
+  title: string
+  content: string
+  title_ui?: string
+  content_ui?: string
+  ui_locale?: string
+  is_translate?: boolean
+  translate_status?: "idle" | "waiting" | "started" | "finished"
+  translate_done?: number
+  translate_total?: number
+  scope?: string
+  tags: string[]
+  status: "active" | "archived"
+  created_by: string
+  updated_by: string
+  source_id?: string
+  payload?: Record<string, unknown>
+  meta?: Record<string, string | number | boolean | null>
+  time: {
+    created: number
+    updated: number
+  }
+}
+
+export type MemoryActivity = {
+  id: string
+  project_id: string
+  session_id?: string
+  memory_id?: string
+  action: "read" | "write" | "validate" | "promote" | "archive" | "remove"
+  effect: "added" | "updated" | "removed" | "read"
+  area?: "project_rules" | "atlas_private" | "lessons" | "feature_memory"
+  class?: "rule" | "knowledge" | "evidence" | "artifact"
+  kind?: string
+  domain?: string
+  actor: string
+  title?: string
+  query?: string
+  count?: number
+  time: number
+}
+
 export type ProjectMeta = {
   name?: string
   icon?: {
@@ -66,6 +115,8 @@ export type State = {
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
   limit: number
+  memory_entry: MemoryEntry[]
+  memory_activity: MemoryActivity[]
   message: {
     [sessionID: string]: Message[]
   }

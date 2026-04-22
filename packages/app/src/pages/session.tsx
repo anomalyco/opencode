@@ -30,8 +30,11 @@ import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/shared/util/encode"
 import { useSearchParams } from "@solidjs/router"
-import { NewSessionView, SessionHeader } from "@/components/session"
+import { NewSessionView, SessionHeader, SessionMemoryTab } from "@/components/session"
+import { SessionAgentDashboard, extractAgentTasks } from "@/components/session-agent-dashboard"
+import { SessionBugReportTab } from "@/components/session-bug-report-tab"
 import { useComments } from "@/context/comments"
+import { useBugReport } from "@/context/bug-report"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -329,6 +332,7 @@ export default function Page() {
   const language = useLanguage()
   const sdk = useSDK()
   const settings = useSettings()
+  const bugReport = useBugReport()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
@@ -1163,6 +1167,32 @@ export default function Page() {
     </div>
   )
 
+  const memoryPanel = () => <SessionMemoryTab class="bg-background-stronger" />
+  const hasMemory = () => true
+  const memoryCount = () => sync.data.memory_entry.length
+  const bugReportPanel = () => <SessionBugReportTab class="bg-background-stronger" />
+  const hasBugReport = () => true
+  const bugReportCount = () => bugReport.reports.length
+  const dashboardTodos = createMemo(() => (params.id ? (sync.data.todo[params.id] ?? []) : []))
+  const dashboardDiffs = createMemo(() => diffs())
+  const dashboardMessageIDs = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []).map((m) => m.id))
+  const dashboardTasks = extractAgentTasks(() => sync.data.part, dashboardMessageIDs)
+  const dashboardAgentName = createMemo(() => {
+    const msgs = params.id ? sync.data.message[params.id] : undefined
+    if (!msgs) return ""
+    const last = [...msgs].reverse().find((m) => m.role === "assistant")
+    if (!last || !("agent" in last)) return ""
+    return typeof last.agent === "string" ? last.agent : ""
+  })
+  const detailPanel = () => (
+    <SessionAgentDashboard
+      todos={dashboardTodos}
+      diffs={dashboardDiffs}
+      tasks={dashboardTasks}
+      agentName={dashboardAgentName}
+    />
+  )
+
   createEffect(
     on(
       activeFileTab,
@@ -1957,8 +1987,15 @@ export default function Page() {
           diffsReady={reviewReady}
           empty={reviewEmptyText}
           hasReview={hasReview}
+          hasMemory={hasMemory}
+          hasBugReport={hasBugReport}
+          memoryCount={memoryCount}
+          bugReportCount={bugReportCount}
           reviewCount={reviewCount}
           reviewPanel={reviewPanel}
+          memoryPanel={memoryPanel}
+          bugReportPanel={bugReportPanel}
+          detailPanel={detailPanel}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}
