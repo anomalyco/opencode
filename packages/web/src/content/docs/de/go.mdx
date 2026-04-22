@@ -61,6 +61,8 @@ Die aktuelle Liste der Modelle umfasst:
 - **Kimi K2.6**
 - **MiMo-V2-Pro**
 - **MiMo-V2-Omni**
+- **MiMo-V2.5-Pro**
+- **MiMo-V2.5**
 - **MiniMax M2.5**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
@@ -82,18 +84,20 @@ Limits sind in Dollarwerten definiert. Das bedeutet, dass die tatsächliche Anza
 
 Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf typischen Go-Nutzungsmustern:
 
-| Model        | Anfragen pro 5 Stunden | Anfragen pro Woche | Anfragen pro Monat |
-| ------------ | ---------------------- | ------------------ | ------------------ |
-| GLM-5.1      | 880                    | 2,150              | 4,300              |
-| GLM-5        | 1,150                  | 2,880              | 5,750              |
-| Kimi K2.5    | 1,850                  | 4,630              | 9,250              |
-| Kimi K2.6    | 1,150                  | 2,880              | 5,750              |
-| MiMo-V2-Pro  | 1,290                  | 3,225              | 6,450              |
-| MiMo-V2-Omni | 2,150                  | 5,450              | 10,900             |
-| Qwen3.6 Plus | 3,300                  | 8,200              | 16,300             |
-| MiniMax M2.7 | 3,400                  | 8,500              | 17,000             |
-| MiniMax M2.5 | 6,300                  | 15,900             | 31,800             |
-| Qwen3.5 Plus | 10,200                 | 25,200             | 50,500             |
+| Model         | Anfragen pro 5 Stunden | Anfragen pro Woche | Anfragen pro Monat |
+| ------------- | ---------------------- | ------------------ | ------------------ |
+| GLM-5.1       | 880                    | 2,150              | 4,300              |
+| GLM-5         | 1,150                  | 2,880              | 5,750              |
+| Kimi K2.5     | 1,850                  | 4,630              | 9,250              |
+| Kimi K2.6     | 1,150                  | 2,880              | 5,750              |
+| MiMo-V2-Pro   | 1,290                  | 3,225              | 6,450              |
+| MiMo-V2-Omni  | 2,150                  | 5,450              | 10,900             |
+| MiMo-V2.5-Pro | 1,290                  | 3,225              | 6,450              |
+| MiMo-V2.5     | 2,150                  | 5,450              | 10,900             |
+| Qwen3.6 Plus  | 3,300                  | 8,200              | 16,300             |
+| MiniMax M2.7  | 3,400                  | 8,500              | 17,000             |
+| MiniMax M2.5  | 6,300                  | 15,900             | 31,800             |
+| Qwen3.5 Plus  | 10,200                 | 25,200             | 50,500             |
 
 Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
 
@@ -104,6 +108,8 @@ Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
 - MiMo-V2-Pro — 350 Input-, 41.000 Cached-, 250 Output-Tokens pro Anfrage
 - MiMo-V2-Omni — 1.000 Input-, 60.000 Cached-, 140 Output-Tokens pro Anfrage
+- MiMo-V2.5-Pro — 350 Input-, 41.000 Cached-, 250 Output-Tokens pro Anfrage
+- MiMo-V2.5 — 1.000 Input-, 60.000 Cached-, 140 Output-Tokens pro Anfrage
 
 Du kannst deine aktuelle Nutzung in der **<a href={console}>Console</a>** verfolgen.
 
@@ -125,18 +131,20 @@ Wenn du auch Guthaben auf deinem Zen-Konto hast, kannst du in der Console die Op
 
 Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 
-| Modell       | Modell-ID    | Endpunkt                                         | AI SDK Package              |
-| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
-| GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.6    | kimi-k2.6    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus | qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus | qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Modell        | Modell-ID     | Endpunkt                                         | AI SDK Package              |
+| ------------- | ------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.1       | glm-5.1       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5         | glm-5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5     | kimi-k2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6     | kimi-k2.6     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro   | mimo-v2-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni  | mimo-v2-omni  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro | mimo-v2.5-pro | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5     | mimo-v2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7  | minimax-m2.7  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5  | minimax-m2.5  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus  | qwen3.6-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus  | qwen3.5-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
 Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K2.6 würdest du beispielsweise `opencode-go/kimi-k2.6` in deiner Config verwenden.
 

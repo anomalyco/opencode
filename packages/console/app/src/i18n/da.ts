@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
   "go.meta.description":
-    "Go starter ved $5 for den første måned, derefter $10/måned, med generøse 5-timers anmodningsgrænser for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7.",
+    "Go starter ved $5 for den første måned, derefter $10/måned, med generøse 5-timers anmodningsgrænser for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
@@ -302,7 +302,7 @@ export const dict = {
   "go.problem.item2": "Generøse grænser og pålidelig adgang",
   "go.problem.item3": "Bygget til så mange programmører som muligt",
   "go.problem.item4":
-    "Inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7",
+    "Inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7",
   "go.how.title": "Hvordan Go virker",
   "go.how.body":
     "Go starter ved $5 for den første måned, derefter $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
@@ -328,7 +328,7 @@ export const dict = {
   "go.faq.a2": "Go inkluderer modellerne nedenfor med generøse grænser og pålidelig adgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nej. Zen er pay-as-you-go, mens Go starter ved $5 for den første måned, derefter $10/måned, med generøse grænser og pålidelig adgang til open source-modellerne GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7.",
+    "Nej. Zen er pay-as-you-go, mens Go starter ved $5 for den første måned, derefter $10/måned, med generøse grænser og pålidelig adgang til open source-modellerne GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7.",
   "go.faq.q4": "Hvad koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
   "go.faq.a4.p1.pricingLink": "$5 første måned",
@@ -351,7 +351,7 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus salgsfremmende modeller tilgængelige på det tidspunkt, med en kvote på 200 forespørgsler/dag. Go inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7 med højere anmodningskvoter håndhævet over rullende vinduer (5-timers, ugentlig og månedlig), nogenlunde svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (faktiske anmodningstal varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus salgsfremmende modeller tilgængelige på det tidspunkt, med en kvote på 200 forespørgsler/dag. Go inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 og MiniMax M2.7 med højere anmodningskvoter håndhævet over rullende vinduer (5-timers, ugentlig og månedlig), nogenlunde svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (faktiske anmodningstal varierer efter model og brug).",
 
   "zen.api.error.rateLimitExceeded": "Hastighedsgrænse overskredet. Prøv venligst igen senere.",
   "zen.api.error.modelNotSupported": "Model {{model}} understøttes ikke",
