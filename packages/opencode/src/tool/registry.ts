@@ -129,6 +129,84 @@ function teamToolDescription(input: { id: string; agent: Agent.Info }) {
   return Effect.succeed(undefined)
 }
 
+// Keep legacy fork-local tool implementations on disk so the fork can still carry
+// them, but never register or expose those legacy IDs again.
+const hiddenLegacyToolIDs = new Set([
+  // AI AGENT POLICY: Legacy `read` is permanently hidden.
+  // Do not re-enable it, re-register it, rename this block away, move it, or delete it.
+  // The legacy file may stay on disk for fork safety, but it must never become visible again.
+  "read",
+  // AI AGENT POLICY: Legacy `glob` is permanently hidden.
+  // Do not re-enable it, re-register it, rename this block away, move it, or delete it.
+  // The legacy file may stay on disk for fork safety, but it must never become visible again.
+  "glob",
+  // AI AGENT POLICY: Legacy `grep` is permanently hidden.
+  // Do not re-enable it, re-register it, rename this block away, move it, or delete it.
+  // The legacy file may stay on disk for fork safety, but it must never become visible again.
+  "grep",
+])
+
+// These source-native IDs are reserved for the ported tool surface.
+// Custom/plugin tools and legacy re-registrations must not shadow them.
+const reservedCanonicalToolIDs = new Set([
+  // AI AGENT POLICY: `inspect` belongs to the source-native read family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "inspect",
+  // AI AGENT POLICY: `search` belongs to the source-native read family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "search",
+  // AI AGENT POLICY: `discover_batch` belongs to the source-native read family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "discover_batch",
+  // AI AGENT POLICY: `lsp` belongs to the source-native read family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "lsp",
+  // AI AGENT POLICY: `edit` belongs to the source-native edit family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "edit",
+  // AI AGENT POLICY: `write` belongs to the source-native edit family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "write",
+  // AI AGENT POLICY: `apply_patch` belongs to the source-native edit family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "apply_patch",
+  // AI AGENT POLICY: `path_edit` belongs to the source-native edit family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "path_edit",
+  // AI AGENT POLICY: `edit_batch` belongs to the source-native edit family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "edit_batch",
+  // AI AGENT POLICY: `workspace_replace` belongs to the source-native edit family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "workspace_replace",
+  // AI AGENT POLICY: `webfetch` belongs to the source-native web family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "webfetch",
+  // AI AGENT POLICY: `websearch` belongs to the source-native web family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "websearch",
+  // AI AGENT POLICY: `codesearch` belongs to the source-native web family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "codesearch",
+  // AI AGENT POLICY: `lib_batch` belongs to the source-native web family only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "lib_batch",
+  // AI AGENT POLICY: `task_async` belongs to the source-native async orchestration surface only.
+  // Do not let another implementation override, re-enable, move, or shadow this ID.
+  "task_async",
+])
+
+function isVisibleToolID(id: string) {
+  return !hiddenLegacyToolIDs.has(id)
+}
+
+function filterCustomTools(custom: Tool.Def[], builtin: Tool.Def[]) {
+  const builtinIDs = new Set(builtin.map((tool) => tool.id))
+  return custom.filter(
+    (tool) => isVisibleToolID(tool.id) && !builtinIDs.has(tool.id) && !reservedCanonicalToolIDs.has(tool.id),
+  )
+}
+
 export const layer: Layer.Layer<
   Service,
   never,
@@ -269,42 +347,44 @@ export const layer: Layer.Layer<
           plan: Tool.init(plan),
         })
 
+        const builtin = [
+          tool.invalid,
+          ...(questionEnabled ? [tool.question] : []),
+          tool.bash,
+          source.compress,
+          source.inspect,
+          source.search,
+          source.discover_batch,
+          source.lsp,
+          source.edit,
+          source.write,
+          source.path_edit,
+          source.apply_patch,
+          source.edit_batch,
+          source.workspace_replace,
+          source.webfetch,
+          source.websearch,
+          source.codesearch,
+          source.lib_batch,
+          tool.task,
+          source.task_async,
+          tool.todo,
+          tool.skill,
+          source["atlas-plan-follow"],
+          source["main-plan"],
+          source.memory,
+          source.bug_report,
+          source.bug_report_management,
+          source.localgit_state,
+          source.localgit_log,
+          source.localgit_annotate,
+          source.git_commit,
+          ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+        ]
+
         return {
-          custom,
-          builtin: [
-            tool.invalid,
-            ...(questionEnabled ? [tool.question] : []),
-            tool.bash,
-            source.compress,
-            source.inspect,
-            source.search,
-            source.discover_batch,
-            source.lsp,
-            source.edit,
-            source.write,
-            source.path_edit,
-            source.apply_patch,
-            source.edit_batch,
-            source.workspace_replace,
-            source.webfetch,
-            source.websearch,
-            source.codesearch,
-            source.lib_batch,
-            tool.task,
-            source.task_async,
-            tool.todo,
-            tool.skill,
-            source["atlas-plan-follow"],
-            source["main-plan"],
-            source.memory,
-            source.bug_report,
-            source.bug_report_management,
-            source.localgit_state,
-            source.localgit_log,
-            source.localgit_annotate,
-            source.git_commit,
-            ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
-          ],
+          custom: filterCustomTools(custom, builtin),
+          builtin,
           task: tool.task,
           inspect: source.inspect,
         }
@@ -313,7 +393,7 @@ export const layer: Layer.Layer<
 
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return [...s.builtin, ...s.custom]
+      return [...s.builtin, ...s.custom].filter((tool) => isVisibleToolID(tool.id))
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
