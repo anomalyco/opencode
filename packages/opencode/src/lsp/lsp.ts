@@ -7,12 +7,14 @@ import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
 import z from "zod"
 import { Config } from "../config"
-import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Process } from "../util"
 import { spawn as lspspawn } from "./launch"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { withStatics } from "@/util/schema"
+import { zod, ZodOverride } from "@/util/effect-zod"
 
 const log = Log.create({ service: "lsp" })
 
@@ -20,60 +22,53 @@ export const Event = {
   Updated: BusEvent.define("lsp.updated", z.object({})),
 }
 
-export const Range = z
-  .object({
-    start: z.object({
-      line: z.number(),
-      character: z.number(),
-    }),
-    end: z.object({
-      line: z.number(),
-      character: z.number(),
-    }),
-  })
-  .meta({
-    ref: "Range",
-  })
-export type Range = z.infer<typeof Range>
+const Position = Schema.Struct({
+  line: Schema.Number,
+  character: Schema.Number,
+})
 
-export const Symbol = z
-  .object({
-    name: z.string(),
-    kind: z.number(),
-    location: z.object({
-      uri: z.string(),
-      range: Range,
-    }),
-  })
-  .meta({
-    ref: "Symbol",
-  })
-export type Symbol = z.infer<typeof Symbol>
+export const Range = Schema.Struct({
+  start: Position,
+  end: Position,
+})
+  .annotate({ identifier: "Range" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Range = typeof Range.Type
 
-export const DocumentSymbol = z
-  .object({
-    name: z.string(),
-    detail: z.string().optional(),
-    kind: z.number(),
+export const Symbol = Schema.Struct({
+  name: Schema.String,
+  kind: Schema.Number,
+  location: Schema.Struct({
+    uri: Schema.String,
     range: Range,
-    selectionRange: Range,
-  })
-  .meta({
-    ref: "DocumentSymbol",
-  })
-export type DocumentSymbol = z.infer<typeof DocumentSymbol>
+  }),
+})
+  .annotate({ identifier: "Symbol" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Symbol = typeof Symbol.Type
 
-export const Status = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    root: z.string(),
-    status: z.union([z.literal("connected"), z.literal("error")]),
-  })
-  .meta({
-    ref: "LSPStatus",
-  })
-export type Status = z.infer<typeof Status>
+export const DocumentSymbol = Schema.Struct({
+  name: Schema.String,
+  detail: Schema.optional(Schema.String),
+  kind: Schema.Number,
+  range: Range,
+  selectionRange: Range,
+})
+  .annotate({ identifier: "DocumentSymbol" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type DocumentSymbol = typeof DocumentSymbol.Type
+
+export const Status = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  root: Schema.String,
+  status: Schema.Literals(["connected", "error"]).annotate({
+    [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
+  }),
+})
+  .annotate({ identifier: "LSPStatus" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Status = typeof Status.Type
 
 enum SymbolKind {
   File = 1,
@@ -162,12 +157,12 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
 
     const state = yield* InstanceState.make<State>(
-      Effect.fn("LSP.state")(function* () {
+      Effect.fn("LSP.state")(function* (ctx) {
         const cfg = yield* config.get()
 
         const servers: Record<string, LSPServer.Info> = {}
 
-        if (cfg.lsp === false) {
+        if (!cfg.lsp) {
           log.info("all LSPs are disabled")
         } else {
           for (const server of Object.values(LSPServer)) {
@@ -176,25 +171,27 @@ export const layer = Layer.effect(
 
           filterExperimentalServers(servers)
 
-          for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
-            const existing = servers[name]
-            if (item.disabled) {
-              log.info(`LSP server ${name} is disabled`)
-              delete servers[name]
-              continue
-            }
-            servers[name] = {
-              ...existing,
-              id: name,
-              root: existing?.root ?? (async () => Instance.directory),
-              extensions: item.extensions ?? existing?.extensions ?? [],
-              spawn: async (root) => ({
-                process: lspspawn(item.command[0], item.command.slice(1), {
-                  cwd: root,
-                  env: { ...process.env, ...item.env },
+          if (cfg.lsp !== true) {
+            for (const [name, item] of Object.entries(cfg.lsp)) {
+              const existing = servers[name]
+              if (item.disabled) {
+                log.info(`LSP server ${name} is disabled`)
+                delete servers[name]
+                continue
+              }
+              servers[name] = {
+                ...existing,
+                id: name,
+                root: existing?.root ?? (async (_file, ctx) => ctx.directory),
+                extensions: item.extensions ?? existing?.extensions ?? [],
+                spawn: async (root) => ({
+                  process: lspspawn(item.command[0], item.command.slice(1), {
+                    cwd: root,
+                    env: { ...process.env, ...item.env },
+                  }),
+                  initialization: item.initialization,
                 }),
-                initialization: item.initialization,
-              }),
+              }
             }
           }
 
@@ -223,7 +220,13 @@ export const layer = Layer.effect(
     )
 
     const getClients = Effect.fnUntraced(function* (file: string) {
-      if (!Instance.containsPath(file)) return [] as LSPClient.Info[]
+      const ctx = yield* InstanceState.context
+      if (
+        !AppFileSystem.contains(ctx.directory, file) &&
+        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
+      ) {
+        return [] as LSPClient.Info[]
+      }
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
@@ -231,7 +234,7 @@ export const layer = Layer.effect(
 
         async function schedule(server: LSPServer.Info, root: string, key: string) {
           const handle = await server
-            .spawn(root)
+            .spawn(root, ctx)
             .then((value) => {
               if (!value) s.broken.add(key)
               return value
@@ -249,6 +252,7 @@ export const layer = Layer.effect(
             serverID: server.id,
             server: handle,
             root,
+            directory: ctx.directory,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)
@@ -271,7 +275,7 @@ export const layer = Layer.effect(
         for (const server of Object.values(s.servers)) {
           if (server.extensions.length && !server.extensions.includes(extension)) continue
 
-          const root = await server.root(file)
+          const root = await server.root(file, ctx)
           if (!root) continue
           if (s.broken.has(root + server.id)) continue
 
@@ -324,13 +328,14 @@ export const layer = Layer.effect(
     })
 
     const status = Effect.fn("LSP.status")(function* () {
+      const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
       const result: Status[] = []
       for (const client of s.clients) {
         result.push({
           id: client.serverID,
           name: s.servers[client.serverID].id,
-          root: path.relative(Instance.directory, client.root),
+          root: path.relative(ctx.directory, client.root),
           status: "connected",
         })
       }
@@ -338,12 +343,13 @@ export const layer = Layer.effect(
     })
 
     const hasClients = Effect.fn("LSP.hasClients")(function* (file: string) {
+      const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
         for (const server of Object.values(s.servers)) {
           if (server.extensions.length && !server.extensions.includes(extension)) continue
-          const root = await server.root(file)
+          const root = await server.root(file, ctx)
           if (!root) continue
           if (s.broken.has(root + server.id)) continue
           return true

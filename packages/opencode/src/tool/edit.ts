@@ -5,7 +5,7 @@
 
 import z from "zod"
 import * as path from "path"
-import { Effect } from "effect"
+import { Effect, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -14,7 +14,6 @@ import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { Format } from "../format"
-import { FileTime } from "../file/time"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -33,6 +32,18 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
   return text.replaceAll("\n", "\r\n")
 }
 
+const locks = new Map<string, Semaphore.Semaphore>()
+
+function lock(filePath: string) {
+  const resolvedFilePath = AppFileSystem.resolve(filePath)
+  const hit = locks.get(resolvedFilePath)
+  if (hit) return hit
+
+  const next = Semaphore.makeUnsafe(1)
+  locks.set(resolvedFilePath, next)
+  return next
+}
+
 const Parameters = z.object({
   filePath: z.string().describe("The absolute path to the file to modify"),
   oldString: z.string().describe("The text to replace"),
@@ -44,7 +55,6 @@ export const EditTool = Tool.define(
   "edit",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
-    const filetime = yield* FileTime.Service
     const afs = yield* AppFileSystem.Service
     const format = yield* Format.Service
     const bus = yield* Bus.Service
@@ -70,7 +80,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
-          yield* filetime.withLock(filePath, () =>
+          yield* lock(filePath).withPermits(1)(
             Effect.gen(function* () {
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)
@@ -92,14 +102,12 @@ export const EditTool = Tool.define(
                   file: filePath,
                   event: existed ? "change" : "add",
                 })
-                yield* filetime.read(ctx.sessionID, filePath)
                 return
               }
 
               const info = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
               if (!info) throw new Error(`File ${filePath} not found`)
               if (info.type === "Directory") throw new Error(`Path is a directory, not a file: ${filePath}`)
-              yield* filetime.assert(ctx.sessionID, filePath)
               contentOld = yield* afs.readFileString(filePath)
 
               const ending = detectLineEnding(contentOld)
@@ -142,19 +150,20 @@ export const EditTool = Tool.define(
                   normalizeLineEndings(contentNew),
                 ),
               )
-              yield* filetime.read(ctx.sessionID, filePath)
             }).pipe(Effect.orDie),
           )
 
+          let additions = 0
+          let deletions = 0
+          for (const change of diffLines(contentOld, contentNew)) {
+            if (change.added) additions += change.count || 0
+            if (change.removed) deletions += change.count || 0
+          }
           const filediff: Snapshot.FileDiff = {
             file: filePath,
             patch: diff,
-            additions: 0,
-            deletions: 0,
-          }
-          for (const change of diffLines(contentOld, contentNew)) {
-            if (change.added) filediff.additions += change.count || 0
-            if (change.removed) filediff.deletions += change.count || 0
+            additions,
+            deletions,
           }
 
           yield* ctx.metadata({

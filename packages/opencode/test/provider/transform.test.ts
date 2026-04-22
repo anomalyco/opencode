@@ -2113,7 +2113,24 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("mistral returns empty object", () => {
+  test("mistral with reasoning returns variants", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-small-latest",
+      providerID: "mistral",
+      api: {
+        id: "mistral-small-latest",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      high: { reasoningEffort: "high" },
+    })
+  })
+
+  test("mistral without reasoning returns empty object", () => {
     const model = createMockModel({
       id: "mistral/mistral-large",
       providerID: "mistral",
@@ -2122,6 +2139,22 @@ describe("ProviderTransform.variants", () => {
         url: "https://api.mistral.com",
         npm: "@ai-sdk/mistral",
       },
+      capabilities: { reasoning: false },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({})
+  })
+
+  test("mistral large with reasoning returns empty object (only small supports reasoning)", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-large",
+      providerID: "mistral",
+      api: {
+        id: "mistral-large-latest",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
@@ -2804,12 +2837,14 @@ describe("ProviderTransform.variants", () => {
         reasoningConfig: {
           type: "adaptive",
           maxReasoningEffort: "xhigh",
+          display: "summarized",
         },
       })
       expect(result.max).toEqual({
         reasoningConfig: {
           type: "adaptive",
           maxReasoningEffort: "max",
+          display: "summarized",
         },
       })
     })

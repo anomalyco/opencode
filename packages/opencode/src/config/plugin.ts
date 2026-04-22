@@ -1,16 +1,20 @@
 import { Glob } from "@opencode-ai/shared/util/glob"
-import z from "zod"
+import { Schema } from "effect"
 import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 import path from "path"
 
-const Options = z.record(z.string(), z.unknown())
-export type Options = z.infer<typeof Options>
+export const Options = Schema.Record(Schema.String, Schema.Unknown).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Options = Schema.Schema.Type<typeof Options>
 
 // Spec is the user-config value: either just a plugin identifier, or the identifier plus inline options.
 // It answers "what should we load?" but says nothing about where that value came from.
-export const Spec = z.union([z.string(), z.tuple([z.string(), Options])])
-export type Spec = z.infer<typeof Spec>
+export const Spec = Schema.Union([Schema.String, Schema.mutable(Schema.Tuple([Schema.String, Options]))]).pipe(
+  withStatics((s) => ({ zod: zod(s) })),
+)
+export type Spec = Schema.Schema.Type<typeof Spec>
 
 export type Scope = "global" | "local"
 
