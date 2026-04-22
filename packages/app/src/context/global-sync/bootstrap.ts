@@ -58,8 +58,10 @@ function errors(list: PromiseSettledResult<unknown>[]) {
 
 const providerRev = new Map<string, number>()
 
+const dirKey = (d: string) => d.replaceAll("\\", "/")
+
 export function clearProviderRev(directory: string) {
-  providerRev.delete(directory)
+  providerRev.delete(dirKey(directory))
 }
 
 function runAll(list: Array<() => Promise<unknown>>) {
@@ -256,8 +258,8 @@ export async function bootstrapDirectory(input: {
   input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
 
-  const rev = (providerRev.get(input.directory) ?? 0) + 1
-  providerRev.set(input.directory, rev)
+  const rev = (providerRev.get(dirKey(input.directory)) ?? 0) + 1
+  providerRev.set(dirKey(input.directory), rev)
   ;(async () => {
     const slow = [
       () => Promise.resolve(input.loadSessions(input.directory)),
@@ -352,12 +354,12 @@ export async function bootstrapDirectory(input: {
           queryFn: () =>
             retry(() => input.sdk.provider.list())
               .then((x) => {
-                if (providerRev.get(input.directory) !== rev) return
+                if (providerRev.get(dirKey(input.directory)) !== rev) return
                 input.setStore("provider", normalizeProviderList(x.data!))
                 input.setStore("provider_ready", true)
               })
               .catch((err) => {
-                if (providerRev.get(input.directory) !== rev) console.error("Failed to refresh provider list", err)
+                if (providerRev.get(dirKey(input.directory)) !== rev) console.error("Failed to refresh provider list", err)
                 const project = getFilename(input.directory)
                 showToast({
                   variant: "error",

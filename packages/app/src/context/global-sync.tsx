@@ -49,6 +49,8 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
+  const dirKey = (d: string) => d.replaceAll("\\", "/")
+
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
@@ -120,39 +122,42 @@ function createGlobalSync() {
 
   const children = createChildStoreManager({
     owner,
-    isBooting: (directory) => booting.has(directory),
-    isLoadingSessions: (directory) => sessionLoads.has(directory),
+    isBooting: (directory) => booting.has(dirKey(directory)),
+    isLoadingSessions: (directory) => sessionLoads.has(dirKey(directory)),
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
     onDispose: (directory) => {
+      const key = dirKey(directory)
       queue.clear(directory)
-      sessionMeta.delete(directory)
-      sdkCache.delete(directory)
-      clearProviderRev(directory)
-      clearSessionPrefetchDirectory(directory)
+      sessionMeta.delete(key)
+      sdkCache.delete(key)
+      clearProviderRev(key)
+      clearSessionPrefetchDirectory(key)
     },
     translate: language.t,
   })
 
   const sdkFor = (directory: string) => {
-    const cached = sdkCache.get(directory)
+    const key = dirKey(directory)
+    const cached = sdkCache.get(key)
     if (cached) return cached
     const sdk = globalSDK.createClient({
       directory,
       throwOnError: true,
     })
-    sdkCache.set(directory, sdk)
+    sdkCache.set(key, sdk)
     return sdk
   }
 
   async function loadSessions(directory: string) {
-    const pending = sessionLoads.get(directory)
+    const key = dirKey(directory)
+    const pending = sessionLoads.get(key)
     if (pending) return pending
 
     children.pin(directory)
     const [store, setStore] = children.child(directory, { bootstrap: false })
-    const meta = sessionMeta.get(directory)
+    const meta = sessionMeta.get(key)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
@@ -174,7 +179,7 @@ function createGlobalSync() {
           loadRootSessionsWithFallback({
             directory,
             limit,
-            list: (query) => globalSDK.client.session.list(query),
+            list: (query) => sdkFor(directory).session.list(query),
           })
             .then((x) => {
               const nonArchived = (x.data ?? [])
@@ -199,7 +204,7 @@ function createGlobalSync() {
                 setStore("session", reconcile(sessions, { key: "id" }))
                 cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
               })
-              sessionMeta.set(directory, { limit })
+              sessionMeta.set(key, { limit })
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
@@ -214,9 +219,9 @@ function createGlobalSync() {
       })
       .then(() => {})
 
-    sessionLoads.set(directory, promise)
+    sessionLoads.set(key, promise)
     void promise.finally(() => {
-      sessionLoads.delete(directory)
+      sessionLoads.delete(key)
       children.unpin(directory)
     })
     return promise
@@ -224,13 +229,14 @@ function createGlobalSync() {
 
   async function bootstrapInstance(directory: string) {
     if (!directory) return
-    const pending = booting.get(directory)
+    const key = dirKey(directory)
+    const pending = booting.get(key)
     if (pending) return pending
 
     children.pin(directory)
     const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
-      const cache = children.vcsCache.get(directory)
+      const cache = children.vcsCache.get(key)
       if (!cache) return
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
@@ -251,9 +257,9 @@ function createGlobalSync() {
       })
     })
 
-    booting.set(directory, promise)
+    booting.set(key, promise)
     void promise.finally(() => {
-      booting.delete(directory)
+      booting.delete(key)
       children.unpin(directory)
     })
     return promise
@@ -296,8 +302,17 @@ function createGlobalSync() {
       return
     }
 
-    const existing = children.children[directory]
-    if (!existing) return
+    let existing = children.children[dirKey(directory)]
+    if (!existing) {
+      // Auto-create child store for session.created events to ensure child sessions
+      // created via Task tool appear in the sidebar instead of being silently dropped
+      if (event.type === "session.created") {
+        const child = children.child(directory, { bootstrap: false })
+        existing = child
+      } else {
+        return
+      }
+    }
     children.mark(directory)
     const [store, setStore] = existing
     applyDirectoryEvent({
@@ -307,7 +322,7 @@ function createGlobalSync() {
       setStore,
       push: queue.push,
       setSessionTodo,
-      vcsCache: children.vcsCache.get(directory),
+      vcsCache: children.vcsCache.get(dirKey(directory)),
       loadLsp: () => {
         void sdkFor(directory)
           .lsp.status()
