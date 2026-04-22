@@ -73,7 +73,6 @@ export const layer = Layer.effect(
       return file
     })
 
-    // Config.Service is read optionally so this layer still works in tests and contexts where it is not provided.
     const limits = Effect.fn("Truncate.limits")(function* () {
       const configSvc = yield* Effect.serviceOption(Config.Service)
       if (Option.isNone(configSvc)) return { maxLines: MAX_LINES, maxBytes: MAX_BYTES }
