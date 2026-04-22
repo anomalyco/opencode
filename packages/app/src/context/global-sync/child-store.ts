@@ -38,8 +38,9 @@ export function createChildStoreManager(input: {
 
   const mark = (directory: string) => {
     if (!directory) return
-    lifecycle.set(dirKey(directory), { lastAccessAt: Date.now() })
-    runEviction(directory)
+    const key = dirKey(directory)
+    lifecycle.set(key, { lastAccessAt: Date.now() })
+    runEviction(key)
   }
 
   const pin = (directory: string) => {
@@ -121,7 +122,7 @@ export function createChildStoreManager(input: {
       max: MAX_DIR_STORES,
       ttl: DIR_IDLE_TTL_MS,
       now: Date.now(),
-    }).filter((directory) => directory !== skip)
+    }).filter((directory) => !skip || directory !== skip)
     if (list.length === 0) return
     for (const directory of list) {
       if (!disposeDirectory(directory)) continue

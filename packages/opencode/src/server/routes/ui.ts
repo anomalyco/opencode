@@ -25,14 +25,19 @@ const localUIPromise = fs.exists(appDistDir).then((exists) => {
   return appDistDir
 })
 
-const DEFAULT_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+const extractScriptHashes = (html: string): string =>
+  [...html.matchAll(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((m) => m[1])
+    .filter((content) => content.trim().length > 0)
+    .map((content) => content.replace(/\r\n?/g, "\n"))
+    .map((content) => `'sha256-${createHash("sha256").update(content).digest("base64")}'`)
+    .join(" ")
 
-const devCsp = (hash = "") =>
-  `default-src 'self' http://localhost:* http://127.0.0.1:*; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*`
+const devCsp = (hashes = "") =>
+  `default-src 'self' http://localhost:* http://127.0.0.1:*; script-src 'self' 'wasm-unsafe-eval'${hashes ? ` ${hashes}` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*`
 
-const csp = (hash = "", isDev = false) =>
-  isDev ? devCsp(hash) : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+const csp = (hashes = "", isDev = false) =>
+  isDev ? devCsp(hashes) : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hashes ? ` ${hashes}` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
 export const UIRoutes = (): Hono =>
   new Hono().all("/*", async (c) => {
@@ -45,12 +50,13 @@ export const UIRoutes = (): Hono =>
       if (!match) return c.json({ error: "Not Found" }, 404)
 
       if (await fs.exists(match)) {
+        const content = await fs.readFile(match)
         const mime = getMimeType(match) ?? "text/plain"
         c.header("Content-Type", mime)
         if (mime.startsWith("text/html")) {
-          c.header("Content-Security-Policy", csp("", false))
+          c.header("Content-Security-Policy", csp(extractScriptHashes(new TextDecoder().decode(content)), false))
         }
-        return c.body(new Uint8Array(await fs.readFile(match)))
+        return c.body(new Uint8Array(content))
       } else {
         return c.json({ error: "Not Found" }, 404)
       }
@@ -60,21 +66,30 @@ export const UIRoutes = (): Hono =>
     const distDir = await localUIPromise
     if (distDir) {
       const filePath = path.join(distDir, reqPath === "/" ? "index.html" : reqPath.replace(/^\//, ""))
-      if (await fs.exists(filePath)) {
-        const mime = getMimeType(filePath) ?? "text/plain"
+      const resolvedPath = path.resolve(filePath)
+      if (!resolvedPath.startsWith(distDir + path.sep) && resolvedPath !== distDir) {
+        return c.json({ error: "Forbidden" }, 403)
+      }
+      if (await fs.exists(resolvedPath)) {
+        const content = await fs.readFile(resolvedPath)
+        const mime = getMimeType(resolvedPath) ?? "text/plain"
         c.header("Content-Type", mime)
         if (mime.startsWith("text/html")) {
-          const hash = "" // Could extract inline script hash for CSP if needed
-          c.header("Content-Security-Policy", csp(hash, true))
+          c.header("Content-Security-Policy", csp(extractScriptHashes(new TextDecoder().decode(content)), true))
         }
-        return c.body(new Uint8Array(await fs.readFile(filePath)))
+        return c.body(new Uint8Array(content))
       }
       // SPA fallback: serve index.html for unknown routes
       const indexPath = path.join(distDir, "index.html")
-      if (await fs.exists(indexPath)) {
+      const resolvedIndexPath = path.resolve(indexPath)
+      if (!resolvedIndexPath.startsWith(distDir + path.sep) && resolvedIndexPath !== distDir) {
+        return c.json({ error: "Forbidden" }, 403)
+      }
+      if (await fs.exists(resolvedIndexPath)) {
+        const content = await fs.readFile(resolvedIndexPath)
         c.header("Content-Type", "text/html")
-        c.header("Content-Security-Policy", csp("", true))
-        return c.body(new Uint8Array(await fs.readFile(indexPath)))
+        c.header("Content-Security-Policy", csp(extractScriptHashes(new TextDecoder().decode(content)), true))
+        return c.body(new Uint8Array(content))
       }
     }
 
@@ -91,7 +106,7 @@ export const UIRoutes = (): Hono =>
           /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
         )
       : undefined
-    const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
+    const hash = match ? `'sha256-${createHash("sha256").update(match[2]).digest("base64")}'` : ""
     response.headers.set("Content-Security-Policy", csp(hash))
     return response
   })
