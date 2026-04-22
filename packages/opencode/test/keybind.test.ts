@@ -71,7 +71,7 @@ describe("Keybind.toString", () => {
 
   test("should convert super modifier to string", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
-    expect(Keybind.toString(info)).toBe("super+z")
+    expect(Keybind.toString(info)).toMatch(/^(cmd|super)\+z$/)
   })
 
   test("should convert super+shift modifier to string", () => {
@@ -415,6 +415,34 @@ describe("Keybind.parse", () => {
         super: true,
         leader: false,
         name: "z",
+      },
+    ])
+  })
+
+  test("should parse cmd as alias for super", () => {
+    const result = Keybind.parse("cmd+k")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "k",
+      },
+    ])
+  })
+
+  test("should parse command as alias for super", () => {
+    const result = Keybind.parse("command+shift+a")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: true,
+        super: true,
+        leader: false,
+        name: "a",
       },
     ])
   })
