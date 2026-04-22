@@ -1,16 +1,17 @@
 import path from "path"
 import z from "zod"
-import { text } from "node:stream/consumers"
 import { Tool } from "../shared/tool"
 import { Instance } from "../../project/instance"
 import { assertExternalDirectory } from "../external-directory"
 import { Ripgrep } from "../../file/ripgrep"
 import { Filesystem } from "../../util/filesystem"
 import { Process } from "../../util/process"
+import { abortAfterAny } from "../../util/abort"
 import { blank, zero } from "../shared/shape"
 import { defaultIgnoreGlobs } from "./shared"
 
 const MAX_LINE_LENGTH = 2000
+const SEARCH_TIMEOUT_MS = 20_000
 const searchAllowed = {
   path: ["pattern", "path", "head_limit"],
   content: ["pattern", "path", "include", "context", "from_line", "to_line", "output_mode", "head_limit"],
@@ -71,6 +72,12 @@ function rank(file: string, input: string, text?: string) {
 
 function clip(line: string) {
   return line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + "..." : line
+}
+
+function timeoutError(input: SearchInput) {
+  return new Error(
+    `Search timed out after ${SEARCH_TIMEOUT_MS}ms for action=${input.action}. Narrow the path or pattern and try again.`,
+  )
 }
 
 function bucket(file: string, root: string) {
@@ -245,72 +252,88 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
     const limit = nextInput.head_limit ?? 100
 
     if (nextInput.action === "path") {
-      const glob = [nextInput.pattern, ...defaultIgnoreGlobs()]
-      const files = [] as Array<{ path: string; mtime: number }>
-      for await (const file of Ripgrep.files({ cwd: search, glob, signal: ctx.abort })) {
-        const full = path.resolve(search, file)
-        files.push({
-          path: full,
-          mtime: Filesystem.stat(full)?.mtime.getTime() ?? 0,
-        })
-      }
-      files.sort((a, b) => rank(b.path, nextInput.pattern) - rank(a.path, nextInput.pattern) || b.mtime - a.mtime)
-      const truncated = files.length > limit
-      const list = truncated ? files.slice(0, limit) : files
-      const summary = structure(
-        files.map((item) => item.path),
-        search,
-      )
-      const output = list.length
-        ? list.map((item) => item.path).join("\n") +
-          (summary.groups.length
-            ? `\n\n(Groups: ${summary.groups
-                .slice(0, 5)
-                .map((item) => `${item.group} (${item.count})`)
-                .join(", ")})`
-            : "") +
-          (summary.entrypoints.length
-            ? `\n(Entrypoints: ${summary.entrypoints
-                .slice(0, 5)
-                .map((item) => path.relative(search, item) || item)
-                .join(", ")})`
-            : "") +
-          (truncated
-            ? `\n\n(Results truncated: showing top ${list.length} ranked matches out of ${files.length}. Narrow the path or pattern, or rerun with a higher head_limit.)`
-            : "")
-        : "No files found"
-      return {
-        title: path.relative(Instance.worktree, search),
-        metadata: {
-          action: nextInput.action as string,
-          ranking: "relevance_then_mtime",
-          groups: summary.groups,
-          entrypoints: summary.entrypoints,
-          count: files.length,
-          shown: list.length,
-          truncated,
-        },
-        output,
+      const timeout = abortAfterAny(SEARCH_TIMEOUT_MS, ctx.abort)
+      try {
+        const glob = [nextInput.pattern, ...defaultIgnoreGlobs()]
+        const files = [] as Array<{ path: string; mtime: number }>
+        for await (const file of Ripgrep.files({ cwd: search, glob, signal: timeout.signal })) {
+          const full = path.resolve(search, file)
+          files.push({
+            path: full,
+            mtime: Filesystem.stat(full)?.mtime.getTime() ?? 0,
+          })
+        }
+        files.sort((a, b) => rank(b.path, nextInput.pattern) - rank(a.path, nextInput.pattern) || b.mtime - a.mtime)
+        const truncated = files.length > limit
+        const list = truncated ? files.slice(0, limit) : files
+        const summary = structure(
+          files.map((item) => item.path),
+          search,
+        )
+        const output = list.length
+          ? list.map((item) => item.path).join("\n") +
+            (summary.groups.length
+              ? `\n\n(Groups: ${summary.groups
+                  .slice(0, 5)
+                  .map((item) => `${item.group} (${item.count})`)
+                  .join(", ")})`
+              : "") +
+            (summary.entrypoints.length
+              ? `\n(Entrypoints: ${summary.entrypoints
+                  .slice(0, 5)
+                  .map((item) => path.relative(search, item) || item)
+                  .join(", ")})`
+              : "") +
+            (truncated
+              ? `\n\n(Results truncated: showing top ${list.length} ranked matches out of ${files.length}. Narrow the path or pattern, or rerun with a higher head_limit.)`
+              : "")
+          : "No files found"
+        return {
+          title: path.relative(Instance.worktree, search),
+          metadata: {
+            action: nextInput.action as string,
+            ranking: "relevance_then_mtime",
+            groups: summary.groups,
+            entrypoints: summary.entrypoints,
+            count: files.length,
+            shown: list.length,
+            truncated,
+          },
+          output,
+        }
+      } catch (error) {
+        if (timeout.signal.aborted && !ctx.abort.aborted) throw timeoutError(nextInput)
+        throw error
+      } finally {
+        timeout.clearTimeout()
       }
     }
 
-    const rg = await Ripgrep.filepath()
-    const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", nextInput.pattern]
-    if (nextInput.include) args.push("--glob", nextInput.include)
-    for (const glob of defaultIgnoreGlobs()) args.push("--glob", glob)
-    args.push(".")
+    const timeout = abortAfterAny(SEARCH_TIMEOUT_MS, ctx.abort)
+    let raw = ""
+    let err = ""
+    let code = 0
+    try {
+      const rg = await Ripgrep.filepath()
+      const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", nextInput.pattern]
+      if (nextInput.include) args.push("--glob", nextInput.include)
+      for (const glob of defaultIgnoreGlobs()) args.push("--glob", glob)
+      args.push(".")
+      const out = await Process.run([rg, ...args], {
+        cwd: search,
+        abort: timeout.signal,
+        nothrow: true,
+      })
+      raw = out.stdout.toString()
+      err = out.stderr.toString()
+      code = out.code
+    } catch (error) {
+      if (timeout.signal.aborted && !ctx.abort.aborted) throw timeoutError(nextInput)
+      throw error
+    } finally {
+      timeout.clearTimeout()
+    }
 
-    const proc = Process.spawn([rg, ...args], {
-      cwd: search,
-      stdout: "pipe",
-      stderr: "pipe",
-      abort: ctx.abort,
-    })
-    if (!proc.stdout || !proc.stderr) throw new Error("Process output not available")
-
-    const raw = await text(proc.stdout)
-    const err = await text(proc.stderr)
-    const code = await proc.exited
     if (code === 1 || (code === 2 && !raw.trim())) {
       return {
         title: nextInput.pattern,

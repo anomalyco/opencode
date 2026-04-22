@@ -154,6 +154,7 @@ export const ayaz = {
     bug_report: "allow",
     bug_report_management: "allow",
     compress: "allow",
+    git_read: "allow",
     git_write: "allow",
     bash: "allow",
     external_directory: "allow",
