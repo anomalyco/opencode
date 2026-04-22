@@ -298,11 +298,10 @@ export const layer: Layer.Layer<
               // Prune loose objects older than retention period
               const result = yield* git(args(["prune", `--expire=${days}.days`]))
               if (result.code !== 0) {
-                log.warn("cleanup failed", {
+                log.warn("prune encountered errors (continuing cleanup)", {
                   exitCode: result.code,
                   stderr: result.stderr,
                 })
-                return
               }
 
               // Remove empty object directories
@@ -396,7 +395,7 @@ export const layer: Layer.Layer<
                   exitCode: checkout.code,
                   stderr: checkout.stderr,
                 })
-                return
+
               }
               log.error("failed to restore snapshot", {
                 snapshot,
@@ -435,7 +434,7 @@ export const layer: Layer.Layer<
                 })
                 if (tree.code === 0 && tree.text.trim()) {
                   log.info("file existed in snapshot but checkout failed, keeping", { file: op.file, hash: op.hash })
-                  return
+  
                 }
                 log.info("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
                 yield* remove(op.file)
@@ -616,7 +615,7 @@ export const layer: Layer.Layer<
                       stderr: err,
                       refs: refs.length,
                     })
-                    return
+    
                   }
 
                   const fail = (msg: string, extra?: Record<string, string>) => {
