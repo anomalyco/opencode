@@ -854,13 +854,21 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "assistant",
         parts: [],
       }
+      // Substitute a space for empty text between signed Anthropic reasoning
+      // blocks to keep thinking block positions (and signatures) valid without
+      // triggering Anthropic's empty-content rejection or the AI SDK's filter.
+      const hasSignedReasoning = msg.parts.some(
+        (p) => p.type === "reasoning" && (p.metadata as any)?.anthropic?.signature != null,
+      )
       for (const part of msg.parts) {
-        if (part.type === "text")
+        if (part.type === "text") {
+          const text = part.text === "" && hasSignedReasoning ? " " : part.text
           assistantMessage.parts.push({
             type: "text",
-            text: part.text,
+            text,
             ...(differentModel ? {} : { providerMetadata: part.metadata }),
           })
+        }
         if (part.type === "step-start")
           assistantMessage.parts.push({
             type: "step-start",
