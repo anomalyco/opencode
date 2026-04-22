@@ -195,6 +195,35 @@ describe("tool.apply_patch freeform", () => {
     })
   })
 
+  test("does not invent a first-line diff for BOM files", async () => {
+    await using fixture = await tmpdir()
+    const { ctx, calls } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const bom = String.fromCharCode(0xfeff)
+        const target = path.join(fixture.path, "example.cs")
+        await fs.writeFile(target, `${bom}using System;\n\nclass Test {}\n`, "utf-8")
+
+        const patchText =
+          "*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch"
+
+        await execute({ patchText }, ctx)
+
+        expect(calls.length).toBe(1)
+        const shown = calls[0].metadata.files[0]?.patch ?? ""
+        expect(shown).not.toContain(bom)
+        expect(shown).not.toContain("-using System;")
+        expect(shown).not.toContain("+using System;")
+
+        const content = await fs.readFile(target, "utf-8")
+        expect(content.charCodeAt(0)).toBe(0xfeff)
+        expect(content.slice(1)).toBe("using System;\n\nclass Test {}\nclass Next {}\n")
+      },
+    })
+  })
+
   test("inserts lines with insert-only hunk", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
