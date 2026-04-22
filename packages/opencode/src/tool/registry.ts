@@ -129,20 +129,17 @@ function teamToolDescription(input: { id: string; agent: Agent.Info }) {
   return Effect.succeed(undefined)
 }
 
-// Keep legacy fork-local tool implementations on disk so the fork can still carry
-// them, but never register or expose those legacy IDs again.
+// Legacy fork-local read-family IDs are retired from the active tool layer.
+// Their old implementations were intentionally removed and must not be restored.
 const hiddenLegacyToolIDs = new Set([
-  // AI AGENT POLICY: Legacy `read` is permanently hidden.
-  // Do not re-enable it, re-register it, rename this block away, move it, or delete it.
-  // The legacy file may stay on disk for fork safety, but it must never become visible again.
+  // AI AGENT POLICY: Legacy `read` is permanently retired.
+  // Do not re-enable it, re-register it, rename this block away, move it, delete it, or restore the removed implementation.
   "read",
-  // AI AGENT POLICY: Legacy `glob` is permanently hidden.
-  // Do not re-enable it, re-register it, rename this block away, move it, or delete it.
-  // The legacy file may stay on disk for fork safety, but it must never become visible again.
+  // AI AGENT POLICY: Legacy `glob` is permanently retired.
+  // Do not re-enable it, re-register it, rename this block away, move it, delete it, or restore the removed implementation.
   "glob",
-  // AI AGENT POLICY: Legacy `grep` is permanently hidden.
-  // Do not re-enable it, re-register it, rename this block away, move it, or delete it.
-  // The legacy file may stay on disk for fork safety, but it must never become visible again.
+  // AI AGENT POLICY: Legacy `grep` is permanently retired.
+  // Do not re-enable it, re-register it, rename this block away, move it, delete it, or restore the removed implementation.
   "grep",
 ])
 
