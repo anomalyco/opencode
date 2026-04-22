@@ -129,6 +129,75 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Too Many Requests")
   })
 
+  test("retries streamed server_error json envelopes", () => {
+    const message =
+      "An error occurred while processing your request. You can retry your request, or contact us through our help center at help.openai.com if the error persists."
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 2,
+        error: {
+          type: "server_error",
+          code: "server_error",
+          message,
+          param: null,
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error)).toBe(message)
+  })
+
+  test("retries streamed server_error json envelopes with empty messages", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 2,
+        error: {
+          type: "server_error",
+          code: "server_error",
+          message: "",
+          param: null,
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
+  test("retries streamed upstream stream_read_error json envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 0,
+        error: {
+          type: "upstream_error",
+          code: "stream_read_error",
+          message: "stream_read_error",
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error)).toBe("stream_read_error")
+  })
+
+  test("retries streamed upstream_error json envelopes with other codes", () => {
+    const message = "Upstream temporarily unavailable"
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 1,
+        error: {
+          type: "upstream_error",
+          code: "temporary_upstream_failure",
+          message,
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error)).toBe(message)
+  })
+
   test("maps overloaded provider codes", () => {
     const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")

@@ -89,16 +89,32 @@ export function retryable(error: Err) {
     }
   })
   if (!json || typeof json !== "object") return undefined
+  const nestedError =
+    "error" in json && typeof json.error === "object" && json.error !== null
+      ? (json.error as Record<string, unknown>)
+      : undefined
   const code = typeof json.code === "string" ? json.code : ""
+  const nestedCode = typeof nestedError?.code === "string" ? nestedError.code : ""
+  const nestedType = typeof nestedError?.type === "string" ? nestedError.type : ""
+  const nestedMessage = typeof nestedError?.message === "string" ? nestedError.message : undefined
 
-  if (json.type === "error" && json.error?.type === "too_many_requests") {
+  if (json.type === "error" && nestedType === "too_many_requests") {
     return "Too Many Requests"
   }
   if (code.includes("exhausted") || code.includes("unavailable")) {
     return "Provider is overloaded"
   }
-  if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
+  if (json.type === "error" && nestedCode.includes("rate_limit")) {
     return "Rate Limited"
+  }
+  if (
+    json.type === "error" &&
+    (nestedType === "server_error" ||
+      nestedCode === "server_error" ||
+      nestedType === "upstream_error" ||
+      nestedCode === "stream_read_error")
+  ) {
+    return nestedMessage?.trim() ? nestedMessage : "Provider is overloaded"
   }
   return undefined
 }
