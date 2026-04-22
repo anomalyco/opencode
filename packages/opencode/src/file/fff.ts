@@ -18,8 +18,6 @@ import { Glob } from "../util/glob"
 import { Log } from "../util/log"
 
 export namespace Fff {
-  const log = Log.create({ service: "file.fff" })
-
   export const Match = z.object({
     path: z.object({
       text: z.string(),
@@ -52,7 +50,7 @@ export namespace Fff {
 
   const root = path.join(Global.Path.cache, "fff")
 
-  async function db() {
+  async function dbs() {
     await fs.mkdir(root, { recursive: true })
     // fff databases are global across the file system
     return {
@@ -71,18 +69,26 @@ export namespace Fff {
     if (wait) return wait
 
     const next = (async () => {
-      const files = await db()
-      const made = FileFinder.create({
+      const files = await dbs()
+      const base = Log.file()
+      const logfile = path.join(Global.Path.log, base ? "fff-" + path.basename(base) : "fff.log")
+      const result = FileFinder.create({
+        aiMode: true,
         basePath: dir,
         frecencyDbPath: files.frecency,
         historyDbPath: files.history,
-        aiMode: true,
+        logFilePath: logfile,
+        logLevel: Log.currentLevel().toLowerCase() as "debug" | "info" | "warn" | "error",
+        // if there is second project opened within the same sesion - disable
+        // content mapping, the memory mapping address space is finite, so we
+        // don't want to blow user's computer (the limit depends on repo size)
+        cacheBudgetMaxFiles: memo.map.size > 0 ? 0 : undefined,
       })
-      if (!made.ok) throw new Error(made.error)
+      if (!result.ok) throw new Error(result.error)
       // we do not syncrhnously wait for the results here to not block anything
       // fff will do the indexing in the background and will automatically
       // become available
-      const pick = made.value
+      const pick = result.value
       memo.map.set(dir, pick)
       return pick
     })()
@@ -96,8 +102,8 @@ export namespace Fff {
   }
 
   export async function files(input: { cwd: string; query: string; page?: number; size?: number; current?: string }) {
-    const pick = await picker(input.cwd)
-    const out = pick.fileSearch(input.query, {
+    const fff = await picker(input.cwd)
+    const out = fff.fileSearch(input.query, {
       pageIndex: input.page ?? 0,
       pageSize: input.size ?? 100,
       currentFile: input.current,
@@ -107,8 +113,8 @@ export namespace Fff {
   }
 
   export async function mixed(input: { cwd: string; query: string; page?: number; size?: number; current?: string }) {
-    const pick = await picker(input.cwd)
-    const out = pick.mixedSearch(input.query, {
+    const fff = await picker(input.cwd)
+    const out = fff.mixedSearch(input.query, {
       pageIndex: input.page ?? 0,
       pageSize: input.size ?? 100,
       currentFile: input.current,

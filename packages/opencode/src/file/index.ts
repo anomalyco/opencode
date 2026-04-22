@@ -650,8 +650,8 @@ export const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         const fast = yield* Effect.promise(() =>
           Fff.mixed({
-            cwd: ctx.directory,
             query,
+            cwd: ctx.directory,
             size: limit,
           })
             .then((out) => {

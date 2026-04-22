@@ -17,6 +17,9 @@ const levelPriority: Record<Level, number> = {
 const keep = 10
 
 let level: Level = "INFO"
+export function currentLevel() {
+  return level
+}
 
 function shouldLog(input: Level): boolean {
   return levelPriority[input] >= levelPriority[level]
