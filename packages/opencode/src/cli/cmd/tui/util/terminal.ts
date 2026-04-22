@@ -47,8 +47,8 @@ export async function colors(): Promise<{
     let timeout: NodeJS.Timeout
 
     const cleanup = () => {
-      process.stdin.setRawMode(false)
       process.stdin.removeListener("data", handler)
+      process.stdin.setRawMode(false)
       clearTimeout(timeout)
     }
 
@@ -89,9 +89,13 @@ export async function colors(): Promise<{
     process.stdout.write("\x1b]11;?\x07")
     // Query foreground (OSC 10)
     process.stdout.write("\x1b]10;?\x07")
-    // Query palette colors 0-15 (OSC 4)
-    for (let i = 0; i < 16; i++) {
-      process.stdout.write(`\x1b]4;${i};?\x07`)
+    // OSC 4 palette queries are skipped on Windows: Windows Terminal does not
+    // reliably respond, causing raw mode to stay active for the full 1s timeout
+    // and leaking escape sequences into the TUI on stdin.
+    if (process.platform !== "win32") {
+      for (let i = 0; i < 16; i++) {
+        process.stdout.write(`\x1b]4;${i};?\x07`)
+      }
     }
 
     timeout = setTimeout(() => {
@@ -111,8 +115,8 @@ export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     let timeout: NodeJS.Timeout
 
     const cleanup = () => {
-      process.stdin.setRawMode(false)
       process.stdin.removeListener("data", handler)
+      process.stdin.setRawMode(false)
       clearTimeout(timeout)
     }
 
