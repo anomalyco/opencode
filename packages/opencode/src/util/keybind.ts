@@ -37,7 +37,7 @@ export function toString(info: Info | undefined): string {
 
   if (info.ctrl) parts.push("ctrl")
   if (info.meta) parts.push("alt")
-  if (info.super) parts.push(process.platform === "darwin" ? "cmd" : "super")
+  if (info.super) parts.push("super")
   if (info.shift) parts.push("shift")
   if (info.name) {
     if (info.name === "delete") parts.push("del")
